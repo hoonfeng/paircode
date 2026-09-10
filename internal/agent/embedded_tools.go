@@ -40,6 +40,12 @@ func InitEmbeddedToolRegistry(root string) *Registry {
 	for _, f := range embeddedToolRegistrars {
 		f(r, root)
 	}
+	// ★ 2026-09-12 deferred（按需工具）在内嵌内核中直接标记发现——内核是
+	//   「执行后端」（插件 execute 经 ctx.binary.exec 直通），不参与会话工具面
+	//   可见性（可见性由插件层/会话注册表决定），不得因 deferred 拦截执行。
+	for n := range DeferredToolNames {
+		r.MarkToolDiscovered(n)
+	}
 	embeddedToolRegistry = r
 	return r
 }

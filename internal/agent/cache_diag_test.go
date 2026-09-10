@@ -13,14 +13,14 @@ import (
 
 // 模拟一批真实工具名（插件化后的注册来源多样：内置组、磁盘插件、工具集、MCP）。
 var diagToolNames = []string{
-	"read", "write", "edit", "multi_edit", "bash", "move_file",
+	"read", "write", "edit", "multi_edit", "exec_command", "move_file",
 	"delete_file", "grep", "glob", "git_status", "git_diff", "git_log",
-	"web_fetch", "web_search", "run_background", "read_output", "kill_process",
-	"memory_write", "memory_read", "memory_search", "project_info_read", "project_info_tree",
+	"web_fetch", "web_search", "write_stdin", "kill_process",
+	"memory", "project_info",
 	"update_tasks", "tool_stats", "history_search", "codegraph_build",
-	"codegraph_search", "codegraph_impact", "bug_detect", "bug_fix",
+	"codegraph_search", "codegraph_relations", "bug_detect", "bug_fix",
 	"csv_read", "word_read", "screenshot_desktop", "web_debug",
-	"cordis_define", "cordis_run", "toolset_build", "mcp_add",
+	"cordis", "toolset_build", "mcp_add",
 	"ask_user", "run_code", "str_replace_editor", "debug_start", "debug_stop",
 	"memory_verify", "project_info_verify", "skill_load", "skill_write",
 }

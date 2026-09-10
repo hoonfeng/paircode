@@ -48,6 +48,7 @@ func loadJSCodeForTest(t *testing.T, code string, dirs ...string) (*PluginHost, 
 // execJSTool 经 registry 执行工具（Json 参数）并返回文本。
 func execJSTool(t *testing.T, reg *Registry, name, argsJSON string) string {
 	t.Helper()
+	reg.MarkToolDiscovered(name) // 按需工具（deferred）：测试直接执行前标记发现（对齐会话内 tool_search 语义）
 	out, err := reg.Execute(context.Background(), name, argsJSON)
 	if err != nil {
 		t.Fatalf("%s 执行失败: %v", name, err)
@@ -55,59 +56,10 @@ func execJSTool(t *testing.T, reg *Registry, name, argsJSON string) string {
 	return out
 }
 
-// TestToolGitJSNative tool-git JS 原生化：真实装载 + git CLI 行为验证。
-func TestToolGitJSNative(t *testing.T) {
-	_, reg := loadDiskPluginForTest(t, "tool-git")
-
-	// 10 个工具全部注册（可见性禁用影响 agent 面；测试直接启用验证行为）
-	for _, name := range []string{"git_status", "git_diff", "git_log", "git_show", "git_blame", "git_add", "git_commit", "git_branch", "git_checkout", "git_stash"} {
-		if _, ok := reg.Get(name); !ok {
-			t.Fatalf("工具 %s 未注册", name)
-		}
-		reg.SetToolEnabled(name, true)
-	}
-
-	// git_status：主项目（gou-ide 是 git 仓库）——输出含分支首行
-	out := execJSTool(t, reg, "git_status", `{}`)
-	if !strings.Contains(out, "##") {
-		t.Fatalf("git_status 输出缺少分支行: %q", out)
-	}
-
-	// git_log：默认 15 条
-	out = execJSTool(t, reg, "git_log", `{}`)
-	if strings.Contains(out, "（无输出）") {
-		t.Fatalf("git_log 输出为空: %q", out)
-	}
-	if !strings.Contains(out, "auto:") && len(out) < 30 {
-		t.Fatalf("git_log 输出异常: %q", out)
-	}
-
-	// git_diff：无改动时返回「无改动」提示
-	out = execJSTool(t, reg, "git_diff", `{}`)
-	if strings.TrimSpace(out) == "" {
-		t.Fatalf("git_diff 输出不应为空: %q", out)
-	}
-
-	// git_show HEAD：--stat 详情
-	out = execJSTool(t, reg, "git_show", `{}`)
-	if !strings.Contains(out, "HEAD") && len(out) < 20 {
-		t.Fatalf("git_show 输出异常: %q", out)
-	}
-}
-
-// TestToolGitJSNativeMultiProject tool-git multi project 路由（../wb-ui/）。
-func TestToolGitJSNativeMultiProject(t *testing.T) {
-	_, reg := loadDiskPluginForTest(t, "tool-git")
-	reg.SetToolEnabled("git_status", true)
-	out, err := reg.Execute(context.Background(), "git_status", `{"project":"wb-ui"}`)
-	if err != nil {
-		t.Fatalf("wb-ui git_status: %v", err)
-	}
-	// wb-ui 也是 git 仓库（有提交）——输出分支行或为空提示
-	if strings.Contains(out, "failed") || strings.Contains(out, "失败") {
-		t.Fatalf("wb-ui git_status 异常: %q", out)
-	}
-}
+// ★ 2026-09-12 codex 精简轮：tool-git（10 工具）已移除——git 操作统一走
+// exec_command（codex 无 git 工具面；前端 Git 面板走独立 git-api 插件不受影响）。
+// 原 TestToolGitJSNative / TestToolGitJSNativeMultiProject 随之删除
+// （插件备份于 _temp/removed-plugins-202609/codex-slim-20260912/）。
 
 // TestToolWebJSNative tool-web JS 原生化：注册 + web_fetch 真实抓取。
 func TestToolWebJSNative(t *testing.T) {
@@ -125,60 +77,70 @@ func TestToolWebJSNative(t *testing.T) {
 }
 
 // TestToolMemoryJSNative tool-memory JS 原生化：写入→读→搜索→删除（自清理）。
+// ★ 2026-09 工具面合并：5 工具合并为单工具 memory(op=…)，含 dynamicApproval
+// （write/delete 需批准，read/search/list 不需要）。
 func TestToolMemoryJSNative(t *testing.T) {
 	_, reg := loadDiskPluginForTest(t, "tool-memory")
-	for _, name := range []string{"memory_write", "memory_delete", "memory_read", "memory_list", "memory_search"} {
-		if _, ok := reg.Get(name); !ok {
-			t.Fatalf("工具 %s 未注册", name)
-		}
-		reg.SetToolEnabled(name, true)
+	tool, ok := reg.Get("memory")
+	if !ok {
+		t.Fatalf("工具 memory 未注册")
+	}
+	reg.SetToolEnabled("memory", true)
+	// dynamicApproval：write/delete 需批准；只读 op 不需要
+	if tool.DynamicApproval == nil {
+		t.Fatal("memory 应声明 dynamicApproval")
+	}
+	if !tool.DynamicApproval(ToolCall{Function: FunctionCall{Name: "memory", Arguments: `{"op":"write"}`}}) {
+		t.Error("op=write 应需批准")
+	}
+	if tool.DynamicApproval(ToolCall{Function: FunctionCall{Name: "memory", Arguments: `{"op":"read"}`}}) {
+		t.Error("op=read 不应需批准")
 	}
 	const name = "jsnative测试条目"
-	out := execJSTool(t, reg, "memory_write", `{"name":"`+name+`","type":"project","description":"JS 原生化验证条目","content":"验证 memory 工具的 JS 实现读写。","project":"gou-ide"}`)
+	out := execJSTool(t, reg, "memory", `{"op":"write","name":"`+name+`","type":"project","description":"JS 原生化验证条目","content":"验证 memory 工具的 JS 实现读写。","project":"gou-ide"}`)
 	if !strings.Contains(out, "已新建记忆") && !strings.Contains(out, "已记忆") {
-		t.Fatalf("memory_write 输出异常: %q", out)
+		t.Fatalf("memory(op=write) 输出异常: %q", out)
 	}
-	defer execJSTool(t, reg, "memory_delete", `{"name":"`+name+`"}`)
+	defer execJSTool(t, reg, "memory", `{"op":"delete","name":"`+name+`"}`)
 	// 读回
-	out = execJSTool(t, reg, "memory_read", `{"name":"`+name+`"}`)
+	out = execJSTool(t, reg, "memory", `{"op":"read","name":"`+name+`"}`)
 	if !strings.Contains(out, "JS 原生化验证条目") {
-		t.Fatalf("memory_read 输出异常: %q", out)
+		t.Fatalf("memory(op=read) 输出异常: %q", out)
 	}
 	// 搜索
-	out = execJSTool(t, reg, "memory_search", `{"query":"jsnative"}`)
+	out = execJSTool(t, reg, "memory", `{"op":"search","query":"jsnative"}`)
 	if !strings.Contains(out, name) {
-		t.Fatalf("memory_search 未命中: %q", out)
+		t.Fatalf("memory(op=search) 未命中: %q", out)
 	}
 }
 
 // TestToolProjectInfoJSNative tool-project-info JS 原生化：写入→读→树→删除（自清理）。
+// ★ 2026-09 工具面合并：7 工具合并为单工具 project_info(op=…)。
 func TestToolProjectInfoJSNative(t *testing.T) {
 	_, reg := loadDiskPluginForTest(t, "tool-project-info")
-	for _, name := range []string{"project_info_write", "project_info_read", "project_info_list", "project_info_tree", "project_info_search", "project_info_delete", "project_info_explore"} {
-		if _, ok := reg.Get(name); !ok {
-			t.Fatalf("工具 %s 未注册", name)
-		}
-		reg.SetToolEnabled(name, true)
+	if _, ok := reg.Get("project_info"); !ok {
+		t.Fatalf("工具 project_info 未注册")
 	}
+	reg.SetToolEnabled("project_info", true)
 	const p = "实现/jsnative验证"
-	out := execJSTool(t, reg, "project_info_write", `{"path":"`+p+`","content":"# JS 原生验证\n\n内容正文。","project":"gou-ide"}`)
+	out := execJSTool(t, reg, "project_info", `{"op":"write","path":"`+p+`","content":"# JS 原生验证\n\n内容正文。","project":"gou-ide"}`)
 	if !strings.Contains(out, "已写入知识库") && !strings.Contains(out, "已更新知识库") {
-		t.Fatalf("project_info_write 输出异常: %q", out)
+		t.Fatalf("project_info(op=write) 输出异常: %q", out)
 	}
-	defer execJSTool(t, reg, "project_info_delete", `{"path":"`+p+`"}`)
-	out = execJSTool(t, reg, "project_info_read", `{"path":"`+p+`"}`)
+	defer execJSTool(t, reg, "project_info", `{"op":"delete","path":"`+p+`"}`)
+	out = execJSTool(t, reg, "project_info", `{"op":"read","path":"`+p+`"}`)
 	if !strings.Contains(out, "JS 原生验证") {
-		t.Fatalf("project_info_read 输出异常: %q", out)
+		t.Fatalf("project_info(op=read) 输出异常: %q", out)
 	}
 	// list/tree 应包含该条目
-	out = execJSTool(t, reg, "project_info_tree", `{}`)
+	out = execJSTool(t, reg, "project_info", `{"op":"tree"}`)
 	if !strings.Contains(out, "jsnative验证") {
-		t.Fatalf("project_info_tree 未含条目: %q", out)
+		t.Fatalf("project_info(op=tree) 未含条目: %q", out)
 	}
 	// explore
-	out = execJSTool(t, reg, "project_info_explore", `{}`)
+	out = execJSTool(t, reg, "project_info", `{"op":"explore"}`)
 	if !strings.Contains(out, "项目结构概览") {
-		t.Fatalf("project_info_explore 输出异常: %q", out)
+		t.Fatalf("project_info(op=explore) 输出异常: %q", out)
 	}
 }
 
@@ -289,6 +251,7 @@ func TestToolOfficeJSNative(t *testing.T) {
 		t.Fatalf("read_xlsx 输出异常: %q", out)
 	}
 }
+
 // writeTestZip 构造最小 ZIP 包（docx/xlsx 测试用）。
 func writeTestZip(t *testing.T, path string, entries map[string]string) {
 	t.Helper()

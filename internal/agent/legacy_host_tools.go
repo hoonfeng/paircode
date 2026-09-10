@@ -32,7 +32,8 @@ var legacyToolGroups = []struct {
 }{
 	{registerAssetTools, "智能资产管理（asset_list/asset_search/asset_delete）"},
 	{registerBridgeTools, "桌面桥接（bridge_status/takeover/lockdown/exec/register_system_tool）"},
-	{registerEntryConfigTools, "入口与配置定位（find_entry_points/find_config_files）"},
+	// ★ 2026-09-12 codex 精简轮：registerEntryConfigTools 存档条目移除
+	//   （tool-entryconfig 插件已删除；内核函数保留、无消费方）。
 	{registerEvolutionTools, "进化系统（evolution_save_capsule/search_capsules/save_gene/status）"},
 	{registerProgressChecker, "进度检查（progress_checker）"},
 	{registerResourceTools, "资源管理（resource_list/search/stats）"},

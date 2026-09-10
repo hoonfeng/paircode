@@ -7,7 +7,7 @@
 //	<installDir>/.pair/toolsets/   全局级（跨项目可用）
 //
 // 每个工具集是一个 Toolset：{ name, description, project, version, plugins[] }，
-// plugins 为 JS 动态插件定义（host 半，与 cordis_define 的 code 参数同形态）。
+// plugins 为 JS 动态插件定义（host 半，与 cordis(op=define) 的 code 参数同形态）。
 // 装载走 PluginHost.DefineJSCodeFull + LoadJSDynamic——工具集即插件，插件化闭环。
 //
 // 动态构建（toolset_build）：无工具集配置时，分析项目（语言/框架/依赖/入口）
@@ -284,7 +284,7 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 //     - plugin-mgmt：cordis_* 插件管理工具
 //     - toolset-mgmt：toolset_* 工具集管理工具
 //
-// 业务插件工具（tool-git/tool-codegraph 等磁盘插件）不默认加入——用户用
+// 业务插件工具（tool-codegraph 等磁盘插件）不默认加入——用户用
 // toolset_edit add_plugin 按需加入。
 // ★ 2026-08-17：装载≠可用兜底——新工作区无任何工具集时，agent 默认只有
 //
@@ -309,7 +309,11 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 // builtinGroupEntries 框架内置工具组条目（system/plugin-mgmt/toolset-mgmt）——
 // defaultProjectToolset 与 ensureBuiltinGroupsInWorkspace 共用同一组装逻辑。
 func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
-	base := []string{"read", "write", "edit", "glob", "grep", "bash", "run_code"}
+	// ★ Round5：编辑面统一 apply_patch（edit 已移除）——system 组声明同步，
+	//   否则白名单收敛后 agent 拿不到 apply_patch。
+	// ★ 2026-09-12：tool_search（按需工具发现，codex Deferred 对齐）加入 base
+	//   ——保证白名单收敛后恒可用（deferred 工具靠它发现）。
+	base := []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "run_code", "tool_search"}
 	sysSet := map[string]bool{}
 	for _, t := range base {
 		sysSet[t] = true
@@ -1238,7 +1242,7 @@ func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
 // 「自举管理工具（SystemTool + cordis_*/toolset_* 等循环协议）」。
 // 未加入工具集的插件工具：注册保留（cordis/前端可见可管理），对 agent
 // 隐藏（Enabled=false）；恢复 = toolset_edit add_plugin 加入工具集。
-// 双入口：① LoadJSDynamic 装载钩子（运行期 cordis_run/全局插件即时生效）；
+// 双入口：① LoadJSDynamic 装载钩子（运行期 cordis(op=run)/全局插件即时生效）；
 //   ② ApplyToolsetVisibilityFilter 启动全量兜底（LoadAllToolsets 末尾）。
 // harness 对齐模式（WB_HARNESS=1）不干预（走 ApplyHarnessToolFilter）。
 // ═══════════════════════════════════════════════════════════════
@@ -1247,19 +1251,19 @@ func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
 //   - SystemTool（宿主会话绑定：update_tasks/tool_stats/history_*）
 //   - cordis_*（插件登记/装载/停止/回收/查看——agent 自举链路）
 //   - toolset_*（工具集管理——agent 自主构建/编辑工具集）
-//   - ask_user / task_create（循环协议）
+//   - ask_user（循环协议；task_create 工具面 2026-09-12 已移除——任务写入收敛 update_tasks）
 func isAgentProtocolTool(name string) bool {
 	if HarnessAlignedToolNames[name] {
 		return true
 	}
-	if strings.HasPrefix(name, "cordis_") || strings.HasPrefix(name, "toolset_") {
+	if name == "cordis" || strings.HasPrefix(name, "cordis_") || strings.HasPrefix(name, "toolset_") {
 		return true
 	}
 	if strings.HasPrefix(name, "history_") {
 		return true
 	}
 	switch name {
-	case "tool_stats", "task_create":
+	case "tool_stats":
 		return true
 	}
 	return false
@@ -1630,7 +1634,9 @@ func ApplyToolsetWhitelistByName(ph *PluginHost, reg *Registry, name string) {
 		}
 	}
 	for _, meta := range reg.AllToolMeta() {
-		if meta.SystemTool || isCordisMgmtTool(meta.Name) || isToolsetMgmtTool(meta.Name) {
+		if meta.SystemTool || isCordisMgmtTool(meta.Name) || isToolsetMgmtTool(meta.Name) || meta.Name == "tool_search" {
+			// ★ tool_search 与 SystemTool 同级恒可用：按需工具（deferred）的
+			//   发现入口——若被白名单收敛禁用，低频工具将永远无法暴露。
 			keep[meta.Name] = true
 		}
 	}
@@ -1729,7 +1735,7 @@ func workspaceToolsetVisibleToolsFor(ph *PluginHost, root string) map[string]boo
 // 插件注册的工具若不在全局工具集白名单（内置条目 Tools / 工具集 JS 插件声明），
 // 对 agent 隐藏（Enabled=false）——cordis/前端仍可见可管理，toolset_edit 加入后恢复。
 // 在 LoadJSDynamic 装载成功后调用（工具集插件经 applyToolsetPlugin 也走此路径，
-// 其工具在白名单内保持启用；非工具集插件经全局装载/cordis_run 装载即被隐藏）。
+// 其工具在白名单内保持启用；非工具集插件经全局装载/cordis(op=run) 装载即被隐藏）。
 func (h *PluginHost) applyPluginToolVisibility(name string) {
 	if h == nil || name == "" || !hasWorkspaceToolsets() {
 		return

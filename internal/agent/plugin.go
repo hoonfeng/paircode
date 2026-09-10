@@ -283,7 +283,7 @@ func (h *PluginHost) claimTool(plugin, toolName string) (bool, error) {
 			h.toolOwner[toolName] = plugin
 			return true, nil
 		}
-		return false, fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis_stop %s 再注册",
+		return false, fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis(op=stop) %s 再注册",
 			toolName, owner, plugin, owner)
 	}
 	if !taken {
@@ -419,7 +419,7 @@ const (
 	PluginSourceGo PluginSource = "go"
 	PluginSourceJS PluginSource = "js"
 	// PluginSourceBridge Node 桥插件（npm/外部包，真实 node 进程装载）。
-	// ★ 2026-08-31：桥插件并入 Inspect 输出——插件面板/cordis_inspect 与 goja
+	// ★ 2026-08-31：桥插件并入 Inspect 输出——插件面板/cordis(op=inspect) 与 goja
 	//   插件同列，来源标注区分（js=goja 沙箱移植版，node-bridge=外部权威版）。
 	PluginSourceBridge PluginSource = "node-bridge"
 )
@@ -434,7 +434,7 @@ type ToolConflictInfo struct {
 	Active string `json:"active"` // 当前生效方："repo" | "bridge"
 }
 
-// PluginRecord 插件记录（cordis_inspect 报告用）。
+// PluginRecord 插件记录（cordis(op=inspect) 报告用）。
 type PluginRecord struct {
 	Name       string       `json:"name"`
 	Source     PluginSource `json:"source"`
@@ -471,12 +471,12 @@ type PluginHost struct {
 	order   []string
 	ctx     *PluginContext
 
-	// JS 动态插件定义（cordis_define 登记，cordis_run 装载）
+	// JS 动态插件定义（cordis(op=define) 登记，cordis(op=run) 装载）
 	defs map[string]*jsPluginDef
 
 	// ★ 版本化 package 模型（对齐 harness registry）：
 	//   pluginId（稳定身份）→ 版本链（package 列表，最新在尾）。define 时
-	//   传 pluginId=existing 追加版本；cordis_run 传 pluginId 解析到最新版本。
+	//   传 pluginId=existing 追加版本；cordis(op=run) 传 pluginId 解析到最新版本。
 	pluginVersions map[string][]*jsPluginDef
 	// 等待中的定义（inject 声明服务缺失 → waiting；服务提供后自动重试激活）
 	waiting map[string]*jsPluginDef
@@ -700,7 +700,7 @@ func (h *PluginHost) findRunningJSAdapter(nameOrID string) *jsPluginAdapter {
 
 // ReportClientFailure 浏览器 client 半失败上报（对齐 harness
 // reportRenderFailure/reportClientGuardFailure）：记入定义诊断，供 Agent
-// 经 cordis_inspect 发现并修复。不改变插件运行状态（host 半不受影响）。
+// 经 cordis(op=inspect) 发现并修复。不改变插件运行状态（host 半不受影响）。
 func (h *PluginHost) ReportClientFailure(plugin, phase, message string) error {
 	if plugin == "" {
 		return fmt.Errorf("plugin 不能为空")
@@ -957,7 +957,7 @@ func (h *PluginHost) Use(p Plugin) error {
 	return h.Load(name)
 }
 
-// Register 注册但不启动（供 cordis_define/run 分两步使用）。
+// Register 注册但不启动（供 cordis(op=define)/run 分两步使用）。
 // 返回的 Load 由调用方触发。
 func (h *PluginHost) Register(p Plugin, src PluginSource) error {
 	name := p.Name()
@@ -1144,7 +1144,7 @@ func (h *PluginHost) Undefine(name string) error {
 }
 
 // UndefinePermanent 删除插件定义并同步删除磁盘插件包（前端「删除定义」按钮 /
-// cordis_undefine 用）。与 Undefine 的区别：Undefine 只删进程内存（defs/plugins/
+// cordis(op=undefine) 用）。与 Undefine 的区别：Undefine 只删进程内存（defs/plugins/
 // sources/order），磁盘插件包目录 <InstallDir>/.pair/plugins/<name>/ 保留——
 // 重启 LoadGlobalPlugins 扫描目录重新装配，插件「复活」。Permanent 复用
 // RemoveJSDef（解析 def → 删版本链 → 删磁盘包），彻底移除。
@@ -1220,12 +1220,12 @@ func (h *PluginHost) retryWaiting(serviceName string) {
 	}
 }
 
-// resolveJSDef 把 cordis_run/stop/undefine 的 id 解析为 JS 定义：
+// resolveJSDef 把 cordis(op=run)/stop/undefine 的 id 解析为 JS 定义：
 //   - 精确 dyn id（pkg-xxx 的 def）→ 该版本
 //   - pluginId（稳定身份）→ 版本链最新版
 //   - 插件名 → 匹配该名插件的最新版本
 func (h *PluginHost) resolveJSDef(idOrName string) (*jsPluginDef, error) {
-	// ★ pluginId（稳定身份）优先解析到最新版本（对齐 cordis_run 语义）：
+	// ★ pluginId（稳定身份）优先解析到最新版本（对齐 cordis(op=run) 语义）：
 	//   注意 pluginId 恒等于首次 dyn id（如 dyn-1），而该 id 同时也是 v1 的精确 id——
 	//   必须先查 pluginVersions 链，否则追加版本后传 pluginId 会错误命中旧版本 v1。
 	h.mu.RLock()
@@ -1272,7 +1272,7 @@ func (h *PluginHost) PluginIds() []string {
 	return ids
 }
 
-// waitingDefs 全部等待中的定义（排序；供 cordis_inspect 报告）。
+// waitingDefs 全部等待中的定义（排序；供 cordis(op=inspect) 报告）。
 func (h *PluginHost) waitingDefs() []*jsPluginDef {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -1298,7 +1298,7 @@ func (h *PluginHost) List() []string {
 	return append([]string(nil), h.order...)
 }
 
-// Inspect 全部插件记录（cordis_inspect 报告 / 插件面板列表）。
+// Inspect 全部插件记录（cordis(op=inspect) 报告 / 插件面板列表）。
 // ★ 2026-08-31：宿主内插件（Go/goja）+ Node 桥插件（DSH/npm）两源合并输出，
 //   并给同名工具冲突的两侧记录附 Conflicts 标注（生效方 repo|bridge）。
 func (h *PluginHost) Inspect() []PluginRecord {
@@ -1358,7 +1358,7 @@ func (h *PluginHost) inspectLocal() []PluginRecord {
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
 		// ★ 内置 Go 插件：工具经 Registry.Register 直接注册（不经 addPluginTool，
-		//   pluginTools 为空）——补静态派生工具清单，cordis_inspect/插件面板可见
+		//   pluginTools 为空）——补静态派生工具清单，cordis(op=inspect)/插件面板可见
 		//   （agent「通过插件列表看见被过滤工具」的通道）。
 		if len(rec.Tools) == 0 && isBuiltinPluginName(name) {
 			rec.Tools = append([]string(nil), builtinPluginToolGroups()[name]...)

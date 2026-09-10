@@ -89,11 +89,11 @@ func TestBuiltinGroupsOf(t *testing.T) {
 			t.Errorf("内置组 %s 不应再展示（已迁移磁盘插件）", gone)
 		}
 	}
-	// plugin-mgmt 含 cordis_define
+	// plugin-mgmt 含 cordis（2026-09 单工具）
 	for _, g := range groups {
 		if g.Name == "plugin-mgmt" {
-			if !containsToolName(g.Tools, "cordis_define") {
-				t.Errorf("plugin-mgmt 应含 cordis_define，实际 %v", toolNamesOf(g))
+			if !containsToolName(g.Tools, "cordis") {
+				t.Errorf("plugin-mgmt 应含 cordis，实际 %v", toolNamesOf(g))
 			}
 		}
 	}

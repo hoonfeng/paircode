@@ -30,7 +30,9 @@ func TestNoOldNameRegistration(t *testing.T) {
 		}
 	}
 
-	newNames := []string{"read", "write", "edit", "bash", "glob", "grep"}
+	// ★ 2026-09 工具重构：bash 已移除（exec_command 会话式取代）；
+	//   ★ Round5：edit/multi_edit 已移除（apply_patch 统一编辑面）
+	newNames := []string{"read", "write", "apply_patch", "glob", "grep", "exec_command"}
 	for _, n := range newNames {
 		tool, ok := reg.Get(n)
 		if !ok {

@@ -104,15 +104,15 @@ var presetModes = []presetMode{
 	{
 		Name: presetNamePlanning, Desc: "计划讨论模式——需求讨论/方案规划/资料检索/记忆与知识库（不含写代码工具）",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-memory", "tool-project-info",
-			"tool-web", "tool-workflow", "tool-vision",
+			"tool-harness", "tool-exec", "tool-memory", "tool-project-info",
+			"tool-web", "tool-workflow",
 		},
 	},
 	{
 		Name: presetNameFullstack, Desc: "全栈开发模式——版本控制/代码图谱/缺陷修复/调试/网页/系统/工作流（日常开发）",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-web", "tool-vision", "tool-snapshot",
-			"tool-project-info", "tool-memory", "tool-git", "tool-codegraph", "tool-bug",
+			"tool-harness", "tool-exec", "tool-web",
+			"tool-project-info", "tool-memory", "tool-codegraph", "tool-bug",
 			"tool-binary", "tool-resource",
 			"tool-workflow", "tool-system",
 		},
@@ -120,22 +120,22 @@ var presetModes = []presetMode{
 	{
 		Name: presetNameOffice, Desc: "办公模式——文档/表格/知识库/网页（文档与资料整理）",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-office", "tool-memory",
-			"tool-project-info", "tool-web", "tool-vision",
+			"tool-harness", "tool-exec", "tool-office", "tool-memory",
+			"tool-project-info", "tool-web",
 		},
 	},
 	{
 		Name: presetNameDebug, Desc: "调试排错模式——调试/缺陷/二进制/代码图谱/截图/网页验证（排查问题）",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-bug",
+			"tool-harness", "tool-exec", "tool-bug",
 			"tool-binary", "tool-codegraph",
-			"tool-snapshot", "tool-vision", "tool-web",
+			"tool-web",
 		},
 	},
 	{
 		Name: presetNameDefault, Desc: "基础工具集——极简核心 + 框架本身提供的工具；插件工具按需加入",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-project-info", "tool-memory",
+			"tool-harness", "tool-exec", "tool-project-info", "tool-memory",
 		},
 	},
 	{
@@ -148,11 +148,15 @@ var presetModes = []presetMode{
 // ★ 标记内容 = 预置分类版本号（presetSeedVersion）；版本升级时执行阶梯迁移并重播种。
 const presetSeedMarker = ".preset-seeded"
 
-// presetSeedVersion 预置分类版本：预设名单/命名变化时递增，触发 seedPresetToolsets
+// presetSeedVersion 预置分类版本：预设名单/命名/内容变化时递增，触发 seedPresetToolsets
 // 对应阶梯迁移（仅限预设名单，用户自定义工具集不动）并重播种。
-// v2：dev/test/docs → 全栈开发/办公；v3：英文名 → 中文名；v4：内容最小满足瘦身
+// v2：dev/test/docs → 全栈开发/办公；v3：英文名 → 中文名；v4：内容最小满足瘦身；
+// v5：工具重构（新增 tool-exec 执行组，exec_command/write_stdin 取代 run_background 等）；
+// v6：编辑面重构（tool-core 插件移除，apply_patch 统一编辑面）；
+// v7：codex 精简轮（tool-git/tool-entryconfig 删除；tool-vision→tool-web、
+//     tool-snapshot→tool-harness、tool-asset→tool-resource 合并）
 //（预设文件删除重建——预设内容属框架维护责任域，用户对预设的定制请复制为自定义集合）。
-const presetSeedVersion = 4
+const presetSeedVersion = 7
 
 // presetLegacyNames v1 起不再保留的旧预置模式（dev/test/docs 被全栈开发/办公取代；
 // v2 已清理；保留定义供版本阶梯迁移 v1→v2 使用）。
@@ -196,6 +200,36 @@ func seedPresetToolsets(ph *PluginHost) {
 		for _, m := range presetModes {
 			if err := os.Remove(toolsetPath("", toolsetProject, m.Name)); err == nil {
 				log.Printf("[toolset] v4 预设瘦身：旧预设 %q 已删除（按新表重建）", m.Name)
+			}
+		}
+	}
+	if curVer < 5 {
+		// v4→v5：工具重构——新增 tool-exec 执行组（exec_command/write_stdin/kill_process），
+		// 各预设同步加挂（预设文件删除重建；用户对预设的定制应复制为自定义集合）。
+		for _, m := range presetModes {
+			if err := os.Remove(toolsetPath("", toolsetProject, m.Name)); err == nil {
+				log.Printf("[toolset] v5 执行组更新：旧预设 %q 已删除（按新表重建）", m.Name)
+			}
+		}
+	}
+	if curVer < 6 {
+		// v5→v6：编辑面重构——tool-core 插件移除（multi_edit/move_file/delete_file
+		// 由 apply_patch 覆盖；tool-harness 承载 read/write/apply_patch/glob/grep）。
+		// 预设删除重建（含移除 tool-core 引用）；用户对预设的定制应复制为自定义集合。
+		for _, m := range presetModes {
+			if err := os.Remove(toolsetPath("", toolsetProject, m.Name)); err == nil {
+				log.Printf("[toolset] v6 编辑面重构：旧预设 %q 已删除（按新表重建）", m.Name)
+			}
+		}
+	}
+	if curVer < 7 {
+		// v6→v7：codex 精简轮——tool-git/tool-entryconfig 插件删除（git 走
+		// exec_command；entryconfig 被 glob/codegraph 覆盖）；tool-vision/snapshot/
+		// asset 分别并入 tool-web/tool-harness/tool-resource（预设引用同步）。
+		// 预设删除重建；用户对预设的定制应复制为自定义集合。
+		for _, m := range presetModes {
+			if err := os.Remove(toolsetPath("", toolsetProject, m.Name)); err == nil {
+				log.Printf("[toolset] v7 codex 精简：旧预设 %q 已删除（按新表重建）", m.Name)
 			}
 		}
 	}

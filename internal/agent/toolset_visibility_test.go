@@ -19,11 +19,10 @@ func mkVisibilityReg() *Registry {
 	reg := NewRegistry()
 	// 协议/管理工具（恒对 agent 可见）
 	for _, n := range []string{"update_tasks", "tool_stats", "ask_user",
-		"task_create", "history_search", "history_list", "history_count"} {
+		"history_search", "history_list", "history_count"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
-	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop",
-		"cordis_undefine", "cordis_service_list", "cordis_inspect_query"} {
+	for _, n := range []string{"cordis"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	for _, n := range []string{"toolset_build", "toolset_list", "toolset_show", "toolset_export",
@@ -35,7 +34,7 @@ func mkVisibilityReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 工具集插件工具（tool-foo 注册，应保留启用）
-	for _, n := range []string{"codegraph_search", "codegraph_impact", "memory_read", "git_diff"} {
+	for _, n := range []string{"codegraph_search", "codegraph_relations", "memory", "git_diff"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 非工具集插件工具（tool-bar 注册，应隐藏）
@@ -48,7 +47,8 @@ func mkVisibilityReg() *Registry {
 // mkVisibilityHost 构造带临时全局工具集的 PluginHost：
 // default.json 声明 tool-foo 插件（工具经 pluginTools 模拟注册）+ builtin:core 内置组。
 // ★ 2026-09-04 工具集全局化：全局工具集目录重定向到临时目录（测试隔离），
-//   NewPluginHost 仅保留 root 用于其他上下文（工作区隔离语义已由全局通用集合取代）。
+//
+//	NewPluginHost 仅保留 root 用于其他上下文（工作区隔离语义已由全局通用集合取代）。
 func mkVisibilityHost(t *testing.T, reg *Registry) (*PluginHost, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -73,7 +73,7 @@ func mkVisibilityHost(t *testing.T, reg *Registry) (*PluginHost, string) {
 	// 模拟插件注册：tool-foo（工具集插件）注册 4 个工具（装载后 running——
 	// ★ 2026-08-2x：白名单仅含 running 插件的工具，未启用插件不暴露）
 	h.mu.Lock()
-	h.pluginTools["tool-foo"] = []string{"codegraph_search", "codegraph_impact", "memory_read", "git_diff"}
+	h.pluginTools["tool-foo"] = []string{"codegraph_search", "codegraph_relations", "memory", "git_diff"}
 	h.states["tool-foo"] = PluginRunning
 	h.mu.Unlock()
 	return h, root
@@ -89,14 +89,14 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 	}
 	// 协议工具保持启用
 	for _, name := range []string{"update_tasks", "tool_stats", "ask_user",
-		"task_create", "history_search",
-		"cordis_inspect", "cordis_define", "cordis_run", "toolset_build", "toolset_edit"} {
+		"history_search",
+		"cordis", "toolset_build", "toolset_edit"} {
 		if !reg.IsEnabled(name) {
 			t.Errorf("协议工具 %s 应保持启用", name)
 		}
 	}
 	// 工具集插件工具启用（pluginTools[tool-foo]）
-	for _, name := range []string{"codegraph_search", "codegraph_impact", "memory_read", "git_diff"} {
+	for _, name := range []string{"codegraph_search", "codegraph_relations", "memory", "git_diff"} {
 		if !reg.IsEnabled(name) {
 			t.Errorf("工具集插件工具 %s 应启用", name)
 		}
@@ -203,14 +203,14 @@ func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
 	if !hasWorkspaceToolsets() {
 		t.Fatal("无工具集时应自动创建基础工具集")
 	}
-	// 框架自举工具恒可用：SystemTool（update_tasks）、cordis_*、toolset_*
-	for _, tn := range []string{"update_tasks", "cordis_define", "cordis_run", "toolset_edit", "toolset_build"} {
+	// 框架自举工具恒可用：SystemTool（update_tasks）、cordis、toolset_*
+	for _, tn := range []string{"update_tasks", "cordis", "toolset_edit", "toolset_build"} {
 		if !reg.IsEnabled(tn) {
 			t.Errorf("框架自举工具 %s 应可用（白名单兜底）", tn)
 		}
 	}
 	// 极简核心可用（默认工具集 system 条目声明）
-	for _, tn := range []string{"read", "write", "edit", "glob", "grep", "bash", "run_code"} {
+	for _, tn := range []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "run_code"} {
 		if !reg.IsEnabled(tn) {
 			t.Errorf("核心工具 %s 应可用（基础工具集声明）", tn)
 		}
@@ -253,25 +253,25 @@ func TestApplyConvToolsetWhitelist(t *testing.T) {
 	})
 	mkTs("dev", []ToolsetPlugin{
 		{Name: "builtin:core", Builtin: "core", Tools: []string{"read", "write", "edit"}},
-		{Name: "builtin:codegraph", Builtin: "codegraph", Tools: []string{"codegraph_search", "codegraph_impact"}},
+		{Name: "builtin:codegraph", Builtin: "codegraph", Tools: []string{"codegraph_search", "codegraph_relations"}},
 	})
 	// 模拟插件工具注册（tool-foo：工具集插件；tool-bar：未声明插件）
 	ph.mu.Lock()
-	ph.pluginTools["tool-foo"] = []string{"memory_read", "git_diff"}
+	ph.pluginTools["tool-foo"] = []string{"memory", "git_diff"}
 	ph.pluginTools["tool-bar"] = []string{"skill_list", "load_skill"}
 	ph.states["tool-foo"] = PluginRunning
 	ph.states["tool-bar"] = PluginRunning
 	ph.mu.Unlock()
-	for _, tn := range []string{"memory_read", "git_diff", "skill_list", "load_skill", "codegraph_search", "codegraph_impact"} {
+	for _, tn := range []string{"memory", "git_diff", "skill_list", "load_skill", "codegraph_search", "codegraph_relations"} {
 		reg.Register(&Tool{Name: tn, Handler: noopHandler})
 	}
 
 	// ① 会话未设置（空）→ default 集合：tool-foo 工具可见、codegraph 隐藏、skill_list 隐藏
 	ApplyConvToolsetWhitelist(ph, reg, "", root)
-	if !reg.IsEnabled("memory_read") || !reg.IsEnabled("git_diff") {
+	if !reg.IsEnabled("memory") || !reg.IsEnabled("git_diff") {
 		t.Error("default 集合：tool-foo 工具（memory_read/git_diff）应启用")
 	}
-	if reg.IsEnabled("codegraph_search") || reg.IsEnabled("codegraph_impact") {
+	if reg.IsEnabled("codegraph_search") || reg.IsEnabled("codegraph_relations") {
 		t.Error("default 集合：codegraph 工具应隐藏")
 	}
 	if reg.IsEnabled("skill_list") || reg.IsEnabled("load_skill") {
@@ -279,14 +279,14 @@ func TestApplyConvToolsetWhitelist(t *testing.T) {
 	}
 	// ② 会话选择 dev → dev 集合：codegraph 可见、tool-foo 隐藏
 	ApplyToolsetWhitelistByName(ph, reg, "dev")
-	if !reg.IsEnabled("codegraph_search") || !reg.IsEnabled("codegraph_impact") {
+	if !reg.IsEnabled("codegraph_search") || !reg.IsEnabled("codegraph_relations") {
 		t.Error("dev 集合：codegraph 工具应启用")
 	}
-	if reg.IsEnabled("memory_read") || reg.IsEnabled("git_diff") {
+	if reg.IsEnabled("memory") || reg.IsEnabled("git_diff") {
 		t.Error("dev 集合：tool-foo 工具应隐藏（仅所选集合声明）")
 	}
 	// ③ 框架自举工具恒可用（两个集合均如此）
-	for _, tn := range []string{"update_tasks", "cordis_define", "toolset_edit"} {
+	for _, tn := range []string{"update_tasks", "cordis", "toolset_edit"} {
 		if !reg.IsEnabled(tn) {
 			t.Errorf("框架自举工具 %s 应始终可用", tn)
 		}

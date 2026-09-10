@@ -9,7 +9,7 @@
 //
 // ★ 协议：工具结果以标记行开头 → __SUBMIT_IMAGE__:{"kind":"submit_image",
 //
-//	"path":"...","mime":"...","size":123,"prompt":"..."}（磁盘插件 tool-vision
+//	"path":"...","mime":"...","size":123,"prompt":"..."}（磁盘插件 tool-web
 //	生成）。本文件解析标记 → 读图 bytes（≤2MiB）→ ImagePart → 挂 pendingImages
 //	→ buildCallContext 注入 user 消息（Images 字段）→ Provider.Chat 转块数组。
 //	标记从结果文本剥离（净化后给 LLM 的文本不含标记）。
@@ -30,7 +30,7 @@ import (
 	"strings"
 )
 
-// imageSubmitMarker 工具结果标记行前缀（磁盘插件 tool-vision 生成）。
+// imageSubmitMarker 工具结果标记行前缀（磁盘插件 tool-web 生成——原 tool-vision，2026-09-12 并入）。
 const imageSubmitMarker = "__SUBMIT_IMAGE__:"
 
 // imageSubmitMeta 标记 JSON 载荷。

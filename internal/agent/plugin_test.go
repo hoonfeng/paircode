@@ -634,14 +634,14 @@ export default {
 	RegisterCordisTools(reg, host, dir)
 	ctx := context.Background()
 
-	// ① cordis_define：登记多文件 TS 插件（dir 指定源码目录）
-	defOut, err := reg.Execute(ctx, "cordis_define",
-		`{"code":`+strconv.Quote(pluginSrc)+`,"language":"ts","dir":`+strconv.Quote(dir)+`,"purpose":"自举闭环 e2e"}`)
+	// ① cordis(op=define)：登记多文件 TS 插件（dir 指定源码目录）
+	defOut, err := reg.Execute(ctx, "cordis",
+		`{"op":"define","code":`+strconv.Quote(pluginSrc)+`,"language":"ts","dir":`+strconv.Quote(dir)+`,"purpose":"自举闭环 e2e"}`)
 	if err != nil {
-		t.Fatalf("cordis_define: %v", err)
+		t.Fatalf("cordis(op=define): %v", err)
 	}
 	if !strings.Contains(defOut, "dyn-") {
-		t.Fatalf("cordis_define 应返回 dyn id，实际: %s", defOut)
+		t.Fatalf("cordis(op=define) 应返回 dyn id，实际: %s", defOut)
 	}
 	m := regexp.MustCompile(`dyn-\d+`).FindString(defOut)
 	if m == "" {
@@ -649,9 +649,9 @@ export default {
 	}
 	id := m
 
-	// ② cordis_run：装载（apply 注册工具/服务/事件/timer）
-	if _, err := reg.Execute(ctx, "cordis_run", `{"id":"`+id+`"}`); err != nil {
-		t.Fatalf("cordis_run: %v", err)
+	// ② cordis(op=run)：装载（apply 注册工具/服务/事件/timer）
+	if _, err := reg.Execute(ctx, "cordis", `{"op":"run","id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis(op=run): %v", err)
 	}
 	if host.State("boot-plugin") != PluginRunning {
 		t.Fatalf("boot-plugin 应 running")
@@ -712,27 +712,27 @@ export default {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// ⑧ cordis_stop：回收贡献（插件工具消失、服务移除、timer 清理）
-	if _, err := reg.Execute(ctx, "cordis_stop", `{"id":"`+id+`"}`); err != nil {
-		t.Fatalf("cordis_stop: %v", err)
+	// ⑧ cordis(op=stop)：回收贡献（插件工具消失、服务移除、timer 清理）
+	if _, err := reg.Execute(ctx, "cordis", `{"op":"stop","id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis(op=stop): %v", err)
 	}
 	if host.State("boot-plugin") != PluginStopped {
 		t.Fatalf("boot-plugin 应 stopped")
 	}
 	if _, err := reg.Execute(ctx, "boot_hello", `{}`); err == nil {
-		t.Error("cordis_stop 后插件工具应已回收")
+		t.Error("cordis(op=stop) 后插件工具应已回收")
 	}
 	if v := host.Context().Get("bootValue"); v != nil {
-		t.Errorf("cordis_stop 后服务应移除，实际 %v", v)
+		t.Errorf("cordis(op=stop) 后服务应移除，实际 %v", v)
 	}
 
-	// ⑨ cordis_inspect 报告可见
-	report, err := reg.Execute(ctx, "cordis_inspect", `{}`)
+	// ⑨ cordis(op=inspect) 报告可见
+	report, err := reg.Execute(ctx, "cordis", `{"op":"inspect"}`)
 	if err != nil {
-		t.Fatalf("cordis_inspect: %v", err)
+		t.Fatalf("cordis(op=inspect): %v", err)
 	}
 	if !strings.Contains(report, "boot-plugin") {
-		t.Errorf("cordis_inspect 应含 boot-plugin：\n%s", report)
+		t.Errorf("cordis(op=inspect) 应含 boot-plugin：\n%s", report)
 	}
 }
 
@@ -756,8 +756,8 @@ func TestAgentBaseInitPlugins(t *testing.T) {
 	if v := base.Plugins.Context().Get("workspaceRoot"); v != dir {
 		t.Fatalf("workspaceRoot 服务 = %v, want %v", v, dir)
 	}
-	// cordis 工具已注册且对 LLM 可见
-	for _, name := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine"} {
+	// cordis 工具已注册且对 LLM 可见（2026-09 七工具合并为单工具 cordis(op=…)）
+	for _, name := range []string{"cordis"} {
 		tool, ok := base.Registry.Get(name)
 		if !ok {
 			t.Fatalf("工具 %s 未注册", name)
@@ -1204,9 +1204,9 @@ func TestCordisServiceList(t *testing.T) {
 	pc := host.Context()
 	cancel := pc.Provide("demoService", map[string]any{"ok": true})
 	defer cancel()
-	out, err := reg.Execute(context.Background(), "cordis_service_list", `{}`)
+	out, err := reg.Execute(context.Background(), "cordis", `{"op":"services"}`)
 	if err != nil {
-		t.Fatalf("cordis_service_list: %v", err)
+		t.Fatalf("cordis(op=services): %v", err)
 	}
 	for _, want := range []string{"fs", "web", "bash", "logger", "timer", "demoService"} {
 		if !strings.Contains(out, want) {

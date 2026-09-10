@@ -12,16 +12,18 @@ func noopHandler(_ context.Context, _ map[string]any) (string, error) { return "
 // mkHarnessReg 构造含 harness 工具 + pair 独有工具的注册表（供过滤测试）。
 func mkHarnessReg() *Registry {
 	reg := NewRegistry()
-	// harness 工具集（含别名与原生 web）
-	for _, n := range []string{"read", "write", "edit", "glob", "grep", "str_replace_editor", "bash", "web_search", "web_fetch", "run_code"} {
+	// harness 工具集（含别名与原生 web + 按需工具搜索 tool_search）
+	// ★ 2026-09 Round4/5：str_replace_editor/edit 系已移除（不再注册）；
+	//   ★ 2026-09-12：tool_search 加入保留名单（deferred 工具发现入口）。
+	for _, n := range []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "write_stdin", "kill_process", "web_search", "web_fetch", "run_code", "tool_search"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 对话协议基础设施
 	for _, n := range []string{"update_tasks", "ask_user"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
-	// 插件管理工具集（cordis_*，自举链路保留）
-	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine", "cordis_service_list"} {
+	// 插件管理工具（cordis 单工具 2026-09 合并，自举链路保留）
+	for _, n := range []string{"cordis"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// 工具集管理（toolset_*，agent 自主创建/管理工具集，保留）
@@ -31,9 +33,16 @@ func mkHarnessReg() *Registry {
 	// pair 独有工具（应被移除；★ Round3：read/write/edit/glob/bash 已并入 harness
 	// 保留清单，此处只用真正的 pair 独有工具）
 	for _, n := range []string{"multi_edit", "tool_stats",
-		"codegraph_search", "memory_read", "project_info_write", "git_diff",
+		"codegraph_search", "memory", "project_info", "git_diff",
 		"binary_hash", "csv_read", "web_debug", "go_build", "fix_flex_autoheight"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
+	}
+	// ★ 2026-09-12 剩余插件审查轮：按需工具（deferred）与 harness 保留是正交
+	// 维度——对保留清单中的按需工具（toolset_*/cordis_* 等）标记「已发现」，
+	// 使本文件的「保留/禁用」断言聚焦 harness 语义（deferred 隐藏语义由
+	// deferred_tools_test.go 覆盖）。
+	for name := range HarnessAlignedToolNames {
+		reg.MarkToolDiscovered(name)
 	}
 	return reg
 }
@@ -57,8 +66,8 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 	}
 	// pair 独有工具保留在注册表但被禁用（agent 不可见，前端可见可恢复）
 	for _, name := range []string{"multi_edit", "tool_stats",
-		"codegraph_search", "memory_read",
-		"project_info_write", "git_diff", "binary_hash", "csv_read", "web_debug",
+		"codegraph_search", "memory",
+		"project_info", "git_diff", "binary_hash", "csv_read", "web_debug",
 		"go_build", "fix_flex_autoheight"} {
 		tool, ok := reg.Get(name)
 		if !ok {
@@ -181,7 +190,7 @@ var trimmedPromptBannedTools = []string{
 	"csv_", "word_", "xlsx", "read_pdf", "skill_", "mcp_",
 	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "glob",
 	"run_background", "read", "edit", "write", "bash",
-	"grep", "glob", "find_symbol", "go_build", "go_run", "run_test",
+	"exec_command", "write_stdin", "read", "edit", "write", "grep", "glob", "find_symbol", "go_build", "go_run", "run_test",
 	"fix_flex_autoheight", "image_",
 }
 
@@ -208,8 +217,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 	//   协议工具（update_tasks/ask_user 等）同样不点名，
 	//   工具名称与用法完全由 tools 参数 schema 提供。
 	for _, banned := range []string{"update_tasks",
-		"read", "edit", "write", "bash", "web_search", "web_fetch",
-		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
+		"read", "edit", "write", "apply_patch", "exec_command", "write_stdin", "web_search", "web_fetch",
 		"ask_user", "str_replace_editor"} {
 		if mentionsToolName(p, banned) {
 			t.Errorf("harness 精简提示词不应引用工具名 %q（工具信息以 tools 参数 schema 为准）", banned)

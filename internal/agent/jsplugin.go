@@ -43,6 +43,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,7 +157,7 @@ func isJSTimeout(err error) bool {
 
 // ─── JS 插件定义 ───────────────────────────────────────────
 
-// jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
+// jsPluginDef 一个 JS 动态插件定义（cordis(op=define) 登记；进程内存，不落盘）。
 //
 // ★ 版本化 package 模型（对齐 registry.ts）：pluginId 是稳定插件身份
 // （跨版本不变，默认=首次定义的 dyn id），packageId 是本次定义（不可变）；
@@ -174,10 +175,10 @@ type jsPluginDef struct {
 	version    string         // 版本号（v1/v2/…；默认 = 首次定义 v1）
 	provides   []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
-	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
+	config     map[string]any // 插件配置（cordis(op=run) 传入，apply(ctx, config) 第二参）
 	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
 	scope      string         // 生效作用域："global"=全局插件（UI 类，跨工作区；存 <InstallDir>/.pair/plugins/dynamic.json，独立于工具集）；""/"project"=项目插件（工作区工具集 dynamic，按工作区加载）
-	dir        string         // ★ 插件目录（磁盘插件包：<InstallDir>/.pair/plugins/<name>/；cordis_define dir 参数）；ctx.binary 服务据此定位 bin/<name>.exe 与 assets/
+	dir        string         // ★ 插件目录（磁盘插件包：<InstallDir>/.pair/plugins/<name>/；cordis(op=define) dir 参数）；ctx.binary 服务据此定位 bin/<name>.exe 与 assets/
 	createdAt  time.Time
 
 	// ★ 状态机与运行诊断（对齐 CordisRunStatus + CordisRunDiagnostic）
@@ -185,7 +186,7 @@ type jsPluginDef struct {
 	waitingFor []string    // status=waiting 时缺的服务清单
 	lastError  string      // 最近一次装载失败原因
 	diag       []string    // 运行诊断（阶段记录，最新在后）
-	console    []string    // 本次装载的 console 输出（log/info/warn/debug/error；cordis_run 返回时附加）
+	console    []string    // 本次装载的 console 输出（log/info/warn/debug/error；cordis(op=run) 返回时附加）
 }
 
 // setStatus 更新定义状态（线程安全；h.mu 保护）。
@@ -209,7 +210,7 @@ func (d *jsPluginDef) addDiag(line string) {
 }
 
 // addConsole 追加一条插件 console 输出（本次装载捕获；上限 30 条防刷屏）。
-// 宿主 stdout 流对模型不可见，必须捕获进 def.console 供 cordis_run 返回展示。
+// 宿主 stdout 流对模型不可见，必须捕获进 def.console 供 cordis(op=run) 返回展示。
 func (d *jsPluginDef) addConsole(line string) {
 	if d == nil {
 		return
@@ -220,7 +221,7 @@ func (d *jsPluginDef) addConsole(line string) {
 	}
 }
 
-// ConsoleText 插件本次装载的 console 输出文本（空=无输出；供 cordis_run 返回附加）。
+// ConsoleText 插件本次装载的 console 输出文本（空=无输出；供 cordis(op=run) 返回附加）。
 func (d *jsPluginDef) ConsoleText() string {
 	if d == nil || len(d.console) == 0 {
 		return ""
@@ -372,7 +373,7 @@ func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	}
 	// 插件卸载时清理活动 timer + JS 侧资源（防 goroutine/ticker/服务泄漏）
 	pc.Effect(func() { p.cleanupJS() })
-	// apply(ctx, config)：config 为 cordis_run 传入的插件配置（无则 undefined）
+	// apply(ctx, config)：config 为 cordis(op=run) 传入的插件配置（无则 undefined）
 	configVal := goja.Undefined()
 	if p.def.config != nil {
 		configVal = p.vm.ToValue(p.def.config)
@@ -626,13 +627,13 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	binaryObj := vm.NewObject()
 	binaryObj.Set("dir", func(call goja.FunctionCall) goja.Value {
 		if p.def.dir == "" {
-			panic(vm.NewTypeError("ctx.binary.dir: 插件目录未知（仅磁盘插件包可用；cordis_define 可传 dir 参数声明源码目录）"))
+			panic(vm.NewTypeError("ctx.binary.dir: 插件目录未知（仅磁盘插件包可用；cordis(op=define) 可传 dir 参数声明源码目录）"))
 		}
 		return vm.ToValue(p.def.dir)
 	})
 	binaryObj.Set("exec", func(call goja.FunctionCall) goja.Value {
 		if p.def.dir == "" {
-			panic(vm.NewTypeError("ctx.binary.exec: 插件目录未知（仅磁盘插件包可用；cordis_define 可传 dir 参数声明源码目录）"))
+			panic(vm.NewTypeError("ctx.binary.exec: 插件目录未知（仅磁盘插件包可用；cordis(op=define) 可传 dir 参数声明源码目录）"))
 		}
 		tool := call.Argument(0).String()
 		if tool == "" {
@@ -968,6 +969,126 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			"status":  map[bool]string{true: "已结束", false: "运行中"}[done],
 		})
 	})
+	// ctx.process.runCommand：会话式命令执行（exec_command 工具能力面，2026-09 新增）。
+	//   opts = { command, cwd?, yieldMs? } → { output, sessionId, running, exitCode, exitErr }
+	//   语义：启动命令等待最多 yieldMs 毫秒——完成则 output=全量输出且 running=false；
+	//   超时仍在跑则 output=已产生部分、sessionId 供 write_stdin 后续轮询/交互。
+	processObj.Set("runCommand", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		obj := map[string]any{}
+		if !goja.IsUndefined(a) && !goja.IsNull(a) {
+			obj, _ = a.Export().(map[string]any)
+		}
+		getStr := func(key string) string {
+			if v, ok := obj[key]; ok && v != nil {
+				return fmt.Sprint(v)
+			}
+			return ""
+		}
+		getInt := func(key string, def int) int {
+			if v, ok := obj[key]; ok && v != nil {
+				switch n := v.(type) {
+				case float64:
+					return int(n)
+				case int64:
+					return int(n)
+				case int:
+					return n
+				}
+			}
+			return def
+		}
+		command := strings.TrimSpace(getStr("command"))
+		if command == "" {
+			panic(vm.NewTypeError("ctx.process.runCommand: command 不能为空"))
+		}
+		dir := p.ctxServiceRoot(pc)
+		if cwd := getStr("cwd"); cwd != "" {
+			resolved, err := resolvePath(dir, cwd)
+			if err != nil {
+				panic(vm.NewGoError(err))
+			}
+			dir = resolved
+		}
+		yieldMs := getInt("yieldMs", 10000)
+		if yieldMs < 0 {
+			yieldMs = 0
+		}
+		id, err := globalBG.start(command, dir)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		proc := globalBG.get(id)
+		done := proc.waitDone(yieldMs)
+		out := proc.readNew() // 首次读取：游标 0 → 自启动全量输出
+		_, _, exitErr := proc.snapshot()
+		return vm.ToValue(map[string]any{
+			"output":    out,
+			"sessionId": id,
+			"running":   !done,
+			"exitCode":  proc.exitCode(),
+			"exitErr":   exitErr,
+		})
+	})
+	// ctx.process.writeStdin：向会话进程写 stdin + 等待新输出（write_stdin 工具能力面，2026-09 新增）。
+	//   opts = { id, chars?, yieldMs? } → { output(自上次读取的增量), running, exitCode, exitErr }
+	//   chars 空 = 仅轮询（默认等 5000ms）；chars 非空 = 写入后等 250ms。
+	processObj.Set("writeStdin", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		obj := map[string]any{}
+		if !goja.IsUndefined(a) && !goja.IsNull(a) {
+			obj, _ = a.Export().(map[string]any)
+		}
+		getInt := func(key string, def int) int {
+			if v, ok := obj[key]; ok && v != nil {
+				switch n := v.(type) {
+				case float64:
+					return int(n)
+				case int64:
+					return int(n)
+				case int:
+					return n
+				case string:
+					if i, err := strconv.Atoi(n); err == nil {
+						return i
+					}
+				}
+			}
+			return def
+		}
+		id := getInt("id", 0)
+		if id <= 0 {
+			panic(vm.NewTypeError("ctx.process.writeStdin: id 必填（正整数会话 id）"))
+		}
+		proc := globalBG.get(id)
+		if proc == nil {
+			panic(vm.NewGoError(fmt.Errorf("无此后台进程 id %d", id)))
+		}
+		chars := ""
+		if v, ok := obj["chars"]; ok && v != nil {
+			chars = fmt.Sprint(v)
+		}
+		if err := proc.writeStdin(chars); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		yieldMs := getInt("yieldMs", 0)
+		if yieldMs <= 0 {
+			if chars == "" {
+				yieldMs = 5000
+			} else {
+				yieldMs = 250
+			}
+		}
+		done := proc.waitDone(yieldMs)
+		out := proc.readNew()
+		_, _, exitErr := proc.snapshot()
+		return vm.ToValue(map[string]any{
+			"output":   out,
+			"running":  !done,
+			"exitCode": proc.exitCode(),
+			"exitErr":  exitErr,
+		})
+	})
 	processObj.Set("kill", func(call goja.FunctionCall) goja.Value {
 		id := int(call.Argument(0).ToInteger())
 		p := globalBG.get(id)
@@ -984,7 +1105,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return vm.ToValue(globalBG.list())
 	})
 	// ctx.process.exec：argv 数组执行（★ 2026-08-22 新增——无 shell 注入，
-	// 对齐 Go 原版 exec.CommandContext，供 tool-git/tool-bug 等
+	// 对齐 Go 原版 exec.CommandContext，供 tool-bug 等
 	// CLI 封装型磁盘插件 JS 原生化使用（tool-debug 已移除，Round4.5）。
 	//   opts = { cmd, args: [], cwd?, timeout? }
 	//     cmd     可执行文件（如 git/go/node）
@@ -1755,7 +1876,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 // （resolvePath 越界拦截）。方法同步实现——await 同步值直接通过，
 // cordis 插件写法 `await ctx.fs.readFile(...)` 兼容。
 // ★ 例外（只读浏览能力，不受工作区限制）：listDir（目录列表）/ drives（盘符
-//   探测）——目录浏览器/添加工作区需全盘浏览；只读无写入，2026-09-09 新增。
+//
+//	探测）——目录浏览器/添加工作区需全盘浏览；只读无写入，2026-09-09 新增。
 func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	root := pc.WorkspaceRoot
@@ -1775,6 +1897,29 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		return resolvePath(root, path)
 	}
 	fs := vm.NewObject()
+	// applyPatch：应用 codex 语法补丁（2026-09 工具重构 Phase B：apply_patch 工具的
+	//   宿主能力面——自由格式补丁取代 edit/multi_edit 的 JSON old_string 模式）。
+	//   patch 文本 → ApplyPatchText（解析+应用+写前快照+变更回调）；返回摘要。
+	fs.Set("applyPatch", func(call goja.FunctionCall) goja.Value {
+		patch := call.Argument(0).String()
+		if strings.TrimSpace(patch) == "" {
+			panic(vm.NewTypeError("ctx.fs.applyPatch: patch 不能为空"))
+		}
+		r := root
+		if r1 := p.toolCallRoot(); r1 != "" {
+			r = r1
+		} else if r2 := p.uiWsRootValue(); r2 != "" {
+			r = r2
+		}
+		if r == "" {
+			panic(vm.NewGoError(fmt.Errorf("ctx.fs.applyPatch: 工作区根为空")))
+		}
+		out, err := ApplyPatchText(r, patch)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(out)
+	})
 	fs.Set("readFile", func(call goja.FunctionCall) goja.Value {
 		full, err := resolve(call.Argument(0).String())
 		if err != nil {
@@ -2946,7 +3091,7 @@ func (p *jsPluginAdapter) buildPluginsService(pc *PluginContext) goja.Value {
 // newJSSandbox 创建插件沙箱：注入 console/btoa/atob/TextEncoder/TextDecoder
 // 与 __resolve 回调。返回 runtime 与 resolve 回调（goja 值 → 插件对象导出）。
 // def 非空时 console 输出同步捕获进 def.console（宿主 stdout 流对模型不可见，
-// 需经 cordis_run 返回展示；见 def.addConsole / ConsoleText）。
+// 需经 cordis(op=run) 返回展示；见 def.addConsole / ConsoleText）。
 func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 	vm := goja.New()
 
@@ -3024,7 +3169,7 @@ func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 		"setImmediate":  "Node timers are unavailable. Use ctx.timeout(callback, 0) instead (cordis timer service).",
 		"clearTimeout":  "Node timers are unavailable. ctx.timeout / ctx.interval return dispose functions that clear the timer.",
 		"clearInterval": "Node timers are unavailable. ctx.timeout / ctx.interval return dispose functions that clear the timer.",
-		"fetch":         "Network access goes through the cordis web service — use ctx.web instead (query cordis_inspect_query for its methods).",
+		"fetch":         "Network access goes through the cordis web service — use ctx.web instead (query cordis(op=query) for its methods).",
 	}
 	for name, redirect := range nodeAPI {
 		n, r := name, redirect
@@ -3126,8 +3271,8 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 	return resolved, nil
 }
 
-// LoadJSDynamic 求值并装载一个 JS 动态插件（对齐 cordis_run 的 host 半）。
-// def 由 cordis_define 登记；装载后插件立即 apply（注册工具等）。
+// LoadJSDynamic 求值并装载一个 JS 动态插件（对齐 cordis(op=run) 的 host 半）。
+// def 由 cordis(op=define) 登记；装载后插件立即 apply（注册工具等）。
 //
 // ★ 插件形态（对齐 isPlugin，兼容 cordis 生态）：
 //   - 对象形态：return { name, apply(ctx, config), inject?: [...] }（apply 必须）
@@ -3138,7 +3283,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	if def == nil || strings.TrimSpace(def.code) == "" {
 		return fmt.Errorf("插件 %s: 代码为空", def.id)
 	}
-	// ★ 提示词插件化：带目录的 JS 插件（cordis_define dir / 磁盘插件包）装载时
+	// ★ 提示词插件化：带目录的 JS 插件（cordis(op=define) dir / 磁盘插件包）装载时
 	//   同步扫描其 prompts/ 目录注册提示词资产（防重复扫描由注册表去重）。
 	if def.dir != "" && def.name != "" {
 		ScanPluginPromptAssets(def.dir, def.name)
@@ -3533,7 +3678,7 @@ func normalizeToolSchema(params map[string]any) map[string]any {
 
 // validateToolSchema 定义期校验插件工具参数 schema（轻量：type 合法性 + 结构要点 +
 // realm 安全：整棵可 JSON 序列化、拒绝外部 $ref 与原型污染键）。
-// 不合法返回 error——cordis_define/registerTool 提前暴露，避免运行期才崩。
+// 不合法返回 error——cordis(op=define)/registerTool 提前暴露，避免运行期才崩。
 // （对齐 guard.ts：schema type 白名单 + cloneJson 无损克隆；goja 单 realm
 //
 //	天然豁免跨 realm instanceof，此处补序列化与引用边界。）
@@ -3736,6 +3881,38 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func()), owner *jsPl
 		return out, hErr
 	}
 
+	// ★ 2026-09 动态审批（工具面合并支撑）：dynamicApproval: (args) => bool——
+	//   按本次调用参数决定是否走审批门（与 RequiresApproval 为「或」关系，
+	//   见 loop.go 审批门）。合并类工具用：如 memory(op=write/delete) 需审批、
+	//   read/list/search 不需要。与 execute 同线程模式（lockFn 包裹 goja 调用）。
+	var dynApprove func(ToolCall) bool
+	if dv := obj.Get("dynamicApproval"); dv != nil && !goja.IsUndefined(dv) && !goja.IsNull(dv) {
+		if dfn, ok := goja.AssertFunction(dv); ok {
+			dynApprove = func(tc ToolCall) bool {
+				argObj := map[string]any{}
+				if s := strings.TrimSpace(tc.Function.Arguments); s != "" {
+					var m map[string]any
+					if err := json.Unmarshal([]byte(s), &m); err == nil {
+						argObj = m
+					}
+				}
+				need := false
+				call := func() {
+					r, derr := dfn(goja.Undefined(), vm.ToValue(argObj))
+					if derr == nil && r != nil && !goja.IsUndefined(r) && !goja.IsNull(r) {
+						need = r.ToBoolean()
+					}
+				}
+				if lockFn != nil {
+					lockFn(call)
+				} else {
+					call()
+				}
+				return need
+			}
+		}
+	}
+
 	return &Tool{
 		Name:             name.String(),
 		Description:      desc,
@@ -3745,6 +3922,7 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func()), owner *jsPl
 		Category:         strField(obj, "category"),
 		ReadOnly:         boolField(obj, "readOnly"),
 		RequiresApproval: boolField(obj, "requiresApproval"),
+		DynamicApproval:  dynApprove,
 		SystemTool:       boolField(obj, "systemTool"),
 	}, nil
 }
@@ -4139,7 +4317,7 @@ func toInt64(v any) int64 {
 // dynSeq 动态插件 id 序号（dyn-<n>）。
 var dynSeq atomic.Uint64
 
-// DefineJS 登记一个 JS 动态插件定义（cordis_define；不装载）。
+// DefineJS 登记一个 JS 动态插件定义（cordis(op=define)；不装载）。
 // 返回分配的 dyn id。源码语言自动探测（TS 类型注解会经内置编译器转译）。
 func (h *PluginHost) DefineJS(code, purpose string) (string, error) {
 	return h.DefineJSCode(code, "", purpose)
@@ -4169,7 +4347,7 @@ func (h *PluginHost) DefineJSCodeFull(code, language, purpose, dir, clientCode s
 
 // DefineJSCodeVersioned 版本化登记：pluginId 为空 → 新建插件（分配稳定 pluginId）；
 // pluginId 非空 → existing 模式：向该插件追加一个版本（对齐 define existing append）。
-// 返回 def.id（dyn-n，精确版本 id）；cordis_run 传 pluginId 或该 id 均可装载。
+// 返回 def.id（dyn-n，精确版本 id）；cordis(op=run) 传 pluginId 或该 id 均可装载。
 func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId string) (string, error) {
 	if strings.TrimSpace(code) == "" {
 		return "", fmt.Errorf("插件代码为空")
@@ -4245,7 +4423,7 @@ func (h *PluginHost) SetJSDefConfig(id, key string, val any) {
 	}
 }
 
-// RemoveJSDef 删除 JS 定义（cordis_undefine 用；先停再删）。
+// RemoveJSDef 删除 JS 定义（cordis(op=undefine) 用；先停再删）。
 // 删除整个 pluginId 的全部版本（版本化模型：undefine 按稳定身份清链）。
 func (h *PluginHost) RemoveJSDef(id string) error {
 	h.mu.RLock()

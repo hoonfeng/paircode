@@ -37,7 +37,7 @@ func registerProgressChecker(r *Registry, root string) {
 
 			allTasks := tm.List("")
 			if len(allTasks) == 0 {
-				return "[任务] **当前没有活跃的任务**\n\n没有需要跟踪的任务进度。可以使用 `task_create` 创建新任务。", nil
+				return "[任务] **当前没有活跃的任务**\n\n没有需要跟踪的任务进度。可以使用 `update_tasks` 创建任务清单。", nil
 			}
 
 			summary := tm.GetSummary()
@@ -121,7 +121,7 @@ func registerProgressChecker(r *Registry, root string) {
 					}
 				}
 			}
-			lines = append(lines, "", "[提示] 使用 `task_create` 创建新任务，`task_update` 更新任务状态。")
+			lines = append(lines, "", "[提示] 使用 `update_tasks` 管理任务清单（全量替换：创建/更新状态一处完成）。")
 
 			return strings.Join(lines, "\n"), nil
 		},

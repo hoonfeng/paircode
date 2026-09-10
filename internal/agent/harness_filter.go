@@ -38,13 +38,12 @@ func HarnessOnlyTools() bool {
 
 // HarnessAlignedToolNames 保留清单（过滤时仅保留以下工具）：
 //
-//	① harness 原生工具集：read/write/edit（tool-fs）、glob/grep（tool-fs-search）、
-//	   bash（tool-bash，内部后台+120s 超时）、web_search/web_fetch（tool-web）、
-//	   run_code（code-mode）
-//	   ★ Round4：str_replace_editor 已从工具面移除（编辑覆盖链 read/write/edit 完全）
-//	② 对话协议基础设施：update_tasks（任务追踪，前端任务面板依赖）、
-//	   ask_user（提问）——
-//	   属循环协议而非 pair 独有编码能力，保留以维持 agent 循环契约。
+//	① harness 原生工具集：read/write/apply_patch（tool-fs）、glob/grep（tool-fs-search）、
+//	   exec_command/write_stdin/kill_process（命令执行，tool-exec）、
+//	   web_search/web_fetch（tool-web）、run_code（code-mode）
+//	   ★ Round4：str_replace_editor 已从工具面移除（编辑覆盖链 read/write 完全）
+//	   ★ Round5：edit/multi_edit 已从工具面移除（apply_patch 统一编辑面）；
+//	     bash/run_background/read_output/job_list 已移除（exec_command 会话式模型取代）
 //	③ 插件管理工具集（cordis_*）：插件即工具的登记/装载/停止/回收/查看——
 //	   自举链路关键能力（用 agent 开发 agent 时需能动态注册新工具），
 //	   与 harness 的 "tools are plugins" 哲学一致，保留。
@@ -53,21 +52,21 @@ func HarnessOnlyTools() bool {
 //	   （需求：工具集由 agent 自主创建，而非仅前端手动创建）。
 var HarnessAlignedToolNames = map[string]bool{
 	// harness 原生工具集
-	"read": true, "write": true, "edit": true,
+	"read": true, "write": true, "apply_patch": true,
 	"glob": true, "grep": true,
-	"web_search":         true, "web_fetch": true,
-	"run_code":            true,
-	"bash":                true,
+	"web_search": true, "web_fetch": true,
+	"run_code": true,
+	// 命令执行（2026-09 工具重构：exec 组取代旧 bash/run_background 链）
+	"exec_command": true,
+	"write_stdin":  true,
+	"kill_process": true,
 	// 对话协议基础设施
 	"update_tasks": true,
 	"ask_user":     true,
-	// 插件管理（cordis_*）：登记/装载/停止/回收/查看 JS 动态插件
-	"cordis_inspect":      true,
-	"cordis_define":       true,
-	"cordis_run":          true,
-	"cordis_stop":         true,
-	"cordis_undefine":     true,
-	"cordis_service_list": true,
+	// 按需工具搜索（deferred 工具发现——harness 模式下同样保留）
+	"tool_search": true,
+	// 插件管理（cordis 单工具 op 分派）：登记/装载/停止/回收/查看 JS 动态插件
+	"cordis": true,
 	// 工具集管理（toolset_*）：工具集=插件组合的固化单元，agent 自主构建/查看/导出/管理
 	"toolset_build":  true,
 	"toolset_list":   true,

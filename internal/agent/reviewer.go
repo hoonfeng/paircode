@@ -86,7 +86,9 @@ var criticalFiles = map[string]bool{
 func NeedsReview(toolName string) bool {
 	switch toolName {
 	// ★ Round3：新名（write/edit/bash）补入；旧名保留历史消息兼容
-	case "write", "edit", "bash", "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command":
+	// ★ 2026-09 工具重构：exec_command 取代 bash（会话式；yield 超时自动转会话）
+	// ★ 2026-09 Round5：apply_patch 取代 edit/multi_edit（旧名保留历史消息兼容）
+	case "write", "apply_patch", "edit", "bash", "exec_command", "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command":
 		return true
 	}
 	// run_background/kill_process 管理自己启动的后台进程，是安全的进程管理，无需审核。
@@ -126,12 +128,12 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	name := tc.Function.Name
 
-	// bash/run_command 安全命令智能放行（无需 LLM 审核；Round3 新名 bash 与旧名并存兼容）
-	if (name == "run_command" || name == "bash") && isSafeShellCommand(argStr(args, "command")) && !isBlockingCommand(argStr(args, "command")) {
+	// exec_command/bash/run_command 安全命令智能放行（无需 LLM 审核；旧名 bash 并存兼容）
+	if (name == "run_command" || name == "bash" || name == "exec_command") && isSafeShellCommand(argStr(args, "command")) && !isBlockingCommand(argStr(args, "command")) {
 		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：普通构建/测试/查询命令"}, nil
 	}
-	if name == "run_background" && isSafeShellCommand(argStr(args, "command")) {
-		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：后台运行安全命令"}, nil
+	if (name == "run_background" || name == "exec_command") && isSafeShellCommand(argStr(args, "command")) {
+		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：后台/长驻运行安全命令（yield 超时自动转会话）"}, nil
 	}
 	// kill_process 仅杀死自己启动的后台进程，是安全的进程管理操作，不需要 LLM 审核。
 	if name == "kill_process" {
@@ -143,6 +145,22 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	}
 
 	path, _ := args["path"].(string)
+
+	// ★ Round5：apply_patch 含 "*** Delete File:" 时做关键文件保护（确定性拦截；
+	//   其余场景走 LLM 审核——patch 内容已随 reviewUserPrompt 提交）。
+	if name == "apply_patch" {
+		for _, ln := range strings.Split(argStr(args, "patch"), "\n") {
+			ln = strings.TrimSpace(ln)
+			if strings.HasPrefix(ln, "*** Delete File:") {
+				dp := strings.TrimSpace(strings.TrimPrefix(ln, "*** Delete File:"))
+				if criticalFiles[strings.ToLower(baseName(dp))] {
+					return ReviewVerdict{Verdict: "驳回", Confidence: 1,
+						Summary:     "驳回：删除关键文件 " + baseName(dp) + " 需人工确认",
+						Suggestions: []string{"如确需删除，请手动操作并确认影响范围", "先检查依赖关系再执行删除"}}, nil
+				}
+			}
+		}
+	}
 
 	// 关键文件保护：删除关键文件直接驳回
 	if strings.Contains(name, "delete") {
@@ -166,22 +184,44 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	return parseVerdict(resp.Content), nil
 }
 func reviewUserPrompt(name string, args map[string]any) string {
-	if name == "run_command" || name == "run_background" || name == "bash" {
+	if name == "run_command" || name == "run_background" || name == "bash" || name == "exec_command" {
 		cmd, _ := args["command"].(string)
 		return "[审核：Shell 命令]\n命令：" + cmd + "\n\n请严格检查：\n" +
 			"1. 破坏性操作（rm -rf、force push、hard reset、format、del /f /s 等）\n" +
 			"2. 会修改项目外系统状态的命令\n3. 路径穿越或访问系统关键目录\n" +
 			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n" +
-			"5. 【阻塞检查】bash/run_command 同步执行最长 120s，是否在运行长期命令（dev server / watch / go run 服务 / npm run dev）？" +
-			"此类命令应改用 run_background 后台执行，否则会阻塞 agent 循环\n\n以 JSON 格式输出审核结果。"
+			"5. 【会话检查】长驻命令（dev server / watch / go run 服务 / npm run dev）由 exec_command 的 yield_time_ms 自动转会话（不阻塞）——如疑似长驻，确认是否合理\n\n以 JSON 格式输出审核结果。"
 	}
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
 	if content == "" {
 		content, _ = args["old_string"].(string)
 	}
+	// ★ Round5：apply_patch 的变更载荷与目标路径在 patch 文本里（无 path/content
+	//   参数）——提取首个文件头与补丁正文，供审核 prompt 展示（否则审核看不到内容）。
+	if patchStr, _ := args["patch"].(string); patchStr != "" {
+		if content == "" {
+			content = patchStr
+		}
+		if path == "" {
+			for _, ln := range strings.Split(patchStr, "\n") {
+				ln = strings.TrimSpace(ln)
+				for _, pfx := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
+					if strings.HasPrefix(ln, pfx) {
+						path = strings.TrimSpace(strings.TrimPrefix(ln, pfx))
+						break
+					}
+				}
+				if path != "" {
+					break
+				}
+			}
+		}
+	}
 	op := "写入（新建/覆盖）"
-	if strings.Contains(name, "edit") {
+	if name == "apply_patch" {
+		op = "编辑（补丁应用）"
+	} else if strings.Contains(name, "edit") {
 		op = "编辑（字符串替换）"
 	} else if strings.Contains(name, "delete") {
 		op = "删除"

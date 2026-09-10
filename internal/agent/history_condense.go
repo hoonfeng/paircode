@@ -299,7 +299,7 @@ func summarizeToolResult(toolName, content string) string {
 		if len(lines) > 0 {
 			return "读取文件: " + truncateRunes(strings.TrimSpace(lines[0]), 80)
 		}
-	case "write_file", "edit_file", "multi_edit":
+	case "write_file", "edit_file", "multi_edit", "apply_patch":
 		return "已编辑文件"
 	case "run_command":
 		// 提取命令结果的关键字
@@ -328,7 +328,7 @@ func summarizeToolResult(toolName, content string) string {
 	case "update_tasks":
 	case "web_debug":
 		return "已打开页面验证"
-	case "codegraph_search", "codegraph_function", "codegraph_impact":
+	case "codegraph_search", "codegraph_function", "codegraph_relations":
 		return "已查询代码图谱"
 	default:
 		// 通用：取前 60 个字符

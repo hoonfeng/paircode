@@ -22,16 +22,16 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ─── 5.3 edit CRLF 场景 ──
+// ─── 5.3 apply_patch CRLF 场景 ──
 
-func TestLiveEditFileCRLF(t *testing.T) {
+func TestLiveApplyPatchCRLF(t *testing.T) {
 	key := liveKey()
 	if key == "" {
 		t.Skip("未设 DEEPSEEK_KEY，跳过真机测试")
 	}
 	root := t.TempDir()
 	crlfPath := filepath.Join(root, "crlf.txt")
-	// 创建 CRLF 文件：LLM 用 LF 的 old_string 也能命中（edit_matcher 归一化匹配）
+	// 创建 CRLF 文件：apply_patch 统一 \n 匹配后 restoreNewlines 恢复 CRLF
 	if err := os.WriteFile(crlfPath, []byte("line1\r\nline2 old\r\nline3\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestLiveEditFileCRLF(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 edit），然后用 read 读回确认内容。完成后输出 完成。"
+	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 apply_patch），然后用 read 读回确认内容。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -58,17 +58,17 @@ func TestLiveEditFileCRLF(t *testing.T) {
 		t.Fatalf("读取 crlf.txt 失败: %v", rerr)
 	}
 	if !strings.Contains(string(data), "line2 new") {
-		t.Errorf("edit 后应含 'line2 new'，得 %q", string(data))
+		t.Errorf("apply_patch 后应含 'line2 new'，得 %q", string(data))
 	}
 	if !strings.Contains(string(data), "line2 new\r\n") {
-		t.Errorf("CRLF 应被保留（edit_matcher restoreNewlines），得 %q", string(data))
+		t.Errorf("CRLF 应被保留（apply_patch restoreNewlines），得 %q", string(data))
 	}
 	joined := strings.Join(ev, " ")
-	// ★ 词边界断言：避免 multi_edit 等含 "edit" 子串的工具名误判
-	if !strings.Contains(" "+joined+" ", " edit ") {
-		t.Errorf("LLM 未调用 edit，工具序列: %v", ev)
+	// ★ 词边界断言：避免含子串的旧工具名误判
+	if !strings.Contains(" "+joined+" ", " apply_patch ") {
+		t.Errorf("LLM 未调用 apply_patch，工具序列: %v", ev)
 	}
-	t.Logf("✓ edit CRLF 真机通过；内容=%q；工具: %v", string(data), ev)
+	t.Logf("✓ apply_patch CRLF 真机通过；内容=%q；工具: %v", string(data), ev)
 }
 
 // ─── 5.4 glob ** 递归 ──

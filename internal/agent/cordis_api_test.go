@@ -44,17 +44,17 @@ return {
   }
 }`
 
-	defOut, err := reg.Execute(ctx, "cordis_define", `{"code":`+strconv.Quote(pluginSrc)+`,"purpose":"CordisApi 全局验证"}`)
+	defOut, err := reg.Execute(ctx, "cordis", `{"op":"define","code":`+strconv.Quote(pluginSrc)+`,"purpose":"CordisApi 全局验证"}`)
 	if err != nil {
-		t.Fatalf("cordis_define: %v", err)
+		t.Fatalf("cordis(op=define): %v", err)
 	}
 	id := regexp.MustCompile(`dyn-\d+`).FindString(defOut)
 	if id == "" {
 		t.Fatalf("无法提取 dyn id: %s", defOut)
 	}
 
-	if _, err := reg.Execute(ctx, "cordis_run", `{"id":"`+id+`"}`); err != nil {
-		t.Fatalf("cordis_run: %v", err)
+	if _, err := reg.Execute(ctx, "cordis", `{"op":"run","id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis(op=run): %v", err)
 	}
 	if host.State("cordis-api-probe") != PluginRunning {
 		t.Fatalf("cordis-api-probe 应 running")
@@ -79,15 +79,15 @@ return {
 		t.Errorf("CordisApi 全局应存在，实际 %v", m["appExists"])
 	}
 
-	// cordis_stop 回收
-	if _, err := reg.Execute(ctx, "cordis_stop", `{"id":"`+id+`"}`); err != nil {
-		t.Fatalf("cordis_stop: %v", err)
+	// cordis(op=stop) 回收
+	if _, err := reg.Execute(ctx, "cordis", `{"op":"stop","id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis(op=stop): %v", err)
 	}
 	if host.State("cordis-api-probe") != PluginStopped {
 		t.Fatalf("cordis-api-probe 应 stopped")
 	}
 	if v := host.Context().Get("probe"); v != nil {
-		t.Errorf("cordis_stop 后 probe 服务应移除，实际 %v", v)
+		t.Errorf("cordis(op=stop) 后 probe 服务应移除，实际 %v", v)
 	}
 	if !strings.Contains(defOut, "cordis-api-probe") && !strings.Contains(defOut, "dyn-") {
 		t.Errorf("define 输出异常: %s", defOut)

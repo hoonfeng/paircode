@@ -54,7 +54,7 @@ func TestEmbeddedToolRegistryCoverage(t *testing.T) {
 	root := t.TempDir()
 	reg := InitEmbeddedToolRegistry(root)
 	for _, name := range []string{
-		"codegraph_build", "codegraph_search", "codegraph_impact", // tool-codegraph
+		"codegraph_build", "codegraph_search", "codegraph_relations", // tool-codegraph
 		"codegraph_find_entry_points", "codegraph_explore", // tool-codegraph-extra
 		"inspect_binary", "write_binary", "binary_strings", "binary_find", // tool-binary
 		"screenshot_desktop", "screenshot_area", "screenshot_window", // tool-screenshot

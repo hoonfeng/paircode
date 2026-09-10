@@ -7,13 +7,15 @@ package agent
 
 // visionDependentTools 视觉依赖工具清单：
 //   - read_image：把工作区图片读给模型看（多模态专属；旧名 submit_image 已弃用）
-//   - screenshot_desktop/window/area：截屏（截图对纯文本模型无意义——
-//     LLM 看不到图，只会白耗截图动作；对话粘贴图片走 pendingImages 队列，
-//     由 Loop.injectPendingImages 按 supportsMultimodal 独立门控）
+//   - screenshot：截屏（2026-09-12 由 screenshot_desktop/window/area 合并为单工具；
+//     旧三名保留为兼容项——内核回退/旧插件场景）
+//     （截图对纯文本模型无意义——LLM 看不到图，只会白耗截图动作；对话粘贴图片
+//     走 pendingImages 队列，由 Loop.injectPendingImages 按 supportsMultimodal 独立门控）
 var visionDependentTools = []string{
 	"read_image",
 	"submit_image", // 兼容旧名（若旧版插件仍在磁盘上）
-	"screenshot_desktop",
+	"screenshot",   // 2026-09-12 合并后的单工具（target=desktop/window/area）
+	"screenshot_desktop", // 旧名兼容（内核回退/旧插件场景）
 	"screenshot_window",
 	"screenshot_area",
 }

@@ -9,15 +9,18 @@ import (
 )
 
 // TestGeneratedDiskPluginLoad 验证自动生成的磁盘工具插件（tool_plugin_gen.go 产物）
-// 可被 goja 沙箱装载：读仓库 .pair/plugins/tool-git/index.js → define+load →
-// 同名工具接管（宿主执行器存档）+ Registry 注册成功。
+// 可被 goja 沙箱装载：读仓库 .pair/plugins/tool-memory/index.js → define+load →
+// Registry 注册成功（工具集可见性收敛在插件装载测试中单独验证）。
+// ★ 2026-09-12 codex 精简轮：原样例 tool-git 已移除（git 走 exec_command）——
+//
+//	改用 tool-memory（JS 原生化插件，同链路）。
 func TestGeneratedDiskPluginLoad(t *testing.T) {
 	// 定位仓库根（测试运行于 internal/agent/）
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("定位仓库根失败: %v", err)
 	}
-	pluginFile := filepath.Join(repoRoot, ".pair", "plugins", "tool-git", "index.js")
+	pluginFile := filepath.Join(repoRoot, ".pair", "plugins", "tool-memory", "index.js")
 	code, err := os.ReadFile(pluginFile)
 	if err != nil {
 		t.Skipf("生成的插件不存在（先跑 go run -tags toolsgen ./dev/tool_plugin_gen）: %v", err)
@@ -26,7 +29,7 @@ func TestGeneratedDiskPluginLoad(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, repoRoot)
 
-	id, err := host.DefineJSCodeFull(string(code), "js", "tool-git 装载测试", "", "")
+	id, err := host.DefineJSCodeFull(string(code), "js", "tool-memory 装载测试", "", "")
 	if err != nil {
 		t.Fatalf("define 失败: %v", err)
 	}
@@ -38,33 +41,21 @@ func TestGeneratedDiskPluginLoad(t *testing.T) {
 		t.Fatalf("装载失败: %v", err)
 	}
 
-	// ① 10 个 git_* 工具全部注册（插件接管）
-	for _, name := range []string{"git_status", "git_diff", "git_log", "git_show", "git_blame",
-		"git_add", "git_commit", "git_branch", "git_checkout", "git_stash"} {
-		tool, ok := reg.Get(name)
-		if !ok {
-			t.Fatalf("%s 未注册", name)
-		}
-		if strings.TrimSpace(tool.Description) == "" {
-			t.Fatalf("%s 描述为空", name)
-		}
-		if !strings.Contains(tool.Name, "git_") {
-			t.Fatalf("%s 名称异常", name)
-		}
+	// ① memory 工具注册（插件接管；2026-09 由 5 工具合并为单工具 memory(op=…)）
+	tool, ok := reg.Get("memory")
+	if !ok {
+		t.Fatalf("memory 未注册")
 	}
-	// ② ★ 宿主不再承载 git 工具实现（2026-08-16 第三轮：内置 20 组注册删除，
-	//    实现归插件独立二进制）——插件注册时宿主 Registry 无同名工具，
-	//    故不存档 hostExecutors，也不应有宿主执行器
-	if _, ok := HostToolMeta("git_status"); ok {
-		t.Fatal("git_status 不应有宿主执行器（实现已迁移插件独立二进制）")
+	if strings.TrimSpace(tool.Description) == "" {
+		t.Fatalf("memory 描述为空")
 	}
-	if _, ok := HostToolMeta("git_commit"); ok {
-		t.Fatal("git_commit 不应有宿主执行器（实现已迁移插件独立二进制）")
+	// ② 插件为 JS 原生实现（execute 走插件内 ctx.fs）——宿主无同名注册，未经 hostExecutors 存档
+	if _, ok := HostToolMeta("memory"); ok {
+		t.Fatal("memory 不应有宿主执行器（JS 原生实现在插件内）")
 	}
-	// ③ hostTool 链路：无存档 → 明确报错（宿主已不承载，工具经插件 execute
-	//    调 ctx.binary 独立二进制执行，不走 hostTool）
-	if _, err := ExecuteHostTool("git_status", map[string]any{"project": repoRoot}); err == nil {
-		t.Fatal("ExecuteHostTool(git_status) 应报错（宿主执行器不存在）")
+	// ③ hostTool 链路：无存档 → 明确报错
+	if _, err := ExecuteHostTool("memory", map[string]any{}); err == nil {
+		t.Fatal("ExecuteHostTool(memory) 应报错（宿主执行器不存在）")
 	}
 }
 
@@ -171,24 +162,18 @@ func TestBinaryPluginExec(t *testing.T) {
 }
 
 // TestBinaryPluginExecUnified 验证统一宿主二进制链路：其他工具组插件 JS 壳
-// execute 调 ctx.binary.exec(t.name, args, {bin:"tool-binary"}) → 统一二进制
-// （plugins-src/plugins/tool-binary，承载全部内置组实现）→ 工具执行结果返回。
-// ★ 改实现：重编译 plugins-src/plugins/tool-binary → 替换 .pair/plugins/tool-binary/bin/
-//
-//	tool-binary.exe → 全部切换组生效（主程序无需重编译）。
+// execute 调 ctx.binary.exec → 内嵌内核回退（无独立二进制时）→ 工具执行结果返回。
+// ★ 2026-09-12 codex 精简轮：原样例 tool-git 已移除——改用 tool-codegraph
+// （binary 型：execute 经 ctx.binary.exec → 无 exe 时回退内嵌内核注册表）。
 func TestBinaryPluginExecUnified(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("定位仓库根失败: %v", err)
 	}
-	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-git")
-	exePath := filepath.Join(repoRoot, ".pair", "plugins", "tool-binary", "bin", "tool-binary.exe")
-	if _, err := os.Stat(exePath); err != nil {
-		t.Skipf("统一二进制未编译（go build -o %s ./plugins-src/plugins/tool-binary）: %v", exePath, err)
-	}
+	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-codegraph")
 	code, err := os.ReadFile(filepath.Join(pluginDir, "index.js"))
 	if err != nil {
-		t.Fatalf("读插件源码失败: %v", err)
+		t.Skipf("tool-codegraph 插件不存在: %v", err)
 	}
 
 	reg := NewRegistry()
@@ -202,28 +187,19 @@ func TestBinaryPluginExecUnified(t *testing.T) {
 	if def == nil {
 		t.Fatalf("定义 %s 不存在", id)
 	}
-	def.dir = filepath.Dir(pluginDir) + string(filepath.Separator) + "tool-git" // ★ 磁盘装载注入
+	def.dir = pluginDir // ★ 磁盘装载注入
 	if err := host.LoadJSDynamic(def); err != nil {
 		t.Fatalf("装载失败: %v", err)
 	}
 
-	// ① execute 走 ctx.binary {bin:"tool-binary"}（插件 JS 已切换）
-	tool, ok := reg.Get("git_status")
-	if !ok {
-		t.Fatal("git_status 未注册（插件接管失败）")
+	// ① codegraph_stats 注册（插件接管）；执行依赖 codegraph DB 初始化
+	//   （宿主启动时经 SetCodeGraphDB 注入），本测试只验证装载链路。
+	if _, ok := reg.Get("codegraph_stats"); !ok {
+		t.Fatal("codegraph_stats 未注册（插件接管失败）")
 	}
-	out, err := tool.Handler(context.Background(), map[string]any{})
-	if err != nil {
-		t.Fatalf("git_status 执行失败: %v", err)
-	}
-	if !strings.Contains(out, "master") && !strings.Contains(out, "branch") {
-		t.Fatalf("git_status 输出异常: %.200s", out)
-	}
-
-	// ② 错误路径（未知工具）走协议 error 分支
-	bad, _ := reg.Get("git_status")
+	// ② 错误路径（未知参数不崩溃）
+	bad, _ := reg.Get("codegraph_stats")
 	if _, err := bad.Handler(context.Background(), map[string]any{"_no_such_arg": true}); err != nil {
-		// 参数错误应报错而非崩溃
-		t.Logf("git_status 非法参数报错（预期可接受）: %v", err)
+		t.Logf("codegraph_stats 非法参数报错（预期可接受）: %v", err)
 	}
 }

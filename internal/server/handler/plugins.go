@@ -364,7 +364,7 @@ func HandlePluginInvoke(w http.ResponseWriter, r *http.Request) {
 
 // HandlePluginClientFailure POST /api/plugins/client-failure：浏览器 client 半
 // 失败上报（渲染/守卫/启动阶段；对齐 harness reportRenderFailure/
-// reportClientGuardFailure）。记入定义诊断，Agent 经 cordis_inspect 发现修复。
+// reportClientGuardFailure）。记入定义诊断，Agent 经 cordis(op=inspect) 发现修复。
 // body: { plugin, phase: render|guard|boot, message }。
 func HandlePluginClientFailure(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {

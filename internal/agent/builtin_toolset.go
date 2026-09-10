@@ -210,9 +210,9 @@ func builtinGroupDesc(name string) string {
 	return ""
 }
 
-// isCordisMgmtTool 判断工具是否为插件管理工具（cordis_*，plugin-mgmt 组）。
+// isCordisMgmtTool 判断工具是否为插件管理工具（cordis 单工具 2026-09 合并；兼容 cordis_ 旧前缀，plugin-mgmt 组）。
 func isCordisMgmtTool(name string) bool {
-	return strings.HasPrefix(name, "cordis_")
+	return name == "cordis" || strings.HasPrefix(name, "cordis_")
 }
 
 // isToolsetMgmtTool 判断工具是否为工具集管理工具（toolset_*，toolset-mgmt 组）。
@@ -345,7 +345,7 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 		return g
 	}
 	if len(mgmtTools) > 0 {
-		groups = append(groups, groupFrom("plugin-mgmt", "插件管理", "cordis_* 插件管理工具（登记/装载/停止/回收/查看）", "plugin-mgmt", mgmtTools))
+		groups = append(groups, groupFrom("plugin-mgmt", "插件管理", "cordis 插件管理工具（登记/装载/停止/回收/查看，2026-09 单工具 op 分派）", "plugin-mgmt", mgmtTools))
 	}
 	if len(tsTools) > 0 {
 		groups = append(groups, groupFrom("toolset-mgmt", "工具集管理", "toolset_* 工具集管理工具（构建/列表/编辑/导出/导入）", "toolset-mgmt", tsTools))

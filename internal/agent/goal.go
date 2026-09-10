@@ -5,11 +5,13 @@
 // 插件层（.pair/plugins/tool-goal）。无 goal / 无插件时零行为变化。
 //
 // 语义对齐 DSH：
-//   - create_goal：直接接收 objective（不做 LLM 推断，减少不确定面）
-//   - get_goal：返回 goal_id/revision/objective/phase/rounds/roundLimit/
+// ★ 2026-09 工具面合并：create_goal/get_goal/update_goal → 单工具 goal(op=create/
+//   get/edit/pause/resume/complete/blocked)。op 分派编排在插件层
+//   （tool-system/index.js），本文件保留 3 个内部路由名执行器（hostTool 承载）。
+//   - goal(op=create)：直接接收 objective（不做 LLM 推断，减少不确定面）
+//   - goal(op=get)：返回 goal_id/revision/objective/phase/rounds/roundLimit/
 //     blockerReason/armed
-//   - update_goal：action ∈ {edit,pause,resume,complete,blocked}；
-//     revision 冲突拒绝（乐观锁）
+//   - goal(op=edit/pause/resume/complete/blocked)：revision 乐观锁冲突拒绝；
 //   - 自动续轮：会话 Run 结束后，goal Armed && phase 非终态 &&
 //     Rounds < RoundLimit → 自动发起下一轮（continuation 消息）
 //   - 同一阻塞条件连续 ≥3 轮 → 自动 blocked（blocked_reason 记录）
@@ -35,8 +37,8 @@ import (
 // Goal 阶段（phase）。
 const (
 	GoalPhaseActive    = "active"    // 推进中（默认）
-	GoalPhaseCompleted = "completed" // 已完成（update_goal action=complete）
-	GoalPhaseBlocked   = "blocked"   // 阻塞（update_goal action=blocked / 自动连续阻塞）
+	GoalPhaseCompleted = "completed" // 已完成（goal(op=complete)）
+	GoalPhaseBlocked   = "blocked"   // 阻塞（goal(op=blocked) / 自动连续阻塞）
 )
 
 // Goal 一个会话目标（会话级状态机 + 磁盘持久化）。
@@ -51,8 +53,8 @@ type Goal struct {
 	Armed         bool   `json:"armed"` // pause=false 停续轮；resume=true 重挂
 
 	// 运行时（不持久化）：阻塞连续计数
-	lastErr    string `json:"-"`
-	errStreak  int    `json:"-"`
+	lastErr   string `json:"-"`
+	errStreak int    `json:"-"`
 }
 
 // Active 是否处于推进态（非终态且武装）。
@@ -85,7 +87,7 @@ func (g *Goal) ContinueMessage() string {
 		limitTxt = "不限"
 	}
 	return fmt.Sprintf("（goal 自动续轮 %d/%s）继续推进目标：%s。当前阶段：%s。"+
-		"请持续推进直到目标完成；完成后调用 update_goal 提交 complete，遇到不可克服障碍用 blocked 说明。",
+		"请持续推进直到目标完成；完成后调用 goal(op=complete) 提交，遇到不可克服障碍用 goal(op=blocked) 说明。",
 		g.Rounds, limitTxt, g.Objective, g.Phase)
 }
 
@@ -98,7 +100,7 @@ func goalSystemSection(g *Goal) string {
 	if g.RoundLimit <= 0 {
 		limitTxt = "不限"
 	}
-	return fmt.Sprintf("%s\n目标：%s\n阶段：%s\n已进行轮次：%d/%s（自动续轮中，完成任务后调用 update_goal action=complete）",
+	return fmt.Sprintf("%s\n目标：%s\n阶段：%s\n已进行轮次：%d/%s（自动续轮中，完成任务后调用 goal(op=complete)）",
 		goalSystemMarker, g.Objective, g.Phase, g.Rounds, limitTxt)
 }
 
@@ -174,7 +176,7 @@ func (gm *GoalManager) Get(wsRoot, convID string) *Goal {
 func (gm *GoalManager) Create(wsRoot, convID, objective string, roundLimit int) (*Goal, error) {
 	objective = strings.TrimSpace(objective)
 	if objective == "" {
-		return nil, fmt.Errorf("create_goal：objective 不能为空")
+		return nil, fmt.Errorf("goal：objective 不能为空")
 	}
 	if roundLimit < 0 {
 		roundLimit = 0
@@ -182,7 +184,7 @@ func (gm *GoalManager) Create(wsRoot, convID, objective string, roundLimit int) 
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 	if gm.loadLocked(wsRoot, convID) != nil {
-		return nil, fmt.Errorf("create_goal：会话 %s 已有目标（可 update_goal edit 修改或 complete 结束）", convID)
+		return nil, fmt.Errorf("goal：会话 %s 已有目标（可 goal(op=edit) 修改或 goal(op=complete) 结束）", convID)
 	}
 	g := &Goal{
 		ID:         convID,
@@ -203,10 +205,10 @@ func (gm *GoalManager) Update(wsRoot, convID string, revision int, action, objec
 	defer gm.mu.Unlock()
 	g := gm.loadLocked(wsRoot, convID)
 	if g == nil {
-		return nil, fmt.Errorf("update_goal：会话 %s 无目标（先 create_goal）", convID)
+		return nil, fmt.Errorf("goal：会话 %s 无目标（先 goal(op=create)）", convID)
 	}
 	if revision > 0 && revision != g.Revision {
-		return nil, fmt.Errorf("update_goal：revision 冲突（当前 %d，提交 %d）——目标已被其他轮次更新，请先 get_goal 取最新", g.Revision, revision)
+		return nil, fmt.Errorf("goal：revision 冲突（当前 %d，提交 %d）——目标已被其他轮次更新，请先 goal(op=get) 取最新", g.Revision, revision)
 	}
 	switch action {
 	case "edit":
@@ -220,7 +222,7 @@ func (gm *GoalManager) Update(wsRoot, convID string, revision int, action, objec
 		g.Armed = false
 	case "resume":
 		if g.Terminal() {
-			return nil, fmt.Errorf("update_goal：目标已处于终态（%s），不可 resume", g.Phase)
+			return nil, fmt.Errorf("goal：目标已处于终态（%s），不可 resume", g.Phase)
 		}
 		g.Armed = true
 	case "complete":
@@ -233,7 +235,7 @@ func (gm *GoalManager) Update(wsRoot, convID string, revision int, action, objec
 			g.BlockerReason = "（未说明原因）"
 		}
 	default:
-		return nil, fmt.Errorf("update_goal：未知 action %q（可用 edit/pause/resume/complete/blocked）", action)
+		return nil, fmt.Errorf("goal：未知 op %q（可用 edit/pause/resume/complete/blocked）", action)
 	}
 	g.Revision++
 	gm.persist(g, wsRoot)
@@ -288,14 +290,15 @@ func goalWorkspaceRoot(ctx context.Context, args map[string]any, convID string) 
 
 // ─── 路由执行器存档（插件工具 execute → ctx.hostTool.exec） ─────
 
-// archiveGoalTools 将 create_goal/get_goal/update_goal 的路由执行器存档到
-// hostTool 索引（与 ask_user 同构：编排在插件、能力在宿主；_convID 路由）。
+// archiveGoalTools 将 goal 家族（工具面为单工具 goal(op=…)，内部路由名
+// create_goal/get_goal/update_goal）的路由执行器存档到 hostTool 索引
+// （与 ask_user 同构：编排在插件、能力在宿主；_convID 路由）。
 func archiveGoalTools() {
 	ArchiveHostTool(&Tool{
 		Name:       "create_goal",
 		SystemTool: true,
-		Description: "创建同会话完成目标（对齐 goal 范式）。objective 必填（直接给出目标，不做推断）；" +
-			"max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。",
+		Description: "（goal(op=create) 内部执行器）创建同会话完成目标。objective 必填（直接给出目标，不做推断）；" +
+			"max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 goal(op=complete/blocked) 或达轮次上限。",
 		Parameters: objSchema(props{
 			"objective":       strProp("目标描述（祈使句，直接给出，如「修复登录超时 bug」）"),
 			"max_goal_rounds": intProp("可选：自动续轮上限（默认 3；0=不限——慎用，会无限续轮）"),
@@ -303,35 +306,35 @@ func archiveGoalTools() {
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			convID := argStr(args, "_convID")
 			if convID == "" {
-				return "", fmt.Errorf("create_goal：缺少会话标识（_convID 未注入）——插件工具须经宿主工具执行链调用")
+				return "", fmt.Errorf("goal：缺少会话标识（_convID 未注入）——插件工具须经宿主工具执行链调用")
 			}
 			objective := argStr(args, "objective")
 			if strings.TrimSpace(objective) == "" {
-				return "", fmt.Errorf("create_goal：objective 不能为空")
+				return "", fmt.Errorf("goal：objective 不能为空")
 			}
 			limit := argInt(args, "max_goal_rounds", 3) // 缺省 3；显式 0 = 不限（慎用）
 			g, err := goalManager.Create(goalWorkspaceRoot(ctx, args, convID), convID, objective, limit)
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("✅ 目标已创建：%s\nID: %s（revision %d）｜自动续轮上限：%d 轮｜完成后调用 update_goal action=complete",
+			return fmt.Sprintf("✅ 目标已创建：%s\nID: %s（revision %d）｜自动续轮上限：%d 轮｜完成后调用 goal(op=complete)",
 				g.Objective, g.ID, g.Revision, g.RoundLimit), nil
 		},
 	})
 
 	ArchiveHostTool(&Tool{
-		Name:       "get_goal",
-		SystemTool: true,
-		Description: "读取当前会话目标（goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed）。无目标返回提示。",
-		Parameters: objSchema(props{}),
+		Name:        "get_goal",
+		SystemTool:  true,
+		Description: "（goal(op=get) 内部执行器）读取当前会话目标（goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed）。无目标返回提示。",
+		Parameters:  objSchema(props{}),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			convID := argStr(args, "_convID")
 			if convID == "" {
-				return "", fmt.Errorf("get_goal：缺少会话标识（_convID 未注入）")
+				return "", fmt.Errorf("goal：缺少会话标识（_convID 未注入）")
 			}
 			g := goalManager.Get(goalWorkspaceRoot(ctx, args, convID), convID)
 			if g == nil {
-				return "（当前会话无目标；可用 create_goal 创建）", nil
+				return "（当前会话无目标；可用 goal(op=create) 创建）", nil
 			}
 			b, _ := json.MarshalIndent(map[string]any{
 				"goal_id":       g.ID,
@@ -348,23 +351,22 @@ func archiveGoalTools() {
 	})
 
 	ArchiveHostTool(&Tool{
-		Name:       "update_goal",
-		SystemTool: true,
-		Description: "更新当前会话目标（对齐 goal update）。action ∈ {edit,pause,resume,complete,blocked}；" +
+		Name: "update_goal",
+		Description: "（goal(op=edit/pause/resume/complete/blocked) 内部执行器）更新当前会话目标。action ∈ {edit,pause,resume,complete,blocked}；" +
 			"revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；" +
 			"complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。",
 		Parameters: objSchema(props{
-			"goal_id":        strProp("目标 ID（=会话 ID；get_goal 可查）"),
-			"revision":       intProp("当前 revision（get_goal 返回；冲突时拒绝）"),
-			"action":         strProp("edit / pause / resume / complete / blocked"),
-			"objective":      strProp("edit 用：新目标描述（可选）"),
+			"goal_id":         strProp("目标 ID（=会话 ID；goal(op=get) 可查）"),
+			"revision":        intProp("当前 revision（goal(op=get) 返回；冲突时拒绝）"),
+			"action":          strProp("edit / pause / resume / complete / blocked"),
+			"objective":       strProp("edit 用：新目标描述（可选）"),
 			"max_goal_rounds": intProp("edit 用：新自动续轮上限（可选）"),
-			"blocked_reason": strProp("blocked 用：阻塞原因（必填）"),
+			"blocked_reason":  strProp("blocked 用：阻塞原因（必填）"),
 		}, "goal_id", "revision", "action"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			convID := argStr(args, "_convID")
 			if convID == "" {
-				return "", fmt.Errorf("update_goal：缺少会话标识（_convID 未注入）")
+				return "", fmt.Errorf("goal：缺少会话标识（_convID 未注入）")
 			}
 			action := argStr(args, "action")
 			rev := argInt(args, "revision", 0)

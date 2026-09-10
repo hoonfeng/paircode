@@ -90,7 +90,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	r.Register(&Tool{
 		Name: "toolset_edit",
 		Description: "手动编辑工具集（插件化思路）：\n" +
-			"① add_plugin 向工具集添加插件——来源：宿主已定义 JS 动态插件（cordis_define 定义、" +
+			"① add_plugin 向工具集添加插件——来源：宿主已定义 JS 动态插件（cordis(op=define) 定义、" +
 			".pair/cordis.patch.json 装配、npm 市场安装的都在宿主 defs 中）、其他工具集（from_toolset）、" +
 			"或 plugin_json 直接给插件定义；★ 可选 tools 参数（逗号分隔）只加入插件内指定工具——插件整体装载、白名单外的工具自动摘除（插件内工具可单独加入工具集，enable_tool 可恢复）；\n" +
 			"② rm_plugin 从工具集移除插件（其注册的全部工具一并卸载）；\n" +
@@ -444,7 +444,7 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 				return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show %s 查看）", from, pn, from)
 			}
 		} else {
-			// 宿主 defs：cordis_define 定义 / .pair/cordis.patch.json 装配 / npm 安装的都在
+			// 宿主 defs：cordis(op=define) 定义 / .pair/cordis.patch.json 装配 / npm 安装的都在
 			found := false
 			for _, d := range ph.JSDefs() {
 				if d.Name() == pn || d.id == pn {
@@ -474,7 +474,7 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 				}
 			}
 			if !found {
-				return "", fmt.Errorf("宿主未定义插件 %q（可用 cordis_define 定义、npm 市场安装，或 from_toolset/plugin_json 提供）", pn)
+				return "", fmt.Errorf("宿主未定义插件 %q（可用 cordis(op=define) 定义、npm 市场安装，或 from_toolset/plugin_json 提供）", pn)
 			}
 		}
 	default:

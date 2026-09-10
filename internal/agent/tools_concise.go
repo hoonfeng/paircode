@@ -22,20 +22,18 @@ var conciseToolDescriptions = map[string]string{
 
 	// ── 任务 ──
 	"update_tasks": "维护任务清单（全量替换）：subject 必填、status 定态（pending/in_progress/completed/cancelled），可附 description/dependencies。",
-	"task_create":  "建子任务；立后即 task_update 标 in_progress 执行，毕则标 completed。",
 	"tool_stats":   "观工具调用统计（次数/成败/成功率）；min_calls 滤低频、recent 观近录。",
 
 	// ── 文件编辑 ──
-	"read":               "读文件内容（工作区内 path；可 offset+limit 读片段，缺省读全，超 2000 行截断）。",
-	"write":              "写 content 至 path（覆盖，父目录自动建）；需审核批准。",
-	"edit":               "以 new_string 换文中唯一 old_string（智能匹配 CRLF/空白；败则用 line_start/line_end 定位）。",
+	"read":        "读文件内容（工作区内 path；可 offset+limit 读片段，缺省读全，超 2000 行截断）。",
+	"write":       "写 content 至 path（覆盖，父目录自动建）；需审核批准。",
+	"apply_patch": "应用 codex 语法补丁修改文件（*** Begin Patch/Add File/Update File/Delete File/Move to/*** End Patch）；一次多文件多操作，上下文行定位（免行号/免 JSON 转义）。",
 
 	// ── 代码执行 / 命令 ──
-	"run_code":       "执行代码片段（auto/go/python/node）并返输出。",
-	"bash":           "同步执行一条 shell 命令返输出（独立 shell 无状态）；禁用于长驻进程（用 run_background）。",
-	"run_background": "后台启动长命令（dev server/watch 等）返进程 id；以 read_output 读输出、kill_process 止。",
-	"read_output":    "读后台进程（id）累积输出与运行状态。",
-	"kill_process":   "止后台进程（id）；仅限 run_background 所启，不能动外部进程。",
+	"run_code":     "执行代码片段（auto/go/python/node）并返输出。",
+	"exec_command": "执行 shell 命令：短命令同步返输出（含退出码）；长进程等待 yield_time_ms 后返 session_id，以 write_stdin 轮询/写 stdin、kill_process 止。",
+	"write_stdin":  "向会话进程（session_id）写 stdin（chars 空=仅轮询）并读增量输出（自上次读取起）。",
+	"kill_process": "止会话进程（session_id）；仅限 exec_command 所启，已结束会话调用幂等无害。",
 
 	// ── 搜索 ──
 	// ★ Round3：search_content/search_files 旧名注册已删除（并入 glob/grep），死条目随删
@@ -47,20 +45,10 @@ var conciseToolDescriptions = map[string]string{
 	"web_search": "搜网返题/链/摘（SearXNG 优先，否则 DuckDuckGo）。",
 
 	// ── 记忆 ──
-	"memory_write":  "写或更持久记忆（跨会话存 .pair/memory/）；先查有无同名，有则融合更新，勿碎片化。",
-	"memory_delete": "删过时/错误记忆（按 name）。",
-	"memory_read":   "按 name 读记忆全文。",
-	"memory_list":   "列记忆总览（名+摘要）。",
-	"memory_search": "按关键词搜记忆（名/摘要/正文）返名+摘要。",
+	"memory": "跨会话记忆（.pair/memory/）单工具：op=write 写/更新（先查重同则融合，勿碎片化；需批准）/read/search/list/delete。",
 
-	// ── 插件 cordis ──
-	"cordis_inspect":       "观插件运行时：无 id 摘要、id 版本链、id+version=vN 源码与诊断。",
-	"cordis_define":        "登记 JS/TS 动态插件（预检不运行）：code 为 async 函数体，可 ctx.tools.register/systemPrompt/on/provide；含 client 半自动 global；scope 定 project/global；pluginId 非空则追加版本。",
-	"cordis_run":           "装载已登记插件（id 或 pluginId）：goja 求值并 apply(ctx, config)；重复 run 先卸旧再装新。",
-	"cordis_stop":          "停止运行中插件，回收其工具/提示/监听；定义保留可再 run。",
-	"cordis_undefine":      "删插件定义（先停后忘）；删后不可再 run。",
-	"cordis_service_list":  "列宿主服务与方法签名（写插件先查；静态服务 ctx.xxx 访问，动态 ctx.get）。",
-	"cordis_inspect_query": "按协议查询插件运行时（platform=host 只读）：provider=service/tool/event/plugin，method=list*/get*。",
+	// ── 插件 cordis（单工具 op 分派）──
+	"cordis": "动态插件单工具：op=inspect 观运行时（无 id 摘要/版本链/源码诊断）；define 登记 JS/TS（预检不运行；code 为 async 函数体，pluginId 非空追加版本）；run 装载（goja apply）；stop 停收；undefine 删定义；services 列宿主服务签名；query 协议查询（provider/method）。",
 
 	// ── 工具集 ──
 	"toolset_build":  "动态构建工具集：分析项目 → 模板组合生成插件 → 装载固化 .pair/toolsets/{name}.json；overwrite=true 覆盖。",

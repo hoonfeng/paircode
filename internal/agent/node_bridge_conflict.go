@@ -8,7 +8,7 @@
 //
 // 现语义（取消同名工具覆盖冲突）：
 //   - 两版并存：桥插件并入 Inspect 输出（source=node-bridge），与 goja 插件
-//     （source=js）同列插件面板/cordis_inspect，来源与版本各自标注；
+//     （source=js）同列插件面板/cordis(op=inspect)，来源与版本各自标注；
 //   - 同名工具默认 repo 版优先生效，桥侧同名工具「挂起」（实例保留在 b.tools）；
 //   - 生效方可切换：SetBridgeToolPreference(ph, tool, "bridge"|"repo")
 //     （HTTP：POST /api/plugins/prefer）；

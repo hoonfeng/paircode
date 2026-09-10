@@ -211,7 +211,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 22. codegraph_get_detailed_symbol ----
 	r.Register(&Tool{
 		Name: "codegraph_get_detailed_symbol", Description: "获取符号详细上下文（源码+调用者+被调用者）。",
-		UsageGuide: "获取某符号的完整上下文：源码+调用者+被调用者。比分别调 codegraph_callers/callees 更省 token（一站式）。",
+		UsageGuide: "获取某符号的完整上下文：源码+调用者+被调用者。比分别调 codegraph_relations（callers/callees 模式）更省 token（一站式）。",
 		Parameters: objSchema(props{"query": strProp("符号名"), "includeSource": boolProp("可选：包含源码（默认 true）")}, "query"),
 		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {

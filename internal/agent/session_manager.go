@@ -63,7 +63,7 @@ type LoopOpts struct {
 	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
-// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
+	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（任务分解），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
@@ -111,7 +111,7 @@ type Session struct {
 
 	// 交互通道（从 web 层 webAgentSession 迁移）
 	// ★ Round3 ⑤：askCh 结构化（多问题 answers 数组；单问题=单元素数组，向后兼容）
-	askCh      chan []AskAnswer // ask_user 工具阻塞等用户回答
+	askCh      chan []AskAnswer    // ask_user 工具阻塞等用户回答
 	approvalCh chan ApprovalResult // Approve 钩子阻塞等用户裁决
 	feedbackCh chan string         // OnFeedback 每轮 LLM 调用前检查
 
@@ -178,8 +178,9 @@ func NewSessionManager() *SessionManager {
 
 // SetWorkspaceRoot 设置「当前工作区根」，切换当前 store/DS 指针（惰性缓存，不关闭旧句柄）。
 // ★ 2026-08-23 多工作区隔离：不再替换全局 store / 关闭旧 DB——正在运行的会话
-//   （绑定启动时工作区）继续用自己根的 store/DB（storeFor 按根路由），切换只影响新会话。
-//   工作区删除时经 CloseWorkspaceDB(root) 显式关闭该根句柄（Windows 文件占用）。
+//
+//	（绑定启动时工作区）继续用自己根的 store/DB（storeFor 按根路由），切换只影响新会话。
+//	工作区删除时经 CloseWorkspaceDB(root) 显式关闭该根句柄（Windows 文件占用）。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.wsMu.Lock()
 	m.curRoot = root
@@ -535,8 +536,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
-// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入背景快照
-	//   （运行中 create_goal 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
+	// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入背景快照
+	//   （运行中 goal(op=create) 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
 	// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages 第一条）
 	//   会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（经背景快照注入，append-only）。
 	if g := goalManager.Get(opts.WorkspaceRoot, convID); g != nil && g.Active() {
@@ -553,7 +554,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			loop.emit(Event{Type: EventNotice, Content: msg})
 		})
 	}
-
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）
 	if opts.WorkspaceRoot != "" {
@@ -770,31 +770,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				},
 			})
 
-			// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
-			opts.Registry.Register(&Tool{
-				Name:       "task_create",
-				SystemTool: true,
-				UsageGuide: "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
-				Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
-					"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
-				Parameters: objSchema(props{
-					"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
-					"description":  strProp("详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。"),
-					"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表"},
-				}, "subject", "description"),
-				Handler: func(hctx context.Context, args map[string]any) (string, error) {
-					subject := argStr(args, "subject")
-					desc := argStr(args, "description")
-					deps := argStrSlice(args, "dependencies")
-					root := sess.WorkspaceRoot
-					if root == "" {
-						root = ""
-					}
-					tm := UseTaskManager(root)
-					task := tm.Create(subject, desc, deps, sess.ConvID)
-					return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
-				},
-			})
 		}
 	}
 
@@ -908,13 +883,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   会话 Run 结束后，goal Armed && 非终态 && Rounds < RoundLimit →
 		//   自动发起下一轮（continuation 消息）。pause 停续轮、resume 重挂；
 		//   同一阻塞条件连续 ≥3 轮自动 blocked（MarkRound 内判定）。
-		//   零行为变化保证：无 create_goal 时 goalManager.Get 返回 nil，循环直接退出。
+		//   零行为变化保证：无 goal(op=create) 时 goalManager.Get 返回 nil，循环直接退出。
 		for !sess.stopped {
 			g := goalManager.MarkRound(opts.WorkspaceRoot, convID, err)
 			if g == nil || g.ContinueMessage() == "" {
 				break
 			}
-// 目标上下文注入背景快照（幂等：marker 已存在不重复追加）
+			// 目标上下文注入背景快照（幂等：marker 已存在不重复追加）
 			// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages
 			//   第一条）会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（背景快照注入）。
 			if !strings.Contains(loop.ResumeContext, goalSystemMarker) {
@@ -975,7 +950,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   4. 前端拿到后无法展示不同轮次的 thinking 段
 		// 现在每轮 assistant 独立存储，由 SegmentsFromMessage 在读取时通过 look-ahead
 		// 自动将 tool_result 嵌入对应 tool_call segment，形成完整的"工具+结果"链路。
-
 
 		// ★ 错误/停止处理：确保前端总收到结束信号（防止 assistant 消息永久 loading）
 		// Loop.Run 内部已对多数错误发射 EventError，此处补发 Loop 未覆盖的信号：

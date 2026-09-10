@@ -148,7 +148,7 @@ func TestPluginReload(t *testing.T) {
 	_ = host.Undefine("reload-demo")
 }
 
-// TestCordisInspectQuery cordis_inspect_query 精确查询协议。
+// TestCordisInspectQuery cordis(op=query) 精确查询协议。
 func TestCordisInspectQuery(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, `C:\ws`)
@@ -163,14 +163,14 @@ func TestCordisInspectQuery(t *testing.T) {
 	if err != nil || !strings.Contains(out, "readFile") {
 		t.Fatalf("getService fs: %v\n%s", err, out)
 	}
-	// tool listTool（RegisterCordisTools 后才含 cordis_*）
+	// tool listTool（RegisterCordisTools 后才含 cordis）
 	RegisterCordisTools(reg, host, `C:\ws`)
 	out, err = cordisInspectQuery(host, "host", "tool", "listTool", nil)
-	if err != nil || !strings.Contains(out, "cordis_inspect_query") {
+	if err != nil || !strings.Contains(out, "cordis") {
 		t.Fatalf("listTool: %v\n%s", err, out)
 	}
-	out, err = cordisInspectQuery(host, "host", "tool", "getTool", map[string]any{"name": "cordis_define"})
-	if err != nil || !strings.Contains(out, "cordis_define") {
+	out, err = cordisInspectQuery(host, "host", "tool", "getTool", map[string]any{"name": "cordis"})
+	if err != nil || !strings.Contains(out, "cordis") {
 		t.Fatalf("getTool: %v\n%s", err, out)
 	}
 	// event listEvent
@@ -349,9 +349,9 @@ return { name: 'ref-demo', apply(ctx) { ctx.tools.register({ name: 'ref_probe', 
 	if !strings.Contains(out, `"pluginId": "`+id+`"`) {
 		t.Fatalf("引用应含 pluginId: %s", out)
 	}
-	// ★ 工具描述已取消（2026-08-17）：指引不再点名 cordis_inspect 等工具名，
+	// ★ 工具描述已取消（2026-08-17）：指引不再点名 cordis(op=…) 等工具名，
 	//   改为泛化描述（工具信息以 tools 参数 schema 为准）。
-	if strings.Contains(out, "cordis_inspect") || strings.Contains(out, "cordis_define") {
+	if strings.Contains(out, "cordis_inspect") || strings.Contains(out, "cordis_define") || strings.Contains(out, "cordis(op=") {
 		t.Fatalf("指引不应含具体工具名: %s", out)
 	}
 	if !strings.Contains(out, "查看版本链与运行状态") {

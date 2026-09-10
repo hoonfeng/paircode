@@ -495,6 +495,7 @@ var fileModifyTools = map[string]bool{
 	"write_binary": true,
 	"edit":         true,
 	"write":        true,
+	"apply_patch":  true,
 }
 
 // toolPathParams 各工具的文件路径参数名（可能有多个）。

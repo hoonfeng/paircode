@@ -25,7 +25,7 @@ package agent
 
 // builtinPluginSpec 一个内置插件规格。
 type builtinPluginSpec struct {
-	name  string // 插件名（cordis_inspect 展示；同名注册冲突时报错）
+	name  string // 插件名（cordis(op=inspect) 展示；同名注册冲突时报错）
 	desc  string // 插件用途
 	apply func(c *PluginContext)
 }
@@ -35,26 +35,27 @@ type builtinPluginSpec struct {
 //
 //	按组注册）——宿主进程不再 apply 本表。
 func builtinPluginSpecs(root string) []builtinPluginSpec {
-	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
-	bg := globalBG         // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go）
+	bg := globalBG // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go）
 	return []builtinPluginSpec{
 		// ★ Round3：fs-search 组并入 core（search_content→grep、search_files→glob，
 		//   list_files→glob 目录列举分支；glob/grep 注册落在 registerCoreTools）。
-		{"core", "文件读写/编辑/命令执行/搜索（read/write/edit/multi_edit/bash/move_file/delete_file/glob/grep）",
-			func(c *PluginContext) { registerCoreTools(c.Tools, root, eh, bg) }},
+		// ★ Round5：编辑面统一 apply_patch——edit/multi_edit/move_file/delete_file
+		//   已移除（read/write/apply_patch/glob/grep）。
+		{"core", "文件读写/搜索（read/write/apply_patch/glob/grep）",
+			func(c *PluginContext) { registerCoreTools(c.Tools, root) }},
 		{"git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）",
 			func(c *PluginContext) { registerGitTools(c.Tools, root) }},
 		{"web", "联网（web_fetch/web_search）",
 			func(c *PluginContext) { registerWebTools(c.Tools) }},
-		{"shell", "后台命令（run_background/read_output/kill_process）",
+		{"shell", "会话式命令执行（exec_command/write_stdin/kill_process）",
 			func(c *PluginContext) { registerShellTools(c.Tools, bg, root) }},
-		{"memory", "跨会话记忆（memory_write/read/list/search）",
+		{"memory", "跨会话记忆（memory(op=write/read/search/list/delete)）",
 			func(c *PluginContext) { registerMemoryTools(c.Tools, root) }},
 		{"verify", "知识库过期验证（memory_verify/project_info_verify）",
 			func(c *PluginContext) { registerVerifyTools(c.Tools, root) }},
 		{"task", "任务追踪（update_tasks）",
 			func(c *PluginContext) { registerTaskTools(c.Tools, root) }},
-		{"project-info", "项目知识库（project_info_write/read/list/search/delete/explore）",
+		{"project-info", "项目知识库（project_info(op=write/read/list/tree/search/delete/explore)）",
 			func(c *PluginContext) { registerProjectInfoTools(c.Tools, root) }},
 		{"binary", "二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy，含 2026-08-16 并入的 binary-re 逆向 6 工具）",
 			func(c *PluginContext) { registerBinaryTools(c.Tools, root); registerBinaryRETools(c.Tools, root) }},
@@ -68,7 +69,7 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 			func(c *PluginContext) { RegisterBugTools(c.Tools, root) }},
 		{"office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）",
 			func(c *PluginContext) { registerOfficeTools(c.Tools, root) }},
-		{"codegraph", "代码知识图谱（codegraph_build/search/impact/…）",
+		{"codegraph", "代码知识图谱（codegraph_build/search/relations/…）",
 			func(c *PluginContext) { registerCodeGraphTools(c.Tools, root) }},
 		{"codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）",
 			func(c *PluginContext) { registerExtraCodeGraphTools(c.Tools, root) }},
@@ -88,6 +89,12 @@ func RegisterToolGroups(r *Registry, root string, groups ...string) {
 		}
 		s.apply(&PluginContext{Tools: r})
 	}
+	// ★ 2026-09-12 deferred（按需工具）在「全量持有」场景（独立二进制/测试/示例）
+	//   直接标记发现——这些场景没有会话工具面与 tool_search，deferred 不应
+	//   造成「注册了却永不可见」（幂等）。
+	for n := range DeferredToolNames {
+		r.MarkToolDiscovered(n)
+	}
 }
 
 // RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用）。
@@ -95,6 +102,8 @@ func RegisterToolGroups(r *Registry, root string, groups ...string) {
 //
 //	改用 RegisterHostFrameworkTools（工具实现已全部迁移磁盘插件）。
 func RegisterDefaultTools(r *Registry, root string) {
+	// RegisterToolGroups 内部已对 deferred（按需工具）全量标记发现
+	//（全量持有场景无会话工具面/tool_search）。
 	RegisterToolGroups(r, root)
 }
 
@@ -107,6 +116,17 @@ func RegisterHostFrameworkTools(r *Registry, root string) {
 	RegisterManagementTools(r, root) // history_search/list/count 等
 	registerToolStatsTool(r)         // tool_stats
 	registerTaskTools(r, root)       // update_tasks（会话绑定 TaskManager）
+	// ★ 按需工具搜索（codex Deferred/tool_search 对齐，2026-09-12）：低频工具
+	//   默认不进 LLM 工具面（DeferredToolNames 名单），模型搜索命中后本会话内
+	//   提升（见 deferred_tools.go）。注册在框架工具入口——所有会话统一装配。
+	RegisterToolSearchTool(r, root)
+	// ★ 2026-09 工具面合并：load_skill_resource 并入单工具 load_skill（tool-system
+	//   插件按 path 参数分派路由 ctx.hostTool.exec('load_skill_resource')）——该名
+	//   无插件同名声明，claimTool 不会存档，这里显式存档宿主执行器（幂等；handler
+	//   运行时解析会话根 skillRuntimeRoot，无闭包冻结问题）。
+	if t, ok := r.Get("load_skill_resource"); ok {
+		ArchiveHostTool(t)
+	}
 }
 
 // ★ 框架能力（workspaceRoot 服务 / 内置工具集模板）已内联 NewPluginHost

@@ -2,8 +2,9 @@
 // harness_js_test.go — tool-harness JS 原生化行为验证
 //
 // 装载 .pair/plugins/tool-harness/index.js（磁盘插件）到临时工作区，
-// 验证 read/write/edit/glob/grep/bash/run_code 的 JS 实现
-// （ctx.fs/ctx.bash）；run_code 保持 hostTool（宿主执行器）。
+// 验证 read/write/apply_patch/glob/grep 的 JS 实现（ctx.fs）；run_code 保持
+// hostTool（宿主执行器）。★ 2026-09 工具重构：后台进程 4 件套移交 tool-exec
+// （见 exec_plugin_test.go）；★ Round5：编辑面统一 apply_patch（ctx.fs.applyPatch）。
 // ═══════════════════════════════════════════════════════════════
 
 package agent
@@ -11,8 +12,6 @@ package agent
 import (
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -66,28 +65,34 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("read file_path 别名异常: %q", out)
 	}
 
-	// ③ edit：精确替换 + 唯一性 + replace_all（R2-7）
-	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/y.txt", "old_string": "b", "new_string": "b2"}); err != nil {
-		t.Fatalf("edit 失败: %v", err)
+	// ③ apply_patch：Update File（上下文行定位）+ Add File + Move to + Delete File
+	if _, err := execTool(t, reg, "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Update File: x/y.txt\n@@\n a\n-b\n+b2\n c\n*** End Patch\n"}); err != nil {
+		t.Fatalf("apply_patch update 失败: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(root, "x", "y.txt"))
 	if !strings.Contains(string(data), "b2") {
-		t.Fatalf("edit 未生效: %q", string(data))
+		t.Fatalf("apply_patch update 未生效: %q", string(data))
 	}
-	// 多处出现 → 默认拒绝（须唯一）
-	if err := os.WriteFile(filepath.Join(root, "x", "dup.txt"), []byte("x\ny\nx\n"), 0o644); err != nil {
-		t.Fatal(err)
+	// Add File：新文件（每行 + 前缀）
+	if _, err := execTool(t, reg, "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: x/new.txt\n+hello\n+world\n*** End Patch\n"}); err != nil {
+		t.Fatalf("apply_patch add 失败: %v", err)
 	}
-	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/dup.txt", "old_string": "x", "new_string": "X"}); err == nil {
-		t.Fatalf("edit 多处出现应拒绝（须唯一）")
+	if nb, _ := os.ReadFile(filepath.Join(root, "x", "new.txt")); string(nb) != "hello\nworld\n" {
+		t.Fatalf("apply_patch add 内容异常: %q", string(nb))
 	}
-	// replace_all=true → 全部替换
-	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/dup.txt", "old_string": "x", "new_string": "X", "replace_all": true}); err != nil {
-		t.Fatalf("edit replace_all 失败: %v", err)
+	// Move to（纯移动）：x/new.txt → x/moved.txt
+	if _, err := execTool(t, reg, "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Update File: x/new.txt\n*** Move to: x/moved.txt\n*** End Patch\n"}); err != nil {
+		t.Fatalf("apply_patch move 失败: %v", err)
 	}
-	dupData, _ := os.ReadFile(filepath.Join(root, "x", "dup.txt"))
-	if string(dupData) != "X\ny\nX\n" {
-		t.Fatalf("edit replace_all 未全部替换: %q", string(dupData))
+	if _, err := os.Stat(filepath.Join(root, "x", "moved.txt")); err != nil {
+		t.Fatalf("apply_patch move 目标不存在: %v", err)
+	}
+	// Delete File
+	if _, err := execTool(t, reg, "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Delete File: x/moved.txt\n*** End Patch\n"}); err != nil {
+		t.Fatalf("apply_patch delete 失败: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "x", "moved.txt")); !os.IsNotExist(err) {
+		t.Fatalf("apply_patch delete 后文件仍存在: %v", err)
 	}
 
 	// ④ glob：找到文件（相对路径）
@@ -104,32 +109,24 @@ func TestToolHarnessJSNative(t *testing.T) {
 	if err != nil || !strings.Contains(out, "g.txt:1") {
 		t.Fatalf("grep 异常: %q err=%v", out, err)
 	}
-
-	// ⑥ 后台进程（③.4 并入自 tool-shell）：run_background → job_list → read_output → kill_process
-	out, err = execTool(t, reg, "run_background", map[string]any{"command": "echo bg-smoke-ok"})
-	if err != nil || !strings.Contains(out, "id=") {
-		t.Fatalf("run_background 异常: %q err=%v", out, err)
-	}
-	idM := regexp.MustCompile(`id=(\d+)`).FindStringSubmatch(out)
-	if idM == nil {
-		t.Fatalf("run_background 未返回进程 id: %q", out)
-	}
-	bgID, _ := strconv.Atoi(idM[1])
-	out, err = execTool(t, reg, "job_list", map[string]any{})
-	if err != nil || !strings.Contains(out, "id="+idM[1]) {
-		t.Fatalf("job_list 异常: %q err=%v", out, err)
-	}
-	out, err = execTool(t, reg, "read_output", map[string]any{"id": bgID})
-	if err != nil || !strings.Contains(out, "[") {
-		t.Fatalf("read_output 异常: %q err=%v", out, err)
-	}
-	if _, err := execTool(t, reg, "kill_process", map[string]any{"id": bgID}); err != nil {
-		t.Fatalf("kill_process 失败: %v", err)
-	}
+	// ⑥ 后台进程 4 件套（run_background/read_output/kill_process/job_list）
+	// ★ 2026-09 工具重构：已移交 tool-exec 插件（exec_command 会话式模型）——
+	//   本插件的对应验证见 exec_plugin_test.go。
 
 	// ⑧ run_code：保持 hostTool（宿主执行器）
 	out, err = execTool(t, reg, "run_code", map[string]any{"code": "console.log('rc-ok')", "language": "node"})
 	if err != nil || !strings.Contains(out, "rc-ok") {
 		t.Fatalf("run_code 异常: %q err=%v", out, err)
 	}
+}
+
+// execTool 取注册表工具直接执行（JS 插件测试共用；原 toolcore_test.go，Round5
+//   tool-core 移除后随迁——tool-harness 是唯一装载的磁盘插件宿主）。
+func execTool(t *testing.T, reg *Registry, name string, args map[string]any) (string, error) {
+	t.Helper()
+	tool, ok := reg.Get(name)
+	if !ok {
+		t.Fatalf("工具 %s 未注册（JS 插件未接管）", name)
+	}
+	return tool.Handler(nil, args)
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestToolsReadWriteEditList(t *testing.T) {
+func TestToolsReadWritePatchList(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
@@ -32,19 +32,16 @@ func TestToolsReadWriteEditList(t *testing.T) {
 		t.Errorf("read = %q, err=%v", out, err)
 	}
 
-	// edit（唯一替换）
-	if _, err = reg.Execute(ctx, "edit", `{"path":"sub/a.txt","old_string":"WORLD","new_string":"GOUI"}`); err != nil {
-		t.Fatalf("edit: %v", err)
+	// apply_patch（上下文行替换；Round5 取代 edit）
+	if _, err = reg.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Update File: sub/a.txt\n@@\n-hello WORLD\n+hello GOUI\n*** End Patch\n"}`); err != nil {
+		t.Fatalf("apply_patch: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "sub", "a.txt")); string(b) != "hello GOUI" {
-		t.Errorf("edit 后 = %q", b)
+		t.Errorf("apply_patch 后 = %q", b)
 	}
 
-	// edit：old_string 非唯一 → 报错
+	// 供 glob 用例的文件
 	os.WriteFile(filepath.Join(dir, "dup.txt"), []byte("x x x"), 0o644)
-	if _, err = reg.Execute(ctx, "edit", `{"path":"dup.txt","old_string":"x","new_string":"y"}`); err == nil {
-		t.Error("edit 非唯一 old_string 应报错")
-	}
 
 	// glob
 	out, err = reg.Execute(ctx, "glob", `{}`)
@@ -75,25 +72,26 @@ func TestToolRunCommand(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	out, err := reg.Execute(context.Background(), "bash", `{"command":"echo CMD_OK_88"}`)
+	out, err := reg.Execute(context.Background(), "exec_command", `{"command":"echo CMD_OK_88"}`)
 	if err != nil {
-		t.Fatalf("bash: %v", err)
+		t.Fatalf("exec_command: %v", err)
 	}
 	if !strings.Contains(out, "CMD_OK_88") {
-		t.Errorf("bash 输出 = %q", out)
+		t.Errorf("exec_command 输出 = %q", out)
 	}
 }
 
-func TestMoveAndDeleteFile(t *testing.T) {
+func TestApplyPatchMoveDelete(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hi\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	r := NewRegistry()
 	RegisterDefaultTools(r, dir)
 	ctx := context.Background()
 
-	if _, err := r.Execute(ctx, "move_file", `{"from":"a.txt","to":"sub/b.txt"}`); err != nil {
+	// 纯 Move（Update File + Move to，无内容变更）
+	if _, err := r.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Update File: a.txt\n*** Move to: sub/b.txt\n*** End Patch\n"}`); err != nil {
 		t.Fatalf("move: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "a.txt")); !os.IsNotExist(err) {
@@ -103,14 +101,12 @@ func TestMoveAndDeleteFile(t *testing.T) {
 		t.Errorf("sub/b.txt 应存在：%v", err)
 	}
 
-	if _, err := r.Execute(ctx, "delete_file", `{"path":"sub/b.txt"}`); err != nil {
+	// Delete File
+	if _, err := r.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Delete File: sub/b.txt\n*** End Patch\n"}`); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "sub", "b.txt")); !os.IsNotExist(err) {
 		t.Error("b.txt 应已删除")
-	}
-	if _, err := r.Execute(ctx, "delete_file", `{"path":"sub"}`); err == nil {
-		t.Error("delete_file 应拒绝目录")
 	}
 }
 
@@ -138,28 +134,31 @@ func TestReadFileRange(t *testing.T) {
 	}
 }
 
-func TestMultiEdit(t *testing.T) {
+func TestApplyPatchMultiHunk(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte("aaa bbb ccc"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte("aaa bbb ccc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	r := NewRegistry()
 	RegisterDefaultTools(r, dir)
 	ctx := context.Background()
 
-	if _, err := r.Execute(ctx, "multi_edit", `{"path":"f.go","edits":[{"old_string":"aaa","new_string":"A"},{"old_string":"ccc","new_string":"C"}]}`); err != nil {
-		t.Fatalf("multi_edit: %v", err)
+	// 一个 @@ 段整体替换（上下文行定位）
+	if _, err := r.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Update File: f.go\n@@\n-aaa bbb ccc\n+A bbb C\n*** End Patch\n"}`); err != nil {
+		t.Fatalf("apply_patch: %v", err)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "f.go"))
-	if string(got) != "A bbb C" {
-		t.Errorf("内容 = %q，期望 'A bbb C'", string(got))
+	if string(got) != "A bbb C\n" {
+		t.Errorf("内容 = %q，期望 'A bbb C\\n'", string(got))
 	}
-	// 非唯一 old_string 应报错且不写
-	os.WriteFile(filepath.Join(dir, "g.go"), []byte("x x"), 0o644)
-	if _, err := r.Execute(ctx, "multi_edit", `{"path":"g.go","edits":[{"old_string":"x","new_string":"y"}]}`); err == nil {
-		t.Error("不唯一 old_string 应报错")
+	// 上下文不匹配 → 报错且不写
+	if err := os.WriteFile(filepath.Join(dir, "g.go"), []byte("x x\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if g, _ := os.ReadFile(filepath.Join(dir, "g.go")); string(g) != "x x" {
+	if _, err := r.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Update File: g.go\n@@\n-x\n+y\n*** End Patch\n"}`); err == nil {
+		t.Error("上下文不匹配应报错")
+	}
+	if g, _ := os.ReadFile(filepath.Join(dir, "g.go")); string(g) != "x x\n" {
 		t.Errorf("失败时不应写入，g.go = %q", string(g))
 	}
 }
@@ -205,7 +204,7 @@ func TestRegistryDefinitions(t *testing.T) {
 	//   find_files_by_pattern → glob（增加 language 参数）；
 	//   task_create → update_tasks。均已合并/更名，这里断言替代后的工具。
 	mustHave := []string{
-		"read", "write", "edit", "multi_edit", "glob", "bash",
+		"read", "write", "apply_patch", "glob", "exec_command", "write_stdin", "kill_process",
 		"git_status", "memory_write", "glob", "grep",
 		"update_tasks", "codegraph_search", "codegraph_file_structure",
 		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",

@@ -8,10 +8,8 @@ import (
 	"os"
 
 	"path/filepath"
-	"regexp"
 
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -88,6 +86,12 @@ type Registry struct {
 	tools map[string]*Tool
 	order []string // 保持注册顺序，传给 LLM 时稳定
 
+	// discovered 按需工具（DeferredToolNames）的「本会话已发现」集合——
+	// 未发现的按需工具不进 LLM 工具面（Definitions/EnabledNames 过滤），
+	// tool_search 命中后 MarkToolDiscovered 提升（对齐 codex Deferred 暴露）。
+	// 会话隔离：每会话独立 Registry 实例（Copy/Subset 快照继承）。
+	discovered map[string]bool
+
 	// 钩子（均可空）：
 	//   BeforeTool：执行前调用；返回 proceed=false 则短路——用 override/overrideErr 作结果，不执行 handler。
 	//               用途：审批拒绝、缓存命中、参数校验拦截。
@@ -109,7 +113,7 @@ type Registry struct {
 
 // NewRegistry 创建空注册表。
 func NewRegistry() *Registry {
-	return &Registry{tools: map[string]*Tool{}}
+	return &Registry{tools: map[string]*Tool{}, discovered: map[string]bool{}}
 }
 
 // Register 注册一个工具（同名覆盖，顺序不变）。
@@ -197,6 +201,9 @@ func (r *Registry) EnabledNames() []string {
 	out := make([]string, 0, len(r.order))
 	for _, name := range r.order {
 		if t := r.tools[name]; t != nil && t.Enabled {
+			if isDeferredToolName(name) && !r.discovered[name] {
+				continue // 按需工具（未发现）不暴露（防 run_code 沙箱绕过）
+			}
 			out = append(out, name)
 		}
 	}
@@ -220,6 +227,7 @@ func (r *Registry) Copy() *Registry {
 	out := &Registry{
 		tools:        map[string]*Tool{},
 		order:        append([]string(nil), r.order...),
+		discovered:   discoveredCopy(r.discovered),
 		BeforeTool:   r.BeforeTool,
 		AfterTool:    r.AfterTool,
 		OnToolError:  r.OnToolError,
@@ -239,6 +247,7 @@ func (r *Registry) Subset(names []string) *Registry {
 	defer r.mu.RUnlock()
 	out := &Registry{
 		tools:        map[string]*Tool{},
+		discovered:   discoveredCopy(r.discovered),
 		BeforeTool:   r.BeforeTool,
 		AfterTool:    r.AfterTool,
 		OnToolError:  r.OnToolError,
@@ -257,6 +266,33 @@ func (r *Registry) Subset(names []string) *Registry {
 	return out
 }
 
+// MarkToolDiscovered 标记按需工具为「本会话已发现」（tool_search 命中后调用）——
+// 该工具自此进入本会话的 LLM 工具面（Definitions/EnabledNames 不再过滤）。
+func (r *Registry) MarkToolDiscovered(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.discovered == nil {
+		r.discovered = map[string]bool{}
+	}
+	r.discovered[name] = true
+}
+
+// IsToolDiscovered 查询按需工具是否已在本会话被发现。
+func (r *Registry) IsToolDiscovered(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.discovered[name]
+}
+
+// discoveredCopy 拷贝发现集合（nil 安全）。
+func discoveredCopy(m map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 // ToolMeta 工具的完整元信息（供前端 UI 展示）。
 type ToolMeta struct {
 	Name        string `json:"name"`
@@ -264,6 +300,7 @@ type ToolMeta struct {
 	Category    string `json:"category"`
 	UsageGuide  string `json:"usageGuide"`
 	Enabled     bool   `json:"enabled"`
+	Deferred    bool   `json:"deferred"` // 按需工具（默认不进 LLM 工具面；tool_search 可发现）
 	ReadOnly    bool   `json:"readOnly"`
 	SystemTool  bool   `json:"systemTool"`
 }
@@ -281,6 +318,7 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 			Category:    t.Category,
 			UsageGuide:  t.UsageGuide,
 			Enabled:     t.Enabled,
+			Deferred:    isDeferredToolName(t.Name),
 			ReadOnly:    t.ReadOnly,
 			SystemTool:  t.SystemTool,
 		})
@@ -304,6 +342,9 @@ func (r *Registry) Definitions() []ToolDefinition {
 		t := r.tools[name]
 		if !t.Enabled {
 			continue // 禁用的工具不暴露给 LLM
+		}
+		if isDeferredToolName(name) && !r.discovered[name] {
+			continue // 按需工具（未发现）：不进 LLM 工具面，经 tool_search 搜索提升
 		}
 		desc := trimToolDesc(t.Description)
 		defs = append(defs, ToolDefinition{
@@ -366,6 +407,12 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 		// 但模型幻觉/手动调用仍可能到达这里，明确报错防绕过。
 		return "", fmt.Errorf("工具 %s 已禁用（未加入工作区工具集；可用 toolset_edit add_builtin 或工具集面板启用）", name)
 	}
+	// ★ 按需工具（deferred）只影响「LLM 工具面」（Definitions/EnabledNames
+	//   过滤），不限制直接执行——对齐 codex ToolExposure::Deferred 的
+	//   「可见性管理」语义（仅 omit from model-visible list；历史回放/
+	//   内部调用等直达路径照常执行）。
+	// ★ 注入会话注册表到 Context（tool_search 等需要访问注册表状态的内置工具用）
+	ctx = withRegistry(ctx, r)
 	args := map[string]any{}
 	if s := strings.TrimSpace(argsJSON); s != "" {
 		if err := json.Unmarshal([]byte(s), &args); err != nil {
@@ -437,7 +484,11 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用；由内置插件
 // 规格统一分发，见 builtin_plugins.go）。★ 宿主进程不调用——改用
 // RegisterHostFrameworkTools（工具实现已迁移磁盘插件 .pair/plugins/tool-*）。
-func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry) {
+//
+// ★ 2026-09 工具重构 Phase B：编辑面统一为 apply_patch（codex 语法自由格式
+// 补丁）——edit/multi_edit（JSON old_string 匹配+行号追踪）与 move_file/
+// delete_file 已移除（Add/Update/Delete/Move to 全覆盖）；read/write 保留。
+func registerCoreTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:        "read",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
@@ -508,158 +559,14 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 	})
 
 	r.Register(&Tool{
-		Name:       "edit",
-		UsageGuide: "把文件中唯一一处 old_string 替换为 new_string。内置智能匹配（CRLF 归一化+空白折叠）。匹配失败时优先用 line_start/line_end 行号定位（最可靠）。比手动 read+write 更精确（保留换行风格+行号偏移追踪+codegraph 自动注入）。仅用于小改动（≤5 行），大改动请用 write 写整段。",
-		Description: "把文件中唯一一处 old_string 替换为 new_string。" +
-			"匹配策略（自动）：精确→CRLF归一化（兼容 Windows \\r\\n 文件与 LLM 给的 \\n）→空白折叠（容忍缩进/行尾空白/tab与空格差异）；全部失败时返回带行号上下文的诊断。" +
-			"替代方案：用 line_start/line_end 行号定位整段替换（最可靠，old_string 可选作校验）。" +
-			"保留文件原换行风格（CRLF 文件替换后仍 CRLF）。",
-		Parameters: objSchema(props{
-			"path":       strProp("文件路径"),
-			"old_string": strProp("待替换原文（须在文件中唯一；line_start>0 时可省略或作校验）"),
-			"new_string": strProp("替换后的新文"),
-			"line_start": intProp("可选：1 基起始行号，>0 时启用行号定位模式（与 old_string 二选一或并用）"),
-			"line_end":   intProp("可选：1 基结束行号（含）；省略或 < line_start 时只替换 line_start 一行"),
-			"project":    projectSchemaProp(),
-		}, "path", "new_string"),
+		Name:       "apply_patch",
+		UsageGuide: "应用 codex 语法自由格式补丁修改文件（*** Begin Patch / Add File / Update File / Delete File / *** End Patch）。免 JSON 转义、免唯一性/行号依赖——Update 用上下文行定位；编辑文件的主工具（取代 edit/multi_edit）。",
+		Description: "应用补丁修改文件：一次调用可含多个文件、四类操作（新增/更新/删除/移动）。" +
+			"@@ 段内：空格前缀=上下文行、- 前缀=删除行、+ 前缀=新增行；写前自动快照+变更回调。",
+		Parameters:       objSchema(props{"patch": strProp("补丁文本（*** Begin Patch … *** End Patch）")}, "patch"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePathFor(root, args, argStr(args, "path"))
-			if err != nil {
-				return "", err
-			}
-			SnapshotBeforeWriteWithTracking(root, p)
-
-			orig, err := os.ReadFile(p)
-			if err != nil {
-				return "", err
-			}
-			origStr := string(orig)
-			newStr, err := ApplyEdit(origStr, EditOptions{
-				OldString: argStr(args, "old_string"),
-				NewString: argStr(args, "new_string"),
-				LineStart: argInt(args, "line_start", 0),
-				LineEnd:   argInt(args, "line_end", 0),
-			})
-			if err != nil {
-				return "", err
-			}
-			if err := os.WriteFile(p, []byte(newStr), 0o644); err != nil {
-				return "", err
-			}
-			// ★ v2: 行号偏移追踪 + 编辑后上下文反馈
-			oldLC := countLines(origStr)
-			newLC := countLines(newStr)
-			delta := newLC - oldLC
-			ls := argInt(args, "line_start", 0)
-			le := argInt(args, "line_end", 0)
-			if ls <= 0 {
-				ls = 1
-			}
-			if le <= 0 {
-				le = ls
-			}
-			nl := countLines(argStr(args, "new_string"))
-			eh.record(fileEditRecord{Path: p, LineDelta: delta, EditEnd: ls + nl - 1})
-			editCtx := editContext(strings.Split(normalizeNewlines(newStr), "\n"), ls, le, nl, delta)
-			if FileChangeCallback != nil {
-				FileChangeCallback(argStr(args, "path"))
-			}
-			return fmt.Sprintf("已编辑 %s\n%s", argStr(args, "path"), editCtx), nil
-		},
-	})
-
-	r.Register(&Tool{
-		Name:       "multi_edit",
-		UsageGuide: "按顺序对一个文件应用多处替换。比多次 edit 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit 调用。",
-		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。" +
-			"匹配策略同 edit（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
-			"比多次 edit 高效。保留文件原换行风格。",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": props{
-				"path":    strProp("文件路径"),
-				"project": projectSchemaProp(),
-				"edits": map[string]any{
-					"type":        "array",
-					"description": "按顺序应用的替换列表",
-					"items": map[string]any{
-						"type": "object",
-						"properties": props{
-							"old_string": strProp("待替换原文（须唯一；line_start>0 时可省略或作校验）"),
-							"new_string": strProp("替换后的新文"),
-							"line_start": intProp("可选：1 基起始行号，>0 时启用行号定位模式"),
-							"line_end":   intProp("可选：1 基结束行号（含）；省略只替换 line_start 一行"),
-						},
-						"required": []string{"new_string"},
-					},
-				},
-			},
-			"required": []string{"path", "edits"},
-		},
-		RequiresApproval: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePathFor(root, args, argStr(args, "path"))
-			if err != nil {
-				return "", err
-			}
-			SnapshotBeforeWriteWithTracking(root, p)
-			data, err := os.ReadFile(p)
-			if err != nil {
-				return "", err
-			}
-			edits, _ := args["edits"].([]any)
-			if len(edits) == 0 {
-				return "", fmt.Errorf("edits 不能为空")
-			}
-			origLC := countLines(string(data))
-			content := string(data)
-			totalDelta := 0
-			lastEditEnd := 0
-			for i, it := range edits {
-				m, ok := it.(map[string]any)
-				if !ok {
-					return "", fmt.Errorf("edits[%d] 格式错误", i)
-				}
-				old, _ := m["old_string"].(string)
-				neu, _ := m["new_string"].(string)
-				ls := argInt(m, "line_start", 0)
-				le := argInt(m, "line_end", 0)
-				if old == "" && ls <= 0 {
-					return "", fmt.Errorf("edits[%d] 必须提供 old_string 或 line_start", i)
-				}
-				// ★ v2: 自动补偿行号偏移
-				if ls > 0 && totalDelta != 0 && ls > lastEditEnd {
-					ls += totalDelta
-					if le > 0 {
-						le += totalDelta
-					}
-				}
-				out, err := ApplyEdit(content, EditOptions{
-					OldString: old,
-					NewString: neu,
-					LineStart: ls,
-					LineEnd:   le,
-				})
-				if err != nil {
-					return "", fmt.Errorf("edits[%d] 应用失败: %w", i, err)
-				}
-				curDelta := countLines(out) - countLines(content)
-				totalDelta += curDelta
-				if ls > 0 {
-					lastEditEnd = ls + countLines(neu) - 1
-				}
-				content = out
-			}
-			if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-				return "", err
-			}
-			newLC := countLines(content)
-			eh.record(fileEditRecord{Path: p, LineDelta: newLC - origLC, EditEnd: lastEditEnd})
-			if FileChangeCallback != nil {
-				FileChangeCallback(argStr(args, "path"))
-			}
-			return fmt.Sprintf("已对 %s 应用 %d 处编辑（累计偏移 %+d 行）", argStr(args, "path"), len(edits), totalDelta), nil
+			return ApplyPatchText(root, argStr(args, "patch"))
 		},
 	})
 
@@ -685,123 +592,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 			return listFilesHandler(root)(ctx, args) // 目录列举
 		},
 	})
-	r.Register(&Tool{
-		Name:             "bash",
-		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止（内部后台执行，不阻塞 agent）。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
-		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
-		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）"), "project": projectSchemaProp()}, "command"),
-		RequiresApproval: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			command := argStr(args, "command")
-			if strings.TrimSpace(command) == "" {
-				return "", fmt.Errorf("command 不能为空")
-			}
-			// ★ 通过 bg.start() 后台启动命令（不阻塞 loop），然后轮询等待完成。
-			dir := root
-			if cwd := argStr(args, "cwd"); cwd != "" {
-				var err error
-				if dir, err = resolvePathFor(root, args, cwd); err != nil {
-					return "", err
-				}
-			}
-			id, err := bg.start(command, dir)
-			if err != nil {
-				return "", err
-			}
-			p := bg.get(id)
-			if p == nil {
-				return "", fmt.Errorf("内部错误：后台进程创建后丢失")
-			}
-			// 轮询等待完成（带超时和 ctx 中断），不阻塞 loop 线程。
-			deadline := time.After(120 * time.Second)
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					// 上下文取消时杀死子进程，防止残留
-					if p.cmd != nil && p.cmd.Process != nil {
-						killProcessTree(p.cmd.Process.Pid)
-					}
-					out, _, _ := p.snapshot()
-					return capOutput(out, 16000) + "\n[已中断: " + ctx.Err().Error() + "]", nil
-				case <-deadline:
-					killProcessTree(p.cmd.Process.Pid)
-					out, _, _ := p.snapshot()
-					return capOutput(out, 16000) + "\n[超时 120s 已终止]", nil
-				case <-ticker.C:
-					out, done, exitErr := p.snapshot()
-					if done {
-						res := capOutput(out, 16000)
-						if exitErr != "" {
-							res += "\n[退出: " + exitErr + "]"
-						}
-						// 清理已完成的进程记录
-						bg.mu.Lock()
-						delete(bg.procs, id)
-						bg.mu.Unlock()
-						return res, nil
-					}
-				}
-			}
-		},
-	})
 
-	r.Register(&Tool{
-		Name:             "move_file",
-		UsageGuide:       "移动或重命名工作区内的文件/目录。目标父目录自动创建。需审核批准。覆盖 os.Rename 的限制（自动创建目标目录+路径越界拦截+变更通知）。",
-		Description:      "把文件/目录从 from 移动或重命名到 to（都在工作区内；目标父目录自动创建）。",
-		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径"), "project": projectSchemaProp()}, "from", "to"),
-		RequiresApproval: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			from, err := resolvePathFor(root, args, argStr(args, "from"))
-			if err != nil {
-				return "", err
-			}
-			to, err := resolvePathFor(root, args, argStr(args, "to"))
-			if err != nil {
-				return "", err
-			}
-			if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
-				return "", err
-			}
-			if err := os.Rename(from, to); err != nil {
-				return "", err
-			}
-			if FileChangeCallback != nil {
-				FileChangeCallback(argStr(args, "from") + " → " + argStr(args, "to"))
-			}
-			return fmt.Sprintf("已移动 %s → %s", argStr(args, "from"), argStr(args, "to")), nil
-		},
-	})
-
-	r.Register(&Tool{
-		Name:             "delete_file",
-		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 bash rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
-		Description:      "删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。",
-		Parameters:       objSchema(props{"path": strProp("要删除的文件路径"), "project": projectSchemaProp()}, "path"),
-		RequiresApproval: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePathFor(root, args, argStr(args, "path"))
-			if err != nil {
-				return "", err
-			}
-			info, err := os.Stat(p)
-			if err != nil {
-				return "", err
-			}
-			if info.IsDir() {
-				return "", fmt.Errorf("delete_file 不删目录：%s", argStr(args, "path"))
-			}
-			if err := os.Remove(p); err != nil {
-				return "", err
-			}
-			if FileChangeCallback != nil {
-				FileChangeCallback("(删除) " + argStr(args, "path"))
-			}
-			return "已删除 " + argStr(args, "path"), nil
-		},
-	})
 
 	// grep：工作区内正则全文搜索（原 search_content，并入 core 组；生产语义以
 	// tool-harness JS 插件为准，Go 侧仅测试/归档基座）
@@ -824,73 +615,9 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Handler:  searchContentHandler(root),
 	})
 
-	registerCodeGraphTools(r, root)      // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
+	registerCodeGraphTools(r, root)      // codegraph_build / codegraph_search / codegraph_relations / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerExtraCodeGraphTools(r, root) // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
-	// ── 默认 BeforeTool：edit/multi_edit 执行前用 codegraph 注入最新行号 ──
-	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。
-	if r.BeforeTool == nil {
-		r.BeforeTool = func(ctx context.Context, name string, args map[string]any) (bool, string, error) {
-			if name != "edit" && name != "multi_edit" {
-				return true, "", nil // 放行
-			}
-			oldStr, _ := args["old_string"].(string)
-			filePath, _ := args["path"].(string)
-			if oldStr == "" || filePath == "" {
-				return true, "", nil // 放行
-			}
-			symName := extractGoSymbolName(oldStr)
-			if symName == "" {
-				return true, "", nil // 放行
-			}
-			cg, cgErr := getCodeGraph(root)
-			if cgErr != nil || cg == nil {
-				return true, "", nil // 放行
-			}
-			for _, e := range cg.SearchEntities(symName) {
-				if e.FilePath != filePath {
-					continue
-				}
-				if !strings.Contains(e.Name, symName) {
-					continue
-				}
-				// ★ 找到匹配实体 → 注入最新行号，让 edit 用行号定位执行
-				args["line_start"] = float64(e.Line)
-				if e.EndLine > e.Line {
-					args["line_end"] = float64(e.EndLine)
-				}
-				break
-			}
-			return true, "", nil // 放行（参数已被修改）
-		}
-	}
 
-	// ── 默认 OnToolError：edit/multi_edit 匹配失败→自动行号定位重试 ──
-	// 注意：BeforeTool 已用 codegraph 预注入行号，此处为兜底（codegraph 找不到时）。
-	if r.OnToolError == nil {
-		r.OnToolError = func(ctx context.Context, name string, args map[string]any, err error) (string, error) {
-			if name != "edit" && name != "multi_edit" {
-				return "", err
-			}
-			if ls, _ := args["line_start"].(float64); ls > 0 {
-				return "", err
-			}
-			errStr := err.Error()
-			if !strings.Contains(errStr, "未找到") && !strings.Contains(errStr, "多次") && !strings.Contains(errStr, "不唯一") {
-				return "", err
-			}
-			re := regexp.MustCompile(`L(\d+):`)
-			m := re.FindStringSubmatch(errStr)
-			if len(m) < 2 {
-				return "", err
-			}
-			lineNo, _ := strconv.Atoi(m[1])
-			if lineNo <= 0 {
-				return "", err
-			}
-			args["line_start"] = float64(lineNo)
-			return "", ErrRetry
-		}
-	}
 }
 
 // ─── 流式更新支持 ──────────────────────────────────────────────
@@ -1193,48 +920,4 @@ func extractBaseCommand(cmd string) string {
 	return cmd
 }
 
-// extractGoSymbolName 从 Go 代码片段（old_string）中提取符号名称。
-// 用于 edit 匹配失败时通过 codegraph 定位符号的最新行号。
-// 匹配优先级：方法 > 函数 > 类型 > 变量 > 常量。
-func extractGoSymbolName(s string) string {
-	if s == "" {
-		return ""
-	}
-	// 去掉可能的前导空白和注释
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "//") || strings.HasPrefix(s, "/*") {
-		return ""
-	}
 
-	// 方法：func (r *Receiver) MethodName(
-	re := regexp.MustCompile(`(?m)^func\s+\([^)]*\)\s*(\w+)\s*\(`)
-	if m := re.FindStringSubmatch(s); len(m) > 1 {
-		return m[1]
-	}
-
-	// 函数：func FunctionName(
-	re = regexp.MustCompile(`(?m)^func\s+(\w+)\s*\(`)
-	if m := re.FindStringSubmatch(s); len(m) > 1 {
-		return m[1]
-	}
-
-	// 类型/结构体/接口：type TypeName
-	re = regexp.MustCompile(`(?m)^type\s+(\w+)`)
-	if m := re.FindStringSubmatch(s); len(m) > 1 {
-		return m[1]
-	}
-
-	// 变量：var VarName
-	re = regexp.MustCompile(`(?m)^var\s+(\w+)`)
-	if m := re.FindStringSubmatch(s); len(m) > 1 {
-		return m[1]
-	}
-
-	// 常量：const ConstName
-	re = regexp.MustCompile(`(?m)^const\s+(\w+)`)
-	if m := re.FindStringSubmatch(s); len(m) > 1 {
-		return m[1]
-	}
-
-	return ""
-}

@@ -9,7 +9,7 @@ import (
 )
 
 // TestUndefinePermanentDiskPackage 验证「删除定义」= 删内存 + 删磁盘插件包：
-//  1. define + 落盘插件包目录（globalPluginsDir/<name>/，cordis_define 的固化路径）
+//  1. define + 落盘插件包目录（globalPluginsDir/<name>/，cordis(op=define) 的固化路径）
 //  2. UndefinePermanent → 内存定义删除 + 磁盘包目录删除
 //  3. 磁盘目录删除后 LoadGlobalPlugins 的装配依据（目录+package.json）不复存在 →
 //     重启不再装配（复活根因消除）
@@ -26,7 +26,7 @@ func TestUndefinePermanentDiskPackage(t *testing.T) {
 	})
 	_ = os.RemoveAll(dir) // 清历史残留
 
-	// 1. define + 落盘（模拟 cordis_define 的固化路径 syncDynamicPluginToToolset）
+	// 1. define + 落盘（模拟 cordis(op=define) 的固化路径 syncDynamicPluginToToolset）
 	jsCode := "return { name: '" + name + "', apply(ctx) { ctx.tools.register({ name: '" + name + "_tool', description: 't', parameters: {}, execute: async () => 'ok' }) } }"
 	id, err := host.DefineJSCodeFull(jsCode, "", "测试", "", "")
 	if err != nil {
@@ -56,7 +56,7 @@ func TestUndefinePermanentDiskPackage(t *testing.T) {
 	}
 }
 
-// TestRemoveJSDefDeletesDiskPackage cordis_undefine 工具路径同样删磁盘包。
+// TestRemoveJSDefDeletesDiskPackage cordis(op=undefine) 工具路径同样删磁盘包。
 func TestRemoveJSDefDeletesDiskPackage(t *testing.T) {
 	host := NewPluginHost(NewRegistry(), nil, "")
 	name := "test-undelete-jsdef"

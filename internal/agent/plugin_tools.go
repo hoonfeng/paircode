@@ -27,239 +27,218 @@ import (
 // RegisterCordisTools 注册 cordis_* 动态插件管理工具。
 // 由 AgentBase.Init 调用；host 为插件宿主，root 为工作区根（dir 参数解析基准）。
 func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
+	// ★ 2026-09 工具面合并：cordis_inspect/define/run/stop/undefine/service_list/
+	//   inspect_query 七工具合并为单工具 cordis(op=…)——op 分派到下方 cordisOpXxx
+	//   （各实现逻辑与原 handler 一致）。
 	registry.Register(&Tool{
-		Name:        "cordis_inspect",
-		Description: "查看当前进程的插件运行时（三层自检，对齐 harness cordis_inspect_self）：① 无 id → 摘要（插件/动态包列表，含版本数与 waiting 提示）；② id=pluginId 或 dyn id → 版本链（当前活动版本 + 各版本状态）；③ id + version=vN → 指定版本源码与完整运行诊断（diag/lastError）。插件 = { name, apply(ctx) }，JS 动态插件用 cordis_define 定义、cordis_run 装载。",
-		Category:    "system",
-		ReadOnly:    true,
-		Parameters: objSchema(map[string]any{
-			"id":      strProp("可选：精确插件名、dyn id（如 dyn-1）或 pluginId（稳定身份）。省略则报告全部（L1 摘要）。"),
-			"version": strProp("可选：配合 id 指定版本号（如 v2）查看该版本源码+诊断（L3）。缺省=版本链概览（L2）。"),
-		}),
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			return cordisInspectReport(host, argStr(args, "id"), argStr(args, "version"))
-		},
-	})
-
-	registry.Register(&Tool{
-		Name:        "cordis_define",
-		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。★ 创建前建议 cordis_inspect 检查已有插件/工具（同名插件或工具会导致冲突——define 后自动检测并提示）。★ 登记后自动同步（重启自动装配、前端插件面板可见可管理），cordis_run 装载后工具对 agent 可用。★ 作用域 scope：含 client 半的 UI 类插件默认 global——全局插件跨工作区生效，存 <安装目录>/.pair/plugins/dynamic.json（★ 独立于工具集，不属于任何工具集）；纯 host 工具插件默认 project（工作区 .pair/toolsets/dynamic.json 工具集，按项目加载）。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失时插件进入 waiting，服务出现后自动激活；可选服务用 ctx.get(name) 判 undefined）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。★ 版本化：pluginId 非空时向已有插件追加新版本（对齐 harness define existing append）；缺省=新建插件。返回 dyn id（精确版本）供 cordis_run/stop/undefine 使用。",
+		Name:        "cordis",
+		Description: "cordis 动态插件管理（单工具 op 分派）：inspect 查看插件运行时（三层自检：无 id 摘要/版本链/源码诊断）；define 登记 JS/TS 插件定义（预检不运行；code 为 async 函数体，pluginId 非空=追加版本）；run 装载（goja 求值并 apply，可传 config）；stop 停止并回收；undefine 删定义；services 列宿主服务与方法签名；query 按协议精确查询（platform/provider/method/input）。写插件前先 services/query 查精确签名，勿臆测。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder/CordisApi（内置真 cordis 运行时，new CordisApi.api.Context() 建 cordis app 跑生态插件协作）；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
-			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.invoke(plugin, method, args?) 远程调用 host 半 ctx.registerClientMethod 注册的方法（invoke RPC）、ui.reportFailure(phase, message) 失败上报（render/guard/boot，Agent inspect 可查）、ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（render(el, ui)，el 为容器 DOM，ui 为当前沙箱对象）、ui.http.get/post 调后端 API。★ 含 client 半 = UI 类插件，自动 global 作用域（跨工作区生效）。"),
-			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
-			"purpose":  strProp("可选：插件用途说明。"),
-			"pluginId": strProp("可选：已有插件的稳定 id（cordis_define 首次返回的 dyn-<n> 即稳定身份）。非空=向该插件追加新版本（existing append）；缺省=新建插件。追加版本后 cordis_run 传 pluginId 装载最新版。"),
-			"dir":      strProp("可选：源码目录（解析相对 import 的多文件插件）。缺省=单文件模式（不解析 import）。"),
-			"scope":    strProp("可选：生效作用域 \"global\"=全局（跨工作区，UI 类插件默认）|\"project\"=项目（默认，纯工具插件）。含 client 半时自动 global。"),
-		}, "code"),
+			"op":       strProp("操作：inspect 查看 / define 登记 / run 装载 / stop 停止 / undefine 删定义 / services 列服务 / query 协议查询"),
+			"id":       strProp("inspect/run/stop/undefine 用：精确插件名、dyn id（如 dyn-1）或 pluginId（稳定身份）。"),
+			"version":  strProp("inspect 用：可选版本号（如 v2）——配合 id 查看该版本源码+诊断（L3）。"),
+			"code":     strProp("define 用：插件 host 半代码（JS/TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。"),
+			"client":   strProp("define 用：可选 client 半代码（浏览器端执行；含 client 半=UI 类插件自动 global 作用域）。"),
+			"language": strProp("define 用：可选源码语言 \"js\" | \"ts\"（默认自动探测）。"),
+			"purpose":  strProp("define 用：可选插件用途说明。"),
+			"pluginId": strProp("define 用：可选稳定 id——非空=向该插件追加新版本（existing append）；缺省=新建。"),
+			"dir":      strProp("define 用：可选源码目录（解析相对 import 的多文件插件）。"),
+			"scope":    strProp("define 用：可选作用域 \"global\"=全局（跨工作区）|\"project\"=项目（默认；含 client 半自动 global）。"),
+			"config":   strProp("run 用：可选插件配置 JSON 对象（透传 apply(ctx, config) 第二参）。"),
+			"platform": strProp("query 用：运行时平台 \"host\"（宿主进程）| \"client\"（浏览器快照）。"),
+			"provider": strProp("query 用：查询对象 service | tool | event | plugin。"),
+			"method":   strProp("query 用：provider 方法：listService/getService、listTool/getTool、listEvent/getEvent、listPlugin/getPlugin。"),
+			"input":    strProp("query 用：可选查询输入 JSON 对象（如 {name:\"fs\"}）。"),
+		}, "op"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			code := argStr(args, "code")
-			if strings.TrimSpace(code) == "" {
-				return "", fmt.Errorf("code 不能为空")
+			switch strings.ToLower(strings.TrimSpace(argStr(args, "op"))) {
+			case "inspect":
+				return cordisOpInspect(host, args)
+			case "define":
+				return cordisOpDefine(registry, host, root, args)
+			case "run":
+				return cordisOpRun(host, args)
+			case "stop":
+				return cordisOpStop(host, args)
+			case "undefine":
+				return cordisOpUndefine(host, args)
+			case "services", "service_list", "service-list":
+				return cordisOpServices(host, args)
+			case "query", "inspect_query":
+				return cordisOpQuery(host, args)
 			}
-			purpose := argStr(args, "purpose")
-			language := argStr(args, "language")
-			clientCode := argStr(args, "client")
-			pluginId := strings.TrimSpace(argStr(args, "pluginId"))
-			scope := strings.TrimSpace(argStr(args, "scope"))
-			dir := ""
-			if d := strings.TrimSpace(argStr(args, "dir")); d != "" {
-				resolved, err := resolvePathFor(root, args, d)
-				if err != nil {
-					return "", err
-				}
-				dir = resolved
-			}
-			id, err := host.DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId)
-			if err != nil {
-				return "", err
-			}
-			// ★ 创建工具插件前考虑已有插件/工具（需求）：define 成功后检测同名冲突，
-			//   返回信息附带 warning 引导 agent 决策；并实时同步到工作区工具集。
-			def, _ := host.GetJSDef(id)
-			var warnings []string
-			pname := extractJSPluginName(def.code)
-			if pname != "" {
-				for _, other := range host.JSDefs() {
-					if other.id == id {
-						continue
-					}
-					if other.Name() == pname {
-						warnings = append(warnings, fmt.Sprintf("宿主已有同名插件 %q（%s，v%s）——若两者都运行将冲突；建议 cordis_inspect 查看后决定是否换名或停旧装新",
-							pname, other.id, other.version))
-						break
-					}
-				}
-				if registry != nil {
-					if t, ok := registry.Get(pname); ok {
-						who := "宿主内置工具"
-						if host.HasPluginTool(pname) {
-							who = "其他插件工具"
-						}
-						_ = t
-						warnings = append(warnings, fmt.Sprintf("工具名 %q 已被 %s 占用——注册同名工具会被拒绝（claimTool 冲突）；如需同名请先禁用/卸载占用方，或换工具名",
-							pname, who))
-					}
-				}
-			}
-			// 动态插件实时固化到插件工具集（跨重启存续；cordis_define 只登记不装载，
-			// cordis_run 后工具可用，重启自动装配）。★ 作用域：含 client 半的 UI 类
-			// 插件自动 global（全局生效，不进项目工具集）；scope 显式指定 global/project。
-			syncMsg := ""
-			if dir == "" { // 多文件 bundle 插件不固化（代码依赖 dir 相对 import）
-				if scope == "" && strings.TrimSpace(clientCode) != "" {
-					scope = "global" // UI 类插件默认全局
-				}
-				if msg, serr := syncDynamicPluginToToolset(root, def, pname, scope); serr != nil {
-					log.Printf("[cordis] 同步动态插件到工具集失败: %v", serr)
-				} else {
-					syncMsg = msg
-				}
-			}
-			extra := ""
-			if dir != "" {
-				extra = "，多文件 bundle（dir=" + dir + "）"
-			}
-			if strings.TrimSpace(clientCode) != "" {
-				extra += "，含 client 半（浏览器 UI）"
-			}
-			mode := "新建插件"
-			if pluginId != "" {
-				mode = "向 " + pluginId + " 追加版本"
-			}
-			msg := fmt.Sprintf("已登记 %s（%s，version=%s 语言 %s，purpose: %s%s）。用 cordis_run id=%s 或 id=%s 装载。",
-				id, mode, def.version, detectPluginLanguage(code, language), purpose, extra, id, def.pluginId)
-			if len(warnings) > 0 {
-				msg += "\n\n⚠️ " + strings.Join(warnings, "\n⚠️ ")
-			}
-			if syncMsg != "" {
-				msg += "\n" + syncMsg
-			}
-			return msg, nil
+			return "", fmt.Errorf("cordis：op 无效 %q（可用 inspect/define/run/stop/undefine/services/query）", argStr(args, "op"))
 		},
 	})
+}
 
-	registry.Register(&Tool{
-		Name:        "cordis_run",
-		Description: "装载一个已登记的 JS 动态插件（cordis_define 的 id 或 pluginId）：在 goja 沙箱中求值并执行 apply(ctx, config)。可选 config 透传为 apply 第二参（插件配置）。id 可传精确 dyn id（指定版本）或 pluginId（最新版本）；已运行的插件重复 run 会先卸载旧实例再装载新版本（restart 语义，对齐 harness run mode=run）。inject 声明服务缺失时插件进入 waiting（服务出现后自动激活，可用 cordis_inspect 查看）。",
-		Category:    "system",
-		Parameters: objSchema(map[string]any{
-			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1，精确版本）或 pluginId（稳定身份=首次 dyn id，装载最新版本）。"),
-			"config": strProp("可选：插件配置 JSON 对象（透传给 apply(ctx, config) 第二参）。"),
-		}, "id"),
-		// ★ 2026-08-19：client 半激活审批机制整体取消（参考外部实现
-		//   无此机制）→ 恒 false：装载带 client 半的插件不再触发审批门，浏览器
-		//   直接装载（Round3 已删 IsClientApproved 等审批遗留）。
-		DynamicApproval: func(tc ToolCall) bool {
-			return false
-		},
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			id := argStr(args, "id")
-			def, err := host.resolveJSDef(id)
-			if err != nil {
-				return "", err
+// ─── cordis 各 op 实现（2026-09 由独立工具提取，逻辑与原 handler 一致）───
+
+// cordisOpInspect op=inspect：插件运行时只读报告（摘要/版本链/源码诊断）。
+func cordisOpInspect(host *PluginHost, args map[string]any) (string, error) {
+	return cordisInspectReport(host, argStr(args, "id"), argStr(args, "version"))
+}
+
+// cordisOpDefine op=define：登记 JS/TS 动态插件定义（语法预检，不运行）。
+func cordisOpDefine(registry *Registry, host *PluginHost, root string, args map[string]any) (string, error) {
+
+	code := argStr(args, "code")
+	if strings.TrimSpace(code) == "" {
+		return "", fmt.Errorf("code 不能为空")
+	}
+	purpose := argStr(args, "purpose")
+	language := argStr(args, "language")
+	clientCode := argStr(args, "client")
+	pluginId := strings.TrimSpace(argStr(args, "pluginId"))
+	scope := strings.TrimSpace(argStr(args, "scope"))
+	dir := ""
+	if d := strings.TrimSpace(argStr(args, "dir")); d != "" {
+		resolved, err := resolvePathFor(root, args, d)
+		if err != nil {
+			return "", err
+		}
+		dir = resolved
+	}
+	id, err := host.DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId)
+	if err != nil {
+		return "", err
+	}
+	// ★ 创建工具插件前考虑已有插件/工具（需求）：define 成功后检测同名冲突，
+	//   返回信息附带 warning 引导 agent 决策；并实时同步到工作区工具集。
+	def, _ := host.GetJSDef(id)
+	var warnings []string
+	pname := extractJSPluginName(def.code)
+	if pname != "" {
+		for _, other := range host.JSDefs() {
+			if other.id == id {
+				continue
 			}
-			if cfgStr := strings.TrimSpace(argStr(args, "config")); cfgStr != "" {
-				var cfg map[string]any
-				if err := json.Unmarshal([]byte(cfgStr), &cfg); err != nil {
-					return "", fmt.Errorf("config 不是合法 JSON 对象: %v", err)
+			if other.Name() == pname {
+				warnings = append(warnings, fmt.Sprintf("宿主已有同名插件 %q（%s，v%s）——若两者都运行将冲突；建议 cordis(op=inspect) 查看后决定是否换名或停旧装新",
+					pname, other.id, other.version))
+				break
+			}
+		}
+		if registry != nil {
+			if t, ok := registry.Get(pname); ok {
+				who := "宿主内置工具"
+				if host.HasPluginTool(pname) {
+					who = "其他插件工具"
 				}
-				def.config = cfg
+				_ = t
+				warnings = append(warnings, fmt.Sprintf("工具名 %q 已被 %s 占用——注册同名工具会被拒绝（claimTool 冲突）；如需同名请先禁用/卸载占用方，或换工具名",
+					pname, who))
 			}
-			if err := host.LoadJSDynamic(def); err != nil {
-				return "", err
-			}
-			// ★ 2026-08-19：client 半激活审批机制整体取消（外部无此机制），
-			//   浏览器直接装载全部 client 半（Round3 已删 MarkClientApproved）。
-			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
-			if def.status == PluginWaiting {
-				msg := fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",
-					def.name, def.id, def.version, def.inject, def.waitingFor, def.pluginId)
-				if c := def.ConsoleText(); c != "" {
-					msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
-				}
-				return msg, nil
-			}
-			msg := fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis_inspect id=%s 查看。", def.name, def.id, def.version, def.pluginId)
-			if c := def.ConsoleText(); c != "" {
-				msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
-			}
-			return msg, nil
-		},
-	})
+		}
+	}
+	// 动态插件实时固化到插件工具集（跨重启存续；cordis(op=define) 只登记不装载，
+	// cordis(op=run) 后工具可用，重启自动装配）。★ 作用域：含 client 半的 UI 类
+	// 插件自动 global（全局生效，不进项目工具集）；scope 显式指定 global/project。
+	syncMsg := ""
+	if dir == "" { // 多文件 bundle 插件不固化（代码依赖 dir 相对 import）
+		if scope == "" && strings.TrimSpace(clientCode) != "" {
+			scope = "global" // UI 类插件默认全局
+		}
+		if msg, serr := syncDynamicPluginToToolset(root, def, pname, scope); serr != nil {
+			log.Printf("[cordis] 同步动态插件到工具集失败: %v", serr)
+		} else {
+			syncMsg = msg
+		}
+	}
+	extra := ""
+	if dir != "" {
+		extra = "，多文件 bundle（dir=" + dir + "）"
+	}
+	if strings.TrimSpace(clientCode) != "" {
+		extra += "，含 client 半（浏览器 UI）"
+	}
+	mode := "新建插件"
+	if pluginId != "" {
+		mode = "向 " + pluginId + " 追加版本"
+	}
+	msg := fmt.Sprintf("已登记 %s（%s，version=%s 语言 %s，purpose: %s%s）。用 cordis(op=run) id=%s 或 id=%s 装载。",
+		id, mode, def.version, detectPluginLanguage(code, language), purpose, extra, id, def.pluginId)
+	if len(warnings) > 0 {
+		msg += "\n\n⚠️ " + strings.Join(warnings, "\n⚠️ ")
+	}
+	if syncMsg != "" {
+		msg += "\n" + syncMsg
+	}
+	return msg, nil
+}
 
-	registry.Register(&Tool{
-		Name:        "cordis_stop",
-		Description: "停止一个运行中的插件（JS 动态插件或 Go 插件），回收其注册的工具/系统提示/事件监听；定义保留，可再次 cordis_run。",
-		Category:    "system",
-		Parameters: objSchema(map[string]any{
-			"id": strProp("插件名或 dyn id。"),
-		}, "id"),
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			name, err := host.resolvePluginName(argStr(args, "id"))
-			if err != nil {
-				return "", err
-			}
-			if err := host.Unload(name); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("插件 %s 已停止，贡献已回收。", name), nil
-		},
-	})
+// cordisOpRun op=run：装载已登记插件（goja 求值并 apply(ctx, config)；restart 语义）。
+func cordisOpRun(host *PluginHost, args map[string]any) (string, error) {
+	id := argStr(args, "id")
+	def, err := host.resolveJSDef(id)
+	if err != nil {
+		return "", err
+	}
+	if cfgStr := strings.TrimSpace(argStr(args, "config")); cfgStr != "" {
+		var cfg map[string]any
+		if err := json.Unmarshal([]byte(cfgStr), &cfg); err != nil {
+			return "", fmt.Errorf("config 不是合法 JSON 对象: %v", err)
+		}
+		def.config = cfg
+	}
+	if err := host.LoadJSDynamic(def); err != nil {
+		return "", err
+	}
+	// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
+	if def.status == PluginWaiting {
+		msg := fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis(op=inspect) id=%s 查看。",
+			def.name, def.id, def.version, def.inject, def.waitingFor, def.pluginId)
+		if c := def.ConsoleText(); c != "" {
+			msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
+		}
+		return msg, nil
+	}
+	msg := fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis(op=inspect) id=%s 查看。", def.name, def.id, def.version, def.pluginId)
+	if c := def.ConsoleText(); c != "" {
+		msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
+	}
+	return msg, nil
+}
 
-	registry.Register(&Tool{
-		Name:        "cordis_service_list",
-		Description: "列出宿主可用服务及其方法签名（写插件时先查询：inject 声明硬依赖 / ctx.get(name) 读可选服务）。静态服务（fs/web/bash/logger/timer/tools/events）声明后按 ctx.xxx 属性访问；动态服务（ctx.provide）用 ctx.get 读取。",
-		Category:    "system",
-		ReadOnly:    true,
-		Parameters:  objSchema(map[string]any{}),
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			return cordisServiceList(host), nil
-		},
-	})
+// cordisOpStop op=stop：停止运行中插件并回收其贡献（定义保留）。
+func cordisOpStop(host *PluginHost, args map[string]any) (string, error) {
+	name, err := host.resolvePluginName(argStr(args, "id"))
+	if err != nil {
+		return "", err
+	}
+	if err := host.Unload(name); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("插件 %s 已停止，贡献已回收。", name), nil
+}
 
-	registry.Register(&Tool{
-		Name:        "cordis_undefine",
-		Description: "删除一个 JS 动态插件定义：先停止（若在运行），再忘掉它。定义消失后 cordis_run 不再可用。",
-		Category:    "system",
-		Parameters: objSchema(map[string]any{
-			"id": strProp("cordis_define 返回的 dyn id。"),
-		}, "id"),
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			id := argStr(args, "id")
-			if err := host.RemoveJSDef(id); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("已删除插件定义 %s。", id), nil
-		},
-	})
+// cordisOpServices op=services：列出宿主可用服务及其方法签名。
+func cordisOpServices(host *PluginHost, args map[string]any) (string, error) {
+	return cordisServiceList(host), nil
+}
 
-	registry.Register(&Tool{
-		Name:        "cordis_inspect_query",
-		Description: "按精确协议查询插件运行时/宿主目录（对齐 harness cordis_inspect_query 的简化实现）。platform=host 时由宿主本地执行只读查询，不修改运行时。provider 决定查询对象：service（服务契约）/ tool（工具 schema）/ event（事件模式）/ plugin（插件记录）。method 由 provider 决定：service 支持 listService（无 input 列签名目录；input={name} 取精确契约）与 getService；tool 支持 listTool 与 getTool（input={name}）；event 支持 listEvent 与 getEvent（input={name}）；plugin 支持 listPlugin 与 getPlugin（input={name}）。写插件前先查精确签名，不要臆测。",
-		Category:    "system",
-		ReadOnly:    true,
-		Parameters: objSchema(map[string]any{
-			"platform": strProp("运行时平台：\"host\"（宿主进程，本地执行）| \"client\"（浏览器；当前返回 client 半装载状态摘要）。"),
-			"provider": strProp("查询对象：service | tool | event | plugin。"),
-			"method":   strProp("provider 的方法：listService/getService、listTool/getTool、listEvent/getEvent、listPlugin/getPlugin。"),
-			"input":    strProp("可选：查询输入 JSON 对象（如 {name:\"fs\"}）。"),
-		}, "platform", "provider", "method"),
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			platform := argStr(args, "platform")
-			provider := argStr(args, "provider")
-			method := argStr(args, "method")
-			input := map[string]any{}
-			if is := strings.TrimSpace(argStr(args, "input")); is != "" {
-				if err := json.Unmarshal([]byte(is), &input); err != nil {
-					return "", fmt.Errorf("input 不是合法 JSON 对象: %v", err)
-				}
-			}
-			return cordisInspectQuery(host, platform, provider, method, input)
-		},
-	})
+// cordisOpUndefine op=undefine：删除 JS 动态插件定义（先停后忘）。
+func cordisOpUndefine(host *PluginHost, args map[string]any) (string, error) {
+	id := argStr(args, "id")
+	if err := host.RemoveJSDef(id); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("已删除插件定义 %s。", id), nil
+}
+
+// cordisOpQuery op=query：按精确协议查询插件运行时/宿主目录。
+func cordisOpQuery(host *PluginHost, args map[string]any) (string, error) {
+	platform := argStr(args, "platform")
+	provider := argStr(args, "provider")
+	method := argStr(args, "method")
+	input := map[string]any{}
+	if is := strings.TrimSpace(argStr(args, "input")); is != "" {
+		if err := json.Unmarshal([]byte(is), &input); err != nil {
+			return "", fmt.Errorf("input 不是合法 JSON 对象: %v", err)
+		}
+	}
+	return cordisInspectQuery(host, platform, provider, method, input)
 }
 
 // cordisInspectQuery 执行精确协议查询（cordis_inspect_query 实现）。

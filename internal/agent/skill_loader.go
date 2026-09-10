@@ -2,7 +2,8 @@
 // 三级渐进披露：
 //   L1 常驻 system prompt —— frontmatter 的 name+description（PromptSkills）
 //   L2 load_skill 工具     —— 按需加载 SKILL.md 正文（Skill.Body）
-//   L3 load_skill_resource —— 按需加载 references/assets/scripts 子文件（LoadSkillResource，沙箱校验）
+//   L3 load_skill（path）  —— 按需加载 references/assets/scripts 子文件（LoadSkillResource，沙箱校验；
+//                              2026-09 工具面合并：load_skill_resource → load_skill(path=…)）
 //
 // 存储格式：目录式 .pair/skills/<name>/SKILL.md（frontmatter）+ references/ assets/ scripts/。
 // 旧扁平 .pair/skills/<name>.md 兼容读取（无 frontmatter，首行 # 标题）。
@@ -28,8 +29,9 @@ var SkillProjectDir string
 
 // SkillGlobalDir 全局技能目录（<InstallDir>/.pair/skills/），跨工作区共享。
 // ★ 2026-09-12 修复：skill_write 闭包捕获启动根（未开工作区=空串）导致技能
-//   写到安装目录根下的 BUG——空根场景本应显式落全局目录；同时为「跨工作区
-//   通用技能」提供显式 scope=global 写入目标。由 bridge 启动时设置。
+//
+//	写到安装目录根下的 BUG——空根场景本应显式落全局目录；同时为「跨工作区
+//	通用技能」提供显式 scope=global 写入目标。由 bridge 启动时设置。
 var SkillGlobalDir string
 
 // SkillEnabled 启用覆盖（键 "level::name" 如 "system::emoji-icons"，值 true=启用）。
@@ -460,7 +462,7 @@ func PromptSkills(skills []Skill) string {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("\n\n# 可用技能（按需用 load_skill 取全文，load_skill_resource 取子资源）\n")
+	sb.WriteString("\n\n# 可用技能（按需用 load_skill 取全文；子资源传 path）\n")
 	for _, s := range skills {
 		desc := s.Description
 		if desc == "" {

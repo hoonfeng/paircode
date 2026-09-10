@@ -33,50 +33,61 @@ import (
 //
 // ★ 修改插件实现模式时必须同步本表（测试是模式漂移守卫）。
 // ★ 2026-09 Round3 ③.4 插件瘦身合并：tool-shell（→tool-harness）、
-//   tool-screenshot/tool-web-debug（→tool-web）、tool-goal（→tool-system）、
-//   tool-subagent（→tool-workflow）、tool-bridge（已删除）不再独立存在，
-//   模式表同步删除对应行。
+//
+//	tool-screenshot/tool-web-debug（→tool-web）、tool-goal（→tool-system）、
+//	tool-subagent（→tool-workflow）、tool-bridge（已删除）不再独立存在，
+//	模式表同步删除对应行。
 var toolPluginModes = map[string]string{
-	"tool-system":          "hostTool",
-	"tool-codegraph":       "binary",
-	"tool-binary":          "binary",
+	"tool-system":    "hostTool",
+	"tool-codegraph": "binary",
+	"tool-binary":    "binary",
 	// ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳、无组合逻辑）
-	"tool-office":          "mixed",
-	"tool-harness":         "mixed", // ★ 07-23 合并 tool-shell：6 后台进程工具为 JS 原生（原 tool-shell native 模式）
-	"tool-git":             "native",
-	"tool-core":            "native",
-	"tool-memory":          "native",
-	"tool-project-info":    "native",
-	"tool-vision":          "native",
-	"tool-bug":             "native",
-	"tool-web":             "mixed", // ★ ③.4 合并 tool-screenshot/tool-web-debug：screenshot_*/web_debug 走 binary 内核
+	"tool-office":       "mixed",
+	"tool-harness":      "mixed",  // ★ 07-23 合并 tool-shell；2026-09 后台 4 件套移交 tool-exec；Round5 apply_patch 统一编辑面（read/write/apply_patch/glob/grep 仍原生）
+	"tool-exec":         "native", // ★ 2026-09 工具重构：exec_command/write_stdin/kill_process（ctx.process 会话式）
+	"tool-memory":       "native",
+	"tool-project-info": "native",
+	"tool-bug":          "native",
+	"tool-web":          "mixed", // ★ ③.4 合并 tool-screenshot/tool-web-debug；2026-09-12 并入 tool-vision（read_image JS 原生，别名）——screenshot/web_debug 走 binary 内核
 	// ★ 2026-09 t1 T1 闭环：7 组孤儿工具迁移为磁盘插件（tool_plugin_gen.go 生成，
 	//   execute 走 ctx.hostTool.exec 复用宿主存档能力——legacy_host_tools.go）
-	"tool-asset":       "hostTool",
-	"tool-entryconfig": "hostTool",
-	"tool-resource":    "hostTool", // ★ 2026-09-04 tool-verify 并入：verify 2 工具 JS 原生 impl 优先、hostTool 兜底（registerVerifyTools 已加档）
-	"tool-snapshot":    "hostTool",
+	// ★ 2026-09-12 codex 精简轮：tool-git/tool-entryconfig 已删除；tool-vision→tool-web、
+	//   tool-snapshot→tool-harness、tool-asset→tool-resource（仅剩 tool-resource 独立行）
+	"tool-resource": "hostTool", // ★ 2026-09-04 tool-verify 并入；2026-09-12 tool-asset（asset_delete/evolution_*）并入
 	// ★ Round3 ③/⑤：goal/workflow 宿主机制工具面（execute → ctx.hostTool）；
 	//   subagent 系列 2026-09 ③.4 并入 tool-workflow（ctx.agents 服务，JS 原生编排）
 	"tool-workflow": "mixed", // workflow→hostTool 执行器；subagent 系列→ctx.agents 服务（均不在内嵌内核，别名声明）
 }
 
 // toolHarnessAliases 混合型插件的 JS 原生实现工具（不在内嵌内核，断言跳过）：
-// tool-harness：read/write/edit/glob/grep（ctx.fs 原生）+
-//   run_background/read_output/kill_process/job_output/job_list/job_kill
-//   （ctx.process 原生，③.4 并入自 tool-shell）；
+// tool-harness：read/write/apply_patch/glob/grep（ctx.fs 原生；run_code 仍由 registerRunCode
+//
+//	覆盖内核，正常断言）；★ 2026-09 工具重构：后台 4 件套已移交 tool-exec（native）。
+//
 // tool-web：web_fetch/web_search（ctx.web 原生，③.4 后为 mixed 型）。
-// （run_code 仍由 registerRunCode 覆盖内核，正常断言；str_replace_editor 已移除
-// （Round4）；screenshot_*/web_debug 同理内核覆盖。）
+// （str_replace_editor 已移除（Round4）；screenshot_*/web_debug 同理内核覆盖。）
 var toolHarnessAliases = map[string]bool{
-	"read": true, "write": true, "edit": true, "glob": true, "grep": true,
-	"run_background": true, "read_output": true, "kill_process": true,
-	"job_output": true, "job_list": true, "job_kill": true,
+	"read": true, "write": true, "apply_patch": true, "glob": true, "grep": true,
 	"web_fetch": true, "web_search": true,
+	// ★ 2026-09-12 并入声明：tool-snapshot→tool-harness（list/restore_snapshot 走
+	// 宿主存档 hostTool）；tool-vision→tool-web（read_image JS 原生）；
+	// screenshot 三合一（调度直通内核原名 screenshot_desktop/window/area）
+	"list_snapshots": true, "restore_snapshot": true,
+	"read_image": true,
+	"screenshot": true,
 	// tool-workflow（2026-09 ③.4 后为 mixed）：workflow→宿主 goja 运行器（hostTool），
 	// subagent 系列→ctx.agents 宿主服务——二者均非内嵌内核，别名声明跳过
 	"workflow": true, "subagent": true, "subagent_fork": true, "report": true,
 	"list_agents": true, "interrupt_agent": true, "send_message": true,
+}
+
+// toolDispatchAliases 分派型工具 → 内部路由名（工具面合并后的单工具：
+// 工具名本身可能无 hostTool 存档，execute 按参数分派到内部路由名执行器）。
+// 断言验证内部路由名均已存档（2026-09：goal → create/get/update_goal；
+// load_skill → load_skill_resource（path 分支，L3 技能子资源加载））。
+var toolDispatchAliases = map[string][]string{
+	"goal":       {"create_goal", "get_goal", "update_goal"},
+	"load_skill": {"load_skill_resource"},
 }
 
 // loadDiskPluginForTestFramed 装载磁盘插件，且宿主注册表预注册框架工具
@@ -114,6 +125,9 @@ func TestToolLandingMatrix(t *testing.T) {
 	})
 	defer SetSessionBridge(&SessionBridge{})
 
+	// ★ 2026-09：重置内嵌内核单例——前序测试（harness 的 run_code 等）可能已用
+	// TempDir root 初始化（单例首次 root 被缓存），不重置会污染本测试的 root 解析。
+	embeddedToolRegistry = nil
 	embedded := InitEmbeddedToolRegistry(root)
 	hostNames := map[string]bool{}
 	for _, n := range HostToolNames() {
@@ -169,7 +183,18 @@ func TestToolLandingMatrix(t *testing.T) {
 					continue // 宿主预注册框架工具（未被本插件 claim），跳过
 				}
 				if !hostNames[tn] {
-					problems = append(problems, "[hostTool 未存档] "+d.Name()+"/"+tn)
+					if _, ok := toolDispatchAliases[tn]; !ok {
+						problems = append(problems, "[hostTool 未存档] "+d.Name()+"/"+tn)
+					}
+				}
+				// ★ 2026-09 工具面合并：分派目标不论工具自身是否在档，都须在档
+				//   （load_skill → load_skill_resource（path 分支路由）；goal → create/get/update_goal）
+				if targets, ok := toolDispatchAliases[tn]; ok {
+					for _, tg := range targets {
+						if !hostNames[tg] {
+							problems = append(problems, "[分派目标未存档] "+d.Name()+"/"+tn+" → "+tg)
+						}
+					}
 				}
 			case "binary", "mixed":
 				if _, ok := embedded.Get(tn); !ok && !toolHarnessAliases[tn] {
@@ -187,9 +212,11 @@ func TestToolLandingMatrix(t *testing.T) {
 // TestToolLandingSpotCheck 代表性工具真实执行（只读/无副作用）：
 //   - hostTool 型：skill_list / history_count / tool_stats（框架存档链路）
 //   - binary 型：binary_hash（内嵌内核链路）
-//   - native 型：project_info_list（ctx.fs 链路）
+//   - native 型：project_info(op=list)（ctx.fs 链路；2026-09 单工具合并）
 func TestToolLandingSpotCheck(t *testing.T) {
 	root := jsNativeWorkspace
+	// ★ 2026-09：重置内嵌内核单例（防前序测试 TempDir root 污染；同 Matrix 测试）
+	embeddedToolRegistry = nil
 	SetSessionBridge(&SessionBridge{
 		WaitAnswer:       func(ctx context.Context, convID string) (string, error) { return "", nil },
 		GetWorkspaceRoot: func(convID string) string { return root },
@@ -205,7 +232,7 @@ func TestToolLandingSpotCheck(t *testing.T) {
 		{"tool-system", "history_count", `{}`},
 		{"tool-system", "tool_stats", `{}`},
 		{"tool-binary", "binary_hash", `{"path":"go.mod"}`},
-		{"tool-project-info", "project_info_list", `{}`},
+		{"tool-project-info", "project_info", `{"op":"list"}`},
 	}
 	for _, c := range cases {
 		var reg *Registry
@@ -216,6 +243,7 @@ func TestToolLandingSpotCheck(t *testing.T) {
 		}
 		// 磁盘插件工具默认未入工具集（disabled）——落地验证启用后执行
 		reg.SetToolEnabled(c.tool, true)
+		reg.MarkToolDiscovered(c.tool) // 按需工具（deferred）：直接执行前标记发现（对齐会话内 tool_search 语义）
 		out, err := reg.Execute(context.Background(), c.tool, c.args)
 		if err != nil {
 			t.Errorf("%s/%s 执行失败（未落地）: %v", c.plugin, c.tool, err)

@@ -68,8 +68,10 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 	host := NewPluginHost(reg, nil, t.TempDir())
 
 	// ① 宿主能力已存档（hostTool seam：能力在宿主）
+	// ★ 2026-09-12 codex 精简轮：find_entry_points 已删（tool-entryconfig 移除，
+	//   存档条目同步摘除）；其余孤儿组工具存档保持。
 	for _, name := range []string{"asset_list", "asset_search", "asset_delete",
-		"find_entry_points", "evolution_status", "progress_checker",
+		"evolution_status", "progress_checker",
 		"resource_list", "list_snapshots", "bridge_status"} {
 		if _, ok := HostToolMeta(name); !ok {
 			t.Fatalf("孤儿工具 %s 未存档为宿主能力", name)
@@ -82,16 +84,17 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 		}
 	}
 
-	// ③ 磁盘插件（tool-asset，生成器产物）装载 → 插件工具接管 + hostTool 执行
+	// ③ 磁盘插件（tool-resource，生成器产物——2026-09-12 并入 tool-asset）装载 →
+	//    插件工具接管 + hostTool 执行
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, err := os.ReadFile(filepath.Join(repoRoot, ".pair", "plugins", "tool-asset", "index.js"))
+	code, err := os.ReadFile(filepath.Join(repoRoot, ".pair", "plugins", "tool-resource", "index.js"))
 	if err != nil {
-		t.Skipf("tool-asset 插件未生成（先跑 go run -tags toolsgen ./dev/tool_plugin_gen）: %v", err)
+		t.Skipf("tool-resource 插件未生成（先跑 go run -tags toolsgen ./dev/tool_plugin_gen）: %v", err)
 	}
-	id, err := host.DefineJSCodeFull(string(code), "js", "tool-asset 装载测试", "", "")
+	id, err := host.DefineJSCodeFull(string(code), "js", "tool-resource 装载测试", "", "")
 	if err != nil {
 		t.Fatalf("define 失败: %v", err)
 	}
@@ -120,13 +123,13 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 	if !strings.Contains(out, "状态") && !strings.Contains(out, "BES") && !strings.Contains(out, "evolution") {
 		t.Fatalf("evolution_status 输出异常: %q", out)
 	}
-	// ⑤ 全部孤儿组插件包均生成（package.json 齐全，LoadGlobalPlugins 可扫描）
+	// ⑤ 孤儿组插件包均生成（package.json 齐全，LoadGlobalPlugins 可扫描）
 	// ★ 2026-09-04 合并：tool-evolution→tool-asset、tool-progress→tool-system、
-	//    tool-verify→tool-resource——孤儿插件包收敛为 5 个；
-	// ★ 2026-09 Round3 ③.4：tool-bridge（桌面桥接，桌面版已移除）插件删除（宿主
-	//    存档 registerBridgeTools 保留，见 legacy_host_tools.go）——孤儿插件包收敛为 4 个
-	for _, name := range []string{"tool-asset", "tool-entryconfig",
-		"tool-resource", "tool-snapshot"} {
+	//    tool-verify→tool-resource；
+	// ★ 2026-09 Round3 ③.4：tool-bridge（桌面桥接）插件删除；
+	// ★ 2026-09-12 codex 精简轮：tool-asset→tool-resource、tool-snapshot→tool-harness，
+	//    tool-entryconfig 删除——孤儿组仅剩 tool-resource 独立包
+	for _, name := range []string{"tool-resource"} {
 		if _, err := os.Stat(filepath.Join(repoRoot, ".pair", "plugins", name, "package.json")); err != nil {
 			t.Fatalf("插件包 %s 缺 package.json: %v", name, err)
 		}

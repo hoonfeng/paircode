@@ -332,7 +332,7 @@ func npmMarketInstall(pkg string) (string, error) {
 	}
 
 	// ★ 2026-08-20 落盘统一：npm 插件固化为磁盘插件包
-	//   <InstallDir>/.pair/plugins/<name>/（与 cordis_define 固化路径一致，
+	//   <InstallDir>/.pair/plugins/<name>/（与 cordis(op=define) 固化路径一致，
 	//   重启 LoadGlobalPlugins 自动装配）；不再写 .pair/cordis.patch.json。
 	pluginName := npmPluginDiskName(pkg)
 

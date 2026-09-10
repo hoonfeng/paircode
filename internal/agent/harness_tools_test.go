@@ -12,8 +12,9 @@ import (
 // ─── harness 基座注册 ────────────────────────────────────────
 
 // TestRegisterHarnessTools_Base 验证 harness 命名基座工具已以新名注册
-// （Round3 别名层删除：read/write/edit/bash/glob/grep 直接由 registerCoreTools
-// 注册，RegisterHarnessTools 仅补 run_code（★ Round4：str_replace_editor 已删）。
+// （Round3 别名层删除：read/write/glob/grep 直接由 registerCoreTools 注册，
+// RegisterHarnessTools 仅补 run_code（★ Round4：str_replace_editor 已删；
+// ★ Round5：编辑面 apply_patch 取代 edit——bash 已不在基座）。
 func TestRegisterHarnessTools_Base(t *testing.T) {
 	root := t.TempDir()
 	r := NewRegistry()
@@ -22,8 +23,8 @@ func TestRegisterHarnessTools_Base(t *testing.T) {
 
 	// 基座工具直接存在（不再依赖旧名 + 别名层）
 	base := map[string]bool{
-		"read": true, "write": true, "edit": true,
-		"glob": true, "grep": true, "bash": true,
+		"read": true, "write": true, "apply_patch": true,
+		"glob": true, "grep": true,
 	}
 	for name := range base {
 		tool, ok := r.Get(name)
@@ -80,19 +81,19 @@ func TestHarnessAlias_ReadWriteEdit(t *testing.T) {
 	if !strings.Contains(out, "line1") || !strings.Contains(out, "line2") {
 		t.Errorf("read 输出异常: %s", out)
 	}
-	// edit 替换
-	out, err = r.Execute(ctx, "edit", `{"path":"a.txt","old_string":"line2","new_string":"LINE2"}`)
+	// apply_patch 替换（codex 语法：上下文行定位）
+	out, err = r.Execute(ctx, "apply_patch", `{"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n line1\n-line2\n+LINE2\n line3\n*** End Patch\n"}`)
 	if err != nil {
-		t.Fatalf("edit 失败: %v", err)
+		t.Fatalf("apply_patch 失败: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(root, "a.txt"))
 	if !strings.Contains(string(data), "LINE2") {
-		t.Errorf("edit 未生效: %s", string(data))
+		t.Errorf("apply_patch 未生效: %s", string(data))
 	}
 }
 
-// TestHarnessAlias_GlobGrepBash 验证 glob/grep/bash 别名。
-func TestHarnessAlias_GlobGrepBash(t *testing.T) {
+// TestHarnessAlias_GlobGrep 验证 glob/grep 别名（bash 已从工具面移除）。
+func TestHarnessAlias_GlobGrep(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "x.go"), []byte("package main\nfunc hello() {}\n"), 0o644)
 	os.WriteFile(filepath.Join(root, "y.py"), []byte("def world():\n    pass\n"), 0o644)
@@ -119,14 +120,6 @@ func TestHarnessAlias_GlobGrepBash(t *testing.T) {
 	}
 	if !strings.Contains(out, "x.go") {
 		t.Errorf("grep 未命中 x.go: %s", out)
-	}
-
-	out, err = r.Execute(ctx, "bash", `{"command":"echo BASH_ALIAS_OK"}`)
-	if err != nil {
-		t.Fatalf("bash 失败: %v", err)
-	}
-	if !strings.Contains(out, "BASH_ALIAS_OK") {
-		t.Errorf("bash 输出异常: %s", out)
 	}
 }
 

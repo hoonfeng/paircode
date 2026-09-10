@@ -469,89 +469,37 @@ func registerCodeGraphTools(r *Registry, root string) {
 		},
 	})
 
-	// ── 6. codegraph_callers — 调用者查询 ──
+	// ── 6. codegraph_relations — 调用关系统一查询（2026-09 合并） ──
+	// ★ codegraph_callers/callees/impact/trace_call_chain 四工具已合并为单工具：
+	//   mode=callers/callees/impact/chain 分派（实现见文件末尾 cgRelationsXxx）。
 	r.Register(&Tool{
-		Name:       "codegraph_callers",
-		UsageGuide: "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比全文搜索引用更精确（基于调用图）。",
-		Description: "查询哪些函数调用了指定的函数/方法。用于理解函数被使用的情况。" +
-			"返回调用者的文件路径和行号。",
+		Name:        "codegraph_relations",
+		UsageGuide:  "函数/方法关系查询：callers（谁调用了它——修改签名/行为前必查，防漏改）/callees（它调用了谁——理解实现）/impact（修改影响范围——可达性分析）/chain（多级调用链树）。比 grep 引用更精确（基于调用图）。",
+		Description: "查询代码实体的调用关系。mode=callers 调用者列表；mode=callees 被调用者列表；mode=impact 修改某函数/类型/文件的影响范围（传递调用链，回答「修改它会波及哪些地方」）；mode=chain 多级调用链追踪（树形）。node 为函数/方法/实体名。",
 		Parameters: objSchema(props{
-			"project": projectSchemaProp(),
-			"name":    strProp("函数/方法名（如 'SendRequest'、'handler.Handle'）"),
-		}, "name"),
+			"project":   projectSchemaProp(),
+			"mode":      strProp("可选：callers(谁调用它，默认)/callees(它调用谁)/impact(修改影响范围)/chain(多级调用链)"),
+			"node":      strProp("函数/方法/实体名（如 'SendRequest'、'handler.Handle'；impact 支持文件路径如 'cmd/main.go'）"),
+			"direction": strProp("可选：chain 专用——callers(反向)/callees(正向)/both(双向)，默认 callers"),
+			"depth":     intProp("可选：impact 搜索深度（默认 10）/ chain 最大深度（默认 5）"),
+		}, "node"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			projRoot, err := projRootFromArgs(root, args)
-			if err != nil {
-				return "", err
+			switch strings.ToLower(strings.TrimSpace(argStr(args, "mode"))) {
+			case "callees":
+				return cgRelationsCallees(ctx, root, args)
+			case "impact":
+				return cgRelationsImpact(ctx, root, args)
+			case "chain", "trace":
+				return cgRelationsChain(ctx, root, args)
+			default: // callers（含空值）
+				return cgRelationsCallers(ctx, root, args)
 			}
-			name := argStr(args, "name")
-			g, err := getCodeGraph(projRoot)
-			if err != nil {
-				return "", err
-			}
-			qe := codegraph.NewQueryEngine(g)
-			calls := qe.GetCallers(name)
-			return codegraph.CallInfoText(calls, "调用者"), nil
 		},
 	})
 
-	// ── 7. codegraph_callees — 被调用者查询 ──
-	r.Register(&Tool{
-		Name:       "codegraph_callees",
-		UsageGuide: "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比 read 手动翻更快（聚合被调函数列表）。",
-		Description: "查询指定的函数/方法调用了哪些其他函数。用于理解函数的内部调用情况。" +
-			"返回被调用者的名称和调用位置。",
-		Parameters: objSchema(props{
-			"project": projectSchemaProp(),
-			"name":    strProp("函数/方法名（如 'handleRequest'）"),
-		}, "name"),
-		ReadOnly: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			projRoot, err := projRootFromArgs(root, args)
-			if err != nil {
-				return "", err
-			}
-			name := argStr(args, "name")
-			g, err := getCodeGraph(projRoot)
-			if err != nil {
-				return "", err
-			}
-			qe := codegraph.NewQueryEngine(g)
-			calls := qe.GetCallees(name)
-			return codegraph.CallInfoText(calls, "被调用者"), nil
-		},
-	})
-
-	// ── 8. codegraph_impact — 影响分析 ──
-	r.Register(&Tool{
-		Name:       "codegraph_impact",
-		UsageGuide: "分析修改某函数/类型/文件后的影响范围（传递调用链）。修改核心代码前必调此工具。比 check_impact 更精确（函数级调用链而非文件级导入链）。",
-		Description: "分析修改某个函数/类型/文件后可能影响的范围。" +
-			"基于调用图进行可达性分析，返回受影响的文件、函数列表和传播路径。" +
-			"用于回答「修改这个函数会影响哪些地方？」",
-		Parameters: objSchema(props{
-			"project":  projectSchemaProp(),
-			"entity":   strProp("实体标识（函数名、类型名或文件路径，如 'SendRequest'、'cmd/main.go'）"),
-			"maxDepth": intProp("可选：搜索深度（默认 10，限制传递链长度）"),
-		}, "entity"),
-		ReadOnly: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			projRoot, err := projRootFromArgs(root, args)
-			if err != nil {
-				return "", err
-			}
-			entityID := argStr(args, "entity")
-			maxDepth := argInt(args, "max_depth", 10)
-			g, err := getCodeGraph(projRoot)
-			if err != nil {
-				return "", err
-			}
-			qe := codegraph.NewQueryEngine(g)
-			result := qe.ImpactAnalysis(entityID, maxDepth)
-			return codegraph.ImpactResultText(result), nil
-		},
-	})
+	// （codegraph_callees / codegraph_impact 已并入上方 codegraph_relations——
+	//   mode=callees / mode=impact，实现见文件末尾 cgRelationsCallees/Impact）
 
 	// ── 9. codegraph_search — 代码搜索 ──
 	r.Register(&Tool{
@@ -836,37 +784,8 @@ func registerCodeGraphTools(r *Registry, root string) {
 		},
 	})
 
-	// ── 16. codegraph_trace_call_chain — 调用链追踪 ──
-	r.Register(&Tool{
-		Name:       "codegraph_trace_call_chain",
-		UsageGuide: "追踪函数调用链：callers（反向：谁调了我）、callees（正向：我调了谁）、both（双向）。比 codegraph_callers/callees 更灵活（支持多级深度追踪）。",
-		Description: "追踪函数/方法的调用链。" +
-			"支持 callers（反向追踪谁调用了它）、callees（正向追踪它调用了谁）、both（双向）。" +
-			"maxDepth 控制追踪深度（默认 5）。返回树形调用链。",
-		Parameters: objSchema(props{
-			"project":   projectSchemaProp(),
-			"function":  strProp("函数/方法名（如 'SendRequest'、'handler.Handle'）"),
-			"direction": strProp("可选：callers(反向)/callees(正向)/both(双向)，默认 callers"),
-			"maxDepth":  intProp("可选：最大深度（默认 5）"),
-		}, "function"),
-		ReadOnly: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			projRoot, err := projRootFromArgs(root, args)
-			if err != nil {
-				return "", err
-			}
-			funcName := argStr(args, "function")
-			direction := argStr(args, "direction")
-			maxDepth := argInt(args, "max_depth", 5)
-			g, err := getCodeGraph(projRoot)
-			if err != nil {
-				return "", err
-			}
-			qe := codegraph.NewQueryEngine(g)
-			nodes := qe.TraceCallChain(funcName, direction, maxDepth)
-			return codegraph.CallChainText(nodes), nil
-		},
-	})
+	// ★ 2026-09：codegraph_trace_call_chain 已并入 codegraph_relations（mode=chain）——
+	//   实现见文件末尾 cgRelationsChain。
 
 	// ── 17. codegraph_find_dead_code — 死代码检测 ──
 	r.Register(&Tool{
@@ -921,6 +840,75 @@ func registerCodeGraphTools(r *Registry, root string) {
 		},
 	})
 
+}
+
+// ── codegraph_relations 各模式实现（2026-09 由独立工具提取）──
+
+// cgRelationsCallers mode=callers：谁调用了指定函数/方法。
+func cgRelationsCallers(ctx context.Context, root string, args map[string]any) (string, error) {
+	projRoot, err := projRootFromArgs(root, args)
+	if err != nil {
+		return "", err
+	}
+	name := argStr(args, "node")
+	g, err := getCodeGraph(projRoot)
+	if err != nil {
+		return "", err
+	}
+	qe := codegraph.NewQueryEngine(g)
+	calls := qe.GetCallers(name)
+	return codegraph.CallInfoText(calls, "调用者"), nil
+}
+
+// cgRelationsCallees mode=callees：指定函数调用了哪些其他函数。
+func cgRelationsCallees(ctx context.Context, root string, args map[string]any) (string, error) {
+	projRoot, err := projRootFromArgs(root, args)
+	if err != nil {
+		return "", err
+	}
+	name := argStr(args, "node")
+	g, err := getCodeGraph(projRoot)
+	if err != nil {
+		return "", err
+	}
+	qe := codegraph.NewQueryEngine(g)
+	calls := qe.GetCallees(name)
+	return codegraph.CallInfoText(calls, "被调用者"), nil
+}
+
+// cgRelationsImpact mode=impact：修改某实体/文件的传递影响范围。
+func cgRelationsImpact(ctx context.Context, root string, args map[string]any) (string, error) {
+	projRoot, err := projRootFromArgs(root, args)
+	if err != nil {
+		return "", err
+	}
+	entityID := argStr(args, "node")
+	maxDepth := argInt(args, "depth", 10) // ★ 修正：旧实现读 max_depth 与 schema 不符（恒默认）
+	g, err := getCodeGraph(projRoot)
+	if err != nil {
+		return "", err
+	}
+	qe := codegraph.NewQueryEngine(g)
+	result := qe.ImpactAnalysis(entityID, maxDepth)
+	return codegraph.ImpactResultText(result), nil
+}
+
+// cgRelationsChain mode=chain：多级调用链追踪（树形）。
+func cgRelationsChain(ctx context.Context, root string, args map[string]any) (string, error) {
+	projRoot, err := projRootFromArgs(root, args)
+	if err != nil {
+		return "", err
+	}
+	funcName := argStr(args, "node")
+	direction := argStr(args, "direction")
+	maxDepth := argInt(args, "depth", 5)
+	g, err := getCodeGraph(projRoot)
+	if err != nil {
+		return "", err
+	}
+	qe := codegraph.NewQueryEngine(g)
+	nodes := qe.TraceCallChain(funcName, direction, maxDepth)
+	return codegraph.CallChainText(nodes), nil
 }
 
 // splitMarkdownSections 将 Markdown 内容按标题分割为多个文档节。

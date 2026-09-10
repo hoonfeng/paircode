@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════
 // tscompile.go — 内置 TS 编译器（esbuild 纯 Go，无 CGO/npm 依赖）
 //
-// 用于 JS 动态插件（cordis_define/cordis_run）装载 harness 生态的
+// 用于 JS 动态插件（cordis(op=define)/cordis(op=run)）装载 harness 生态的
 // TypeScript 插件源码：TS → ES2020 JS，再交给 goja 执行。
 // 单文件：无 import，直接 Transform 剥离类型注解。
 // 多文件：含 import 时走 esbuild Build 的 stdin+bundle 模式，
