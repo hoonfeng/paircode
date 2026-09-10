@@ -412,7 +412,7 @@ export function processAgentEvent(convId, data) {
     const toolName = data.tool || data.name || ''
 
     // ── 文件修改工具 → 触发文件树刷新 ──
-    const fileTools = ['write_file', 'edit_file', 'multi_edit', 'delete_file', 'move_file']
+    const fileTools = ['write', 'write_file', 'apply_patch', 'edit_file', 'multi_edit', 'delete_file', 'move_file']
     if (fileTools.includes(toolName)) {
       window.dispatchEvent(new CustomEvent('refresh-tree'))
     }

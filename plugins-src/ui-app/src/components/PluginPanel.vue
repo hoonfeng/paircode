@@ -124,7 +124,7 @@
       <div v-else-if="plugins.length === 0 && !loading" class="pp-empty">
         <SvgIcon name="puzzle" :size="22" color="var(--text-muted)" />
         <span>暂无插件</span>
-        <span class="pp-empty-sub">点击上方 + 新建 JS 动态插件，或用对话 cordis_define 定义</span>
+        <span class="pp-empty-sub">点击上方 + 新建 JS 动态插件，或用对话 cordis(op=define) 定义</span>
       </div>
       <div v-for="p in plugins" :key="p.name" class="pp-item">
         <div class="pp-item-row" @click="toggleDetail(p)">
@@ -257,7 +257,7 @@ function srcTitle(p) {
       ? 'cordis4 轨插件：npm 包，由 Node 桥进程（cordis4 插件服务面）装载，与 repo 版功能重叠时可切换生效方'
       : 'npm 插件：npm 包，由 Node 桥进程（cordis3）装载'
   }
-  if (p.source === 'js') return 'JS 插件：goja 沙箱内运行（磁盘包 .pair/plugins/ 或 cordis_define 定义）'
+  if (p.source === 'js') return 'JS 插件：goja 沙箱内运行（磁盘包 .pair/plugins/ 或 cordis(op=define) 定义）'
   if (p.source === 'go') return 'Go 内置插件：随程序编译，提供框架能力'
   return '插件来源：' + (p.source || '未知')
 }

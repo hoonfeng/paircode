@@ -92,6 +92,7 @@ export function toolMeta(seg) {
   const args = safeParse(seg.argsRaw)
   if (/^read_file\b|^read\b/.test(name)) return { icon: 'file-text', title: '读取文件', detail: args.path || '', summary: '已读取' }
   if (/^write_file\b|^write\b/.test(name)) return { icon: 'file-plus', title: '写入文件', detail: args.path || '', summary: '已写入' }
+  if (/^apply_patch\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: ((args.patch || '').match(/\*\*\* (?:Add|Update|Delete) File: ([^\n]+)/) || [])[1] || '', summary: '已编辑' }
   if (/^edit_file\b|^edit\b|multi_edit\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: args.path || '', summary: '已编辑' }
   if (/^run_command\b|^bash\b|^run_code\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: '$ ' + (args.command || args.code || '').slice(0, 60), summary: '已完成' }
   if (/^run_test\b/.test(name)) return { icon: 'check', title: '运行测试', detail: args.package_path || '', summary: '已完成' }

@@ -985,9 +985,9 @@ function buildAttachRefText(att) {
     return t
   }
   if (att.type === 'dir') {
-    return '\n\n📎 目录: `' + att.path + '`（请用 list_files 查看）'
+    return '\n\n📎 目录: `' + att.path + '`（请用 glob 查看）'
   }
-  return '\n\n📎 附件: `' + (att.path || att.filename) + '`（请用 read_file 读取）'
+  return '\n\n📎 附件: `' + (att.path || att.filename) + '`（请用 read 读取）'
 }
 
 // nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
@@ -1306,6 +1306,7 @@ function toolMeta(seg) {
   if (/^write_file\b/.test(name)) return { icon: 'file-plus', title: '写入文件', detail: args.path || '', summary: '已写入', resultIcon: 'check' }
   if (/^edit_file\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: args.path || '', summary: '已编辑', resultIcon: 'check' }
   if (/^multi_edit\b/.test(name)) return { icon: 'edit', title: '多处编辑', detail: args.path || '', summary: '已编辑', resultIcon: 'check' }
+  if (/^apply_patch\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: ((args.patch || '').match(/\*\*\* (?:Add|Update|Delete) File: ([^\n]+)/) || [])[1] || '', summary: '已编辑', resultIcon: 'check' }
   if (/^run_command\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: '$ ' + (args.command || '').slice(0, 60), summary: '已完成', resultIcon: 'check' }
   if (/^run_test\b/.test(name)) return { icon: 'check', title: '运行测试', detail: args.package_path || '', summary: '已完成', resultIcon: 'check' }
   if (/^search_content\b/.test(name)) return { icon: 'search', title: '搜索内容', detail: '/' + (args.pattern || '') + '/', summary: '已搜索', resultIcon: 'check' }
@@ -1316,8 +1317,13 @@ function toolMeta(seg) {
   if (/^git_diff\b/.test(name)) return { icon: 'source-control', title: 'Git 差异', detail: args.file ? args.file.slice(0, 40) : '', summary: '已查看', resultIcon: 'check' }
   if (/^git_log\b/.test(name)) return { icon: 'source-control', title: 'Git 日志', detail: '', summary: '已查看', resultIcon: 'check' }
   if (/^find_symbol\b/.test(name)) return { icon: 'search', title: '查找符号', detail: args.symbol || args.symbol || '', summary: '已查找', resultIcon: 'check' }
-  if (/^screenshot_desktop\b/.test(name)) return { icon: 'image', title: '桌面截图', detail: '', summary: '已截图', resultIcon: 'check' }
-  if (/^screenshot_window\b/.test(name)) return { icon: 'image', title: '窗口截图', detail: (args.title || '').slice(0, 40), summary: '已截图', resultIcon: 'check' }
+  if (/^screenshot(_(desktop|window|area))?$/.test(name)) {
+    // 2026-09-12 三合一：screenshot(target=desktop/window/area)；旧名兼容
+    const t = (args.target || (name === 'screenshot_window' ? 'window' : name === 'screenshot_area' ? 'area' : name === 'screenshot_desktop' ? 'desktop' : '')).toLowerCase()
+    const tt = { desktop: '桌面截图', window: '窗口截图', area: '区域截图' }[t] || '截图'
+    return { icon: 'image', title: tt, detail: (args.title || '').slice(0, 40), summary: '已截图', resultIcon: 'check' }
+  }
+  if (/^read_image\b/.test(name)) return { icon: 'image', title: '看图', detail: (args.file_path || args.path || '').slice(0, 50), summary: '已读取图片', resultIcon: 'check' }
   if (/^web_debug\b/.test(name)) return { icon: 'globe', title: '网页调试', detail: args.url ? args.url.slice(0, 50) : '', summary: '已验证', resultIcon: 'check' }
   if (/^go_build\b/.test(name)) return { icon: 'terminal', title: 'Go 构建', detail: args.path || '.', summary: '已完成', resultIcon: 'check' }
   if (/^go_run\b/.test(name)) return { icon: 'terminal', title: 'Go 运行', detail: args.path || '.', summary: '已完成', resultIcon: 'check' }
@@ -1602,7 +1608,7 @@ const sendMessage = async () => {
           images.push({ data: att.content, mimeType: mime, detail: 'high' })
           attachments.push({ type: 'image', path: att.filename || '', label: att.filename || '图片', data: att.content })
         } else {
-          // 读取失败 → 降级为文本附件（旧行为，提示模型用 read_file）
+          // 读取失败 → 降级为文本附件（旧行为，提示模型用 read）
           attachments.push({ type: 'image', path: att.path || att.filename || '', filename: att.filename || '',
             label: att.filename || att.path.split(/[\\/]/).pop() || '图片' })
         }
@@ -2174,7 +2180,7 @@ const handleDrop = (e) => {
   // 外部文件（浏览器文件系统）—— 不在工作区内，提示用户
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
-    // 外部文件无法获得工作区相对路径，agent 无法 read_file，提示用户
+    // 外部文件无法获得工作区相对路径，agent 无法 read，提示用户
     window.$toast && window.$toast('该文件不在工作区内，请先添加到工作区或从文件树拖入', 'warn')
     return
   }
@@ -2189,7 +2195,7 @@ const handlePaste = (e) => {
     if (item.kind === 'file') {
       e.preventDefault(); const file = item.getAsFile(); if (!file) continue
       if (file.type.startsWith('image/')) {
-        // 图片保留 dataURL（图片无法用 read_file 读取）
+        // 图片保留 dataURL（图片无法用 read 读取）
         if (file.size > 1024 * 1024) {
           window.$toast && window.$toast('图片超过 1MB，请压缩后粘贴', 'warn')
           return

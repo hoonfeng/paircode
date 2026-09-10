@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // plugin-runtime.js — 浏览器侧插件 client 半运行时（host/client 双半的 client 侧）
 //
-// 契约（与后端 DefineJSCodeFull / cordis_define 的 client 参数一致）：
+// 契约（与后端 DefineJSCodeFull / cordis(op=define) 的 client 参数一致）：
 //   client 半形态：(ui) => void
 //     ui.on(event, fn)            收 host → 浏览器事件（ui:/client: 前缀）
 //     ui.emit(event, payload)     发事件回 host（host: 前缀给 host 插件消费）
@@ -417,7 +417,7 @@ function makeUI(inst) {
       return res.value
     },
     // D11 失败上报：client 半 render/guard/boot 失败 → 后端记诊断，Agent 经
-    // cordis_inspect 发现修复（不中断 host 半运行）。
+    // cordis(op=inspect) 发现修复（不中断 host 半运行）。
     reportFailure(phase, message) {
       const ph = (phase === 'guard' || phase === 'boot') ? phase : 'render'
       api.pluginClientFailure(inst.name, ph, String(message || 'unknown error')).catch(() => {})

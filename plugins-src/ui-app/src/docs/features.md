@@ -158,8 +158,8 @@ CodeGraph 将项目的代码结构构建成可查询的知识图谱，让 AI 理
 
 PairCode IDE 的工具体系全部插件化——内置功能（文件/搜索/Git/Web/记忆/任务/图谱等 21 组）以插件形态装配，你也可以编写自己的插件扩展能力：
 
-- **JS / TS 插件** — 通过 `cordis_define` 定义函数形态插件，支持 `apply(ctx, config)` 注入服务、timer 定时器、跨 goroutine 执行锁；TS 插件由内置编译器（esbuild 纯 Go）直接转译加载，无需 Node.js
-- **Go 插件** — 内置插件框架，核心功能组全部以 Go 插件装配，`cordis_inspect` 可查看工具归属，`cordis_stop` 卸载整组
+- **JS / TS 插件** — 通过 `cordis(op=define)` 定义函数形态插件，支持 `apply(ctx, config)` 注入服务、timer 定时器、跨 goroutine 执行锁；TS 插件由内置编译器（esbuild 纯 Go）直接转译加载，无需 Node.js
+- **Go 插件** — 内置插件框架，核心功能组全部以 Go 插件装配，`cordis(op=inspect)` 可查看工具归属，`cordis(op=stop)` 卸载整组
 - **Lua 工具** — 支持 Lua 脚本自定义工具，封装常用命令组合与自定义数据处理逻辑
 - **沙箱防护** — VM 超时防护、schema 校验，插件异常不影响主进程
 

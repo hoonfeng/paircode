@@ -58,6 +58,7 @@ const replyPlaceholder = computed(() => {
 
 // 工具中文标签映射
 const toolLabels = {
+  'apply_patch': '应用补丁（编辑文件）',
   'edit_file': '编辑文件',
   'multi_edit': '批量编辑文件',
   'write_file': '写入文件',
