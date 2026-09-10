@@ -1,5 +1,5 @@
 {
-  "version": "1.5.3",
+  "version": "1.5.4",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -16,24 +16,19 @@
   "pipeline": [
     {
       "name": "build-ui-plugins",
-      "command": "node scripts/build-ui.mjs",
-      "ignoreError": false
+      "command": "node scripts/build-ui.mjs"
     },
     {
       "name": "sync-plugins-to-bin",
-      "command": "robocopy .pair/plugins bin/.pair/plugins /MIR /XD node_modules /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
-      "os": "windows",
-      "ignoreError": false
+      "command": "node scripts/sync-plugins-to-bin.mjs"
     },
     {
       "name": "build-ui-frontend",
-      "command": "cd plugins-src/ui-app && npm run build",
-      "ignoreError": false
+      "command": "cd plugins-src/ui-app \u0026\u0026 npm run build"
     },
     {
       "name": "sync-embed-shell",
-      "command": "node scripts/sync-web-dist.mjs",
-      "ignoreError": false
+      "command": "node scripts/sync-web-dist.mjs"
     },
     {
       "name": "generate-icon",
@@ -46,6 +41,10 @@
       "command": "windres -i cmd/companion/companion.rc -o cmd/companion/companion.syso -O coff",
       "os": "windows",
       "ignoreError": true
+    },
+    {
+      "name": "verify-release",
+      "command": "node scripts/verify-release.mjs"
     },
     {
       "name": "build-go",
@@ -61,21 +60,6 @@
     "dirName": "PairCode",
     "format": "zip",
     "include": [
-      {
-        "src": "config/models.template.json",
-        "dst": "config/models.json",
-        "optional": true
-      },
-      {
-        "src": "config/settings.template.json",
-        "dst": "config/settings.json",
-        "optional": true
-      },
-      {
-        "src": "config/mcp.template.json",
-        "dst": "config/mcp.json",
-        "optional": true
-      },
       {
         "src": "config/skills",
         "dst": "config/skills",
@@ -109,12 +93,6 @@
         "optional": true
       },
       {
-        "src": "fonts",
-        "dst": "fonts",
-        "optional": true,
-        "recursive": true
-      },
-      {
         "src": "lib/libSkiaSharp.dll",
         "dst": "lib/libSkiaSharp.dll",
         "optional": true
@@ -127,30 +105,30 @@
       {
         "src": "bin/config/onnx/onnxruntime.dll",
         "dst": "bin/config/onnx/onnxruntime.dll",
-        "os": "windows",
-        "optional": true
+        "optional": true,
+        "os": "windows"
       },
       {
         "src": "bin/config/onnx/libonnxruntime.so",
         "dst": "bin/config/onnx/libonnxruntime.so",
-        "os": "linux",
-        "optional": true
+        "optional": true,
+        "os": "linux"
       },
       {
         "src": "bin/config/onnx/libonnxruntime.dylib",
         "dst": "bin/config/onnx/libonnxruntime.dylib",
-        "os": "darwin",
-        "optional": true
+        "optional": true,
+        "os": "darwin"
       },
       {
-        "src": "bin/.pair/plugins",
+        "src": ".pair/plugins",
         "dst": ".pair/plugins",
         "optional": true,
         "recursive": true
       },
       {
-        "src": "plugins-src",
-        "dst": "plugins-src",
+        "src": "plugins-src/ui-app",
+        "dst": "plugins-src/ui-app",
         "recursive": true,
         "exclude": [
           "node_modules"

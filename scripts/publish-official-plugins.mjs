@@ -9,7 +9,7 @@
 // 用法（cwd=仓库根）：
 //   node scripts/publish-official-plugins.mjs               # 打包 + npm pack 验证（默认）
 //   node scripts/publish-official-plugins.mjs --publish     # 真实发布（需 npm 登录 + 2FA 就绪）
-//   node scripts/publish-official-plugins.mjs --only marketplace,tool-git   # 只发指定插件
+//   node scripts/publish-official-plugins.mjs --only marketplace,tool-web   # 只发指定插件
 //   node scripts/publish-official-plugins.mjs --check       # 只检查现有 npm 包版本（不打包）
 //
 // ★ 2FA：账号开启 2FA 时真实发布需一次性 OTP：
