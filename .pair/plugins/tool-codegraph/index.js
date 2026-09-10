@@ -3,11 +3,14 @@
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。
-// 工具清单：codegraph_build、stats、file_structure、function、class、callers、callees、impact、search、git_history、
-//         get_edit_context、find_related_tests、analyze_complexity、search_by_pattern、trace_call_chain、
-//         find_dead_code、module_architecture、find_entry_points、find_hot_paths、find_by_imports、
+// 工具清单：codegraph_build、stats、file_structure、function、class、relations、search、git_history、
+//         get_edit_context、find_related_tests、analyze_complexity、search_by_pattern、
+//         find_dead_code、module_architecture、find_hot_paths、find_by_imports、
 //         get_detailed_symbol、find_dead_imports、search_by_error、index_markdown、search_docs、
 //         verify_design、pr_context、find_by_signature、semantic_search、explore
+// ★ 2026-09 工具面合并：codegraph_callers/callees/impact/trace_call_chain → 单工具
+//   codegraph_relations（mode=callers/callees/impact/chain）；内核实现见
+//   internal/agent/codegraph_tools.go（cgRelationsXxx）。
 // ★ 2026-09-04 合并：tool-codegraph-extra（图谱扩展 13 工具）并入本插件，一致走 ctx.binary；
 //   删除 codegraph_entity_history（@EntityHistory 零注解消费，codegraph_git_history 覆盖）；
 //   tool-codegraph-extra 插件目录已删除。
@@ -113,75 +116,40 @@ const tools = [
     "readOnly": true
   },
   {
-    "name": "codegraph_callers",
-    "description": "查询哪些函数调用了指定的函数/方法。用于理解函数被使用的情况。返回调用者的文件路径和行号。",
-    "usageGuide": "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比 grep 搜索引用更精确（基于调用图）。",
+    "name": "codegraph_relations",
+    "description": "查询代码实体的调用关系。mode=callers 调用者列表；mode=callees 被调用者列表；mode=impact 修改某函数/类型/文件的影响范围（传递调用链，回答「修改它会波及哪些地方」）；mode=chain 多级调用链追踪（树形）。node 为函数/方法/实体名。",
+    "usageGuide": "函数/方法关系查询：callers（谁调用了它——修改签名/行为前必查，防漏改）/callees（它调用了谁——理解实现）/impact（修改影响范围——可达性分析）/chain（多级调用链树）。比 grep 引用更精确（基于调用图）。",
     "parameters": {
       "properties": {
-        "name": {
-          "description": "函数/方法名（如 'SendRequest'、'handler.Handle'）",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "codegraph_callees",
-    "description": "查询指定的函数/方法调用了哪些其他函数。用于理解函数的内部调用情况。返回被调用者的名称和调用位置。",
-    "usageGuide": "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比手动翻文件更快（聚合被调函数列表）。",
-    "parameters": {
-      "properties": {
-        "name": {
-          "description": "函数/方法名（如 'handleRequest'）",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "codegraph_impact",
-    "description": "分析修改某个函数/类型/文件后可能影响的范围。基于调用图进行可达性分析，返回受影响的文件、函数列表和传播路径。用于回答「修改这个函数会影响哪些地方？」",
-    "usageGuide": "分析修改某函数/类型/文件后的影响范围（传递调用链）。修改核心代码前必调此工具。比 check_impact 更精确（函数级调用链而非文件级导入链）。",
-    "parameters": {
-      "properties": {
-        "entity": {
-          "description": "实体标识（函数名、类型名或文件路径，如 'SendRequest'、'cmd/main.go'）",
-          "type": "string"
-        },
-        "maxDepth": {
-          "description": "可选：搜索深度（默认 10，限制传递链长度）",
+        "depth": {
+          "description": "可选：impact 搜索深度（默认 10）/ chain 最大深度（默认 5）",
           "type": "integer"
         },
+        "direction": {
+          "description": "可选：chain 专用——callers(反向)/callees(正向)/both(双向)，默认 callers",
+          "type": "string"
+        },
+        "mode": {
+          "description": "可选：callers(谁调用它，默认)/callees(它调用谁)/impact(修改影响范围)/chain(多级调用链)",
+          "type": "string"
+        },
+        "node": {
+          "description": "函数/方法/实体名（如 'SendRequest'、'handler.Handle'；impact 支持文件路径如 'cmd/main.go'）",
+          "type": "string"
+        },
         "project": {
           "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
           "type": "string"
         }
       },
       "required": [
-        "entity"
+        "node"
       ],
       "type": "object"
     },
     "readOnly": true
   },
+  // （codegraph_callees / codegraph_impact 已并入 codegraph_relations——mode=callees/impact）
   {
     "name": "codegraph_search",
     "description": "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。比 grep 更精确，因为基于结构化理解而非纯文本匹配。",
@@ -341,36 +309,7 @@ const tools = [
     },
     "readOnly": true
   },
-  {
-    "name": "codegraph_trace_call_chain",
-    "description": "追踪函数/方法的调用链。支持 callers（反向追踪谁调用了它）、callees（正向追踪它调用了谁）、both（双向）。maxDepth 控制追踪深度（默认 5）。返回树形调用链。",
-    "usageGuide": "追踪函数调用链：callers（反向：谁调了我）、callees（正向：我调了谁）、both（双向）。比 codegraph_callers/callees 更灵活（支持多级深度追踪）。",
-    "parameters": {
-      "properties": {
-        "direction": {
-          "description": "可选：callers(反向)/callees(正向)/both(双向)，默认 callers",
-          "type": "string"
-        },
-        "function": {
-          "description": "函数/方法名（如 'SendRequest'、'handler.Handle'）",
-          "type": "string"
-        },
-        "maxDepth": {
-          "description": "可选：最大深度（默认 5）",
-          "type": "integer"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "function"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
+  // （codegraph_trace_call_chain 已并入 codegraph_relations——mode=chain）
   {
     "name": "codegraph_find_dead_code",
     "description": "检测项目中疑似没有被调用的函数、类型、变量。判定方式：函数无 incoming RelCalls 边 + 无其他引用。注意：Go 反射和接口分发可能误报，结果仅供参考。",

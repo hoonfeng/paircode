@@ -1,7 +1,7 @@
 {
   "name": "ui-statusbar",
   "purpose": "工作区/git/文件信息 + statusbar-items 叠加挂载",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
@@ -12,7 +12,9 @@
       "slot": "statusbar",
       "kind": "single",
       "scope": "root",
-      "inject": ["@paircode/core"],
+      "inject": [
+        "@paircode/core"
+      ],
       "immediately": true,
       "build": {
         "entry": "src/ui-main-statusbar.js",

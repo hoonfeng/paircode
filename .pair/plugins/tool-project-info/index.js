@@ -1,148 +1,62 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-project-info — 项目知识库（project_info_write/read/list/search/delete/explore）
+// tool-project-info — 项目知识库（单工具 project_info(op=write/read/list/tree/search/delete/explore)；2026-09 由 7 工具合并）
 //
 // 迁移（2026-08-22 Round2）：binary 形态 → JS 原生（对齐 tool-core 模式）。
 // 原 execute 调 ctx.binary.exec 复用插件目录 bin/ 下独立二进制（已归档
 // bin/legacy-plugin-bins/），现实现完全在插件内（ctx.fs 读写 .pair/project-info/），
 // 不再依赖 ctx.binary。行为复刻 internal/agent/projectinfo.go（树形路径分级、
 // notes/ 前缀镜像、渐进式披露、多项目 project 路由）。
-// 工具清单：project_info_write、project_info_read、project_info_list、project_info_tree、project_info_search、project_info_delete、project_info_explore
+// 工具清单：project_info（op=write/read/list/tree/search/delete/explore）
 // ═══════════════════════════════════════════════════════════════
 // ★ 2026-08-29（候选 A 创造需求）：改用 mini Node API——require('path')
 //   统一路径拼接（手工 d+'/'+name 在 Windows 分隔符下有隐患）。
 const path = require('path')
 const tools = [
   {
-    "name": "project_info_write",
-    "description": "写入/更新项目知识库的一篇（.pair/project-info/\u003c路径\u003e.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
-    "usageGuide": "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用外部风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
+    "name": "project_info",
+    "description": "项目知识库（.pair/project-info/ 树形文档）统一入口。op=write 写入/更新条目（path+content）；op=read 读某篇全文（path）；op=list 列出全部条目的总览；op=tree 返回完整树形结构；op=search 按关键词搜索（query）；op=delete 删除某篇（path）；op=explore 返回项目目录结构概览（构建知识库的起点）。",
+    "usageGuide": "项目知识库操作（渐进式披露）：先 list/tree 看有哪些文档，search 查关键词，read 读全文；explore 扫描项目结构起步；write 记录结构化理解（顶层分支：目标/架构/实现/关键点/设计思想，根为 概览；path 带分支前缀如 架构/模块-agent，兼容 notes/ 前缀镜像 .agents/notes/）；delete 清理过时条目。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区用 project 指定项目。",
     "parameters": {
       "properties": {
         "content": {
-          "description": "Markdown 正文（首行用 # 标题）",
+          "description": "write 用：Markdown 正文（首行用 # 标题）",
+          "type": "string"
+        },
+        "op": {
+          "description": "操作：write 写入/read 读取/list 总览/tree 树形/search 搜索/delete 删除/explore 项目结构扫描",
+          "enum": [
+            "write",
+            "read",
+            "list",
+            "tree",
+            "search",
+            "delete",
+            "explore"
+          ],
           "type": "string"
         },
         "path": {
-          "description": "条目路径（中文，带顶层分支前缀：目标/架构/实现/关键点/设计思想，如 架构/模块-agent），不含 .md；用 / 嵌套为细节篇",
+          "description": "write/read/delete 用：条目路径（中文，带顶层分支前缀：目标/架构/实现/关键点/设计思想，如 架构/模块-agent），不含 .md；用 / 嵌套为细节篇",
           "type": "string"
         },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "content"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "project_info_read",
-    "description": "读取知识库某篇的全文（按路径，如 概览 / 模块-agent）。渐进式披露的细节层。",
-    "usageGuide": "读取知识库某篇全文。渐进式披露：先 project_info_list 看总览，再用此工具读具体细则。比翻目录更方便（自动解析路径+内容格式化）。",
-    "parameters": {
-      "properties": {
-        "path": {
-          "description": "条目路径，不含 .md",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "project_info_list",
-    "description": "列出知识库所有条目的【总览】（路径 + 标题 + 分级）。渐进式披露的总览层。",
-    "usageGuide": "列出知识库所有条目的总览（路径+标题+分级）。新项目先调此工具查看已有哪些文档，避免重复写入。",
-    "parameters": {
-      "properties": {
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "project_info_tree",
-    "description": "返回知识库完整树形结构（缩进树：目标/架构/实现/关键点/设计思想 分支 + 条目）。人可读的树形导航。",
-    "usageGuide": "查看知识库完整树形结构（分支/子类/条目缩进树）。比 project_info_list 更直观：先看树定位条目，再 project_info_read 读全文。",
-    "parameters": {
-      "properties": {
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "project_info_search",
-    "description": "按关键词搜索知识库（匹配路径/标题/正文），返回命中条目。",
-    "usageGuide": "按关键词搜索知识库（匹配路径/标题/正文）。想查某个模块/概念是否已有文档时优先用此工具。",
-    "parameters": {
-      "properties": {
         "project": {
           "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
           "type": "string"
         },
         "query": {
-          "description": "关键词",
+          "description": "search 用：关键词",
           "type": "string"
         }
       },
       "required": [
-        "query"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "project_info_delete",
-    "description": "删除知识库某篇（按路径）。",
-    "usageGuide": "删除知识库某篇（按路径）。知识库条目过时/错误时用此工具清理。删除前建议先 project_info_read 确认。",
-    "parameters": {
-      "properties": {
-        "path": {
-          "description": "条目路径，不含 .md",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
+        "op"
       ],
       "type": "object"
     }
   },
-  {
-    "name": "project_info_explore",
-    "description": "返回项目目录结构概览（根目录关键文件、顶层目录及文件数）——构建知识库的起点；据此用 read 读关键文件分析，再 project_info_write 写入 概览/模块-*/决策-*。",
-    "usageGuide": "扫描项目目录结构概览——构建知识库的起点。新项目首次接触时先调此工具了解项目全貌，再用 read 读关键文件，最后 project_info_write 写入结构化理解。",
-    "parameters": {
-      "properties": {},
-      "type": "object"
-    },
-    "readOnly": true
-  }
+  // （project_info_read / project_info_list 已并入单工具 project_info——op=read/list）
+  // （project_info_tree / project_info_search 已并入单工具 project_info——op=tree/search）
+  // （project_info_delete / project_info_explore 已并入单工具 project_info——op=delete/explore）
 ];
 
 
@@ -352,11 +266,11 @@ function exploreProjectStructure(ctx) {
     if (!st.isDir) continue
     b += '- ' + d + '/（约 ' + countDirFiles(ctx, d) + ' 文件）\n'
   }
-  b += '\n建议：用 read 读关键文件分析后，project_info_write 写入「概览」「模块-<名>」「决策-<主题>」等中文条目。'
+  b += '\n建议：用 read 读关键文件分析后，project_info(op=write) 写入「概览」「模块-<名>」「决策-<主题>」等中文条目。'
   return b
 }
 
-// project_info_write：写/更新 + notes/ 镜像 + 非分支路径提示。
+// projectInfoWrite（op=write）：写/更新 + notes/ 镜像 + 非分支路径提示。
 function projectInfoWrite(ctx, args) {
   const dir = infoDir(ctx, args)
   const rel = safeInfoPath(args.path)
@@ -401,13 +315,13 @@ function projectInfoRead(ctx, args) {
   const dir = infoDir(ctx, args)
   const rel = safeInfoPath(args.path)
   const fp = path.join(dir, rel + '.md')
-  if (!ctx.fs.exists(fp)) throw new Error('无此知识库条目：' + rel + '（用 project_info_list 看全部）')
+  if (!ctx.fs.exists(fp)) throw new Error('无此知识库条目：' + rel + '（用 project_info(op=list) 看全部）')
   return ctx.fs.readFile(fp)
 }
 
 function projectInfoList(ctx, args) {
   const entries = scanInfoEntries(ctx, infoDir(ctx, args))
-  if (entries.length === 0) return '（知识库为空。用 project_info_explore 起步、project_info_write 写入，或菜单「探索项目知识库」。）'
+  if (entries.length === 0) return '（知识库为空。用 project_info(op=explore) 起步、project_info(op=write) 写入，或菜单「探索项目知识库」。）'
   return infoTree(entries, true)
 }
 
@@ -444,20 +358,20 @@ function projectInfoExplore(ctx, args) {
 }
 
 const impls = {
-  project_info_write: projectInfoWrite,
-  project_info_read: projectInfoRead,
-  project_info_list: projectInfoList,
-  project_info_tree: projectInfoTree,
-  project_info_search: projectInfoSearch,
-  project_info_delete: projectInfoDelete,
-  project_info_explore: projectInfoExplore,
+  write: projectInfoWrite,
+  read: projectInfoRead,
+  list: projectInfoList,
+  tree: projectInfoTree,
+  search: projectInfoSearch,
+  delete: projectInfoDelete,
+  explore: projectInfoExplore,
 }
 
 
 return {
   name: 'tool-project-info',
   inject: ['fs'],
-  purpose: '项目知识库（project_info_write/read/list/search/delete/explore）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs）完全在插件内（Round2 JS 原生化）',
+  purpose: '项目知识库（project_info(op=write/read/list/tree/search/delete/explore)）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs）完全在插件内（Round2 JS 原生化；2026-09 由 7 工具合并为单工具）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({
@@ -469,7 +383,16 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => impls[t.name](ctx, args || {}),
+        execute: (args) => {
+          const a = args || {}
+          const fn = impls[a.op]
+          if (!fn) {
+            return Promise.resolve(
+              'project_info：op 无效（可用 write/read/list/tree/search/delete/explore）——未执行任何操作'
+            )
+          }
+          return fn(ctx, a)
+        },
       })
     }
   },

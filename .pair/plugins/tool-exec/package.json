@@ -1,0 +1,8 @@
+{
+  "name": "tool-exec",
+  "purpose": "会话式命令执行（exec_command/write_stdin/kill_process）——对齐 codex unified exec 模型，取代 run_background/read_output/job_list",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js"
+}

@@ -10,6 +10,9 @@
 // 与 tool-web-debug（web_debug）并入本插件——二者为 binary 型工具
 // （execute 经 ctx.binary.exec → 内嵌内核 registerScreenshotTools/
 // registerWebDebugTool 回退，插件不再独立存在）。
+// ★ 2026-09-12 codex 精简轮：tool-vision（read_image）并入本插件（视觉/媒体
+// 同域：联网+截图+看图），实现整体搬迁（__SUBMIT_IMAGE__ 标记协议不变，
+// Loop 层 image_submit.go 解析）。
 // ═══════════════════════════════════════════════════════════════
 
 // HTML 实体解码（常见命名实体 + &#xHH;/&#DDD; 数字实体）。
@@ -106,6 +109,61 @@ function webSearch(ctx, args) {
   return out
 }
 
+// ─── read_image（2026-09-12 自 tool-vision 并入）───
+// 把图片读给模型看（视觉识别）：结果标记 __SUBMIT_IMAGE__:json 由 Loop 层
+// （internal/agent/image_submit.go）解析 → 准入/归一化 → 随下一轮 LLM 请求发送。
+const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024 // 对齐 dsh 准入上限（DEFAULT_MAX_REQUEST_IMAGE_BYTES）
+
+function imageMimeOf(ext) {
+  return { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }[ext] || 'image/jpeg'
+}
+
+// readImage：校验路径/扩展名/大小后生成标记行（图片信封由 Go 层生成）。
+function readImage(ctx, args) {
+  const pathR = String((args && (args.file_path || args.path)) || '').trim()
+  if (!pathR) return 'file_path must be a non-empty string'
+  const prompt = String((args && args.prompt) || '').trim()
+  // 路径解析：绝对（含盘符或 / 开头）直接用；相对拼工作区根
+  let full = pathR
+  if (!(full.includes(':') || full.startsWith('/') || full.startsWith('\\'))) {
+    full = ((ctx.workspaceRoot || '') + '/' + pathR).replace(/[\/]+/g, '/')
+  }
+  let st
+  try { st = ctx.fs.stat(full) } catch (e) { return '错误：图片不存在或不可访问：' + pathR }
+  if (!st || st.isDir) return '错误：file_path 是目录：' + pathR
+  const dot = full.lastIndexOf('.')
+  const slash = Math.max(full.lastIndexOf('/'), full.lastIndexOf('\\'))
+  const ext = dot > slash ? full.slice(dot + 1).toLowerCase() : ''
+  // 无扩展名也接受（对齐 dsh：按文件内容识别格式）；有扩展名必须是支持的图片格式
+  if (ext && !IMG_EXTS.includes(ext)) {
+    return '错误：无法读取 "' + pathR + '"，.' + ext + ' 扩展名不是受支持的图片格式；read_image 接受 PNG/JPEG/WebP/GIF（无扩展名的文件同样按内容识别）'
+  }
+  if (st.size > MAX_IMAGE_BYTES) {
+    return '错误：图片 ' + (st.size / 1048576).toFixed(1) + 'MiB 超过 ' + (MAX_IMAGE_BYTES / 1048576) + 'MiB 准入上限——请缩小尺寸或压缩后重试'
+  }
+  const mark = JSON.stringify({ kind: 'read_image', path: full, mime: ext ? imageMimeOf(ext) : '', size: st.size, prompt })
+  return '__SUBMIT_IMAGE__:' + mark + '\n' + (prompt ? '关注点：' + prompt : '')
+}
+
+// screenshotImpl：三合一截屏调度（2026-09-12 合并 screenshot_desktop/window/area）。
+// 参数校验在 JS 层，执行直通内嵌内核原名（ctx.binary.exec → 无 exe 时回退
+// registerScreenshotTools 的 3 个原名工具）。
+function screenshotImpl(ctx, args) {
+  const target = String((args && args.target) || '').trim().toLowerCase()
+  const name = { desktop: 'screenshot_desktop', window: 'screenshot_window', area: 'screenshot_area' }[target]
+  if (!name) return '错误：target 必须是 "desktop" | "window" | "area"（收到：' + target + '）'
+  if (target === 'window' && !String((args && args.title) || '').trim()) return '错误：target="window" 需要 title（窗口标题或子串）'
+  if (target === 'area') {
+    for (const k of ['left', 'top', 'right', 'bottom']) {
+      if (args[k] == null || String(args[k]).trim() === '') return '错误：target="area" 需要 ' + k + '（像素或百分比）'
+    }
+  }
+  const na = {}
+  for (const k of Object.keys(args || {})) { if (k !== 'target') na[k] = args[k] }
+  return ctx.binary.exec(name, na)
+}
+
 const tools = [
   {
     name: 'web_fetch',
@@ -138,48 +196,30 @@ const tools = [
     impl: webSearch,
   },
   // ── binary 型：execute 经 ctx.binary.exec → 内嵌内核回退（2026-09 并入）──
+  // ★ 2026-09-12 codex 精简轮：screenshot_desktop/window/area 三工具合并为
+  //   单工具 screenshot（target 参数切换形态，对齐 codex「一个工具+参数」）——
+  //   内核回退仍按原名执行（ctx.binary.exec('screenshot_'+target)），
+  //   registerScreenshotTools 与门控兼容不变。
   {
-    name: 'screenshot_desktop',
-    description: '截取整个桌面（所有显示器），保存为 PNG 图片到 screenshots/ 目录。返回文件路径、尺寸和截图时间。之后可用多模态模型（如 DeepSeek-VL）直接分析截图内容。',
-    usageGuide: '截取整个桌面（所有显示器），保存为 PNG。用于查看当前桌面状态、验证 GUI 效果。比手动按 PrintScreen 更方便（自动保存到 screenshots/ + 文件名管理）。',
-    parameters: {
-      properties: {
-        name: { description: '可选：自定义文件名（不含扩展名），默认自动生成时间戳名称', type: 'string' },
-      },
-      type: 'object',
-    },
+    name: 'screenshot',
+    description: '截屏保存为 PNG 到 screenshots/ 目录（单工具三形态）：target="desktop"=整个桌面（所有显示器）；"window"=按窗口标题截取（需 title）；"area"=按坐标截取区域（需 left/top/right/bottom，支持像素或百分比）。返回文件路径、尺寸和截图时间；之后可用 read_image 把图片交给模型看。',
+    usageGuide: '截屏工具（三形态）：screenshot(target="desktop") 截桌面；screenshot(target="window", title="Chrome") 截窗口；screenshot(target="area", left=..., top=..., right=..., bottom=...) 截区域（坐标可为百分比如 "10%"）。截屏后用 read_image 查看效果（验证 UI/桌面/GUI）。',
+    category: '视觉',
     readOnly: true,
-  },
-  {
-    name: 'screenshot_window',
-    description: '按窗口标题或标题子串截取特定窗口，保存为 PNG 图片到 screenshots/ 目录。返回文件路径、窗口尺寸和截图时间。如果多个窗口匹配同一标题子串，会列出所有匹配窗口供选择。',
-    usageGuide: '按窗口标题截取特定窗口，保存为 PNG。比截图整个桌面更精确（只截目标窗口）。title 支持子串匹配不区分大小写。',
     parameters: {
-      properties: {
-        name: { description: '可选：自定义文件名（不含扩展名），默认自动生成', type: 'string' },
-        title: { description: '窗口标题或标题子串（不区分大小写）。例如 "记事本"、"Chrome"、"Calculator"', type: 'string' },
-      },
-      required: ['title'],
       type: 'object',
-    },
-    readOnly: true,
-  },
-  {
-    name: 'screenshot_area',
-    description: '按坐标截取指定区域，保存为 PNG 图片到 screenshots/ 目录。区域坐标可以是绝对坐标（相对于桌面左上角），也可以是百分比（如 "10% 20% 50% 30%"）。返回文件路径、区域尺寸和截图时间。',
-    usageGuide: '按坐标截取指定屏幕区域。left/top/right/bottom 支持像素或百分比（如 10%）。用于截取界面局部细节。',
-    parameters: {
       properties: {
-        bottom: { description: '下边界：像素值或百分比', type: 'string' },
-        left: { description: '左边界：像素值或百分比（如 "10%"）', type: 'string' },
-        name: { description: '可选：自定义文件名', type: 'string' },
-        right: { description: '右边界：像素值或百分比', type: 'string' },
-        top: { description: '上边界：像素值或百分比', type: 'string' },
+        target: { type: 'string', description: '截屏形态："desktop"（整个桌面）| "window"（按窗口标题）| "area"（按坐标区域）' },
+        title: { type: 'string', description: 'target="window" 必填：窗口标题或子串（不区分大小写），如 "记事本"、"Chrome"' },
+        left: { type: 'string', description: 'target="area" 必填：左边界（像素或百分比，如 "10%"）' },
+        top: { type: 'string', description: 'target="area" 必填：上边界' },
+        right: { type: 'string', description: 'target="area" 必填：右边界' },
+        bottom: { type: 'string', description: 'target="area" 必填：下边界' },
+        name: { type: 'string', description: '可选：自定义文件名（不含扩展名），默认自动生成时间戳名称' },
       },
-      required: ['left', 'top', 'right', 'bottom'],
-      type: 'object',
+      required: ['target'],
     },
-    readOnly: true,
+    impl: screenshotImpl,
   },
   {
     name: 'web_debug',
@@ -205,12 +245,28 @@ const tools = [
     },
     readOnly: true,
   },
+  {
+    name: 'read_image',
+    description: '读取工作区内的 PNG/JPEG/WebP/GIF 图片文件并把图片本身交给模型看（随下一轮请求一起发送）：识别截图文字、分析界面布局、验证 UI 渲染效果、描述图表。路径可以没有扩展名（按文件内容识别格式），也可以直接传归一化附件路径。Harness 会在下次模型请求前校验并降采样过大的图片，所以直接用本工具即可，不要为了看图片而安装图像库或生成缩略图。独立文件可以小批并发读取。要求当前模型支持图片输入。',
+    usageGuide: '截图/测试/网页验证产出图片后，把图片路径交给 LLM 看：read_image(file_path=图片路径, prompt=关注的问题)。适用于：① web_debug/screenshot 截图后要 LLM 确认页面渲染效果；② 测试生成图表要 LLM 分析；③ 图片是问题描述的一部分（LLM 看图排错）。',
+    category: '视觉',
+    readOnly: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: '图片文件路径（工作区内绝对路径或相对路径），支持 PNG/JPEG/WebP/GIF' },
+        prompt: { type: 'string', description: '可选：想让 LLM 关注的问题（默认：描述图片内容、识别文字、分析布局）' },
+      },
+      required: ['file_path'],
+    },
+    impl: readImage,
+  },
 ]
 
 return {
   name: 'tool-web',
-  inject: ['web'], // ★ binary 是 ctx 附属对象（jsplugin.go ctxObj.Set("binary", …)），非宿主服务，不进 inject
-  purpose: '网络工具（web_fetch/web_search JS 原生 + screenshot_desktop/window/area/web_debug 内嵌内核回退）——2026-09 并入 tool-screenshot/tool-web-debug',
+  inject: ['web', 'fs'], // ★ binary 是 ctx 附属对象（jsplugin.go ctxObj.Set("binary", …)），非宿主服务，不进 inject；fs：read_image 校验用
+  purpose: '网络与视觉工具（web_fetch/web_search JS 原生 + screenshot_desktop/window/area/web_debug 内嵌内核回退 + read_image 看图）——并入 tool-screenshot/tool-web-debug（2026-09）与 tool-vision（2026-09-12）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

@@ -1,7 +1,7 @@
 {
   "name": "ui-appearance",
   "purpose": "外观设置：主题与界面字体（配置注册化）",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js"

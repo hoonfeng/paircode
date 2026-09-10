@@ -34,6 +34,7 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - ★ 落地用例（2026-08-16）：磁盘插件 `web-api/` 用本能力注册 `/api/ext/*`
     6 条路由（status / fetch 同源代理 / fs-read / fs-exists / fs-list / routes），
     curl 直接消费，验证「插件扩展 HTTP 接口」链路全通（见 web-api/index.js）
+    ——★ 2026-09-12：web-api 示例插件已移除（能力由 ext_routes 测试与插件生态持续覆盖）
 - `ctx.kernel.*` → 内置 HTTP 接口装配（★ 接口插件化：Go 硬编码清零）：  - 内置 /api/* 接口实现保留 Go 内核路由表（internal/agent/kernel_api.go，
     由 cmd/companion/kernel_register.go 注册 82 条），**挂载权在插件**；
   - `ctx.kernel.routes()` → 全部内核接口清单 `[{key,method,path,desc}]`
@@ -130,21 +131,25 @@ search/web 等 17 组）**各自一个独立二进制**承载实现：
   `ctx.hostTool.exec`；ask_user/task_create 经**会话桥**（session_bridge.go）
   按 _convID 路由回会话（见下方 tool-system 条目）
 
-当前 execute 形态分布（★ 2026-09-04 ③.4 插件瘦身后现状；详见 .pair/project.md「插件瘦身②」）：
+当前 execute 形态分布（★ 2026-09-12 剩余插件审查轮校准）：
 - `binary`（ctx.binary.exec → 无 exe 回退内嵌内核）：tool-binary、tool-bug、
-  tool-codegraph、tool-debug、tool-git、tool-harness（run_code 内核承载）、
-  tool-memory、tool-office、tool-project-info、tool-vision、tool-web
-  （screenshot_*/web_debug 2026-09 并入，内核 registerScreenshotTools/
-  registerWebDebugTool 回退）——插件目录无 bin/（独立二进制已归档
-  bin/legacy-plugin-bins/），执行走宿主内嵌内核
+  tool-codegraph、tool-harness（run_code 内核承载）、tool-memory、tool-office、
+  tool-project-info、tool-web（screenshot/read_image/web_debug 内核
+  registerScreenshotTools/registerWebDebugTool 回退）——插件目录无 bin/
+  （独立二进制已归档 bin/legacy-plugin-bins/），执行走宿主内嵌内核；
+  独立二进制源码保留于 `plugins-src/plugins/`（如 codegraph 引擎，按需构建）
 - `hostTool`（宿主 Go 存档）：tool-system（SystemTool + Skills/MCP/进度/goal）、
-  tool-asset、tool-entryconfig、tool-resource、tool-snapshot、tool-workflow（workflow）
-- `JS 原生`（ctx.fs/ctx.web/ctx.process/ctx.agents 等）：tool-core、tool-harness
-  （read/write/edit/glob/grep/后台进程 6 工具）、tool-web（web_fetch/web_search）、
-  tool-workflow（subagent 系列）
+  tool-resource（并入 verify/asset/evolution）、tool-harness（快照 2 工具）、
+  tool-workflow（workflow）
+- `JS 原生`（ctx.fs/ctx.web/ctx.process/ctx.agents 等）：tool-harness
+  （read/write/apply_patch/glob/grep——Round5 编辑面统一 apply_patch）、
+  tool-web（web_fetch/web_search/read_image）、tool-workflow（subagent 系列）
 - ★ 2026-09 ③.4：bash 工具已从工具侧移除；tool-shell/tool-screenshot/
   tool-web-debug/tool-goal/tool-subagent/tool-bridge 插件目录已删除（并入
   tool-harness/tool-web/tool-system/tool-workflow；tool-bridge 因桌面版移除删除）
+- ★ Round5：tool-core 插件已删除（multi_edit/move_file/delete_file 由 apply_patch
+  的 Update/Move to/Delete File 覆盖）；tool-harness 编辑面统一 apply_patch
+  （ctx.fs.applyPatch 宿主桥接）
 
 ## 三层工具实现（从易到难，用户可改程度递增）
 
@@ -208,15 +213,16 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/
   reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
   （快照字段实现：internal/agent/jsplugin_loopfactory.go）
-- **`tool-system/`**（2026-08-16 扩容）：系统内部工具 16 个——SystemTool 组
-  （update_tasks/tool_stats/history_search/history_list/history_count）
-  + Skills（skill_list/load_skill/load_skill_resource/skill_write/skill_delete）
-  + MCP（mcp_list/mcp_add/mcp_remove）+ 市场（marketplace_search/
-  marketplace_install）。execute 全走
+- **`tool-system/`**（2026-08-16 扩容；2026-09 工具面合并）：系统内部工具 15 个——
+  SystemTool 组（update_tasks/tool_stats/history_search/history_list/history_count）
+  + Skills（skill_list/load_skill（path 区分 L2/L3）/skill_write/skill_delete）
+  + MCP（mcp_list/mcp_add/mcp_remove）+ 提问（ask_user）+ 进度
+  （progress_checker，自 tool-progress 并入）+ goal 单工具（op=create/get/update，
+  自 tool-goal 并入；2026-09 由 3 工具合并）。execute 全走
   `ctx.hostTool.exec`（宿主 Go 执行器：编排在插件、能力在宿主）。生成器
-  tool_plugin_gen.go 的 tool-system 组白名单同步维护（含 11 个新工具），
-  `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。**ask_user/
-  task_create 已插件化**（2026-08-16 会话桥机制）：Loop ctx 链携带 convID
+  tool_plugin_gen.go 的 tool-system 组白名单同步维护，
+  `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。**ask_user
+  已插件化**（2026-08-16 会话桥机制）：Loop ctx 链携带 convID
   （SessionManager.Start runCtx 注入）→ JS 工具包装（jsToolToGo）复制 args
   注入 `_convID` 内部键 → 插件 execute 经 ctx.hostTool.exec 路由回宿主 →
   hostTool 路由执行器（session_bridge.go archiveSessionTools）→ SessionBridge
@@ -224,6 +230,9 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   精确路由，多会话并发不串。SessionManager.Start 检测 reg 已存在同名工具时
   不再注册会话级版本（插件优先、宿主兜底）。ask_user 提问卡片/回答交互
   （message_store ask_user segment + /api/answer → SendAnswer）不变。
+  **task_create**：2026-09-12 工具面已移除（描述引用不存在的 task_update 属
+  误导；写任务收敛 update_tasks 全量替换）；宿主会话级注册与会话桥路由能力
+  保留（session_bridge.go / session_manager.go，需要时按名恢复）。
 
 ---
 
@@ -258,7 +267,8 @@ node scripts/sync-web-dist.mjs
 packager  # 或依 packager.json pipeline 手动执行
 ```
 
-- **files 字段**：全部 46 个插件目录（agentloop/core-api/tool-*/ui-*/web-api）
+- **files 字段**：全部插件目录（agentloop/core-api/tool-*/ui-*/基础设施——
+  ★ 2026-09-12 codex 精简轮后 29 个；以 .pair/publish 实际目录为准）
   + UI 源码工程（plugins-src/ui-app/）+ 模型依赖清单（config/models.json +
   config/settings.template.json）+ README.md —— 即「插件 + 插件代码 + 依赖
   模型」整体入包（由 packager.json dist.include 声明）。
@@ -279,3 +289,65 @@ packager  # 或依 packager.json pipeline 手动执行
 宿主启动时 `EnsureModelList()` 确保 models.json 存在（缺失自动写入默认），
 新环境部署发布包时把 config/models.json 复制到宿主 config/ 即恢复完整模型
 列表。
+
+---
+
+## ★ 2026-09-12 codex 精简轮（插件删/合并 + 按需工具机制）
+
+**插件面变化（36 → 29）**：
+- 删除：`tool-git`（10 工具——git 操作统一走 exec_command，对齐 codex 无 git 工具面；
+  前端 Git 面板走独立 git-api 插件不受影响）、`tool-entryconfig`（入口/配置定位，
+  被 glob/codegraph 覆盖）、`host-capability-probe`（探测接口）、`web-api`（/api/ext demo 路由）。
+  备份：`_temp/removed-plugins-202609/codex-slim-20260912/`。
+- 合并：`tool-vision`（read_image）→ `tool-web`（网络+视觉域）；
+  `tool-snapshot`（list/restore_snapshot）→ `tool-harness`（写前快照配套）；
+  `tool-asset`（asset_delete/evolution_*）→ `tool-resource`（资源/资产域）。
+- 工具合并：`screenshot_desktop/window/area` → 单工具 `screenshot`（target 参数，
+  调度直通内嵌内核原名；`multimodal_gate` 门控与前端渲染表同步）。
+- 预设 v7：seed 版本递增重建（预设引用同步；用户自定义集合不受影响）。
+
+**按需工具（deferred）机制（对齐 codex ToolExposure::Deferred + tool_search）**：
+- `internal/agent/deferred_tools.go`：`DeferredToolNames`（低频工具名单）+
+  `tool_search` 工具（关键词加权搜索 → 命中后本会话内提升为可见，下一轮可直接调用）。
+- 语义：名单工具仍在注册表（/api/tools 可见、面板可管理），但不进 LLM 的
+  tools 参数（Definitions/EnabledNames 过滤）；直接调用未发现的按需工具会被
+  引导（Execute 拦截，提示先 tool_search）。
+- 会话隔离：发现状态=Registry 级（新会话重新隐藏；Copy/Subset 快照继承）；
+  独立宿主（RegisterDefaultTools）与内嵌内核（InitEmbeddedToolRegistry）自动
+  全量标记发现，不受会话工具面影响。
+- 元信息：`/api/tools` 返回 `deferred` 字段（前端可显示「按需」标记）；
+  `tool_search` 与 SystemTool 同级恒可用（白名单收敛不摘除）。
+
+---
+
+## ★ 2026-09-12 剩余插件审查轮（29 插件逐个体检）
+
+审查方法：29 插件 × 144 工具全量归组（14 工具插件 + 10 UI 插件 + 5 核心插件），
+对照 ref/codex 工具设计（unified_exec/view_image/multi_agents_v2/tool_search
+对应面验证）+ 引用影响分析（Go/测试/前端/生成器/镜像全链）。
+
+**结论（按插件）**：
+- tool-system（19 工具）：**删 task_create**（双注册路径：session_manager 会话级 +
+  插件声明；描述引用死工具 task_update；被 update_tasks 全量替换覆盖）；
+  history_*/tool_stats/progress_checker 转按需（低频查询）。
+- tool-bug（bug_detect/bug_fix）：转按需（专项排查场景）。
+- tool-codegraph（29 工具）：build/stats 转按需（维护类动作；search/explore/
+  impact/callers/callees 保留直联）——deferred 24/29。
+- agent-teams（14）：保留——按需激活插件（/agent-teams），激活即有使用意图，
+  不叠加 deferred；与 tool-workflow（7）命名空间独立（团队 DAG vs 会话内子代理，
+  对齐 codex multi_agents v1/v2 并存）。
+- tool-memory/tool-project-info/tool-web/tool-harness/tool-exec/tool-workflow：
+  保留直联（高频核心）。tool-resource：memory_verify/project_info_verify 保留
+  本插件（资源总线域：验证对象即受管资产）——不做域搬迁。
+- UI 10 插件：保留（后端接口插件 core-api/fs-api/git-api 与面板插件解耦清晰）。
+- 内核工具：toolset_*（7）/cordis_*（7）转按需——配置类低频（服务 toolsets/cordis
+  自举链，需要时 tool_search「工具集/插件」即现）。
+- 归组观察：plugins-src/plugins/ 为独立二进制归档源（codegraph 等经
+  ctx.binary.exec 活跃），保持现状。
+
+**deferred 名单变化（58 → 81，LLM 工具面 86 → 62）**：
+新增 history_search/history_list/history_count、tool_stats、progress_checker、
+bug_detect/bug_fix、toolset_*（7）、cordis_*（7）、codegraph_build/codegraph_stats。
+
+**验证**：go build + internal/agent 全量测试 + 9095 冒烟（总 143 / deferred 81 /
+task_create 零出现 / tool_search 新域命中）。

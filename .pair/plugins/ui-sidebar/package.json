@@ -1,7 +1,7 @@
 {
   "name": "ui-sidebar",
   "purpose": "文件/搜索/Git/插件 四面板侧栏",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
@@ -12,7 +12,9 @@
       "slot": "sidebar",
       "kind": "single",
       "scope": "root",
-      "inject": ["@paircode/core"],
+      "inject": [
+        "@paircode/core"
+      ],
       "immediately": true,
       "build": {
         "entry": "src/ui-main-sidebar.js",

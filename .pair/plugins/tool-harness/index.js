@@ -1,7 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-harness — harness 核心协议工具（read/write/edit/glob/grep/run_code
-// + 后台进程 run_background/read_output/kill_process/job_list）
-//
+// tool-harness — harness 核心协议工具（read/write/apply_patch/glob/grep/run_code + list/restore_snapshot）
 // 迁移来源（2026-08-16）：内置 RegisterHarnessTools（internal/agent/
 // harness_tools.go）→ 磁盘外置插件。2026-08-16 第二轮：7 个工具的 execute
 // 由 ctx.hostTool（宿主 Go 执行器）改为 **JS 原生化**（调用实现在插件内，
@@ -9,17 +7,12 @@
 // ——其「node + tools.xxx 嵌套调度」需 goja VM 宿主运行时（runCodeNested），
 // 属框架运行时能力，JS 沙箱不可复刻。
 //
-// ★ 2026-09 Round3 ③.4 插件瘦身合并：
-//   - tool-shell 的 6 个后台进程工具（run_background/read_output/
-//     kill_process/job_output/job_list/job_kill）并入本插件（实现同源
-//     ctx.process 宿主服务，globalBG 跨轮次存活）；
-//   - bash 工具移除：短查询不再暴露 bash 工具名（长进程误用风险），
-//     宿主 bash 服务本身保留（fs-api/git-api 的 ctx.bash 仍有依赖）。
-// ★ 2026-09 Round4 工具面瘦身：job_output/job_kill（read_output/kill_process
-//   纯别名）已删除，仅保留 job_list（独立清单语义）。
-//
+// ★ 2026-09 工具重构（对齐 codex unified exec）：后台进程 4 件套
+//   （run_background/read_output/kill_process/job_list）移交 tool-exec
+//   （exec_command/write_stdin/kill_process 会话式模型）；本插件聚焦
+//   文件与工作区工具（read/write/apply_patch/glob/grep/run_code）。
 // 装配：.pair/plugins/ 启动扫描（LoadGlobalPlugins）→ define + load。
-// 停用本插件（cordis_stop tool-harness）即回收全部 13 个工具。
+// 停用本插件（cordis(op=stop) tool-harness）即回收全部 6 个工具。
 // ═══════════════════════════════════════════════════════════════
 
 // ─── JS 原生化实现（ctx.fs / ctx.bash） ────────────────────
@@ -100,79 +93,15 @@ function writeFile(ctx, args) {
   return '已写入 ' + (args.file_path != null ? args.file_path : args.path)
 }
 
-// 行号定位替换：返回替换后的行数组
-function applyLineReplace(lines, ed) {
-  const ls = Number(ed.line_start || 0)
-  if (ls <= 0) return { ok: false }
-  const le = ed.line_end && Number(ed.line_end) >= ls ? Number(ed.line_end) : ls
-  if (ls > lines.length) return { ok: false, err: 'line_start ' + ls + ' 超出文件行数 ' + lines.length }
-  const end = Math.min(le, lines.length)
-  const newText = String(ed.new_string == null ? '' : ed.new_string).split('\n')
-  return { ok: true, lines: lines.slice(0, ls - 1).concat(newText, lines.slice(end)) }
+// apply_patch：codex 语法自由格式补丁（2026-09 工具重构 Phase B——取代 edit/multi_edit）。
+// 宿主能力 ctx.fs.applyPatch（Go ApplyPatchText：解析 + 应用 + 写前快照 + 变更回调）：
+// 免 JSON 转义、免 old_string 唯一性焦虑、免行号依赖（上下文行定位）；支持
+// Add/Delete/Update/Move 四类操作及多文件单次调用。
+function applyPatch(ctx, args) {
+  const patch = String(args.patch == null ? '' : args.patch)
+  if (!patch.trim()) throw new Error('patch 不能为空（codex 语法：*** Begin Patch … *** End Patch）')
+  return ctx.fs.applyPatch(patch)
 }
-
-// edit 匹配：精确 → CRLF 归一化；返回 {ok, text} 或 {ok:false, err}
-// replace_all=true 时替换全部出现处（约定对齐，2026-09 Round2 R2-7），
-// 不再要求 old_string 唯一；默认 false 保持「须唯一」安全语义。
-function applyEdit(text, ed) {
-  const newStr = String(ed.new_string == null ? '' : ed.new_string)
-  // 行号定位模式（最可靠）
-  if (ed.line_start && Number(ed.line_start) > 0) {
-    const r = applyLineReplace(text.split('\n'), ed)
-    if (!r.ok) return r.err ? { ok: false, err: r.err } : { ok: false, err: '行号定位失败' }
-    return { ok: true, text: r.lines.join('\n') }
-  }
-  if (ed.old_string == null) return { ok: false, err: '缺少 old_string（且未用 line_start 行号定位）' }
-  const oldStr = String(ed.old_string)
-  // 精确匹配（统计全部出现位置，>1 报唯一性错误；replace_all 时全部替换）
-  const candidates = []
-  {
-    let from = 0
-    for (;;) {
-      const i = text.indexOf(oldStr, from)
-      if (i < 0) break
-      candidates.push(i)
-      from = i + Math.max(oldStr.length, 1)
-    }
-  }
-  if (candidates.length === 0) {
-    // CRLF 归一化：全文 \r\n → \n 后匹配，替换时保留原换行风格
-    const norm = text.replace(/\r\n/g, '\n')
-    const oldNorm = oldStr.replace(/\r\n/g, '\n')
-    const ni = norm.indexOf(oldNorm)
-    if (ni >= 0) {
-      const eol = detectEOL(text)
-      const newNorm = newStr.replace(/\r\n/g, '\n').split('\n').join(eol)
-      return { ok: true, text: norm.slice(0, ni) + newNorm + norm.slice(ni + oldNorm.length) }
-    }
-    return { ok: false, err: '未找到待替换文本（尝试精确/CRLF 归一化均失败）；请改用 line_start/line_end 行号定位' }
-  }
-  if (candidates.length > 1 && !ed.replace_all) {
-    return { ok: false, err: 'old_string 在文件中出现 ' + candidates.length + ' 处（须唯一；或设 replace_all=true 全部替换）；请用 line_start/line_end 行号定位' }
-  }
-  if (candidates.length === 1) {
-    return { ok: true, text: text.slice(0, candidates[0]) + newStr + text.slice(candidates[0] + oldStr.length) }
-  }
-  // replace_all：从后往前替换（偏移不受前次替换影响）
-  let out = text
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    out = out.slice(0, candidates[i]) + newStr + out.slice(candidates[i] + oldStr.length)
-  }
-  return { ok: true, text: out }
-}
-
-// edit
-function editFile(ctx, args) {
-  const path = projPath(ctx, args, filePath(args))
-  if (!path) throw new Error('缺少文件路径（file_path 或 path）')
-  const text = readFileText(ctx, args, path)
-  const r = applyEdit(text, args)
-  if (!r.ok) throw new Error(r.err)
-  ctx.fs.writeFile(path, r.text)
-  return '已编辑 ' + (args.file_path != null ? args.file_path : args.path)
-}
-
-// ★ Round4：str_replace_editor（命令式壳）已删除——read/write/edit/multi_edit 全覆盖，避免重复工具面。
 
 
 // run_code：统一二进制承载（tool-binary 注册了 run_code——node+tools.xxx
@@ -182,37 +111,6 @@ function runCode(ctx, args) {
   return ctx.binary.exec('run_code', args || {}, opts).text
 }
 
-// ─── 后台进程（合并自 tool-shell，同源 ctx.process 宿主服务）───
-
-// run_background：后台启动长命令，返回进程 id
-async function runBackground(ctx, args) {
-  const command = String(args.command || '').trim()
-  if (!command) throw new Error('command 不能为空')
-  const { id } = await ctx.process.runBackground(command, args.cwd || '')
-  return `已后台启动 id=${id}。用 read_output(id=${id}) 看输出、kill_process(id=${id}) 停止。`
-}
-
-// read_output：读取后台进程累积输出与状态
-async function readOutput(ctx, args) {
-  const { output, done, exitErr, status } = await ctx.process.readOutput(Number(args.id))
-  let line = `[${status}]`
-  if (done && exitErr) line += `（${exitErr}）`
-  const capped = output.length > 16000 ? output.slice(0, 16000) + '\n…[输出截断]' : output
-  return `${line}\n${capped}`
-}
-
-// kill_process：停止后台进程
-async function killProcess(ctx, args) {
-  await ctx.process.kill(Number(args.id))
-  return `已停止 id=${args.id}`
-}
-
-// job_list：列出全部后台进程（job_list 对齐，R2-7）
-async function jobList(ctx, args) {
-  const jobs = await ctx.process.list()
-  if (!jobs || jobs.length === 0) return '（无后台进程）'
-  return jobs.map(j => `- id=${j.id} 状态=${j.status}${j.error ? ' 错误=' + j.error : ''}`).join('\n')
-}
 
 // glob/grep：ctx.fs（复用 glob/grep 宿主实现）
 function globFiles(ctx, args) {
@@ -270,26 +168,19 @@ const tools = [
     impl: writeFile,
   },
   {
-    name: 'edit',
-    description: '把文件中唯一一处 old_string 替换为 new_string（对齐 edit）；replace_all=true 时替换全部出现处。内置智能匹配（CRLF 归一化）；匹配失败优先用 line_start/line_end 行号定位。',
-    usageGuide: 'harness 标准编辑工具：小改动（≤5 行）用精确替换（须唯一；多处出现可设 replace_all=true 全部替换）；大改动请用 write 写整段。替换前会自动快照。',
+    name: 'apply_patch',
+    description: '应用 codex 语法自由格式补丁修改文件（*** Begin Patch / Add File / Update File / Delete File / *** End Patch）。一次调用可含多个文件、四类操作（新增/更新/删除/移动）；Update 用上下文行定位（免行号、免 JSON 转义）——@@ 段内：空格前缀=上下文行、- 前缀=删除行、+ 前缀=新增行。',
+    usageGuide: '编辑文件的主工具（取代 edit/multi_edit）。小改动用 Update File+上下文行；新增文件用 Add File（每行 + 前缀，内容须一次写全）；删除文件用 Delete File；移动用 Update File + *** Move to: 行。修改前先 read 确认上下文行逐字一致，否则该 hunk 匹配失败。',
     category: '文件',
     requiresApproval: true,
     parameters: {
       type: 'object',
       properties: {
-        file_path: { type: 'string', description: '文件路径（参考参数名，与 path 等价）' },
-        path: { type: 'string', description: '文件路径（旧参数名，file_path 优先）' },
-        new_string: { type: 'string', description: '替换后的新文本' },
-        old_string: { type: 'string', description: '待替换原文（默认须唯一；replace_all=true 时替换全部；line_start>0 时可省略或作校验）' },
-        replace_all: { type: 'boolean', description: '可选：true 时替换 old_string 的全部出现处（默认 false 须唯一）' },
-        line_start: { type: 'integer', description: '可选：1 基起始行号（含）；省略或 < line_start 时只替换 line_start 一行' },
-        line_end: { type: 'integer', description: '可选：1 基结束行号（含）' },
-        project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
+        patch: { type: 'string', description: '补丁文本（*** Begin Patch … *** End Patch）' },
       },
-      required: ['new_string'],
+      required: ['patch'],
     },
-    impl: editFile,
+    impl: applyPatch,
   },
   {
     name: 'glob',
@@ -330,66 +221,6 @@ const tools = [
     impl: grepFiles,
   },
   {
-    name: 'run_background',
-    description: '在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。返回进程 id，随后用 read_output 读输出、kill_process 停止。如果命令会长期运行或保持监听状态，优先用此工具。短查询请用其他宿主执行通道。',
-    usageGuide: '后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具。返回进程 id，之后用 read_output/kill_process 控制。',
-    category: '执行',
-    parameters: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: '要后台执行的命令' },
-        cwd: { type: 'string', description: '可选工作目录（工作区内）' },
-        project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
-      },
-      required: ['command'],
-    },
-    impl: runBackground,
-  },
-  {
-    name: 'read_output',
-    description: '读取某后台进程（id）累积的输出与运行状态（运行中/已结束）。',
-    usageGuide: '读取后台进程的累积输出与运行状态。需先用 run_background 启动进程获得 id。比直接看终端更方便（自动截断保护+状态标记运行中/已结束）。',
-    category: '执行',
-    readOnly: true,
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'integer', description: '进程 id' },
-      },
-      required: ['id'],
-    },
-    impl: readOutput,
-  },
-  {
-    name: 'kill_process',
-    description: '停止某后台进程（id）。只能杀死通过 run_background 启动的进程，无法操作外部进程。',
-    usageGuide: '停止某后台进程（仅限通过 run_background 启动的）。进程跑偏/卡死/已不需要时用此工具停止。',
-    category: '执行',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'integer', description: '进程 id' },
-      },
-      required: ['id'],
-    },
-    impl: killProcess,
-  },
-
-  {
-    name: 'job_list',
-    description: '列出全部后台任务（id + 状态 running/done/error）（job_list 对齐）。',
-    usageGuide: '列出全部后台任务（id+状态）。配合 read_output/kill_process 管理后台任务。',
-    category: '执行',
-    readOnly: true,
-    parameters: {
-      type: 'object',
-      properties: {},
-    },
-    impl: jobList,
-  },
-
-
-  {
     name: 'run_code',
     description: '执行一段代码并返回输出（对齐 run_code）。language: auto（默认，按内容探测）/ go / python / node。',
     usageGuide: 'harness 标准代码执行工具：快速验证算法/处理数据/调用本地库，不用写临时文件。与 bash 的区别：直接执行代码片段（自动建临时文件）。',
@@ -404,12 +235,51 @@ const tools = [
     },
     impl: runCode, // 统一二进制承载（node 嵌套 goja 调度 + 外部进程执行）
   },
+  // ─── 会话快照（2026-09-12 自 tool-snapshot 并入）：写前快照的查询/恢复 ───
+  {
+    "name": "restore_snapshot",
+    "description": "从快照恢复指定文件。快照在 write/apply_patch 修改前自动创建。默认恢复到最旧快照（原始文件）。可用 list_snapshots 查看快照列表。指定 index 参数恢复特定版本（0=最旧原始文件，-1=最新，1~N=第 N 份从最旧算）。",
+    "parameters": {
+      "properties": {
+        "index": {
+          "description": "可选快照索引：0=最旧(原始/默认)，-1=最新，1~N=第 N 份",
+          "type": "string"
+        },
+        "path": {
+          "description": "要恢复的文件路径（工作区相对路径，如 \"cmd/main.go\"）",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "requiresApproval": true
+  },
+  {
+    "name": "list_snapshots",
+    "description": "列出指定文件的所有可用快照（按时间倒序，带索引号）。用 restore_snapshot 的 index 参数可恢复指定版本。",
+    "parameters": {
+      "properties": {
+        "path": {
+          "description": "文件路径（工作区相对路径）",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
 ]
 
 return {
   name: 'tool-harness',
-  purpose: 'harness 核心协议工具（read/write/edit/glob/grep/run_code + 后台进程 run_background/read_output/kill_process/job_list）——迁移自内置 RegisterHarnessTools，2026-09 并入 tool-shell（Round4：str_replace_editor/job_output/job_kill 冗余删除）',
-  inject: ['fs', 'bash', 'process'], // ctx.process 后台进程服务（globalBG，跨轮次存活）
+  purpose: 'harness 核心协议工具（read/write/apply_patch/glob/grep/run_code + 快照 list/restore_snapshot）——文件与工作区工具；执行工具由 tool-exec 承载（2026-09 工具重构）；2026-09-12 并入 tool-snapshot',
+  inject: ['fs'],
   apply(ctx) {
     for (const t of tools) {
       const toolDef = {

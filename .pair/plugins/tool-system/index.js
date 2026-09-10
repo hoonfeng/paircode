@@ -5,12 +5,18 @@
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
 // ★ 2026-08-29（t2 集成修复）：移除 generate_commit_message——宿主无对应 Go 实现
 //   （零消费方），claimTool 无存档导致 hostTool 执行必失败；与生成器白名单对齐。
-// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、
-//         history_search、history_list、history_count、tool_stats、todo_write、update_tasks、ask_user、task_create、
-//         progress_checker + goal 组 create_goal/get_goal/update_goal
+// 工具清单：skill_list、load_skill（path 区分 L2 正文/L3 子资源）、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、
+//         history_search、history_list、history_count、tool_stats、update_tasks、ask_user、
+//         progress_checker + goal(op=create/get/edit/pause/resume/complete/blocked)
+// ★ 2026-09-12（剩余插件审查轮）：task_create 工具面已移除——任务写入收敛到
+//   update_tasks（全量替换）。原描述引用不存在的 task_update 属误导；宿主
+//   session_manager 会话级注册与会话桥路由（能力层）保留，需要时可按名恢复。
 // ★ 2026-09-04 合并：tool-progress 插件（进度检查）并入本插件；tool-progress 插件目录已删除。
 // ★ 2026-09 Round3 ③.4 合并：tool-goal 插件（create_goal/get_goal/update_goal，
 //   宿主 goal.go 状态机 + 自动续轮）并入本插件；tool-goal 插件目录已删除。
+// ★ 2026-09 工具面合并：goal 3 工具合并为单工具 goal(op=create/get/edit/pause/
+//   resume/complete/blocked)——op 分派到宿主内部路由名执行器（goal.go 保留
+//   create_goal/get_goal/update_goal 三个 ArchiveHostTool 存档）。
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -25,24 +31,8 @@ const tools = [
   },
   {
     "name": "load_skill",
-    "description": "加载某技能的完整 SKILL.md 正文（L2 渐进式披露）。",
-    "parameters": {
-      "properties": {
-        "name": {
-          "description": "技能名",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "load_skill_resource",
-    "description": "加载某技能的子资源文件（L3 渐进式披露）。",
+    "description": "加载某技能的完整 SKILL.md 正文（L2 渐进式披露），或该技能的子资源文件（L3：传 path）。所有层级（内置/工作区/全局）同名时工作区优先。",
+    "usageGuide": "加载技能全文或子资源（渐进式披露）：先看系统提示中的技能清单（名/描述），需要细则时 load_skill name=xxx 取正文；references/assets/scripts 子文件用 path 指定。",
     "parameters": {
       "properties": {
         "name": {
@@ -50,13 +40,12 @@ const tools = [
           "type": "string"
         },
         "path": {
-          "description": "资源相对路径",
+          "description": "可选：技能内子资源相对路径（如 references/xxx.md）；省略则加载 SKILL.md 正文",
           "type": "string"
         }
       },
       "required": [
-        "name",
-        "path"
+        "name"
       ],
       "type": "object"
     },
@@ -365,36 +354,6 @@ const tools = [
     "systemTool": true
   },
   {
-    "name": "task_create",
-    "description": "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
-    "parameters": {
-      "properties": {
-        "dependencies": {
-          "description": "依赖的任务 ID 列表",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "description": {
-          "description": "详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。",
-          "type": "string"
-        },
-        "subject": {
-          "description": "任务标题，用祈使句（如\"修复登录超时\"）",
-          "type": "string"
-        }
-      },
-      "required": [
-        "subject",
-        "description"
-      ],
-      "type": "object"
-    },
-    "systemTool": true,
-    "usageGuide": "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。"
-  },
-  {
     "name": "progress_checker",
     "description": "检查当前任务完成进度，输出结构化进度报告，识别未完成的任务并给出执行建议。使用场景：任务列表较长时、Agent 不确定下一步做什么时、或用户要求查看进度时。",
     "parameters": {
@@ -421,42 +380,20 @@ const tools = [
 
 const goalTools = [
   {
-    name: 'create_goal',
+    name: 'goal',
     description:
-      '创建同会话完成目标（对齐 goal）。objective 必填（直接给出目标，不做推断）；max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。',
+      '同会话完成目标管理（goal 范式）：创建/查看/更新目标状态。op=create 创建（objective 必填）；op=get 查看当前目标；op=edit 改 objective/max_goal_rounds；op=pause 暂停自动续轮；op=resume 恢复；op=complete 标记完成；op=blocked 标记阻塞（blocked_reason 必填）。创建后每轮结束自动续轮推进，直到 complete/blocked 或达轮次上限。',
     parameters: {
       type: 'object',
       properties: {
-        objective: { type: 'string', description: '目标描述（祈使句，直接给出，如「修复登录超时 bug」）' },
-        max_goal_rounds: { type: 'integer', description: '可选：自动续轮上限（默认 3；0=不限——慎用，会无限续轮）' },
-      },
-      required: ['objective'],
-    },
-    systemTool: true,
-  },
-  {
-    name: 'get_goal',
-    description:
-      '读取当前会话目标（goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed）。无目标返回提示。',
-    parameters: { type: 'object', properties: {}, required: [] },
-    readOnly: true,
-    systemTool: true,
-  },
-  {
-    name: 'update_goal',
-    description:
-      '更新当前会话目标（对齐 goal update）。action ∈ {edit,pause,resume,complete,blocked}；revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。',
-    parameters: {
-      type: 'object',
-      properties: {
-        goal_id: { type: 'string', description: '目标 ID（=会话 ID；get_goal 可查）' },
-        revision: { type: 'integer', description: '当前 revision（get_goal 返回；冲突时拒绝）' },
-        action: { type: 'string', description: 'edit / pause / resume / complete / blocked' },
-        objective: { type: 'string', description: 'edit 用：新目标描述（可选）' },
-        max_goal_rounds: { type: 'integer', description: 'edit 用：新自动续轮上限（可选）' },
+        op: { type: 'string', enum: ['create', 'get', 'edit', 'pause', 'resume', 'complete', 'blocked'], description: '操作：create 创建 / get 查看 / edit 修改 / pause 暂停续轮 / resume 恢复续轮 / complete 完成 / blocked 阻塞' },
+        objective: { type: 'string', description: 'create/edit 用：目标描述（祈使句，直接给出，如「修复登录超时 bug」）' },
+        max_goal_rounds: { type: 'integer', description: 'create/edit 用：自动续轮上限（默认 3；0=不限——慎用，会无限续轮）' },
+        revision: { type: 'integer', description: 'edit/pause/resume/complete/blocked 用：当前 revision（goal(op=get) 返回；乐观锁，冲突拒绝）' },
+        goal_id: { type: 'string', description: '可选：目标 ID（=会话 ID；通常省略——按当前会话自动路由）' },
         blocked_reason: { type: 'string', description: 'blocked 用：阻塞原因（必填）' },
       },
-      required: ['goal_id', 'revision', 'action'],
+      required: ['op'],
     },
     systemTool: true,
   },
@@ -464,7 +401,7 @@ const goalTools = [
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场 + 进度检查 + goal：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*/progress_checker/create_goal/get_goal/update_goal）（tool-progress/tool-goal 已并入）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场 + 进度检查 + goal：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*/progress_checker/goal(op=…)）（tool-progress/tool-goal 已并入）',
   apply(ctx) {
     const all = tools.concat(goalTools)
     for (const t of all) {
@@ -477,7 +414,30 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        // goal/load_skill 单工具：按参数分派到宿主内部路由名执行器
+        // （goal.go 三个 ArchiveHostTool；skill 双执行器 load_skill/load_skill_resource）。
+        execute: t.name === 'goal'
+          ? (args) => {
+              const a = Object.assign({}, args || {})
+              const op = a.op
+              delete a.op
+              if (op === 'create') return ctx.hostTool.exec('create_goal', a)
+              if (op === 'get') return ctx.hostTool.exec('get_goal', a)
+              if (['edit', 'pause', 'resume', 'complete', 'blocked'].includes(op)) {
+                a.action = op
+                return ctx.hostTool.exec('update_goal', a)
+              }
+              return Promise.resolve(
+                'goal：op 无效（可用 create/get/edit/pause/resume/complete/blocked）——未执行任何操作'
+              )
+            }
+          : t.name === 'load_skill'
+            ? (args) => {
+                const a = Object.assign({}, args || {})
+                if (a.path) return ctx.hostTool.exec('load_skill_resource', a)
+                return ctx.hostTool.exec('load_skill', a)
+              }
+            : (args) => ctx.hostTool.exec(t.name, args || {}),
       })
     }
   },

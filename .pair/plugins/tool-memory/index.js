@@ -1,131 +1,65 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-memory — 跨会话记忆（memory_write/read/list/search/delete）
+// tool-memory — 跨会话记忆（单工具 memory(op=write/read/search/list/delete)；2026-09 由 5 工具合并）
 //
 // 迁移（2026-08-22 Round2）：binary 形态 → JS 原生（对齐 tool-core 模式）。
 // 原 execute 调 ctx.binary.exec 复用插件目录 bin/ 下独立二进制（已归档
 // bin/legacy-plugin-bins/），现实现完全在插件内（ctx.fs 读写 .pair/memory/），
 // 不再依赖 ctx.binary。行为复刻 internal/agent/memory.go（frontmatter 格式、
 // MEMORY.md 索引、碎片化提醒、多项目 project 路由）。
-// 工具清单：memory_write、memory_delete、memory_read、memory_list、memory_search
+// 工具清单：memory（op=write/read/search/list/delete）
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
-    "name": "memory_write",
-    "description": "写入或【更新】一条持久记忆（跨会话保留在 .pair/memory/）。**先 memory_search/list 查有无相关记忆——有则用其同名覆盖来更新（先 memory_read 读旧的、融合后写回），别为同一主题反复新建、造成碎片化**。name 唯一标识；type: user(用户偏好)/feedback(纠正与确认的做法)/project(项目决策约束)/reference(外部资源指针)；description 一句话摘要；content 正文。",
-    "usageGuide": "写入或更新一条持久记忆（跨会话保留）。先 memory_search 查有无相关记忆，有则读旧→融合→同名更新，别反复新建造成碎片化。用于记录用户偏好、项目决策、修复方案等。需审核批准。多项目工作区可用 project 参数指定目标项目。",
+    "name": "memory",
+    "description": "跨会话记忆统一入口（.pair/memory/，跨会话保留）。op=write 写入/【更新】一条（name+description+content 必填；**先 search/list 查有无相关记忆——有则用其同名覆盖更新，别反复新建造成碎片化**）；op=read 按 name 读全文；op=search 按关键词搜索（query，匹配名/摘要/正文）；op=list 列出全部总览（名+摘要）；op=delete 删除一条过时/错误记忆（name）。",
+    "usageGuide": "跨会话记忆操作（渐进式披露）：list 看总览、search 查关键词、read 读细则；write 记录用户偏好/项目决策/修复方案（type: user 用户偏好/feedback 纠正确认/project 项目决策约束/reference 外部资源指针）；delete 清理过时记忆。写前先查重，避免碎片化。多项目工作区用 project 指定项目。",
     "parameters": {
       "properties": {
         "content": {
-          "description": "正文",
+          "description": "write 用：正文",
           "type": "string"
         },
         "description": {
-          "description": "一句话摘要",
+          "description": "write 用：一句话摘要",
           "type": "string"
         },
         "name": {
-          "description": "唯一名，用【简短中文】命名（如 数据库连接池配置）；更新已有记忆请用其原名",
+          "description": "write/read/delete 用：唯一名，用【简短中文】命名（如 数据库连接池配置）；更新已有记忆请用其原名",
           "type": "string"
         },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
+        "op": {
+          "description": "操作：write 写入/read 读取/search 搜索/list 总览/delete 删除",
+          "enum": [
+            "write",
+            "read",
+            "search",
+            "list",
+            "delete"
+          ],
           "type": "string"
         },
-        "type": {
-          "description": "user/feedback/project/reference",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "description",
-        "content"
-      ],
-      "type": "object"
-    },
-    "requiresApproval": true
-  },
-  {
-    "name": "memory_delete",
-    "description": "删除一条过时/错误的记忆（按 name）。保持记忆库精简准确，别让过时信息长期误导。",
-    "usageGuide": "删除一条过时/错误的记忆。保持记忆库精简。需审核批准。删除前建议先 memory_read 确认是该条。",
-    "parameters": {
-      "properties": {
-        "name": {
-          "description": "记忆名",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "requiresApproval": true
-  },
-  {
-    "name": "memory_read",
-    "description": "按 name 读取一条记忆的全文。",
-    "usageGuide": "按 name 读一条记忆全文。渐进式披露：先 memory_list 看总览，再用此工具读具体细则。比直接读 .pair/memory/ 文件更方便（自动解析 YAML front-matter）。",
-    "parameters": {
-      "properties": {
-        "name": {
-          "description": "记忆名",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "memory_list",
-    "description": "列出所有记忆的【总览】（名 + 摘要，渐进式披露的总览层）；要某条细则用 memory_read 读全文。",
-    "usageGuide": "列出所有记忆的总览（名+摘要）。先调此工具看有什么记忆，再决定用 memory_read 读哪条。比 bash dir .pair/memory 更友好（渐进式披露+自动维护索引）。",
-    "parameters": {
-      "properties": {
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "memory_search",
-    "description": "按关键词搜索记忆（匹配名/摘要/正文），返回命中条目的名+摘要。",
-    "usageGuide": "按关键词搜索记忆（匹配名/摘要/正文）。要查某个主题是否已有记忆时优先用此工具，比 memory_list 遍历更高效。",
-    "parameters": {
-      "properties": {
         "project": {
           "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
           "type": "string"
         },
         "query": {
-          "description": "关键词",
+          "description": "search 用：关键词",
+          "type": "string"
+        },
+        "type": {
+          "description": "write 用：user/feedback/project/reference",
           "type": "string"
         }
       },
       "required": [
-        "query"
+        "op"
       ],
       "type": "object"
     },
-    "readOnly": true
-  }
+    // 动态审批（2026-09）：write/delete 需人工确认，只读 op 不需要
+    dynamicApproval: (args) => args && (args.op === 'write' || args.op === 'delete'),
+  },
+  // （memory_delete / memory_read / memory_list / memory_search 已并入单工具 memory——op=delete/read/list/search）
 ];
 
 
@@ -162,7 +96,7 @@ function isMemFile(name) {
 const memIndexHeader =
   '# 记忆索引（总览）\n\n' +
   '> 类型：user 用户偏好 / feedback 纠正与确认 / project 项目决策 / reference 外部资源\n' +
-  '> 渐进式披露：先看本总览，需要细则再读对应条目文件（memory_read）。\n\n'
+  '> 渐进式披露：先看本总览，需要细则再读对应条目文件（memory(op=read)）。\n\n'
 
 function memIndexLine(name, desc) {
   return desc ? '- [' + name + '](' + name + '.md) — ' + desc : '- [' + name + '](' + name + '.md)'
@@ -255,7 +189,7 @@ function listMemories(ctx, dir, filter) {
   return lines.join('\n')
 }
 
-// memory_write：写入/更新（frontmatter + 正文），同步维护 MEMORY.md 索引；
+// memoryWrite（op=write）：写入/更新（frontmatter + 正文），同步维护 MEMORY.md 索引；
 // 新建且已有相关记忆时提醒优先更新（防碎片化）。
 function memoryWrite(ctx, args) {
   const dir = memDir(ctx, args)
@@ -274,7 +208,7 @@ function memoryWrite(ctx, args) {
   const sim = similarMemory(ctx, dir, name, name + ' ' + desc + ' ' + content)
   if (sim) {
     return '已新建记忆：' + name + '\n⚠ 已有相关记忆「' + sim +
-      '」——若属同一主题，建议改用 memory_read 读它、融合后用「' + sim + '」更新，而非新建，避免记忆碎片化。'
+      '」——若属同一主题，建议改用 memory(op=read) 读它、融合后用「' + sim + '」更新，而非新建，避免记忆碎片化。'
   }
   return '已记忆：' + name
 }
@@ -310,18 +244,18 @@ function memorySearch(ctx, args) {
 }
 
 const impls = {
-  memory_write: memoryWrite,
-  memory_delete: memoryDelete,
-  memory_read: memoryRead,
-  memory_list: memoryList,
-  memory_search: memorySearch,
+  write: memoryWrite,
+  read: memoryRead,
+  search: memorySearch,
+  list: memoryList,
+  delete: memoryDelete,
 }
 
 
 return {
   name: 'tool-memory',
   inject: ['fs'],
-  purpose: '跨会话记忆（memory_write/read/list/search/delete）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs）完全在插件内（Round2 JS 原生化）',
+  purpose: '跨会话记忆（memory(op=write/read/search/list/delete)）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs）完全在插件内（Round2 JS 原生化；2026-09 由 5 工具合并为单工具）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({
@@ -331,9 +265,19 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         requiresApproval: t.requiresApproval,
+        dynamicApproval: t.dynamicApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => impls[t.name](ctx, args || {}),
+        execute: (args) => {
+          const a = args || {}
+          const fn = impls[a.op]
+          if (!fn) {
+            return Promise.resolve(
+              'memory：op 无效（可用 write/read/search/list/delete）——未执行任何操作'
+            )
+          }
+          return fn(ctx, a)
+        },
       })
     }
   },

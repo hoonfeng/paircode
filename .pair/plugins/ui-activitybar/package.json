@@ -1,7 +1,7 @@
 {
   "name": "ui-activitybar",
   "purpose": "活动栏竖列（左侧图标导航 + activitybar 叠加挂载）",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
@@ -12,7 +12,9 @@
       "slot": "activitybar",
       "kind": "single",
       "scope": "root",
-      "inject": ["@paircode/core"],
+      "inject": [
+        "@paircode/core"
+      ],
       "immediately": true,
       "build": {
         "entry": "src/ui-main-activitybar.js",

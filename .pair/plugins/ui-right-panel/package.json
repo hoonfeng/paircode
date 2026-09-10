@@ -1,7 +1,7 @@
 {
   "name": "ui-right-panel",
   "purpose": "对话面板（含 chat/chat-tools 叠加挂载）",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
@@ -12,7 +12,10 @@
       "slot": "conversation",
       "kind": "single",
       "scope": "root",
-      "inject": ["@paircode/core", "@paircode/layout"],
+      "inject": [
+        "@paircode/core",
+        "@paircode/layout"
+      ],
       "immediately": true,
       "build": {
         "entry": "src/ui-main-right-panel.js",

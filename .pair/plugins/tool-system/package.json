@@ -1,8 +1,8 @@
 {
   "main": "index.js",
   "name": "tool-system",
-  "purpose": "系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）",
+  "purpose": "系统内部工具（update_tasks/tool_stats/history_*/skill_*/mcp_*/ask_user/progress_checker/goal）——全部可更换（手工维护；2026-09 工具面合并：goal 单工具、load_skill 双执行器路由）",
   "scope": "global",
   "type": "plugin",
-  "version": "1.0.1"
+  "version": "1.1.0"
 }

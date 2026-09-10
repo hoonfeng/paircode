@@ -1,7 +1,7 @@
 {
   "name": "git-api",
   "purpose": "Git 接口插件化（17 条）+ Git 源代码管理面板（接口与 UI 一体化）",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
@@ -12,7 +12,9 @@
       "slot": "sidebar",
       "kind": "list",
       "scope": "root",
-      "inject": ["@paircode/core"],
+      "inject": [
+        "@paircode/core"
+      ],
       "immediately": false,
       "build": {
         "entry": "src/ui-main-git.js",
