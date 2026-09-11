@@ -285,7 +285,7 @@ async function main() {
     const el = document.querySelector('.phase-bar')
     if (!el) return null
     const fill = document.querySelector('.phase-bar-fill')
-    return { text: el.textContent.replace(/\\s+/g, ' ').trim(), fill: fill ? fill.style.width : '', icon: !!el.querySelector('svg') }
+    return { text: el.textContent.replace(/\\s+/g, ' ').trim(), fill: fill ? fill.style.width : '', icon: !!el.querySelector('svg'), track: !!document.querySelector('.phase-bar-track') }
   })()`)
   const barRun = await barInfo()
   const barText = (barRun && barRun.text) || ''
@@ -307,12 +307,13 @@ async function main() {
   await sleep(2200)
   const barEnd = await barInfo()
   const endText = (barEnd && barEnd.text) || ''
-  check('结束后统计条切换为「本次运行」文案', /本次运行/.test(endText), endText.slice(0, 120))
+  // ★ 2026-09-12 常态显示：结束后文案为「上次运行」（结果保留，可跨刷新/重启）
+  check('结束后统计条切换为「上次运行」文案（常态定格）', /上次运行/.test(endText), endText.slice(0, 120))
   await sleep(2000)
   const barEnd2 = await barInfo()
   const endText2 = (barEnd2 && barEnd2.text) || ''
   check('结束后耗时/速度定格（2s 后文本不变）', endText === endText2 && /1m\s*0[4-8]s/.test(endText2), JSON.stringify([endText, endText2]))
-  check('结束后进度条 100%', !!barEnd && parseFloat(barEnd.fill) === 100, 'fill=' + (barEnd && barEnd.fill))
+  check('结束后进度条隐藏（空闲态只保留数据）', !!barEnd && barEnd.track === false, 'track=' + (barEnd && barEnd.track))
 
   // 5. 断言③：WS 断线自动重连 + 重连补偿（重拉任务 / 重拉消息）
   await evalJS(`(() => {

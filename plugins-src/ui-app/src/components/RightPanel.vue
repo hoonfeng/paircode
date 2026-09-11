@@ -18,10 +18,11 @@
       <template v-else>
       <!-- 左侧：聊天消息 + 输入区 -->
       <div class="chat-area">
-        <!-- 阶段指示器（自主模式多阶段切换）+ 本次运行统计（耗时/步数/token 速度） -->
+        <!-- 阶段指示器（自主模式多阶段切换）+ 运行统计（耗时/步数/token 速度）——
+             ★ 常态显示：不执行时定格展示该对话「上次运行」的结果（刷新/重启后仍在） -->
         <div v-if="currentPhase || agentRunningConv || runStatsVisible" class="phase-bar">
           <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
-          <span class="phase-text">{{ currentPhase || (agentRunningConv ? '执行中…' : '本次运行') }}</span>
+          <span class="phase-text" :title="runBarTitle">{{ phaseText }}</span>
           <span class="phase-stats">
             <span v-if="runSteps > 0" class="phs-item" :title="'步数：LLM 决策 + 工具执行（本 turn）'"><SvgIcon name="list" :size="10" /> {{ runSteps }} 步</span>
             <span v-if="runToolCalls > 0" class="phs-item" title="工具调用次数"><SvgIcon name="tool" :size="10" /> {{ runToolCalls }} 次</span>
@@ -29,7 +30,8 @@
             <span v-if="runTokenSpeed" class="phs-item" title="输出速度（输出 token / 耗时）"><SvgIcon name="output" :size="10" /> {{ runTokenSpeed }}</span>
             <span v-if="runOutputTokens > 0" class="phs-item" title="本次运行输出 token"><SvgIcon name="database" :size="10" /> {{ formatTokens(runOutputTokens) }}</span>
           </span>
-          <span class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
+          <!-- 进度条仅在运行中显示（空闲定格态不保留满条，避免误读为进行中） -->
+          <span v-if="agentRunningConv || currentPhase" class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
         </div>
         <div class="chat-messages" ref="msgRef" @scroll="onScroll">
           <!-- 顶部加载更多提示 -->
@@ -1060,6 +1062,20 @@ const runStatsVisible = computed(() => {
   const rs = currentRunStat.value
   return !!(rs && rs.startAt && (rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0))
 })
+
+// ★ 常态显示（2026-09-12）：统计条不再只在执行期间可见——agent-events 的
+//   hydrateRunStats() 在启动时从 localStorage 恢复各对话「上次运行」的定格值，
+//   因此不执行（刷新页面 / 重启 IDE 后打开该对话）时同样展示耗时/步数/token 速度。
+// phaseText 统计条文案：运行中跟随阶段（自主模式）或「执行中…」；空闲为「上次运行」。
+const phaseText = computed(() => {
+  if (currentPhase.value) return currentPhase.value
+  if (agentRunningConv.value) return '执行中…'
+  return '上次运行'
+})
+// runBarTitle 统计条悬浮说明（区分实时运行 / 已保留的上次结果）。
+const runBarTitle = computed(() => (agentRunningConv.value || currentPhase.value)
+  ? '本次运行：耗时 / 步数 / 工具次数 / 输出 token / 输出速度（运行中每秒刷新）'
+  : '上次运行：耗时 / 步数 / 工具次数 / 输出 token / 输出速度（结果已保留，刷新或重启后仍在）')
 
 // 计时 tick：仅运行中启动（结束后停止 → 定格值不再变化）
 watch(() => state.agentRunningByConv[state.currentConvId], (running) => {

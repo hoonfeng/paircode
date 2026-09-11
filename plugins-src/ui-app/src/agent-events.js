@@ -874,6 +874,8 @@ export function beginRun(convId) {
 export function endRun(convId) {
   const rs = state.runStatsByConv[convId]
   if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now()
+  // ★ 常态显示：定格值落盘（刷新页面/重启 IDE 后打开该对话仍能看到本次结果）
+  if (rs && rs.endAt) persistRunStats()
 }
 
 // resetRunStat 清空某对话的运行统计（新建对话等场景调用）。
@@ -884,7 +886,77 @@ export function resetRunStat(convId) {
       startAt: 0, endAt: 0, steps: 0, toolCalls: 0, llmCalls: 0,
       promptTokens: 0, completionTokens: 0,
     })
+    persistRunStats()   // 同步清掉持久化条目（清零后不再满足落盘条件）
   }
+}
+
+// ─── ★ 运行统计持久化（常态显示：上次运行结果跨刷新/重启保留）──
+// 口径：每个对话只保留「最近一次已完成运行」的定格值（endAt 存在且确有数据）；
+//   运行中的实时值不落盘——刷新后由 status/事件流重建，避免半程数据被当成结果。
+// 存储：localStorage（与 ui-state 的 paircode-* 同前缀；纯前端，不依赖后端接口）。
+const RUN_STATS_LS_KEY = 'paircode-run-stats'
+const RUN_STATS_LS_MAX = 80   // 最多保留的对话条数（超限按 endAt 淘汰最旧）
+let runStatsPersistTimer = null
+
+// persistRunStatsNow 立即落盘（内部：收集所有已定格条目 + 容量淘汰）。
+function persistRunStatsNow() {
+  try {
+    const out = {}
+    for (const convId of Object.keys(state.runStatsByConv)) {
+      const rs = state.runStatsByConv[convId]
+      if (!rs || !rs.startAt || !rs.endAt) continue
+      if (!(rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0)) continue
+      out[convId] = {
+        startAt: rs.startAt, endAt: rs.endAt,
+        steps: rs.steps, toolCalls: rs.toolCalls, llmCalls: rs.llmCalls,
+        promptTokens: rs.promptTokens, completionTokens: rs.completionTokens,
+      }
+    }
+    const ids = Object.keys(out)
+    if (ids.length > RUN_STATS_LS_MAX) {
+      ids.sort((a, b) => (out[a].endAt || 0) - (out[b].endAt || 0))   // 旧 → 新
+      for (const id of ids.slice(0, ids.length - RUN_STATS_LS_MAX)) delete out[id]
+    }
+    localStorage.setItem(RUN_STATS_LS_KEY, JSON.stringify(out))
+  } catch (e) {
+    console.warn('[AE] 运行统计持久化失败（忽略）', e)
+  }
+}
+
+// persistRunStats 节流落盘（结束路径多点触发时合并为一次写入）。
+export function persistRunStats() {
+  if (runStatsPersistTimer) return
+  runStatsPersistTimer = setTimeout(() => {
+    runStatsPersistTimer = null
+    persistRunStatsNow()
+  }, 500)
+}
+
+// hydrateRunStats 启动时恢复上次运行统计（幂等：已有实时数据的对话跳过，实时值优先）。
+export function hydrateRunStats() {
+  let obj = null
+  try {
+    const raw = localStorage.getItem(RUN_STATS_LS_KEY)
+    if (!raw) return
+    obj = JSON.parse(raw)
+  } catch (e) {
+    console.warn('[AE] 运行统计恢复失败（忽略）', e)
+    return
+  }
+  if (!obj || typeof obj !== 'object') return
+  let n = 0
+  for (const convId of Object.keys(obj)) {
+    const v = obj[convId]
+    if (!v || !v.endAt) continue
+    if (state.runStatsByConv[convId]) continue   // 运行中/本次会话已有 → 实时值优先
+    state.runStatsByConv[convId] = reactive({
+      startAt: v.startAt || 0, endAt: v.endAt || 0,
+      steps: v.steps || 0, toolCalls: v.toolCalls || 0, llmCalls: v.llmCalls || 0,
+      promptTokens: v.promptTokens || 0, completionTokens: v.completionTokens || 0,
+    })
+    n++
+  }
+  if (n > 0) console.log('[AE] 已恢复 %d 个对话的上次运行统计（常驻展示）', n)
 }
 
 export function getConvCtxStats(convId) {
@@ -909,3 +981,7 @@ export function resetConvCtxStats(convId) {
     })
   }
 }
+
+// ★ 常态显示：模块加载（壳 / 区域包任一入口 import 本模块）即恢复上次运行统计。
+//   幂等：已有实时数据的对话跳过；恢复后的对象为 reactive，RightPanel 统计条即时可见。
+hydrateRunStats()

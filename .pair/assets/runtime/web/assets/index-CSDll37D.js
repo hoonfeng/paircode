@@ -13256,6 +13256,7 @@
   function endRun(convId) {
     const rs = state.runStatsByConv[convId];
     if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now();
+    if (rs && rs.endAt) persistRunStats();
   }
   function resetRunStat(convId) {
     const rs = state.runStatsByConv[convId];
@@ -13269,7 +13270,74 @@
         promptTokens: 0,
         completionTokens: 0
       });
+      persistRunStats();
     }
+  }
+  const RUN_STATS_LS_KEY = "paircode-run-stats";
+  const RUN_STATS_LS_MAX = 80;
+  let runStatsPersistTimer = null;
+  function persistRunStatsNow() {
+    try {
+      const out = {};
+      for (const convId of Object.keys(state.runStatsByConv)) {
+        const rs = state.runStatsByConv[convId];
+        if (!rs || !rs.startAt || !rs.endAt) continue;
+        if (!(rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0)) continue;
+        out[convId] = {
+          startAt: rs.startAt,
+          endAt: rs.endAt,
+          steps: rs.steps,
+          toolCalls: rs.toolCalls,
+          llmCalls: rs.llmCalls,
+          promptTokens: rs.promptTokens,
+          completionTokens: rs.completionTokens
+        };
+      }
+      const ids = Object.keys(out);
+      if (ids.length > RUN_STATS_LS_MAX) {
+        ids.sort((a, b) => (out[a].endAt || 0) - (out[b].endAt || 0));
+        for (const id of ids.slice(0, ids.length - RUN_STATS_LS_MAX)) delete out[id];
+      }
+      localStorage.setItem(RUN_STATS_LS_KEY, JSON.stringify(out));
+    } catch (e) {
+      console.warn("[AE] 运行统计持久化失败（忽略）", e);
+    }
+  }
+  function persistRunStats() {
+    if (runStatsPersistTimer) return;
+    runStatsPersistTimer = setTimeout(() => {
+      runStatsPersistTimer = null;
+      persistRunStatsNow();
+    }, 500);
+  }
+  function hydrateRunStats() {
+    let obj = null;
+    try {
+      const raw = localStorage.getItem(RUN_STATS_LS_KEY);
+      if (!raw) return;
+      obj = JSON.parse(raw);
+    } catch (e) {
+      console.warn("[AE] 运行统计恢复失败（忽略）", e);
+      return;
+    }
+    if (!obj || typeof obj !== "object") return;
+    let n = 0;
+    for (const convId of Object.keys(obj)) {
+      const v = obj[convId];
+      if (!v || !v.endAt) continue;
+      if (state.runStatsByConv[convId]) continue;
+      state.runStatsByConv[convId] = /* @__PURE__ */ reactive({
+        startAt: v.startAt || 0,
+        endAt: v.endAt || 0,
+        steps: v.steps || 0,
+        toolCalls: v.toolCalls || 0,
+        llmCalls: v.llmCalls || 0,
+        promptTokens: v.promptTokens || 0,
+        completionTokens: v.completionTokens || 0
+      });
+      n++;
+    }
+    if (n > 0) console.log("[AE] 已恢复 %d 个对话的上次运行统计（常驻展示）", n);
   }
   function getConvCtxStats(convId) {
     if (!state.convCtxStatsByConv[convId]) {
@@ -13304,6 +13372,7 @@
       });
     }
   }
+  hydrateRunStats();
   const agentEvents = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     beginRun,
@@ -13312,8 +13381,10 @@
     getConvCtxStats,
     getConvRuntime,
     getRunStat,
+    hydrateRunStats,
     markHistoryLoaded,
     normalizeAskType,
+    persistRunStats,
     processAgentDisconnect,
     processAgentDone,
     processAgentEvent,
