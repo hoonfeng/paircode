@@ -1203,6 +1203,18 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			}
 			jsonResp(w, m)
 
+		case sub == "run-stats":
+			// ★ 2026-09-12 后端运行统计（run_stats.go）：每会话「最近一次运行」的
+			//   耗时 / 步数 / 工具调用（次数 + 累计耗时）/ LLM 调用（次数 + 生成耗时）/
+			//   token 用量 / 输出速度（t/s 由后端派生：生成阶段耗时为分母）。
+			//   运行中返回内存实时累加值；结束后为定格值（已落盘 .pair/run-stats.json，
+			//   刷新页面 / 重启 IDE 后仍可读——前端不再自行计算与持久化）。
+			statsRoot := wsRoot
+			if statsRoot == "" {
+				statsRoot = core.Root()
+			}
+			jsonResp(w, agent.RunStatsFor(statsRoot, id))
+
 		case sub == "":
 			meta, err := store.GetConversation(id)
 			if err != nil {
@@ -2232,9 +2244,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	//   自动续跑（受 maxToolBudgetSegments 约束）负责，宿主不再传迭代数。
 
 	return agent.LoopOpts{
-		Provider:      prov,
-		Registry:      reg,
-		System:        sys,
+		Provider: prov,
+		Registry: reg,
+		System:   sys,
 		// ★ 2026-09-12 分段续跑配置化：单段工具调用预算 / 续跑段数上限由
 		//   agentloop 插件注册配置（pluginSettings.agentloop）经装配器透传
 		//   （见 .pair/plugins/agentloop/index.js 的 ctx.loopFactory.register）；

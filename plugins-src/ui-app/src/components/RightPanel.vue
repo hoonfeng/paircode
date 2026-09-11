@@ -24,11 +24,11 @@
           <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
           <span class="phase-text" :title="runBarTitle">{{ phaseText }}</span>
           <span class="phase-stats">
-            <span v-if="runSteps > 0" class="phs-item" :title="'步数：LLM 决策 + 工具执行（本 turn）'"><SvgIcon name="list" :size="10" /> {{ runSteps }} 步</span>
-            <span v-if="runToolCalls > 0" class="phs-item" title="工具调用次数"><SvgIcon name="tool" :size="10" /> {{ runToolCalls }} 次</span>
-            <span v-if="runElapsedText" class="phs-item" title="本次运行耗时"><SvgIcon name="clock" :size="10" /> {{ runElapsedText }}</span>
-            <span v-if="runTokenSpeed" class="phs-item" title="输出速度（输出 token / 耗时）"><SvgIcon name="output" :size="10" /> {{ runTokenSpeed }}</span>
-            <span v-if="runOutputTokens > 0" class="phs-item" title="本次运行输出 token"><SvgIcon name="database" :size="10" /> {{ formatTokens(runOutputTokens) }}</span>
+            <span v-if="runSteps > 0" class="phs-item" title="步数：一次 LLM 调用 + 工具执行 = 一步（后端统计）"><SvgIcon name="list" :size="10" /> {{ runSteps }} 步</span>
+            <span v-if="runToolCalls > 0" class="phs-item" :title="'工具调用次数（后端统计）' + (runToolMsText ? '，累计工具耗时 ' + runToolMsText : '')"><SvgIcon name="tool" :size="10" /> {{ runToolCalls }} 次<span v-if="runToolMsText" class="phs-sub"> · {{ runToolMsText }}</span></span>
+            <span v-if="runElapsedText" class="phs-item" title="本次运行墙钟耗时（含工具执行/审批等待）"><SvgIcon name="clock" :size="10" /> {{ runElapsedText }}</span>
+            <span v-if="runTokenSpeed" class="phs-item" title="输出速度 = 输出 token ÷ LLM 生成耗时（首 token → 末 token，不含工具执行；后端计算）"><SvgIcon name="output" :size="10" /> {{ runTokenSpeed }}</span>
+            <span v-if="runOutputTokens > 0" class="phs-item" title="本次运行累计输出 token（后端统计）"><SvgIcon name="database" :size="10" /> {{ formatTokens(runOutputTokens) }}</span>
           </span>
           <!-- 进度条仅在运行中显示（空闲定格态不保留满条，避免误读为进行中） -->
           <span v-if="agentRunningConv || currentPhase" class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
@@ -277,7 +277,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { state, rightPanelWidth } from '../ui-state.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import SheetPicker from './SheetPicker.vue'
@@ -1014,9 +1014,14 @@ const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || ''
 //   显示，运行中无 phase 事件时统计条整条不出现；现显式声明）
 const agentRunningConv = computed(() => !!state.agentRunningByConv[state.currentConvId])
 
-// ── ★ 本次运行统计（耗时计时 · 步数 · token 速度）──
-// 数据源：agent-events 的 runStatsByConv（usage/step 事件 + status 运行集合维护）；
-// 展示位置：消息区顶部 phase-bar（运行时跟随阶段、结束后定格为本轮结果）。
+// ── ★ 运行统计（耗时 · 步数 · 工具调用 · token 速度）──
+// 数据源：**后端**运行统计（state.runStatsByConv；由 agent-events 的 fetchRunStats
+//   经 GET /api/conversations/{id}/run-stats 拉取）。后端 agent 循环埋点累加
+//   （Go 循环与 JS 循环共用入口）并持久化到 .pair/run-stats.json —— 前端不累加、
+//   不本地持久化（前端累加受丢事件/刷新影响，不可信）。
+//   ★ token 速度由后端派生：输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
+//     不含工具执行 / 审批等待 / prefill 排队；旧实现用整段运行墙钟当分母 → 严重低估。
+// 展示位置：消息区顶部 phase-bar（运行中实时刷新，结束后定格为本轮结果）。
 const currentRunStat = computed(() => state.runStatsByConv[state.currentConvId] || null)
 const runTick = ref(0)   // 计时 tick（运行中每秒 +1 驱动刷新）
 let runTickTimer = null
@@ -1038,23 +1043,32 @@ function formatTokens(n) {
   return (v / 1000000).toFixed(1) + 'M'
 }
 
-// runElapsedMs 本次运行耗时：运行中随 tick 每秒增长，结束后定格为 endAt - startAt
+// runElapsedMs 本次运行耗时：运行中随 tick 每秒增长（后端 startAt 为同机时间），
+// 结束后定格为后端派生值 durationMs。
 const runElapsedMs = computed(() => {
   const rs = currentRunStat.value
   void runTick.value   // 依赖 tick → 运行中每秒重算
   if (!rs || !rs.startAt) return 0
-  return (rs.endAt || Date.now()) - rs.startAt
+  if (rs.endAt || !rs.running) {
+    return rs.durationMs || (rs.endAt > rs.startAt ? rs.endAt - rs.startAt : 0)
+  }
+  return Math.max(0, Date.now() - rs.startAt)
 })
 const runElapsedText = computed(() => (runElapsedMs.value >= 1000 ? formatDuration(runElapsedMs.value) : ''))
 const runSteps = computed(() => { const rs = currentRunStat.value; return rs && rs.steps > 0 ? rs.steps : 0 })
 const runToolCalls = computed(() => (currentRunStat.value ? currentRunStat.value.toolCalls : 0))
+// runToolMsText 工具执行累计耗时（仅 ≥1s 显示，避免碎片数字干扰）
+const runToolMsText = computed(() => {
+  const ms = currentRunStat.value ? currentRunStat.value.toolMs : 0
+  return ms >= 1000 ? formatDuration(ms) : ''
+})
 const runOutputTokens = computed(() => (currentRunStat.value ? currentRunStat.value.completionTokens : 0))
-// runTokenSpeed 输出速度：输出 token / 耗时（不足 1s 不显示，避免首 token 前抖动）
+// runTokenSpeed 输出速度：直接用后端派生值（输出 token ÷ LLM 生成耗时），
+// 前端不做除法——避免再次把工具/审批等待算进生成时间。
 const runTokenSpeed = computed(() => {
   const rs = currentRunStat.value
-  const sec = runElapsedMs.value / 1000
-  if (!rs || rs.completionTokens <= 0 || sec < 1) return ''
-  const tps = rs.completionTokens / sec
+  if (!rs || !(rs.tokensPerSecond > 0)) return ''
+  const tps = rs.tokensPerSecond
   return (tps >= 100 ? Math.round(tps) : tps.toFixed(1)) + ' t/s'
 })
 // runStatsVisible 统计条显示条件：本次运行有任一数据（结束定格后仍显示，切会话即切换）
@@ -1063,9 +1077,9 @@ const runStatsVisible = computed(() => {
   return !!(rs && rs.startAt && (rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0))
 })
 
-// ★ 常态显示（2026-09-12）：统计条不再只在执行期间可见——agent-events 的
-//   hydrateRunStats() 在启动时从 localStorage 恢复各对话「上次运行」的定格值，
-//   因此不执行（刷新页面 / 重启 IDE 后打开该对话）时同样展示耗时/步数/token 速度。
+// ★ 常态显示（2026-09-12）：统计条不再只在执行期间可见——打开/切换会话时
+//   fetchRunStats 从后端拉取该会话「最近一次运行」的定格值（后端持久化于
+//   .pair/run-stats.json），因此刷新页面 / 重启 IDE 后同样展示耗时/步数/token 速度。
 // phaseText 统计条文案：运行中跟随阶段（自主模式）或「执行中…」；空闲为「上次运行」。
 const phaseText = computed(() => {
   if (currentPhase.value) return currentPhase.value
@@ -1074,8 +1088,8 @@ const phaseText = computed(() => {
 })
 // runBarTitle 统计条悬浮说明（区分实时运行 / 已保留的上次结果）。
 const runBarTitle = computed(() => (agentRunningConv.value || currentPhase.value)
-  ? '本次运行：耗时 / 步数 / 工具次数 / 输出 token / 输出速度（运行中每秒刷新）'
-  : '上次运行：耗时 / 步数 / 工具次数 / 输出 token / 输出速度（结果已保留，刷新或重启后仍在）')
+  ? '本次运行（后端统计）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度（运行中每 2s 刷新）'
+  : '上次运行（后端统计，已落盘）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度；速度 = 输出 token ÷ LLM 生成耗时')
 
 // 计时 tick：仅运行中启动（结束后停止 → 定格值不再变化）
 watch(() => state.agentRunningByConv[state.currentConvId], (running) => {
@@ -2042,6 +2056,8 @@ const reloadConvMessages = async (convId) => {
   state.msgLoadedByConv[convId] = mergedMsgs.length
   // ★ 刷新门控：reload 也算历史加载完成（flush 门控期间的 WS 事件）
   markHistoryLoaded(convId)
+  // ★ 运行统计（后端真源）：会话切换/续跑后拉取该会话最近一次运行结果
+  fetchRunStats(convId)
   if (state.currentConvId === convId) {
     state.messages = mergedMsgs
     state.chatLoading = false
@@ -2146,6 +2162,9 @@ const switchConv = async (id) => {
       // ★ 刷新门控：历史加载完成 → flush 门控期间的 WS 快照/事件（快照重建
       //   当前回合、事件续接增量），否则快照/流式先到会挤占历史加载。
       markHistoryLoaded(id)
+      // ★ 运行统计（后端真源）：切换到该会话即拉取其最近一次运行结果
+      //   （运行中的会话由 agent-events 的轮询持续刷新）
+      fetchRunStats(id)
     } else {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
@@ -2661,6 +2680,8 @@ onUnmounted(() => {
 .phase-text { font-weight: 600; }
 .phase-stats { display: flex; gap: 12px; margin-left: auto; }
 .phs-item { display: flex; align-items: center; gap: 3px; color: rgba(212, 167, 78, 0.6); font-size: 10px; }
+/* phs-sub 统计条内的次要数值（如工具累计耗时），弱化一级避免与主数值抢注意力 */
+.phs-sub { color: rgba(212, 167, 78, 0.42); }
 .phase-bar-track { width: 100%; height: 2px; background: rgba(212, 167, 78, 0.1); border-radius: 1px; margin-top: 2px; }
 .phase-bar-fill { height: 100%; background: #d4a74e; border-radius: 1px; transition: width 1s ease; }
 .folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }

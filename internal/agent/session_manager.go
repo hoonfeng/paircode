@@ -602,6 +602,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
+	// ★ 后端运行统计（run_stats.go，2026-09-12）：挂载本次运行的统计累加器。
+	//   步数（beginStep）、LLM 调用次数/生成耗时/token 用量、工具调用次数与耗时
+	//   全部由 Loop 在运行期累加（Go 循环与 JS 循环共用同一入口）；
+	//   本会话结束（正常/用户停止/异常）时在下方 goroutine 的 defer 中定格并落盘。
+	//   ★ 一次会话 = 一次运行：段预算自动续跑的多段在同一 Loop 上累加，不重复计数。
+	loop.SetRunStats(BeginRunStatsFor(opts.WorkspaceRoot, convID))
+
 	// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入背景快照
 	//   （运行中 goal(op=create) 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
 	// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages 第一条）
@@ -868,6 +875,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// 同时写入全局订阅者（WebSocket 端点），让跨工作区的所有会话事件都可通过单一连接传输。
 	// Events 关闭后退出，并关闭所有剩余订阅者 channel（通知订阅者流结束）。
 	go func() {
+		// ★ 2026-09-12：订阅者投递失败（缓冲满）此前完全静默——排查「前端突然不再
+		//   输出 agent 内容」时无任何线索。现累计并低频打日志（首 3 次 + 每 500 条），
+		//   便于定位「事件被丢弃」与「客户端消费慢/写阻塞」。
+		subDropped := 0
 		for e := range sess.Events {
 			sess.subMu.RLock()
 			subs := sess.subscribers
@@ -876,6 +887,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				select {
 				case sub <- e:
 				default:
+					subDropped++
 				}
 			}
 			// 全局订阅者 fan-out（WebSocket）
@@ -887,7 +899,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				select {
 				case gsub <- ge:
 				default:
+					subDropped++
 				}
+			}
+			if subDropped > 0 && (subDropped <= 3 || subDropped%500 == 0) {
+				log.Printf("[session] 订阅者事件丢弃 conv=%s 累计=%d（订阅者缓冲满：前端消费慢/WS 写阻塞 → 客户端缺事件，重连时由 snapshot 补偿）", convID, subDropped)
 			}
 		}
 		// Events 已关闭：清空 subscribers 并逐个 close（通知订阅者流结束）。
@@ -925,6 +941,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			}
 			// 更新 History（loop.Run 的 defer 已更新 loop.History，同步到 session）
 			sess.History = loop.History
+			// ★ 后端运行统计：定格本次运行（endAt + 速度派生 + 落盘 .pair/run-stats.json）。
+			//   放在 History 同步之后、状态标记之前：任何结束路径（正常完成/用户停止/
+			//   异常/panic）都会执行 → 前端刷新后仍能读到本轮结果。
+			EndRunStatsFor(opts.WorkspaceRoot, convID)
 			// ★ 持久化中断状态：异常/用户停止 → interrupted=true（任务未完成，前端显示"可继续"），
 			//   正常完成（err==nil）→ false。此标记写入 index.json，跨进程重启保留。
 			if store != nil {
@@ -1493,7 +1513,11 @@ func (m *SessionManager) SendFeedback(convID string, feedback string) error {
 // 供 WebSocket 端点使用：单一连接接收所有并行会话事件，每条 GlobalEvent 携带 convID。
 // 调用方应在连接关闭时调 UnsubscribeAll 释放资源。
 func (m *SessionManager) SubscribeAll() <-chan GlobalEvent {
-	ch := make(chan GlobalEvent, 200)
+	// ★ 2026-09-12：容量 200 → 2000。流式事件（thinking/content 每 chunk 一条）在长任务下
+	//   可达每秒数十条；客户端写慢（浏览器主线程忙/后台标签节流）时 200 缓冲瞬间打满 →
+	//   后续事件被 fan-out 静默丢弃 → 前端「agent 在跑但内容缺块/看起来停了」。
+	//   加大缓冲显著降低概率；配合 fan-out 的丢弃日志（可见化）与重连 snapshot 补偿。
+	ch := make(chan GlobalEvent, 2000)
 	m.globalSubMu.Lock()
 	m.globalSubscribers = append(m.globalSubscribers, ch)
 	m.globalSubMu.Unlock()

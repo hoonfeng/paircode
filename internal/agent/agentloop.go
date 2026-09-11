@@ -80,6 +80,8 @@ func (l *Loop) openTurn() {
 // 对应 step/start。
 func (l *Loop) beginStep() {
 	l.StepNo++
+	// ★ 后端运行统计：步数（两条循环路径共用本入口：Go 回退循环与 JS 循环 ctrl.beginStep）
+	l.stats.addStep()
 	l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/start] 模型调用 #%d", l.TurnNo, l.StepNo, l.StepNo)})
 }
 

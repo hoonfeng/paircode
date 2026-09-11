@@ -119,6 +119,8 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
 		//   统一全量工具面，跨轮次前缀稳定（实测修复后跨轮首请求命中 98.2%）。
 		callStart := time.Now()
+		// ★ 后端运行统计（run_stats.go）：本次调用的生成阶段计时（首 chunk → 末 chunk）
+		var firstChunkAt, lastChunkAt time.Time
 		log.Printf("[loop-js] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
 			l.TurnNo, l.StepNo, l.getProvider().Name(), len(jmsgs), len(jtools))
 		FireLLMTracer(LLMTraceEvent{
@@ -126,6 +128,12 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			Provider: l.getProvider().Name(), Messages: jmsgs, Tools: jtools,
 		})
 		assistant, cerr := l.getProvider().Chat(r.ctx, jmsgs, jtools, func(c Chunk) {
+			// ★ 后端运行统计：生成阶段计时（首 chunk → 末 chunk，token 速度分母）
+			now := time.Now()
+			if firstChunkAt.IsZero() {
+				firstChunkAt = now
+			}
+			lastChunkAt = now
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}
@@ -180,6 +188,15 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			resp.Err = cerr.Error()
 		}
 		FireLLMTracer(resp)
+		// ★ 后端运行统计：记录本次 LLM 调用（次数 / 调用耗时 / 生成耗时 / token 用量）。
+		//   失败调用同样计入，在 panic 返回前累加。
+		{
+			genMs := int64(0)
+			if !firstChunkAt.IsZero() && !lastChunkAt.IsZero() {
+				genMs = lastChunkAt.Sub(firstChunkAt).Milliseconds()
+			}
+			l.stats.addLLMCall(lastUsage, time.Since(callStart).Milliseconds(), genMs)
+		}
 		if cerr != nil {
 			log.Printf("[loop-js] LLM 调用失败 turn=%d step=%d 耗时=%s err=%v",
 				l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), cerr)
@@ -230,8 +247,10 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if v := call.Argument(2); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 			callID = v.String()
 		}
+		toolStart := time.Now()
 		result, terr := l.Registry.Execute(r.ctx, name, argsJSON)
-		l.noteToolCall() // ★ 段预算·工具调用闸计数（已实际执行，见 tool_budget.go）
+		l.stats.addToolCall(time.Since(toolStart)) // ★ 后端运行统计：工具次数 + 耗时
+		l.noteToolCall()                           // ★ 段预算·工具调用闸计数（已实际执行，见 tool_budget.go）
 		out := map[string]any{"content": result, "error": nil, "id": callID}
 		if terr != nil {
 			out["content"] = "Error: " + terr.Error()

@@ -11505,8 +11505,11 @@
     // ★ 各对话「本次运行」统计（耗时计时/步数/token 速度展示）——
     //   由 agent-events 的 usage/step 事件与 status 运行集合维护，RightPanel 渲染。
     //   运行中实时刷新（1s tick），结束后 endAt 定格保留（切会话显示各自的）。
+    // { [convId]: { startAt, endAt, durationMs, running, steps, toolCalls, toolMs, llmCalls,
+    //               llmMs, genMs, promptTokens, completionTokens, tokensPerSecond, fetchedAt } }
+    // ★ 2026-09-12：字段与**后端**运行统计对齐（GET /api/conversations/{id}/run-stats）；
+    //   前端只缓存展示，不累加、不本地持久化（真源在后端 .pair/run-stats.json）。
     runStatsByConv: {},
-    // { [convId]: { startAt, endAt, steps, toolCalls, llmCalls, promptTokens, completionTokens } }
     msgTotalByConv: {},
     // { [convId]: number } 各对话总消息数（懒加载判断是否还有更早消息）
     msgLoadedByConv: {},
@@ -12502,10 +12505,16 @@
   }
   const wsPendingByConv = /* @__PURE__ */ new Map();
   const historyLoadedConvs = /* @__PURE__ */ new Set();
-  function markHistoryLoaded(convId) {
-    if (!convId) return;
-    historyLoadedConvs.add(convId);
+  const WS_PENDING_MAX_MS = 3e3;
+  const WS_PENDING_MAX_EVENTS = 2e3;
+  const wsPendingTimers = /* @__PURE__ */ new Map();
+  function flushPendingEvents(convId, reason) {
     const pend = wsPendingByConv.get(convId);
+    const timer = wsPendingTimers.get(convId);
+    if (timer) {
+      clearTimeout(timer);
+      wsPendingTimers.delete(convId);
+    }
     if (!pend) return;
     wsPendingByConv.delete(convId);
     const { snapshot, events } = pend;
@@ -12516,14 +12525,21 @@
         console.warn("[AE] flush snapshot 失败 conv=%s", convId, e);
       }
     }
+    let failed = 0;
     for (const ev of events) {
       try {
         processAgentEvent(convId, ev);
       } catch (e) {
-        console.warn("[AE] flush event 失败 conv=%s", convId, e);
+        failed++;
       }
     }
-    console.log("[AE] markHistoryLoaded flush conv=%s snapshot=%s events=%d", convId, !!snapshot, events.length);
+    if (failed > 0) console.warn("[AE] flush 事件失败 %d/%d conv=%s", failed, events.length, convId);
+    console.log("[AE] flush pending(%s) conv=%s snapshot=%s events=%d", reason, convId, !!snapshot, events.length);
+  }
+  function markHistoryLoaded(convId) {
+    if (!convId) return;
+    historyLoadedConvs.add(convId);
+    flushPendingEvents(convId, "history");
   }
   function startConvRuntime(convId, msgKey, lastUserText = "") {
     runtimes[convId] = {
@@ -12704,18 +12720,26 @@
     if (!historyLoadedConvs.has(convId)) {
       let pend = wsPendingByConv.get(convId);
       if (!pend) {
-        pend = { snapshot: null, events: [] };
+        pend = { snapshot: null, events: [], firstAt: Date.now() };
         wsPendingByConv.set(convId, pend);
+        wsPendingTimers.set(convId, setTimeout(() => {
+          if (!historyLoadedConvs.has(convId)) {
+            historyLoadedConvs.add(convId);
+            console.warn("[AE] 历史加载未在 %dms 内完成——兜底 flush 门控事件 conv=%s（防通讯断裂）", WS_PENDING_MAX_MS, convId);
+          }
+          flushPendingEvents(convId, "timeout");
+        }, WS_PENDING_MAX_MS));
       }
       if (data && data.type === "snapshot") pend.snapshot = data;
-      else pend.events.push(data);
+      else {
+        pend.events.push(data);
+        if (pend.events.length > WS_PENDING_MAX_EVENTS) {
+          pend.events.splice(0, pend.events.length - WS_PENDING_MAX_EVENTS);
+        }
+      }
       return;
     }
-    const runStat = beginRun(convId);
-    if (runStat) {
-      if (typeof data.step === "number" && data.step > runStat.steps) runStat.steps = data.step;
-      if (data.type === "tool_call") runStat.toolCalls++;
-    }
+    beginRun(convId);
     if (!state.messagesByConv[convId]) state.messagesByConv[convId] = [];
     const msgs = state.messagesByConv[convId];
     let rt = runtimes[convId];
@@ -13222,122 +13246,125 @@
     if (!state.runStatsByConv[convId]) {
       state.runStatsByConv[convId] = /* @__PURE__ */ reactive({
         startAt: 0,
-        // 本次运行开始时间（ms）；0 = 未开始
+        // 本次运行开始时间（Unix ms）；0 = 无数据
         endAt: 0,
-        // 本次运行结束时间（ms）；0 = 仍在运行
+        // 结束时间（0 = 运行中）
+        durationMs: 0,
+        // 墙钟总耗时（后端派生）
+        running: false,
+        // 是否运行中
         steps: 0,
-        // 步数（后端 step：LLM 调用 + 工具执行）
+        // 步数（后端 beginStep 累加）
         toolCalls: 0,
-        // 工具调用次数（step 缺失时的兜底展示）
+        // 工具调用次数（后端累加）
+        toolMs: 0,
+        // 工具执行累计耗时
         llmCalls: 0,
-        // LLM 调用次数（usage 事件数）
+        // LLM 调用次数
+        llmMs: 0,
+        // LLM 调用累计耗时（请求往返）
+        genMs: 0,
+        // LLM 生成阶段累计耗时（token 速度分母）
         promptTokens: 0,
-        // 本次运行累计输入 token
-        completionTokens: 0
-        // 本次运行累计输出 token（token 速度用）
+        // 累计输入 token
+        completionTokens: 0,
+        // 累计输出 token
+        tokensPerSecond: 0,
+        // 输出速度（后端派生）
+        fetchedAt: 0
+        // 本地：最近一次拉取时间（用于运行中推断增量）
       });
     }
     return state.runStatsByConv[convId];
   }
-  function beginRun(convId) {
-    const rs = getRunStat(convId);
-    if (!rs) return null;
-    if (!rs.startAt || rs.endAt) {
-      rs.startAt = Date.now();
-      rs.endAt = 0;
-      rs.steps = 0;
-      rs.toolCalls = 0;
-      rs.llmCalls = 0;
-      rs.promptTokens = 0;
-      rs.completionTokens = 0;
+  async function fetchRunStats(convId) {
+    if (!convId) return null;
+    try {
+      const params = state.workspaceRoot ? { workspaceRoot: state.workspaceRoot } : {};
+      const d = await api.apiGet("/conversations/" + encodeURIComponent(convId) + "/run-stats", params);
+      if (!d || typeof d !== "object") return null;
+      const rs = getRunStat(convId);
+      if (!rs) return null;
+      Object.assign(rs, {
+        startAt: d.startAt || 0,
+        endAt: d.endAt || 0,
+        durationMs: d.durationMs || 0,
+        running: !!d.running,
+        steps: d.steps || 0,
+        toolCalls: d.toolCalls || 0,
+        toolMs: d.toolMs || 0,
+        llmCalls: d.llmCalls || 0,
+        llmMs: d.llmMs || 0,
+        genMs: d.genMs || 0,
+        promptTokens: d.promptTokens || 0,
+        completionTokens: d.completionTokens || 0,
+        tokensPerSecond: d.tokensPerSecond || 0,
+        fetchedAt: Date.now()
+      });
+      return rs;
+    } catch (e) {
+      return null;
     }
+  }
+  const runStatsPollTimers = {};
+  function startRunStatsPolling(convId, intervalMs = 2e3) {
+    if (!convId || runStatsPollTimers[convId]) return;
+    runStatsPollTimers[convId] = setInterval(() => {
+      if (!state.agentRunningByConv[convId]) {
+        stopRunStatsPolling(convId);
+        return;
+      }
+      fetchRunStats(convId);
+    }, intervalMs);
+  }
+  function stopRunStatsPolling(convId) {
+    if (!convId) return;
+    const t = runStatsPollTimers[convId];
+    if (t) {
+      clearInterval(t);
+      delete runStatsPollTimers[convId];
+    }
+  }
+  function beginRun(convId) {
+    if (!convId) return null;
+    const rs = getRunStat(convId);
+    startRunStatsPolling(convId);
+    fetchRunStats(convId);
     return rs;
   }
   function endRun(convId) {
-    const rs = state.runStatsByConv[convId];
-    if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now();
-    if (rs && rs.endAt) persistRunStats();
+    if (!convId) return;
+    stopRunStatsPolling(convId);
+    fetchRunStats(convId);
+    setTimeout(() => {
+      fetchRunStats(convId);
+    }, 600);
   }
   function resetRunStat(convId) {
+    if (!convId) return;
+    stopRunStatsPolling(convId);
     const rs = state.runStatsByConv[convId];
-    if (rs) {
-      Object.assign(rs, {
-        startAt: 0,
-        endAt: 0,
-        steps: 0,
-        toolCalls: 0,
-        llmCalls: 0,
-        promptTokens: 0,
-        completionTokens: 0
-      });
-      persistRunStats();
-    }
+    if (!rs) return;
+    Object.assign(rs, {
+      startAt: 0,
+      endAt: 0,
+      durationMs: 0,
+      running: false,
+      steps: 0,
+      toolCalls: 0,
+      toolMs: 0,
+      llmCalls: 0,
+      llmMs: 0,
+      genMs: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      tokensPerSecond: 0,
+      fetchedAt: 0
+    });
   }
-  const RUN_STATS_LS_KEY = "paircode-run-stats";
-  const RUN_STATS_LS_MAX = 80;
-  let runStatsPersistTimer = null;
-  function persistRunStatsNow() {
-    try {
-      const out = {};
-      for (const convId of Object.keys(state.runStatsByConv)) {
-        const rs = state.runStatsByConv[convId];
-        if (!rs || !rs.startAt || !rs.endAt) continue;
-        if (!(rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0)) continue;
-        out[convId] = {
-          startAt: rs.startAt,
-          endAt: rs.endAt,
-          steps: rs.steps,
-          toolCalls: rs.toolCalls,
-          llmCalls: rs.llmCalls,
-          promptTokens: rs.promptTokens,
-          completionTokens: rs.completionTokens
-        };
-      }
-      const ids = Object.keys(out);
-      if (ids.length > RUN_STATS_LS_MAX) {
-        ids.sort((a, b) => (out[a].endAt || 0) - (out[b].endAt || 0));
-        for (const id of ids.slice(0, ids.length - RUN_STATS_LS_MAX)) delete out[id];
-      }
-      localStorage.setItem(RUN_STATS_LS_KEY, JSON.stringify(out));
-    } catch (e) {
-      console.warn("[AE] 运行统计持久化失败（忽略）", e);
-    }
-  }
-  function persistRunStats() {
-    if (runStatsPersistTimer) return;
-    runStatsPersistTimer = setTimeout(() => {
-      runStatsPersistTimer = null;
-      persistRunStatsNow();
-    }, 500);
-  }
-  function hydrateRunStats() {
-    let obj = null;
-    try {
-      const raw = localStorage.getItem(RUN_STATS_LS_KEY);
-      if (!raw) return;
-      obj = JSON.parse(raw);
-    } catch (e) {
-      console.warn("[AE] 运行统计恢复失败（忽略）", e);
-      return;
-    }
-    if (!obj || typeof obj !== "object") return;
-    let n = 0;
-    for (const convId of Object.keys(obj)) {
-      const v = obj[convId];
-      if (!v || !v.endAt) continue;
-      if (state.runStatsByConv[convId]) continue;
-      state.runStatsByConv[convId] = /* @__PURE__ */ reactive({
-        startAt: v.startAt || 0,
-        endAt: v.endAt || 0,
-        steps: v.steps || 0,
-        toolCalls: v.toolCalls || 0,
-        llmCalls: v.llmCalls || 0,
-        promptTokens: v.promptTokens || 0,
-        completionTokens: v.completionTokens || 0
-      });
-      n++;
-    }
-    if (n > 0) console.log("[AE] 已恢复 %d 个对话的上次运行统计（常驻展示）", n);
+  try {
+    localStorage.removeItem("paircode-run-stats");
+  } catch (e) {
   }
   function getConvCtxStats(convId) {
     if (!state.convCtxStatsByConv[convId]) {
@@ -13372,19 +13399,17 @@
       });
     }
   }
-  hydrateRunStats();
   const agentEvents = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     beginRun,
     createAssistantPlaceholder,
     endRun,
+    fetchRunStats,
     getConvCtxStats,
     getConvRuntime,
     getRunStat,
-    hydrateRunStats,
     markHistoryLoaded,
     normalizeAskType,
-    persistRunStats,
     processAgentDisconnect,
     processAgentDone,
     processAgentEvent,
@@ -13394,7 +13419,9 @@
     resetConvRuntime,
     resetRunStat,
     setGlobalCtx,
-    startConvRuntime
+    startConvRuntime,
+    startRunStatsPolling,
+    stopRunStatsPolling
   }, Symbol.toStringTag, { value: "Module" }));
   function normPath(p2) {
     if (typeof p2 !== "string" || !p2) return p2;

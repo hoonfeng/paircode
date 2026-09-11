@@ -9,6 +9,8 @@
 
 import { state } from './ui-state.js'
 import { reactive } from 'vue'
+// ★ 运行统计经后端接口拉取（fetchRunStats）——api.js 不 import 本模块，无循环依赖。
+import api from './api.js'
 
 // ─── 按 convId 存储运行时状态（非响应式，普通对象）──
 // { convId: { msgIdx, finalContent, lastUserText } }
@@ -62,25 +64,44 @@ export function setGlobalCtx(ctx) {
 // 门控方案：历史未加载的会话，其 WS 事件全部入 pending（snapshot 覆盖存储），
 // markHistoryLoaded（switchConv/reload 加载成功）后统一 flush：快照先（重建当前回合），
 // 事件后（增量），与 HTTP 历史无缝拼接。
-const wsPendingByConv = new Map()    // convId → { snapshot: null|data, events: [] }
+const wsPendingByConv = new Map()    // convId → { snapshot: null|data, events: [], firstAt }
 const historyLoadedConvs = new Set() // 已完成历史加载的会话（刷新后防反复门控）
 
-// markHistoryLoaded 标记会话历史已加载并 flush 门控期间的事件。
-// 由 RightPanel 在 apiLoadAndBuildConv 成功后调用（switchConv / reloadConvMessages）。
-export function markHistoryLoaded(convId) {
-  if (!convId) return
-  historyLoadedConvs.add(convId)
+// ★ 2026-09-12 修复「执行中前端突然不再输出 agent 内容」：门控必须有兜底。
+//   原实现只在 historyLoadedConvs 未置位时无期限积压事件，而 markHistoryLoaded 仅由
+//   RightPanel 在历史加载**成功**后调用（apiLoadAndBuildConv 失败/30s 超时返回 null
+//   时不调用）→ 该会话此后所有 WS 事件（content/thinking/tool_call…）永久留在 pending，
+//   界面表现为「agent 仍在跑，但前端再也不出新内容」。现在：pending 超过
+//   WS_PENDING_MAX_MS 即强制 flush 并置位（宁可顺序稍后，也不能永久不显示）。
+const WS_PENDING_MAX_MS = 3000
+const WS_PENDING_MAX_EVENTS = 2000   // 单会话 pending 事件上限（超限丢最旧，防内存膨胀）
+const wsPendingTimers = new Map()    // convId → timeout id
+
+// flushPendingEvents 重放某会话门控期间的快照 + 事件（markHistoryLoaded 与超时兜底共用）。
+function flushPendingEvents(convId, reason) {
   const pend = wsPendingByConv.get(convId)
+  const timer = wsPendingTimers.get(convId)
+  if (timer) { clearTimeout(timer); wsPendingTimers.delete(convId) }
   if (!pend) return
   wsPendingByConv.delete(convId)
   const { snapshot, events } = pend
   if (snapshot) {
     try { processAgentEvent(convId, snapshot) } catch (e) { console.warn('[AE] flush snapshot 失败 conv=%s', convId, e) }
   }
+  let failed = 0
   for (const ev of events) {
-    try { processAgentEvent(convId, ev) } catch (e) { console.warn('[AE] flush event 失败 conv=%s', convId, e) }
+    try { processAgentEvent(convId, ev) } catch (e) { failed++ }
   }
-  console.log('[AE] markHistoryLoaded flush conv=%s snapshot=%s events=%d', convId, !!snapshot, events.length)
+  if (failed > 0) console.warn('[AE] flush 事件失败 %d/%d conv=%s', failed, events.length, convId)
+  console.log('[AE] flush pending(%s) conv=%s snapshot=%s events=%d', reason, convId, !!snapshot, events.length)
+}
+
+// markHistoryLoaded 标记会话历史已加载并 flush 门控期间的事件。
+// 由 RightPanel 在 apiLoadAndBuildConv 成功后调用（switchConv / reloadConvMessages）。
+export function markHistoryLoaded(convId) {
+  if (!convId) return
+  historyLoadedConvs.add(convId)
+  flushPendingEvents(convId, 'history')
 }
 
 // ─── 运行时管理 ──
@@ -255,18 +276,32 @@ export function processAgentEvent(convId, data) {
   //   导致 hasRealMsgs 误判、历史永不加载（「刷新后只有当前 ws 消息」）。
   if (!historyLoadedConvs.has(convId)) {
     let pend = wsPendingByConv.get(convId)
-    if (!pend) { pend = { snapshot: null, events: [] }; wsPendingByConv.set(convId, pend) }
+    if (!pend) {
+      pend = { snapshot: null, events: [], firstAt: Date.now() }
+      wsPendingByConv.set(convId, pend)
+      // ★ 兜底定时器：历史加载成功会经 markHistoryLoaded 立即 flush；失败/超时
+      //   （apiLoadAndBuildConv 返回 null 时不调用 markHistoryLoaded）则由本定时器
+      //   在 WS_PENDING_MAX_MS 后强制 flush 并置位——避免事件永久积压。
+      wsPendingTimers.set(convId, setTimeout(() => {
+        if (!historyLoadedConvs.has(convId)) {
+          historyLoadedConvs.add(convId)
+          console.warn('[AE] 历史加载未在 %dms 内完成——兜底 flush 门控事件 conv=%s（防通讯断裂）', WS_PENDING_MAX_MS, convId)
+        }
+        flushPendingEvents(convId, 'timeout')
+      }, WS_PENDING_MAX_MS))
+    }
     if (data && data.type === 'snapshot') pend.snapshot = data
-    else pend.events.push(data)
+    else {
+      pend.events.push(data)
+      if (pend.events.length > WS_PENDING_MAX_EVENTS) {
+        pend.events.splice(0, pend.events.length - WS_PENDING_MAX_EVENTS)
+      }
+    }
     return
   }
-  // ★ 运行统计（耗时计时/步数/token 速度）：在刷新门控之后统一累加——
-  //   门控内 pending 的事件会在 flush 时重放，若在门控前累加会重复计数。
-  const runStat = beginRun(convId)
-  if (runStat) {
-    if (typeof data.step === 'number' && data.step > runStat.steps) runStat.steps = data.step
-    if (data.type === 'tool_call') runStat.toolCalls++
-  }
+  // ★ 运行统计：不再前端累加（后端埋点为准）——此处只需确保轮询在进行
+  //   （有事件到达即说明会话在跑；beginRun 幂等，且会在会话停止时自动停轮询）。
+  beginRun(convId)
   // 确保 messagesByConv 存在
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
   const msgs = state.messagesByConv[convId]
@@ -829,135 +864,134 @@ export function processStatus(payload) {
   }
 }
 
-// ─── convCtxStats 辅助 ──
-// ─── 运行统计（本次运行耗时/步数/token 速度）辅助 ───
-// 由 usage/step 事件与 status 运行集合维护；RightPanel 渲染为状态条：
-//   ⏱ 耗时（计时到秒，结束后定格）· 步数（step，权威值来自后端 WS payload）
-//   · ⚡ token/s（输出 token / 耗时，流式中实时刷新，结束后定格）
+// ─── 运行统计（★ 2026-09-12 后端权威改造）──
+// 真源在后端（internal/agent/run_stats.go + GET /api/conversations/{id}/run-stats）：
+//   · 步数 / 工具调用次数与累计耗时 / LLM 调用次数与生成耗时 / token 用量
+//     全部由 agent 循环埋点累加（Go 循环与 JS 循环共用入口）；
+//   · token 速度 = 输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
+//     不含工具执行 / 审批等待 / prefill 排队——旧前端用「整段运行墙钟」当分母，
+//     把工具耗时算进生成时间，速度被严重低估；
+//   · 结果落盘 .pair/run-stats.json：刷新页面 / 重启 IDE 后仍可读。
+// 前端职责仅剩：拉取（运行开始/结束/会话切换）、运行中轮询、渲染。
+//   ★ 已删除前端的本地累加与 localStorage 持久化（口径受丢事件与刷新影响，不可信）。
 
-// getRunStat 取（不存在则创建）指定对话的运行统计对象。
+// getRunStat 取（不存在则创建）指定对话的运行统计对象（字段与后端 JSON 对齐）。
 // 用 reactive 包裹：字段变化驱动 RightPanel 展示实时刷新。
 export function getRunStat(convId) {
   if (!convId) return null
   if (!state.runStatsByConv[convId]) {
     state.runStatsByConv[convId] = reactive({
-      startAt: 0,          // 本次运行开始时间（ms）；0 = 未开始
-      endAt: 0,            // 本次运行结束时间（ms）；0 = 仍在运行
-      steps: 0,            // 步数（后端 step：LLM 调用 + 工具执行）
-      toolCalls: 0,        // 工具调用次数（step 缺失时的兜底展示）
-      llmCalls: 0,         // LLM 调用次数（usage 事件数）
-      promptTokens: 0,     // 本次运行累计输入 token
-      completionTokens: 0, // 本次运行累计输出 token（token 速度用）
+      startAt: 0,          // 本次运行开始时间（Unix ms）；0 = 无数据
+      endAt: 0,            // 结束时间（0 = 运行中）
+      durationMs: 0,       // 墙钟总耗时（后端派生）
+      running: false,      // 是否运行中
+      steps: 0,            // 步数（后端 beginStep 累加）
+      toolCalls: 0,        // 工具调用次数（后端累加）
+      toolMs: 0,           // 工具执行累计耗时
+      llmCalls: 0,         // LLM 调用次数
+      llmMs: 0,            // LLM 调用累计耗时（请求往返）
+      genMs: 0,            // LLM 生成阶段累计耗时（token 速度分母）
+      promptTokens: 0,     // 累计输入 token
+      completionTokens: 0, // 累计输出 token
+      tokensPerSecond: 0,  // 输出速度（后端派生）
+      fetchedAt: 0,        // 本地：最近一次拉取时间（用于运行中推断增量）
     })
   }
   return state.runStatsByConv[convId]
 }
 
-// beginRun 开始一次运行计时：已有未结束的计时保持（同一运行内的事件不重置）。
-// 返回统计对象（供调用方直接累加字段）。
-export function beginRun(convId) {
-  const rs = getRunStat(convId)
-  if (!rs) return null
-  if (!rs.startAt || rs.endAt) {
-    rs.startAt = Date.now()
-    rs.endAt = 0
-    rs.steps = 0
-    rs.toolCalls = 0
-    rs.llmCalls = 0
-    rs.promptTokens = 0
-    rs.completionTokens = 0
+// fetchRunStats 从后端拉取指定会话的运行统计（后端 = 唯一真源）。
+// 触发点：运行开始/结束（beginRun/endRun）、会话历史加载完成、运行中轮询。
+export async function fetchRunStats(convId) {
+  if (!convId) return null
+  try {
+    const params = state.workspaceRoot ? { workspaceRoot: state.workspaceRoot } : {}
+    const d = await api.apiGet('/conversations/' + encodeURIComponent(convId) + '/run-stats', params)
+    if (!d || typeof d !== 'object') return null
+    const rs = getRunStat(convId)
+    if (!rs) return null
+    Object.assign(rs, {
+      startAt: d.startAt || 0,
+      endAt: d.endAt || 0,
+      durationMs: d.durationMs || 0,
+      running: !!d.running,
+      steps: d.steps || 0,
+      toolCalls: d.toolCalls || 0,
+      toolMs: d.toolMs || 0,
+      llmCalls: d.llmCalls || 0,
+      llmMs: d.llmMs || 0,
+      genMs: d.genMs || 0,
+      promptTokens: d.promptTokens || 0,
+      completionTokens: d.completionTokens || 0,
+      tokensPerSecond: d.tokensPerSecond || 0,
+      fetchedAt: Date.now(),
+    })
+    return rs
+  } catch (e) {
+    return null   // 拉取失败保持上一次值（不清零，避免统计条闪烁消失）
   }
+}
+
+// ─── 运行中轮询（仅运行中的会话；累加在后端，前端定期取回显示）──
+const runStatsPollTimers = {}
+
+// startRunStatsPolling 启动某会话的运行统计轮询（重复调用幂等）。
+// 会话不再运行（state.agentRunningByConv 变 false）时自动停止——双保险，避免漏停。
+export function startRunStatsPolling(convId, intervalMs = 2000) {
+  if (!convId || runStatsPollTimers[convId]) return
+  runStatsPollTimers[convId] = setInterval(() => {
+    if (!state.agentRunningByConv[convId]) { stopRunStatsPolling(convId); return }
+    fetchRunStats(convId)
+  }, intervalMs)
+}
+
+// stopRunStatsPolling 停止某会话的运行统计轮询。
+export function stopRunStatsPolling(convId) {
+  if (!convId) return
+  const t = runStatsPollTimers[convId]
+  if (t) {
+    clearInterval(t)
+    delete runStatsPollTimers[convId]
+  }
+}
+
+// beginRun 运行开始：拉起轮询并立即取一次后端统计（进程内已有实时值）。
+export function beginRun(convId) {
+  if (!convId) return null
+  const rs = getRunStat(convId)
+  startRunStatsPolling(convId)
+  fetchRunStats(convId)
   return rs
 }
 
-// endRun 结束计时（endAt 定格：UI 显示的总耗时/速度不再变化）。
+// endRun 运行结束：停止轮询并取定格值（后端已 endAt、派生速度并落盘）。
 export function endRun(convId) {
-  const rs = state.runStatsByConv[convId]
-  if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now()
-  // ★ 常态显示：定格值落盘（刷新页面/重启 IDE 后打开该对话仍能看到本次结果）
-  if (rs && rs.endAt) persistRunStats()
+  if (!convId) return
+  stopRunStatsPolling(convId)
+  fetchRunStats(convId)
+  // ★ 后端在会话 goroutine 收尾（done 事件之后）才定格 endAt/落盘 → 稍后补拉一次，
+  //   确保拿到定格值而非运行中值（补拉失败保持上一次值，不影响显示）。
+  setTimeout(() => { fetchRunStats(convId) }, 600)
 }
 
-// resetRunStat 清空某对话的运行统计（新建对话等场景调用）。
+// resetRunStat 清空本地缓存的运行统计（新建对话等场景；后端按会话独立保存，不受影响）。
 export function resetRunStat(convId) {
+  if (!convId) return
+  stopRunStatsPolling(convId)
   const rs = state.runStatsByConv[convId]
-  if (rs) {
-    Object.assign(rs, {
-      startAt: 0, endAt: 0, steps: 0, toolCalls: 0, llmCalls: 0,
-      promptTokens: 0, completionTokens: 0,
-    })
-    persistRunStats()   // 同步清掉持久化条目（清零后不再满足落盘条件）
-  }
+  if (!rs) return
+  Object.assign(rs, {
+    startAt: 0, endAt: 0, durationMs: 0, running: false,
+    steps: 0, toolCalls: 0, toolMs: 0, llmCalls: 0, llmMs: 0, genMs: 0,
+    promptTokens: 0, completionTokens: 0, tokensPerSecond: 0, fetchedAt: 0,
+  })
 }
 
-// ─── ★ 运行统计持久化（常态显示：上次运行结果跨刷新/重启保留）──
-// 口径：每个对话只保留「最近一次已完成运行」的定格值（endAt 存在且确有数据）；
-//   运行中的实时值不落盘——刷新后由 status/事件流重建，避免半程数据被当成结果。
-// 存储：localStorage（与 ui-state 的 paircode-* 同前缀；纯前端，不依赖后端接口）。
-const RUN_STATS_LS_KEY = 'paircode-run-stats'
-const RUN_STATS_LS_MAX = 80   // 最多保留的对话条数（超限按 endAt 淘汰最旧）
-let runStatsPersistTimer = null
-
-// persistRunStatsNow 立即落盘（内部：收集所有已定格条目 + 容量淘汰）。
-function persistRunStatsNow() {
-  try {
-    const out = {}
-    for (const convId of Object.keys(state.runStatsByConv)) {
-      const rs = state.runStatsByConv[convId]
-      if (!rs || !rs.startAt || !rs.endAt) continue
-      if (!(rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0)) continue
-      out[convId] = {
-        startAt: rs.startAt, endAt: rs.endAt,
-        steps: rs.steps, toolCalls: rs.toolCalls, llmCalls: rs.llmCalls,
-        promptTokens: rs.promptTokens, completionTokens: rs.completionTokens,
-      }
-    }
-    const ids = Object.keys(out)
-    if (ids.length > RUN_STATS_LS_MAX) {
-      ids.sort((a, b) => (out[a].endAt || 0) - (out[b].endAt || 0))   // 旧 → 新
-      for (const id of ids.slice(0, ids.length - RUN_STATS_LS_MAX)) delete out[id]
-    }
-    localStorage.setItem(RUN_STATS_LS_KEY, JSON.stringify(out))
-  } catch (e) {
-    console.warn('[AE] 运行统计持久化失败（忽略）', e)
-  }
-}
-
-// persistRunStats 节流落盘（结束路径多点触发时合并为一次写入）。
-export function persistRunStats() {
-  if (runStatsPersistTimer) return
-  runStatsPersistTimer = setTimeout(() => {
-    runStatsPersistTimer = null
-    persistRunStatsNow()
-  }, 500)
-}
-
-// hydrateRunStats 启动时恢复上次运行统计（幂等：已有实时数据的对话跳过，实时值优先）。
-export function hydrateRunStats() {
-  let obj = null
-  try {
-    const raw = localStorage.getItem(RUN_STATS_LS_KEY)
-    if (!raw) return
-    obj = JSON.parse(raw)
-  } catch (e) {
-    console.warn('[AE] 运行统计恢复失败（忽略）', e)
-    return
-  }
-  if (!obj || typeof obj !== 'object') return
-  let n = 0
-  for (const convId of Object.keys(obj)) {
-    const v = obj[convId]
-    if (!v || !v.endAt) continue
-    if (state.runStatsByConv[convId]) continue   // 运行中/本次会话已有 → 实时值优先
-    state.runStatsByConv[convId] = reactive({
-      startAt: v.startAt || 0, endAt: v.endAt || 0,
-      steps: v.steps || 0, toolCalls: v.toolCalls || 0, llmCalls: v.llmCalls || 0,
-      promptTokens: v.promptTokens || 0, completionTokens: v.completionTokens || 0,
-    })
-    n++
-  }
-  if (n > 0) console.log('[AE] 已恢复 %d 个对话的上次运行统计（常驻展示）', n)
-}
+// ★ 运行统计的 localStorage 持久化与启动恢复（hydrateRunStats）已删除（2026-09-12）：
+//   口径真源在后端（.pair/run-stats.json），前端持久化属重复实现且不可信
+//   （丢事件/多标签/清缓存都会偏离真实值）。
+//   一次性清理旧版本遗留的键（避免陈旧值被误读为当前统计）。
+try { localStorage.removeItem('paircode-run-stats') } catch (e) { /* 忽略（无 localStorage 环境） */ }
 
 export function getConvCtxStats(convId) {
   if (!state.convCtxStatsByConv[convId]) {
@@ -982,6 +1016,5 @@ export function resetConvCtxStats(convId) {
   }
 }
 
-// ★ 常态显示：模块加载（壳 / 区域包任一入口 import 本模块）即恢复上次运行统计。
-//   幂等：已有实时数据的对话跳过；恢复后的对象为 reactive，RightPanel 统计条即时可见。
-hydrateRunStats()
+// ★ 运行统计无需启动恢复：数据源在后端（GET /api/conversations/{id}/run-stats），
+//   由 fetchRunStats 在「会话切换 / 运行开始 / 运行结束 / 运行中轮询」时拉取。

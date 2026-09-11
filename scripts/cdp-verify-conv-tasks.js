@@ -273,11 +273,18 @@ async function main() {
   check('刷新后任务面板恢复（两个任务）', domText.includes('VERIFY-A') && domText.includes('VERIFY-B'), domText.slice(0, 160))
 
   // 4. 断言②：运行统计条（注入运行态 → 实时刷新 → 结束定格）
+  //   ★ 2026-09-12 后端统计改造：字段结构与后端 GET /api/conversations/{id}/run-stats
+  //     对齐（durationMs/running/toolMs/genMs/tokensPerSecond 等）——前端只渲染后端值，
+  //     token 速度不再由前端相除（真源与端到端验证见 cdp-verify-runstats-backend.js）。
   const injected = await evalJS(`(() => {
     const st = window.__PAIRCODE_CORE.uiState.state
     const id = ${JSON.stringify(CONV_ID)}
     st.agentRunningByConv[id] = true
-    st.runStatsByConv[id] = { startAt: Date.now() - 65000, endAt: 0, steps: 5, toolCalls: 3, llmCalls: 4, promptTokens: 8000, completionTokens: 1200 }
+    st.runStatsByConv[id] = {
+      startAt: Date.now() - 65000, endAt: 0, durationMs: 65000, running: true,
+      steps: 5, toolCalls: 3, toolMs: 4200, llmCalls: 4, llmMs: 60000, genMs: 40000,
+      promptTokens: 8000, completionTokens: 1200, tokensPerSecond: 30, fetchedAt: Date.now(),
+    }
     return true
   })()`)
   await sleep(1800)
@@ -293,7 +300,7 @@ async function main() {
   check('显示步数 5 步', /5\s*步/.test(barText), barText.slice(0, 120))
   check('显示工具调用 3 次', /3\s*次/.test(barText), barText.slice(0, 120))
   check('显示耗时（注入 65s → 显示 1m 0x s）', /1m\s*0[4-8]s/.test(barText), barText.slice(0, 120))
-  check('显示 token 速度（约 18 t/s）', /t\/s/.test(barText), barText.slice(0, 120))
+  check('显示 token 速度（后端派生值 30 t/s）', /30(\.0)?\s*t\/s/.test(barText), barText.slice(0, 120))
   check('显示输出 token 1.2k', /1\.2k/.test(barText), barText.slice(0, 120))
   check('进度条宽度非 0（运行中）', !!barRun && parseFloat(barRun.fill) > 0 && parseFloat(barRun.fill) < 100, 'fill=' + (barRun && barRun.fill))
 
@@ -301,6 +308,8 @@ async function main() {
     const st = window.__PAIRCODE_CORE.uiState.state
     const id = ${JSON.stringify(CONV_ID)}
     st.runStatsByConv[id].endAt = Date.now()
+    st.runStatsByConv[id].running = false
+    st.runStatsByConv[id].durationMs = 65000
     st.agentRunningByConv[id] = false
     return true
   })()`)

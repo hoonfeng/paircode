@@ -267,6 +267,12 @@ type Loop struct {
 	CompactRequested bool   // 外部设置后下轮迭代触发上下文精简（供主动精简 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
 
+	// stats 本次运行的统计累加器（★ 2026-09-12 后端统计改造，见 run_stats.go）：
+	// 由 SessionManager 在会话启动时挂载（SetRunStats），运行期间累加步数/工具调用
+	// 次数与耗时/LLM 调用次数与生成耗时/token 用量；nil 时所有累加空转（零开销）。
+	// 后端为唯一真源：前端不再自行累加（前端口径受丢事件与刷新影响）。
+	stats *RunStats
+
 	mu sync.Mutex // 保护 ReviewMode 的并发读写（SetReviewMode/getReviewMode）
 
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
@@ -849,7 +855,17 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
 		//   统一全量工具面，跨轮次前缀稳定（实测修复后跨轮首请求命中 98.2%）。
 		var stopReason string
+		// ★ 后端运行统计（run_stats.go）：本次 LLM 调用的生成阶段计时——
+		//   firstChunkAt=首个流式 chunk，lastChunkAt=末个 chunk，差值即「纯生成耗时」，
+		//   不含 prefill/排队/工具执行/审批等待（与 LLM 调用总耗时区分）。
+		var firstChunkAt, lastChunkAt time.Time
+		var callUsage *Usage
 		assistant, err := l.getProvider().Chat(ctx, callMsgs, tools, func(c Chunk) {
+			now := time.Now()
+			if firstChunkAt.IsZero() {
+				firstChunkAt = now
+			}
+			lastChunkAt = now
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}
@@ -868,6 +884,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					usage.PromptBreakdown = pb
 				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
+				callUsage = &usage // 运行统计：本调用 token 用量（回调后累加）
 				// ★ 缓存诊断：记录命中/未命中 + 会话累计命中率
 				if l.cacheDiagOn {
 					l.emitCacheUsage(&usage)
@@ -880,6 +897,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				}
 			}
 		})
+		// ★ 后端运行统计：记录本次 LLM 调用（次数 / 调用耗时 / 生成耗时 / token 用量）。
+		//   失败调用同样计入（计时与用量已产生），在错误返回前累加。
+		{
+			genMs := int64(0)
+			if !firstChunkAt.IsZero() && !lastChunkAt.IsZero() {
+				genMs = lastChunkAt.Sub(firstChunkAt).Milliseconds()
+			}
+			l.stats.addLLMCall(callUsage, time.Since(callStart).Milliseconds(), genMs)
+		}
 		if err != nil {
 			log.Printf("[loop] LLM 调用失败 turn=%d step=%d 耗时=%s err=%v",
 				l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), err)
@@ -1000,8 +1026,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					}
 				}
 
+				toolStart := time.Now()
 				result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
-				l.noteToolCall() // ★ 段预算·工具调用闸计数（见 tool_budget.go）
+				l.stats.addToolCall(time.Since(toolStart)) // ★ 后端运行统计：工具次数 + 耗时
+				l.noteToolCall()                           // ★ 段预算·工具调用闸计数（见 tool_budget.go）
 				if terr != nil {
 					result = "Error: " + terr.Error()
 				} else {
