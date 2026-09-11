@@ -1199,9 +1199,18 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	// ★ agentloop 核心外置：registerLoop(impl) 注册 JS 循环实现（Run 委托 JS 驱动）
 	p.attachLoopRegister(loopFactoryObj)
+	// ★ 2026-09-12 会话交接插件化：registerHandoff({id?, onUserTurn?, onSegment?}) 注册
+	//   JS 交接策略（判断 / 生成 / 复用刷新 / 锚点定位 / 视图组装）。
+	//   宿主两个跨轮边界（用户输入 / 段续跑）委托该实现；未注册或执行失败 → Go 默认实现。
+	//   卸载自动还原（插件停用即回退，零风险）。
+	p.attachHandoffRegister(loopFactoryObj)
 	// ★ LLM 请求/响应完整追踪（llm-trace 缓存分析数据面）：ctx.llmtrace.register(fn)
 	p.attachLLMTrace(ctxObj)
 	ctxObj.Set("loopFactory", loopFactoryObj)
+	// ★ 2026-09-12 ctx.handoff：会话交接无状态能力（阈值 / 锚点指纹 / token 估算 /
+	//   规则摘要 / 相关性解析）。口径桥接自 Go（单一真源）——插件内的交接策略复用
+	//   同一套判定，避免两侧漂移导致锚点或阈值不一致（缓存前缀稳定的前提）。
+	ctxObj.Set("handoff", handoffUtilsObject(vm))
 
 	// ctx.providerFactory.register(apply)：注册 LLM Provider 参数装配器（配置消费插件化）。
 	// apply(current) → overrides | null：
@@ -3448,7 +3457,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
 		return true
 	}
 	// ★ 2026-08-28 多智能体团队：ctx.agents / ctx.llm / ctx.http 属按 inject
@@ -3463,7 +3472,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http", "commands"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http", "commands"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)

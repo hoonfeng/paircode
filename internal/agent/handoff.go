@@ -732,3 +732,58 @@ func buildLoopHandoffView(runCtx context.Context, l *Loop, store ConversationSto
 	}
 	return BuildHandoffView(runCtx, prov, nil, store, convID, l.History, task, l.MaxContextTokens)
 }
+
+// ── 插件化边界入口（2026-09-12：交接策略外置到 agentloop 插件）──
+//
+// 设计：执行位置在宿主（物理约束——用户输入边界在会话装配前；段边界在 Run 之外），
+// 策略实现在插件（ctx.loopFactory.registerHandoff）。宿主在这两处调用注册实现，
+// 未注册或执行失败 → 回退本文件上方 Go 默认实现（可回退，零回归）。
+//
+// ★ 语义要点（缓存铁律）：两个入口都是**跨轮边界**——
+//   · 用户输入边界：上一轮已结束，重排历史发生在「尚不可复用的前缀」上；
+//   · 段边界：上一段已结束、下一段尚未开始（同一条用户消息内的 step 循环之外），
+//     不会切断轮内 append-only 的前缀。
+//   一次 Run 的 step 之间**不做任何整理**（见 compress.go maybeCompact：段内只追加）。
+
+// HandoffUserTurnView 用户输入边界（新提交对话 / 点继续执行）的整理视图：
+// JS 实现（插件 registerHandoff.onUserTurn）优先；未注册或执行失败 → 回退 Go 默认。
+// 返回 (view, applied, notice)；applied=false 时调用方保持原逻辑
+// （原样历史或按 token 压力精简）。notice 非空时由调用方透传给用户。
+func HandoffUserTurnView(ctx context.Context, prov, judge Provider, store ConversationStore,
+	convID, workspaceRoot string, history []Message, task string, maxContextTokens int) ([]Message, bool, string) {
+	if impl := CurrentJSHandoff(); impl != nil {
+		view, ok, notice, err := impl.UserTurnView(convID, workspaceRoot, history, task,
+			maxContextTokens, prov, judge, store)
+		if err != nil {
+			log.Printf("[handoff] JS 交接实现（用户输入边界）失败，回退 Go 默认: %v", err)
+		} else {
+			// ok=false = JS 明确判定「不启用」（未达阈值/已关闭）→ 不回退重复判定
+			return view, ok, notice
+		}
+	}
+	view, ok := BuildHandoffView(ctx, prov, judge, store, convID, history, task, maxContextTokens)
+	return view, ok, ""
+}
+
+// HandoffSegmentView 段续跑边界（跨轮）的整理视图：JS 实现优先，回退 Go 默认。
+// 返回的 view 作为下一段初始历史注入（loop.Run(runCtx, contMsg, view)）。
+// Provider 取压缩模型（轻量）优先，其次主模型——与 Go 默认实现同口径。
+func HandoffSegmentView(runCtx context.Context, l *Loop, store ConversationStore, convID, task string) ([]Message, bool, string) {
+	if impl := CurrentJSHandoff(); impl != nil {
+		var prov Provider
+		if l.Compressor != nil {
+			prov = l.Compressor
+		} else {
+			prov = l.getProvider()
+		}
+		view, ok, notice, err := impl.SegmentView(convID, l.WorkspaceRoot, l.History, task,
+			l.MaxContextTokens, prov, store)
+		if err != nil {
+			log.Printf("[handoff] JS 交接实现（段边界）失败，回退 Go 默认: %v", err)
+		} else {
+			return view, ok, notice
+		}
+	}
+	view, ok := buildLoopHandoffView(runCtx, l, store, convID, task)
+	return view, ok, ""
+}

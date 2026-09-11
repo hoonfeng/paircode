@@ -1012,16 +1012,24 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				contMsg := SegmentContinueMessage(seg)
 
 				// ★ 2026-09-11 会话交接（handoff.go）：段边界对累计历史做一次判断/整理——
-				//   达阈值时用一次 LLM 把上一段历史折叠为「提交消息」，替代全量历史注入
+				//   达阈值时把上一段历史折叠为「提交消息」，替代全量历史注入
 				//   下一段（防续跑上下文膨胀）；未达阈值保持原样（同会话历史保留）。
 				//   整理只替换喂 LLM 的历史视图；落盘/展示仍为完整时间线。
+				// ★ 2026-09-12 策略外置：整理由 agentloop 插件（registerHandoff.onSegment）
+				//   实现；宿主只提供执行位置与能力（provider/store/口径工具），未注册或
+				//   执行失败即回退 Go 默认实现（handoff.go，语义不变）。
+				//   ★ 段边界是**跨轮边界**：发生在上一段已结束、下一段尚未开始处，
+				//   轮内（一次 Run 的 step 之间）不整理——保证轮内前缀 append-only。
 				nextHist := []Message(nil)
-				if view, hok := buildLoopHandoffView(runCtx, loop, store, convID, contMsg); hok {
+				if view, hok, hnotice := HandoffSegmentView(runCtx, loop, store, convID, contMsg); hok {
 					nextHist = view
+					if hnotice == "" {
+						hnotice = fmt.Sprintf(
+							"已把此前对话整理为「会话交接·提交消息」（历史 %d 条 → 交接要点 + 近期 %d 条），本段从交接要点继续",
+							len(loop.History), len(view)-1)
+					}
 					select {
-					case sess.Events <- Event{Type: EventNotice, Content: fmt.Sprintf(
-						"已把此前对话整理为「会话交接·提交消息」（历史 %d 条 → 交接要点 + 近期 %d 条），本段从交接要点继续",
-						len(loop.History), len(view)-1)}:
+					case sess.Events <- Event{Type: EventNotice, Content: hnotice}:
 					default:
 					}
 				}

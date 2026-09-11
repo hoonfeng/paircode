@@ -29,6 +29,289 @@
 //
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// 会话交接（handoff）策略实现 — 2026-09-12 从 Go（internal/agent/handoff.go）外置
+//
+// 宿主在两个**跨轮边界**调用本实现（执行位置仍在宿主：用户输入边界在会话装配
+// 之前、段边界在 Run 之外，插件无从自主介入）：
+//   · onUserTurn  用户输入（新提交对话 / 点继续执行）—— 带判官（任务关系可能变化）
+//   · onSegment   段续跑边界（同一条消息内的分段，Run 之间）—— judge=null
+//
+// ★ 铁律：整理只替换「喂 LLM 的历史视图」，落盘/展示始终为完整时间线；
+//   一次 Run 的 step 之间不整理（轮内前缀 append-only —— 缓存命中率的前提）。
+//
+// ★ 口径单一真源：锚点指纹 / token 估算 / 阈值 / 规则摘要 / 相关性解析经
+//   ctx.handoff 桥接自 Go —— 两侧判定同源，避免锚点或阈值漂移。
+// ═══════════════════════════════════════════════════════════════
+
+// hTruncRunes 与 Go truncRunesAgent 等价（TrimSpace → rune 截断 → 超长加省略号）。
+function hTruncRunes(s, n) {
+  const t = String(s == null ? '' : s).trim();
+  const r = Array.from(t);
+  return r.length <= n ? t : r.slice(0, n).join('') + '…';
+}
+
+function hRuneLen(s) { return Array.from(String(s == null ? '' : s)).length; }
+
+// hAnchorAt 计算交接基点指纹（序列锚）——等价 Go handoffAnchorAt。
+function hAnchorAt(U, history, keep, T) {
+  const hist = U.stripSystem(history) || [];
+  if (!hist.length) return '';
+  if (!(keep >= 1)) keep = 1;
+  let idx = hist.length - keep;
+  if (idx < 0) idx = 0;
+  // 边界对齐：基点本身不能是孤立 tool（其配对 tool_call 会被折叠）
+  while (idx > 0 && hist[idx] && hist[idx].role === 'tool') idx--;
+  let n = T.anchorSeq;
+  if (idx + n > hist.length) n = hist.length - idx;
+  const parts = [];
+  for (let k = 0; k < n; k++) parts.push(U.fingerprint(hist[idx + k]));
+  return parts.join(T.anchorSep);
+}
+
+// hAnchorIndex 定位锚点消息下标（等价 Go handoffAnchorIndex）：
+// ① 记录内 MsgCount 推回生成时基点（精确、穿透重复消息）② 从前往后首个匹配
+// （历史前部不变 → 跨轮稳定）③ 返回 -1（调用方按锚点丢失保守处理）。
+function hAnchorIndex(U, hist, rec, T) {
+  if (!rec || !rec.anchor) return -1;
+  const parts = String(rec.anchor).split(T.anchorSep);
+  const n = parts.length;
+  if (!n) return -1;
+  const matchAt = (i) => {
+    if (i < 0 || i + n > hist.length) return false;
+    for (let k = 0; k < n; k++) {
+      if (U.fingerprint(hist[i + k]) !== parts[k]) return false;
+    }
+    return true;
+  };
+  if (rec.msgCount > 0) {
+    let idx = rec.msgCount - U.keepForRelevance(rec.relevance);
+    if (idx > hist.length) idx = hist.length;
+    while (idx > 0 && idx < hist.length && hist[idx] && hist[idx].role === 'tool') idx--;
+    if (matchAt(idx)) return idx;
+  }
+  for (let i = 0; i + n <= hist.length; i++) {
+    if (matchAt(i)) return i;
+  }
+  return -1;
+}
+
+// hIncrement 自基点起的增量消息（含基点本身）——等价 Go handoffIncrement。
+function hIncrement(U, history, rec, T) {
+  const hist = U.stripSystem(history) || [];
+  if (!rec || !rec.anchor) return hist;
+  const i = hAnchorIndex(U, hist, rec, T);
+  if (i >= 0) return hist.slice(i);
+  let keep = T.keepRecent;
+  if (rec.relevance) keep = U.keepForRelevance(rec.relevance);
+  return hist.length > keep ? hist.slice(hist.length - keep) : hist;
+}
+
+// hShouldHandoff 触发门槛（等价 Go ShouldHandoff）：token 阈值 或 条数阈值。
+function hShouldHandoff(U, history, maxCtx, T) {
+  if (!U.enabled) return { ok: false, reason: '已关闭（PAIR_HANDOFF=0）' };
+  const hist = U.stripSystem(history) || [];
+  if (!hist.length) return { ok: false, reason: '' };
+  const tokens = U.estimateTokens(hist);
+  const trigger = U.thresholds(maxCtx).triggerTokens;
+  if (tokens >= trigger) {
+    return { ok: true, reason: `历史 ${hist.length} 条 / ~${tokens} tokens ≥ 触发阈值 ${trigger}` };
+  }
+  if (hist.length >= T.minMsgs) {
+    return { ok: true, reason: `历史 ${hist.length} 条 ≥ 触发条数 ${T.minMsgs}（~${tokens} tokens）` };
+  }
+  return { ok: false, reason: '' };
+}
+
+// hShouldRefresh 刷新判断（等价 Go ShouldRefreshHandoff）：
+// 增量 = 锚后内容 tokens − 生成时保留段基线 KeptTokens（只看新增量，防抖动）。
+function hShouldRefresh(U, history, rec, T) {
+  if (!rec || !String(rec.text || '').trim()) {
+    return { need: true, inc: U.estimateTokens(U.stripSystem(history) || []) };
+  }
+  const hist = U.stripSystem(history) || [];
+  if (hAnchorIndex(U, hist, rec, T) < 0) return { need: true, inc: U.estimateTokens(hist) };
+  const incTokens = U.estimateTokens(hIncrement(U, history, rec, T));
+  let delta = incTokens - (rec.keptTokens || 0);
+  if (delta < 0) delta = 0;
+  return { need: delta >= T.refreshTokens, inc: delta };
+}
+
+// hComposeView 组装注入视图：[交接消息] + [基点起增量（含基点，原文保留）]
+// —— 等价 Go ComposeHandoffView（视图内至多一份交接块）。
+function hComposeView(U, history, rec, text, T) {
+  const inc = hIncrement(U, history, rec, T);
+  const out = [{ role: 'user', content: text }];
+  for (const m of inc) {
+    if (U.isHandoffText(m.content || '')) continue; // 跳过历史中的旧交接块
+    out.push(m);
+  }
+  return out;
+}
+
+// hSanitizeBody 清洗 LLM 输出（等价 Go sanitizeHandoffBody）。
+function hSanitizeBody(s, U) {
+  s = String(s == null ? '' : s).trim();
+  if (s.startsWith('```')) {
+    const i = s.indexOf('\n');
+    if (i >= 0) s = s.slice(i + 1);
+    s = s.trim();
+    if (s.endsWith('```')) s = s.slice(0, s.length - 3);
+    s = s.trim();
+  }
+  const i = s.indexOf('\n');
+  if (i >= 0 && s.slice(0, i).indexOf(U.title) >= 0) s = s.slice(i + 1).trim();
+  return s;
+}
+
+// hSample 构建 LLM 整理的输入文本（等价 Go handoffSample：尾部取样 + 规则摘要 + 上次交接）。
+function hSample(U, history, prev, task, T) {
+  const hist = U.stripSystem(history) || [];
+  let start = 0;
+  if (hist.length > T.inputMaxMsgs) start = hist.length - T.inputMaxMsgs;
+  let b = '';
+  if (start > 0) {
+    const early = hist.slice(0, start);
+    b += '（更早 ' + early.length + ' 条历史｜规则摘要）\n' + U.ruleSummary(early) + '\n\n';
+  }
+  for (const m of hist.slice(start)) {
+    if (U.isHandoffText(m.content || '')) continue;
+    let role = '工具';
+    if (m.role === 'user') role = '用户';
+    else if (m.role === 'assistant') role = '助手';
+    const toolInfo = (m.toolCalls && m.toolCalls.length) ? ' [工具调用]' : '';
+    let content = String(m.content == null ? '' : m.content).trim();
+    if (!content) content = '（无正文）';
+    b += role + ':' + toolInfo + ' ' + hTruncRunes(content, T.inputMsgRunes) + '\n';
+  }
+  if (!b) b = '（历史无可取内容）\n';
+
+  let out = '';
+  out += '你是对话交接助手。请阅读下方【即将继续的任务】与【对话历史节选】，输出一份《会话交接·提交消息》，供继续工作的 AI 助手快速恢复状态。\n\n';
+  out += '要求：\n';
+  out += '1. 先判断历史与「即将继续的任务」的相关性：高（同一任务的延续）/ 部分（同项目不同任务）/ 无关（全新任务）。无关或部分相关时，历史中与任务无关的细节只保留一句概述，不展开。\n';
+  out += '2. 输出 Markdown 正文，包含以下小节（无内容的小节省略）：\n';
+  out += '## 与当前任务的相关性\n（一行：高/部分/无关 + 一句话说明）\n';
+  out += '## 任务目标\n## 已完成\n## 当前状态（关键文件、构建/测试结果、产物落点）\n## 关键决策与坑\n## 待完成 / 下一步\n';
+  out += '3. 具体优于笼统：保留文件名、命令、结论、错误原因等可执行信息；不要编造历史中没有的内容。\n';
+  out += '4. 全文不超过 700 字，只输出正文（不要额外解释、不要代码围栏）。\n\n';
+  out += '【即将继续的任务】\n' + hTruncRunes(task, T.taskRunes) + '\n';
+  if (prev && String(prev.text || '').trim()) {
+    out += '\n【上一份交接（可作基线，无需重复其全文）】\n' + hTruncRunes(prev.text, T.prevTextRunes) + '\n';
+  }
+  out += '\n【对话历史节选（尾部 ' + Math.min(hist.length, T.inputMaxMsgs) + ' 条）】\n' + b;
+  return out;
+}
+
+// hBuildText 一次 LLM 整理（失败 → 规则式兜底），返回带 marker+标题前缀的注入文本。
+function hBuildText(U, args, prev, history, task, T, log) {
+  let body = '';
+  const prov = args.provider;
+  if (prov && typeof prov.chat === 'function') {
+    const msg = prov.chat([{ role: 'user', content: hSample(U, history, prev, task, T) }]);
+    if (msg && msg.content) {
+      const s = hSanitizeBody(msg.content, U);
+      if (hRuneLen(s) >= 40) body = s;
+      else log('会话交接：LLM 输出过短（清洗后 ' + hRuneLen(s) + ' runes），回退规则式');
+    } else {
+      log('会话交接：LLM 整理失败（无输出），回退规则式');
+    }
+  } else {
+    log('会话交接：无可用 Provider，使用规则式交接');
+  }
+  if (!body) body = U.ruleFallback(history);
+  return U.marker + U.title + '\n' + body;
+}
+
+// hJudge 轻量相关性判官（独立实例，只输出一个词；失败 → ''，保持现状零副作用）。
+function hJudge(U, args, rec, task, T) {
+  const judge = args.judge;
+  if (!judge || typeof judge.chat !== 'function') return '';
+  if (!rec || !String(rec.text || '').trim() || !String(task || '').trim()) return '';
+  const prompt = '判断「当前任务」与「历史交接要点」的关系，只输出一个词：高、部分 或 无关。\n' +
+    '高=同一任务的延续；部分=同项目不同任务；无关=全新任务。\n\n' +
+    '【当前任务】\n' + hTruncRunes(task, T.judgeTaskRunes) + '\n\n' +
+    '【历史交接要点】\n' + hTruncRunes(rec.text, T.judgePrevRunes) + '\n\n只输出一个词：';
+  const msg = judge.chat([{ role: 'user', content: prompt }]);
+  if (!msg || !msg.content) return '';
+  return U.parseRelevance(msg.content);
+}
+
+// hBuildView 主流程（等价 Go BuildHandoffView）：判断 →（生成 / 复用）→ 组装视图。
+// 返回 view 数组（启用整理）或 null（未达阈值 / 未启用 / 存储不支持）。
+function hBuildView(U, args, log) {
+  const T = U.thresholds(args.maxContextTokens);
+  const convID = args.convID || '';
+  const history = args.history || [];
+  const store = args.store;
+  if (!U.enabled || !convID || !store || !history.length) return null;
+  if (!hShouldHandoff(U, history, args.maxContextTokens, T).ok) return null;
+  if (typeof store.loadRecord !== 'function') return null; // 存储不支持交接记录 → 不启用
+
+  const prev = store.loadRecord();
+  let rec = null;
+  let forceRefresh = false;
+  let rel = '';
+  if (prev && String(prev.text || '').trim()) {
+    const curRel = prev.relevance || T.relHigh;
+    const sr = hShouldRefresh(U, history, prev, T);
+    if (!sr.need) {
+      // B：复用期定期语义复检（增量达周期才调用判官）
+      if (args.judge && (sr.inc - (prev.relCheckedInc || 0)) >= T.recheckTokens) {
+        const newRel = hJudge(U, args, prev, args.task, T);
+        if (newRel && newRel !== curRel) {
+          forceRefresh = true;
+          rel = newRel;
+          log('会话交接：判官复检 ' + curRel + ' → ' + newRel + '（自复检增量 ~' + sr.inc + ' tokens），刷新交接');
+        } else {
+          if (newRel) log('会话交接：判官复检保持 ' + newRel + '（自复检增量 ~' + sr.inc + ' tokens）');
+          prev.relCheckedInc = sr.inc; // 无论成败都推进（防失败时每轮重试风暴）
+          store.saveRecord(prev);
+        }
+      }
+      if (!forceRefresh) {
+        rec = prev;
+        const histArr = U.stripSystem(history) || [];
+        const histN = histArr.length;
+        const idx = hAnchorIndex(U, histArr, rec, T);
+        log('会话交接：复用上次交接（增量 ~' + sr.inc + ' tokens < 刷新阈值 ' + T.refreshTokens +
+          '；锚点 idx=' + idx + '/' + histN + ' 条，msgCount=' + (rec.msgCount || 0) +
+          ' keep=' + U.keepForRelevance(rec.relevance) + '）');
+        if (idx < 0) {
+          // ★ 锚点未命中取证：打印锚点指纹与历史前几条指纹（定位失败 → 兜底保留段 → 每段断裂）
+          const fp = [];
+          for (let k = 0; k < Math.min(4, histArr.length); k++) {
+            fp.push(k + ':' + String(U.fingerprint(histArr[k])).slice(0, 50));
+          }
+          const ap = String(rec.anchor || '').split(T.anchorSep)
+            .map((s, i) => i + ':' + String(s).slice(0, 46)).join(' | ');
+          log('会话交接：★锚点未命中（历史 ' + histN + ' 条，msgCount=' + (rec.msgCount || 0) +
+            '）锚点指纹=' + ap);
+          log('会话交接：★历史前 4 条指纹=' + fp.join(' | '));
+        }
+      }
+    }
+  }
+  if (!rec) {
+    const text = hBuildText(U, args, prev, history, args.task, T, log);
+    if (!rel) rel = U.parseRelevance(text);
+    if (!rel) rel = T.relHigh; // 解析失败 → 保守按高（不缩保留段）
+    rec = {
+      text: text,
+      createdAt: new Date().toISOString(),
+      anchor: hAnchorAt(U, history, U.keepForRelevance(rel), T),
+      msgCount: (U.stripSystem(history) || []).length,
+      relevance: rel,
+      keptTokens: 0,
+    };
+    rec.keptTokens = U.estimateTokens(hIncrement(U, history, rec, T));
+    store.saveRecord(rec);
+    const gIdx = hAnchorIndex(U, U.stripSystem(history) || [], rec, T);
+    log('会话交接：已生成新交接（' + rec.msgCount + ' 条历史，相关性 ' + rel + '；锚点 idx=' + gIdx + '）');
+  }
+  return hComposeView(U, history, rec, rec.text, T);
+}
+
 return {
   name: 'agentloop',
   purpose: 'Agent 循环 JS 实现（核心外置：策略在 JS，能力在 Go；含配置注册化）',
@@ -743,6 +1026,33 @@ return {
     });
 
     const log = ctx.logger('agentloop');
+
+    // ★ 会话交接策略注册（2026-09-12 从 Go 外置；宿主两个跨轮边界委托本实现）。
+    //   宿主未注册本实现（或本实现抛错）时自动回退 Go 默认实现（handoff.go）——
+    //   停用插件即还原原有行为，零风险。
+    const handoffUtils = ctx.handoff;
+    if (ctx.loopFactory && typeof ctx.loopFactory.registerHandoff === 'function') {
+      if (handoffUtils) {
+        const hlog = (m) => log.info(m);
+        ctx.loopFactory.registerHandoff({
+          id: 'agentloop',
+          // 用户输入边界（新提交对话 / 点继续执行）：任务关系可能变化 → 带判官复检
+          onUserTurn: async (args) => {
+            const view = hBuildView(handoffUtils, args, hlog);
+            return view ? { view, applied: true } : { applied: false };
+          },
+          // 段续跑边界（同一条消息内的分段，Run 之间）：同一任务延续 → judge 由宿主置空
+          onSegment: async (args) => {
+            const view = hBuildView(handoffUtils, args, hlog);
+            return view ? { view, applied: true } : { applied: false };
+          },
+        });
+        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
+      } else {
+        log.warn('ctx.handoff 能力不可用（宿主版本过旧？）——跳过会话交接注册，宿主走 Go 默认实现');
+      }
+    }
+
     log.info('已注册 Agent 循环 JS 实现（核心外置：策略 JS / 能力 Go；配置注册化 schema=' + (reg ? reg.key : 'agentloop') + '）');
   }
 };

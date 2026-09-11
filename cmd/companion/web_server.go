@@ -2227,11 +2227,19 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		// ★ 判官实例（B/C 语义复检）：独立轻量实例——non-thinking + 极小输出
 		//   （只输出一个词），与主对话通道隔离；构建为纯参数装配（无网络），每轮现建。
 		judge := agent.HandoffJudgeProvider(agent.ResolveProviderParamsForConv(convID, root))
-		if view, ok := agent.BuildHandoffView(context.Background(), prov, judge, store, convID, history, message, core.Settings.ContextMaxTokens); ok {
+		// ★ 2026-09-12 策略外置：整理由 agentloop 插件（registerHandoff.onUserTurn）实现，
+		//   宿主只提供调用位置（会话装配前——插件无从自主介入）与能力（provider/judge/
+		//   store/口径工具）；未注册或执行失败 → 回退 Go 默认实现（语义不变）。
+		view, ok, hnotice := agent.HandoffUserTurnView(context.Background(), prov, judge, store,
+			convID, root, history, message, core.Settings.ContextMaxTokens)
+		if ok {
 			log.Printf("[handoff] conv=%s 已启用交接视图（历史 %d 条 → %d 条）", convID, len(history), len(view))
 			history = view
 			handoffApplied = true
-			agentMgr.PushNotice(convID, "已把此前对话整理为「会话交接·提交消息」（完整历史仍保存在会话记录中），后续基于交接要点继续")
+			if hnotice == "" {
+				hnotice = "已把此前对话整理为「会话交接·提交消息」（完整历史仍保存在会话记录中），后续基于交接要点继续"
+			}
+			agentMgr.PushNotice(convID, hnotice)
 		}
 	}
 	if !handoffApplied {
