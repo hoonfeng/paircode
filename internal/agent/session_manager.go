@@ -68,6 +68,10 @@ type LoopOpts struct {
 	MaxAutonomousMinutes  int        // 自主模式时间预算（分钟，0=无限制）
 	CheckpointInterval    int        // 检查点间隔（迭代数，0=默认5）
 	WorkspaceRoot         string     // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
+	// ConvID 会话标识（仅诊断用：缓存前缀诊断据此区分会话——同一会话内的
+	// 视图重排（会话交接生效/刷新、跨轮精简）应报为「前缀断裂」并给出原因，
+	// 而非被误判为「新会话」跳过比较）。
+	ConvID string
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
 	ReviewMode string

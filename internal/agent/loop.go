@@ -174,6 +174,11 @@ type Loop struct {
 	// （如将委派任务/关键消息作为独立用户消息存储，使前端看到清晰的层次）。
 	OnMessagePersist func(msg Message) error
 
+	// ConvID 会话标识（仅缓存诊断用，业务逻辑不依赖）：前缀诊断据此区分会话——
+	// 同一会话内的视图重排（会话交接生效/刷新、跨轮精简）是一次「前缀断裂」，
+	// 而不是「新会话」（旧实现用消息前几条指纹做标识，视图一变就被误判跳过）。
+	ConvID string
+
 	// ── 上下文精简（可空；复刻参考 context/manager.ts，见 compress.go）──
 	// MaxContextTokens>0 时启用：每次 LLM 调用前，若 tokens/Max 超阈值，把中段老消息压成一条摘要。
 	// Compressor 非空→用它（轻量精简模型）做 LLM 摘要，否则/失败→规则式摘要。
@@ -1148,7 +1153,7 @@ const maxToolResultChars = 9000
 // emitCacheShape 快照本轮前缀形状（system prompt + 工具定义）并与上一轮比较，
 // 输出前缀稳定性诊断：变化时给出原因（system/tools），稳定时输出哈希供人工对比。
 // 跨 Loop/Run 共享 prevShape：多轮对话间也能定位缓存断裂点。
-func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
+func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition, tail int) {
 	// tools 序列化体积（诊断：tools 精简效果 / provider 缓存 miss 量）
 	toolsBytes := 0
 	if b, err := json.Marshal(tools); err == nil {
@@ -1156,6 +1161,9 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 	}
 	cur := CaptureShape(systemPromptFromMsgs(callMsgs), tools)
 	tag := fmt.Sprintf("[cache-diag] turn=%d step=%d", l.TurnNo, l.StepNo)
+	// ★ 消息级前缀诊断（回答「历史是否被原地改写」）：现有 shape 只覆盖
+	//   system/tools，历史消息的变化（改写/删除/插入）不在其中——本行补齐。
+	compareMsgPrefix(callMsgs, tail, tag, l.ConvID)
 	// ★ 诊断：dynamic 部分内容指纹（定位变化源——system 消息 boundary 后内容）
 	if sp := systemPromptFromMsgs(callMsgs); sp != "" {
 		static, dyn := splitAtBoundary(sp)
@@ -1187,6 +1195,95 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 			log.Printf("%s 前缀稳定 system=%s tools=%s tools_raw=%s tools_n=%d tools_bytes=%d", tag, diag.SystemHash, diag.ToolsHash, cur.ToolsRawHash, len(tools), toolsBytes)
 		}
 	}
+}
+
+// ── 消息级前缀诊断（回答「历史是否被原地改写」）──
+// 现有 PrefixShape 只覆盖 system/tools；历史消息的变化（改写/删除/插入）不在其中。
+// 本节比较相邻两次请求的逐条消息指纹，直接判定前缀是否被破坏。
+
+var (
+	cacheDiagMsgKey    string   // 会话标识（system + 历史最早两条指纹）
+	cacheDiagMsgBriefs []string // 上次请求逐条消息的「指纹 + 摘要」
+	cacheDiagMsgTail   int      // 上次请求末尾的临时尾部条数（ephemeral/执行日志）
+)
+
+// msgPrefixKey 诊断用的会话标识：优先用宿主注入的 ConvID（精确）；
+// 未注入时退化为「system + 历史最早两条」指纹（会话内稳定，但视图重排会变——
+// 该场景依赖 ConvID 路径才能正确报出断裂）。
+func msgPrefixKey(callMsgs []Message, convID string) string {
+	if convID != "" {
+		return "conv\x00" + convID
+	}
+	var b strings.Builder
+	for i, m := range callMsgs {
+		if i >= 3 {
+			break
+		}
+		b.WriteString(shortHash(m))
+		b.WriteByte('|')
+	}
+	return "msg\x00" + b.String()
+}
+
+// msgBrief 诊断串：指纹 + 截断摘要（整串比较等价于消息比较——内容不同则指纹不同）。
+func msgBrief(m Message) string {
+	body := strings.ReplaceAll(m.Content, "\n", "\\n")
+	r := []rune(body)
+	if len(r) > 120 {
+		body = string(r[:120]) + "…"
+	}
+	return shortHash(m) + "\x00" + string(m.Role) + "|" + body
+}
+
+// compareMsgPrefix 消息级前缀诊断：本次请求 vs 上次请求逐条比较。
+// tail 为本次请求末尾的临时尾部条数（ephemeral/执行日志——设计上只追加在
+// 末尾且下次请求可能不再出现，其变化不影响已发送前缀命中）。
+//
+// 判定：
+//  1. 本次覆盖上次全部非临时内容 → 前缀延展（缓存可连续命中）；
+//  2. 首个差异落在上次请求的临时尾部内 → 仅临时尾部变化（已发送历史前缀未受影响）；
+//  3. 其余 → ★ 已发送历史被改写/删除（provider 缓存从该点起全部 miss）。
+func compareMsgPrefix(callMsgs []Message, tail int, tag, convID string) {
+	key := msgPrefixKey(callMsgs, convID)
+	briefs := make([]string, len(callMsgs))
+	for i, m := range callMsgs {
+		briefs[i] = msgBrief(m)
+	}
+	prev, prevTail, prevKey := cacheDiagMsgBriefs, cacheDiagMsgTail, cacheDiagMsgKey
+	cacheDiagMsgKey, cacheDiagMsgBriefs, cacheDiagMsgTail = key, briefs, tail
+	if prevKey != key || len(prev) == 0 {
+		log.Printf("%s 消息前缀基线建立 cur=%d（会话切换/重启：诊断基线重置）", tag, len(briefs))
+		return
+	}
+	lcp := 0
+	for lcp < len(prev) && lcp < len(briefs) && prev[lcp] == briefs[lcp] {
+		lcp++
+	}
+	stablePrev := len(prev)
+	if prevTail > 0 && prevTail <= stablePrev {
+		stablePrev -= prevTail
+	}
+	if lcp >= stablePrev {
+		log.Printf("%s 消息前缀延展 %d→%d（LCP=%d/已发送 %d，历史逐字节稳定，缓存可连续命中）",
+			tag, len(prev), len(briefs), lcp, stablePrev)
+		return
+	}
+	log.Printf("%s ★消息前缀断裂 at=%d prev=%d cur=%d（已发送历史被改写/删除/重排 → provider 缓存从该点起全部 miss；"+
+		"视图整理如会话交接/跨轮精简属设计内代价）", tag, lcp, len(prev), len(briefs))
+	if lcp < len(prev) {
+		log.Printf("%s   prev[%d]=%s", tag, lcp, briefBody(prev[lcp]))
+	}
+	if lcp < len(briefs) {
+		log.Printf("%s   cur [%d]=%s", tag, lcp, briefBody(briefs[lcp]))
+	}
+}
+
+// briefBody 拆出诊断串的可读部分（去掉指纹前缀）。
+func briefBody(b string) string {
+	if i := strings.IndexByte(b, 0); i >= 0 {
+		return b[i+1:]
+	}
+	return b
 }
 
 // emitCacheUsage 记录本轮缓存命中/未命中与会话累计命中率。
@@ -1277,7 +1374,7 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 	// ★ 缓存诊断：每次构建后快照前缀形状（Go/JS 循环统一在构建处诊断，
 	//   避免 JS 循环缺形状诊断、且与 Go 默认循环重复调用）
 	if l.cacheDiagOn {
-		l.emitCacheShape(result, l.Registry.Definitions())
+		l.emitCacheShape(result, l.Registry.Definitions(), len(rest))
 	}
 	return result
 }

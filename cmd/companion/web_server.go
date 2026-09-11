@@ -2259,6 +2259,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		CompressedSummaries: summaries,
 		Autonomous:          autonomous,
 		ResumeContext:       resumeCtx, // ★ 2026-09-03 会话连贯性上下文注入背景快照（不拼 system）
+		ConvID:              convID,    // 仅诊断用：缓存前缀诊断区分会话
 	}
 }
 

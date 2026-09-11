@@ -396,9 +396,30 @@ func handoffIncrement(history []Message, rec *HandoffRecord) []Message {
 	return hist
 }
 
-// handoffAnchorIndex 在历史（已去 system）中定位锚点消息下标（从末尾向前找）；
-// 未找到返回 -1。序列锚（handoffAnchorSep 拼接的多段指纹）要求「连续匹配」；
-// 旧版单指纹记录解析为单段，退化为单条匹配（兼容存量 .handoff.json）。
+// handoffAnchorIndex 在历史（已去 system）中定位锚点消息下标；未找到返回 -1。
+// 序列锚（handoffAnchorSep 拼接的多段指纹）要求「连续匹配」；旧版单指纹记录
+// 解析为单段，退化为单条匹配（兼容存量 .handoff.json）。
+//
+// ★ 2026-09-12 修复（缓存命中率骤降根因）：**定位优先用记录内的基线位置**，
+//
+//	 其次从前往后取第一个匹配。
+//	 原实现从末尾向前找第一个匹配——消息内容重复时（同一工具同参数反复调用、
+//	 模型套话反复出现、"第N步"这类模板化正文）锚序列会在历史中多处命中，
+//	 从末尾找会定位到**最近一次**出现处（实测距末尾 15 条，真基点在第 107 条，
+//	 漂移 366 条）→ 两个后果：
+//	   ① ComposeHandoffView 的保留段退化为「最近十几条」，每次跨轮重排 →
+//	      provider 前缀缓存从交接消息之后整段失效（实测命中率 98%→56%，
+//	      每轮白付 ~24K tokens）；
+//	   ② ShouldRefreshHandoff 的 increment ≈ KeptTokens → delta ≈ 0 →
+//	      永不刷新（交接文本老化，新内容进不去）。
+//	 定位优先级：
+//	1. 记录生成时的基点位置（MsgCount − 保留深度，再按「基点非 tool」对齐）——
+//	   历史 append-only 时该位置跨轮**恒定且精确**，能穿透重复消息干扰
+//	   （既保持折叠瘦身，又保证前缀单调）；
+//	2. 从前往后第一个匹配（历史前部逐字节不变 → 跨轮稳定）；
+//	3. 均未命中 → 返回 -1（调用方按「锚点丢失」保守处理）。
+//	 注：定位偏早只会让保留段更长（语义无损，缓存仍稳定）；偏晚才是致命
+//	 （每轮重排 → 缓存全断）。
 func handoffAnchorIndex(hist []Message, rec *HandoffRecord) int {
 	if rec == nil || rec.Anchor == "" {
 		return -1
@@ -408,15 +429,34 @@ func handoffAnchorIndex(hist []Message, rec *HandoffRecord) int {
 	if n == 0 {
 		return -1
 	}
-	for i := len(hist) - n; i >= 0; i-- {
-		ok := true
+	matchAt := func(i int) bool {
+		if i < 0 || i+n > len(hist) {
+			return false
+		}
 		for k := 0; k < n; k++ {
 			if handoffFingerprint(hist[i+k]) != parts[k] {
-				ok = false
-				break
+				return false
 			}
 		}
-		if ok {
+		return true
+	}
+	// ① 生成时基线位置（精确）：MsgCount 即生成时的历史条数，
+	//    基点 = MsgCount − 保留深度，并按生成时的「跳过孤立 tool」规则前移。
+	if rec.MsgCount > 0 {
+		idx := rec.MsgCount - keepForRelevance(rec.Relevance)
+		if idx > len(hist) {
+			idx = len(hist)
+		}
+		for idx > 0 && idx < len(hist) && hist[idx].Role == RoleTool {
+			idx--
+		}
+		if matchAt(idx) {
+			return idx
+		}
+	}
+	// ② 首个匹配（历史前部不变 → 跨轮稳定）
+	for i := 0; i+n <= len(hist); i++ {
+		if matchAt(i) {
 			return i
 		}
 	}

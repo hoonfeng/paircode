@@ -99,6 +99,7 @@ func newLoop(opts LoopOpts) *Loop {
 		History:               CopyHistory(opts.History),
 		CompressedSummaries:   opts.CompressedSummaries,
 		WorkspaceRoot:         opts.WorkspaceRoot,
+		ConvID:                opts.ConvID,
 		ReviewMode:            opts.ReviewMode,
 		ReviewBlacklist:       opts.ReviewBlacklist,
 		ReviewWhitelist:       opts.ReviewWhitelist,

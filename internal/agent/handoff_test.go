@@ -298,10 +298,16 @@ func TestHandoff_SequenceAnchorDedup(t *testing.T) {
 	if len(view) != want {
 		t.Fatalf("视图应含完整增量（%d 条），实得 %d", want, len(view))
 	}
-	// 兼容路径对照：旧版单指纹会锚到末尾新增的重复项（41 条中的倒数第 2 条）。
+	// 兼容路径（★ 2026-09-12 语义统一）：单指纹（存量旧记录）同样按
+	// 「第一个匹配」稳定定位——原实现从末尾向前找，会锚到新增的重复项
+	// （每次追加都漂移 → 保留段重排 → 跨轮前缀缓存全断）。
 	legacy := &HandoffRecord{Text: "t", Anchor: handoffFingerprint(dup), KeptTokens: 1}
-	if li := handoffAnchorIndex(h2, legacy); li != len(h2)-2 {
-		t.Fatalf("单指纹（兼容路径）预期锚到末尾重复项 %d，实得 %d", len(h2)-2, li)
+	if li := handoffAnchorIndex(h2, legacy); li != 8 {
+		t.Fatalf("单指纹（兼容路径）应稳定定位到首个匹配 8，实得 %d", li)
+	}
+	h3 := append(append([]Message{}, h2...), dup)
+	if li := handoffAnchorIndex(h3, legacy); li != 8 {
+		t.Fatalf("单指纹定位应跨轮稳定（首个匹配 8），实得 %d", li)
 	}
 }
 
