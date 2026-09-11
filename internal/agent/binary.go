@@ -22,7 +22,7 @@ func registerBinaryTools(r *Registry, root string) {
 		Description: "分析二进制文件而不撑爆上下文：返回大小 + 嗅探类型（按 magic bytes）+ 指定区段的十六进制/ASCII 预览" +
 			"（hexdump 风格）。读图片/可执行/压缩包/字体等二进制用它，别用 read。",
 		Parameters: objSchema(props{
-			"path":   strProp("文件路径（工作区内）"),
+			"path":   strProp("文件路径（工作区内；相对主项目根，跨项目请传绝对路径）"),
 			"offset": intProp("可选：起始字节偏移（默认 0）"),
 			"length": intProp("可选：预览字节数（默认 256，上限 4096）"),
 		}, "path"),
@@ -68,7 +68,7 @@ func registerBinaryTools(r *Registry, root string) {
 		Name:             "write_binary",
 		UsageGuide:       "把 base64 编码的字节写入文件。用于写二进制内容（图片/字体/编译产物等）。需审核批准。比 write 更省 token（base64 比文本转义更紧凑）。",
 		Description:      "把 base64 编码的字节写入文件（path；覆盖；父目录自动创建）。用于写二进制内容。",
-		Parameters:       objSchema(props{"path": strProp("文件路径"), "base64": strProp("base64 编码的字节")}, "path", "base64"),
+		Parameters:       objSchema(props{"path": strProp("文件路径（相对主项目根，跨项目请传绝对路径）"), "base64": strProp("base64 编码的字节")}, "path", "base64"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePath(root, argStr(args, "path"))

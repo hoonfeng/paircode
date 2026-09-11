@@ -46,16 +46,22 @@ func (b *jsLoopFactoryBridge) Create(opts LoopOpts) (LoopHandle, error) {
 // 不可序列化，不暴露）。
 func (b *jsLoopFactoryBridge) buildSnapshot(opts LoopOpts) map[string]any {
 	return map[string]any{
-		"system":               opts.System,
-		"maxIterations":        opts.MaxIterations,
-		"maxContextTokens":     opts.MaxContextTokens,
-		"autonomous":           opts.Autonomous,
-		"maxAutonomousMinutes": opts.MaxAutonomousMinutes,
-		"checkpointInterval":   opts.CheckpointInterval,
-		"workspaceRoot":        opts.WorkspaceRoot,
-		"reviewMode":           opts.ReviewMode,
-		"reviewBlacklist":      opts.ReviewBlacklist,
-		"reviewWhitelist":      opts.ReviewWhitelist,
+		"system": opts.System,
+		// ★ 2026-09-12：「最大迭代数」配置项已移除（装配器不再可覆盖迭代上限，
+		//   段内迭代安全上限由宿主按段预算派生，见 tool_budget.go IterationLimit）。
+		// ★ 2026-09-12 分段续跑配置化（★ 双闸门）：stepBudget / toolCallBudget / 段数上限
+		//   对装配器可见（插件可覆盖，未返回则保持宿主 settings 值；语义见 tool_budget.go）。
+		"stepBudget":            opts.StepBudget,
+		"toolCallBudget":        opts.ToolCallBudget,
+		"maxToolBudgetSegments": opts.MaxToolBudgetSegments,
+		"maxContextTokens":      opts.MaxContextTokens,
+		"autonomous":            opts.Autonomous,
+		"maxAutonomousMinutes":  opts.MaxAutonomousMinutes,
+		"checkpointInterval":    opts.CheckpointInterval,
+		"workspaceRoot":         opts.WorkspaceRoot,
+		"reviewMode":            opts.ReviewMode,
+		"reviewBlacklist":       opts.ReviewBlacklist,
+		"reviewWhitelist":       opts.ReviewWhitelist,
 	}
 }
 
@@ -92,7 +98,9 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 	}
 	// ★ 2026-09-03 极简工具面已移除：setGroups 装配不再需要（tools 统一全量面）。
 	setStr("system", &out.System)
-	setInt("maxIterations", &out.MaxIterations)
+	setInt("stepBudget", &out.StepBudget)
+	setInt("toolCallBudget", &out.ToolCallBudget)
+	setInt("maxToolBudgetSegments", &out.MaxToolBudgetSegments)
 	setInt("maxContextTokens", &out.MaxContextTokens)
 	setBool("autonomous", &out.Autonomous)
 	setInt("maxAutonomousMinutes", &out.MaxAutonomousMinutes)
@@ -101,7 +109,7 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 	setStr("reviewMode", &out.ReviewMode)
 	setStrs("reviewBlacklist", &out.ReviewBlacklist)
 	setStrs("reviewWhitelist", &out.ReviewWhitelist)
-// ★ 2026-09-03 极简工具面已移除：stagedToolGroups 装配不再透传（tools 统一全量面，
+	// ★ 2026-09-03 极简工具面已移除：stagedToolGroups 装配不再透传（tools 统一全量面，
 	//   跨轮次前缀稳定——极简/全量切换会让 DeepSeek 缓存从头断前缀）。
 	return out
 }

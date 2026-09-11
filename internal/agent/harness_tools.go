@@ -36,8 +36,6 @@ func RegisterHarnessTools(r *Registry, root string) {
 	registerRunCode(r, root)
 }
 
-
-
 // writeFileWithSnapshot 带快照写文件（复用全局快照机制）。
 func writeFileWithSnapshot(root, p, content string) error {
 	SnapshotBeforeWriteWithTracking(root, p)

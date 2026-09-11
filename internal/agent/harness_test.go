@@ -121,7 +121,8 @@ func TestToolHarnessJSNative(t *testing.T) {
 }
 
 // execTool 取注册表工具直接执行（JS 插件测试共用；原 toolcore_test.go，Round5
-//   tool-core 移除后随迁——tool-harness 是唯一装载的磁盘插件宿主）。
+//
+//	tool-core 移除后随迁——tool-harness 是唯一装载的磁盘插件宿主）。
 func execTool(t *testing.T, reg *Registry, name string, args map[string]any) (string, error) {
 	t.Helper()
 	tool, ok := reg.Get(name)

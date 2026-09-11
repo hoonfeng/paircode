@@ -28,7 +28,7 @@ var embeddedToolRegistrars = []func(r *Registry, root string){
 	RegisterHarnessTools,        // tool-harness（run_code 含 goja 嵌套工具调度）
 	// ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳），registerDebugTools
 	//   内核不再挂内嵌回退（内核实现保留于 debug_tools.go，供独立二进制复用）。
-	registerOfficeTools,         // tool-office（word/xlsx/pdf 仍走宿主的内核）
+	registerOfficeTools, // tool-office（word/xlsx/pdf 仍走宿主的内核）
 }
 
 // InitEmbeddedToolRegistry 构建内嵌工具注册表（幂等；懒调用）。
@@ -39,12 +39,6 @@ func InitEmbeddedToolRegistry(root string) *Registry {
 	r := NewRegistry()
 	for _, f := range embeddedToolRegistrars {
 		f(r, root)
-	}
-	// ★ 2026-09-12 deferred（按需工具）在内嵌内核中直接标记发现——内核是
-	//   「执行后端」（插件 execute 经 ctx.binary.exec 直通），不参与会话工具面
-	//   可见性（可见性由插件层/会话注册表决定），不得因 deferred 拦截执行。
-	for n := range DeferredToolNames {
-		r.MarkToolDiscovered(n)
 	}
 	embeddedToolRegistry = r
 	return r

@@ -218,7 +218,7 @@ func RegisterSnapshotTools(r *Registry, root string) {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
-				"path": strProp("文件路径（工作区相对路径）"),
+				"path": strProp("文件路径（相对主项目根，跨项目请传绝对路径）"),
 			},
 			"required": []string{"path"},
 		},

@@ -56,12 +56,13 @@ func modeLabel(mode string) string {
 // RegisterManagementTools 注册 Agent 自管理工具。
 // root 为工作区根路径，每个会话传自己的实现多工作区隔离。
 // ★ 2026-09-12 修复（重大 BUG）：本函数注册的工具经磁盘插件 tool-system 接管
-//   后存档进全局 hostExecutors（启动时一次性存档）——闭包捕获的 root/技能
-//   目录随启动冻结：启动时未开工作区 root="" → skill_write 执行
-//   WriteSkill("") → filepath.Join("", name) 生成相对路径 → 写到进程
-//   CWD（安装目录根）下，与实际使用的 skills 目录脱节；切换工作区也不刷新。
-//   现改为执行时运行时解析（会话绑定 _wsRoot 注入 → ctx 会话根 → 工作区
-//   实时快照），与 goal/ask_user 路由执行器同构。
+//
+//	后存档进全局 hostExecutors（启动时一次性存档）——闭包捕获的 root/技能
+//	目录随启动冻结：启动时未开工作区 root="" → skill_write 执行
+//	WriteSkill("") → filepath.Join("", name) 生成相对路径 → 写到进程
+//	CWD（安装目录根）下，与实际使用的 skills 目录脱节；切换工作区也不刷新。
+//	现改为执行时运行时解析（会话绑定 _wsRoot 注入 → ctx 会话根 → 工作区
+//	实时快照），与 goal/ask_user 路由执行器同构。
 func RegisterManagementTools(r *Registry, root string) {
 	// ── Skills ──
 	r.Register(&Tool{
@@ -213,7 +214,8 @@ func skillRuntimeRoot(ctx context.Context, args map[string]any) string {
 // skillTargetDir 按 scope 解析技能写入/删除目标目录。
 // 返回（目录, 层级中文标签, 错误）。scope：global=全局 / system=内置 / 其他=工作区级。
 // ★ 2026-09-12 修复核心：工作区根为空时不再退化为相对路径写入（原 BUG 落点），
-//   而是显式回落全局技能目录（<InstallDir>/.pair/skills/）。
+//
+//	而是显式回落全局技能目录（<InstallDir>/.pair/skills/）。
 func skillTargetDir(ctx context.Context, args map[string]any, registerRoot string) (string, string, error) {
 	scope := mArgStr(args, "scope")
 	switch scope {

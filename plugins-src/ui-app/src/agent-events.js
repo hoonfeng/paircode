@@ -260,6 +260,13 @@ export function processAgentEvent(convId, data) {
     else pend.events.push(data)
     return
   }
+  // ★ 运行统计（耗时计时/步数/token 速度）：在刷新门控之后统一累加——
+  //   门控内 pending 的事件会在 flush 时重放，若在门控前累加会重复计数。
+  const runStat = beginRun(convId)
+  if (runStat) {
+    if (typeof data.step === 'number' && data.step > runStat.steps) runStat.steps = data.step
+    if (data.type === 'tool_call') runStat.toolCalls++
+  }
   // 确保 messagesByConv 存在
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
   const msgs = state.messagesByConv[convId]
@@ -453,6 +460,8 @@ export function processAgentEvent(convId, data) {
     const errText = (data.content || '').trim()
     const seg = pushSegment(msg.segments, 'content')
     seg.content += '**[错误]** ' + errText
+    // ★ 运行统计：错误终止 → 计时定格
+    endRun(convId)
     // 附带"可继续"引导：异常中断后可直接在本对话继续，不丢失进度
     seg.content += '\n\n> ⚠️ 本次任务未完成。可直接在下方输入继续（沿用本对话上下文），或点击对话列表中的该项恢复。'
     // ★ 后端异常/停止时只发 EventError 不发 EventDone，必须在此清理 loading 状态，
@@ -480,6 +489,12 @@ export function processAgentEvent(convId, data) {
     return
   } else if (data.type === 'usage' && data.usage) {
     const u = data.usage
+    // ★ 运行统计：本次运行的 token 累计（不受 isCurrent 限制——多会话并行各自累计）
+    if (runStat) {
+      runStat.promptTokens += u.prompt_tokens || 0
+      runStat.completionTokens += u.completion_tokens || 0
+      runStat.llmCalls++
+    }
     // wsTokenStats 从 API /api/tokens/stats 加载（工作区级累积），不被 per-call 值覆盖
     // 仅当前对话才更新 convCtxStats（避免跨对话串扰）
     if (isCurrent) {
@@ -529,7 +544,7 @@ export function processAgentEvent(convId, data) {
       if (globalCtx.onNudge) globalCtx.onNudge(convId)
     }
   } else if (data.type === 'compacted') {
-    msg.segments.push({ type: 'content', content: '> 📦 上下文已压缩（中段老消息已摘要）' })
+    msg.segments.push({ type: 'content', content: '> 📦 已精简早期历史对话（中段老消息已摘要）' })
   } else if (data.type === 'circling') {
     msg.segments.push({ type: 'content', content: '> ⚠️ 检测到重复操作，已提示 Agent 换思路' })
   } else if (data.type === 'evaluation') {
@@ -610,6 +625,8 @@ export function processAgentDone(convId, data) {
       }
     }
   }
+  // ★ 运行统计：done → 计时定格（UI 显示本次运行的总耗时与 token 速度）
+  endRun(convId)
   state.loadingByConv[convId] = false
   state.agentRunningByConv[convId] = false
   const isCurrent = state.currentConvId === convId
@@ -664,6 +681,8 @@ export function processAgentDisconnect(convId, errMsg) {
 // 清理所有标记为 running 的对话，重置状态。
 export function processAllDisconnected() {
   for (const convId of Object.keys(state.agentRunningByConv)) {
+    // ★ 运行统计：后端进程已关闭，本次运行不可能继续 → 计时定格
+    endRun(convId)
     const rt = runtimes[convId]
     const msgs = state.messagesByConv[convId]
     if (msgs && rt) {
@@ -718,6 +737,9 @@ export function processStatus(payload) {
   for (const convId of runningSet) {
     state.agentRunningByConv[convId] = true
     state.loadingByConv[convId] = true
+    // ★ 运行统计：后端报告运行中 → 无未结束的计时则开始计时
+    //   （重连/切会话后 running 状态回来时接着计，不重复开表）
+    beginRun(convId)
     // ★ 兜底：若消息已加载（switchConv 已完成）但无 runtime，创建占位
     //   ★ 刷新门控：历史未加载时跳过（占位由 switchConv 加载后创建，避免先占位
     //     导致 hasRealMsgs 误判、历史不加载）
@@ -752,6 +774,8 @@ export function processStatus(payload) {
   const resyncCandidates = []
   for (const convId of Object.keys(state.agentRunningByConv)) {
     if (state.agentRunningByConv[convId] && !runningSet.has(convId)) {
+      // ★ 运行统计：不在 running 集合 = 本次运行已结束 → 计时定格
+      endRun(convId)
       state.agentRunningByConv[convId] = false
       state.loadingByConv[convId] = false
       if (state.currentConvId === convId) {
@@ -806,6 +830,63 @@ export function processStatus(payload) {
 }
 
 // ─── convCtxStats 辅助 ──
+// ─── 运行统计（本次运行耗时/步数/token 速度）辅助 ───
+// 由 usage/step 事件与 status 运行集合维护；RightPanel 渲染为状态条：
+//   ⏱ 耗时（计时到秒，结束后定格）· 步数（step，权威值来自后端 WS payload）
+//   · ⚡ token/s（输出 token / 耗时，流式中实时刷新，结束后定格）
+
+// getRunStat 取（不存在则创建）指定对话的运行统计对象。
+// 用 reactive 包裹：字段变化驱动 RightPanel 展示实时刷新。
+export function getRunStat(convId) {
+  if (!convId) return null
+  if (!state.runStatsByConv[convId]) {
+    state.runStatsByConv[convId] = reactive({
+      startAt: 0,          // 本次运行开始时间（ms）；0 = 未开始
+      endAt: 0,            // 本次运行结束时间（ms）；0 = 仍在运行
+      steps: 0,            // 步数（后端 step：LLM 调用 + 工具执行）
+      toolCalls: 0,        // 工具调用次数（step 缺失时的兜底展示）
+      llmCalls: 0,         // LLM 调用次数（usage 事件数）
+      promptTokens: 0,     // 本次运行累计输入 token
+      completionTokens: 0, // 本次运行累计输出 token（token 速度用）
+    })
+  }
+  return state.runStatsByConv[convId]
+}
+
+// beginRun 开始一次运行计时：已有未结束的计时保持（同一运行内的事件不重置）。
+// 返回统计对象（供调用方直接累加字段）。
+export function beginRun(convId) {
+  const rs = getRunStat(convId)
+  if (!rs) return null
+  if (!rs.startAt || rs.endAt) {
+    rs.startAt = Date.now()
+    rs.endAt = 0
+    rs.steps = 0
+    rs.toolCalls = 0
+    rs.llmCalls = 0
+    rs.promptTokens = 0
+    rs.completionTokens = 0
+  }
+  return rs
+}
+
+// endRun 结束计时（endAt 定格：UI 显示的总耗时/速度不再变化）。
+export function endRun(convId) {
+  const rs = state.runStatsByConv[convId]
+  if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now()
+}
+
+// resetRunStat 清空某对话的运行统计（新建对话等场景调用）。
+export function resetRunStat(convId) {
+  const rs = state.runStatsByConv[convId]
+  if (rs) {
+    Object.assign(rs, {
+      startAt: 0, endAt: 0, steps: 0, toolCalls: 0, llmCalls: 0,
+      promptTokens: 0, completionTokens: 0,
+    })
+  }
+}
+
 export function getConvCtxStats(convId) {
   if (!state.convCtxStatsByConv[convId]) {
     state.convCtxStatsByConv[convId] = reactive({

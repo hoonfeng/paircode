@@ -76,11 +76,10 @@ func runToolRound(t *testing.T, store *MessageStore, convID, task string, round 
 
 	prov := &toolProvider{rounds: round}
 	loop := &Loop{
-		Provider:      prov,
-		Registry:      reg,
-		System:        "test-system",
-		MaxIterations: 3,
-		History:       CopyHistory(condensed),
+		Provider: prov,
+		Registry: reg,
+		System:   "test-system",
+		History:  CopyHistory(condensed),
 	}
 	loop.OnBatchPersist = func(msgs []Message) {
 		var combined []Message

@@ -4,16 +4,14 @@
 // 对齐 DSH harness workflow 语义（goja 执行 workflow 脚本）：
 //   - 脚本体（plain JS，top-level return 结果）+ meta{name,description,phases}
 //   - 钩子：
-//       agent(prompt, opts?) → 后台委托子 Agent 并同步等待其完成，返回最终正文
-//                              （SpawnSubAgent + 轮询 subagent/idle + LastText）
 //       pipeline(items, ...stages) → 逐项顺序过阶段（无 barrier），
 //                                    阶段抛错 → 该项结果 null、跳过其余阶段
 //       parallel(thunks) → 全部执行并等待（barrier）；thunk 抛错 → null
-//                          ★ goja 单线程：JS 侧顺序调度，并发性由宿主子 Agent
-//                          侧承载（天然满足「上限 4」防成员风暴）
+//                          ★ goja 单线程：JS 侧顺序调度
 //       phase(title) / log(msg) → 进度记录（随结果 JSON 返回）
 //       args → workflow 输入参数（脚本内全局可读）
-//   - 取消：ctx 取消时 agent 等待立即中止（错误返回）
+//   - ★ 2026-09：agent(prompt, opts?) 钩子（子 Agent 委托）随子 Agent 实现
+//     一并删除——脚本内不再提供宿主子 Agent 委托能力。
 //
 // 范围声明（后续演进）：不做跨会话恢复/持久化队列（单次执行、结果即返回）。
 // ═══════════════════════════════════════════════════════════════
@@ -24,18 +22,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/hoonfeng/paircode/goja"
 )
 
-// workflowAgentTimeout 单个 agent 钩子的最长等待（超时报错，防脚本悬挂）。
-const workflowAgentTimeout = 20 * time.Minute
-
 // workflowWallClockLimit 整个 workflow 脚本的墙钟上限（t4 F4：CPU 看门狗）。
-// 只拦纯死循环/失控脚本；agent 等待在 Go 侧通道阻塞，Interrupt 不打断等待本身。
+// 只拦纯死循环/失控脚本。
 const workflowWallClockLimit = 90 * time.Minute
 
 // workflowRunner 一次 workflow 执行的运行态。
@@ -56,10 +50,10 @@ func archiveWorkflowTool() {
 		Name:       "workflow",
 		SystemTool: true,
 		Description: "执行一个 workflow 编排脚本（对齐 DSH harness workflow）。script 为 JS 函数体（末尾 return 结果）；" +
-			"钩子：agent(prompt, opts?) 后台委托子 Agent 并等待完成返回其最终正文；pipeline(items, ...stages) 逐项过阶段；" +
-			"parallel(thunks) 批量执行（宿主侧并发）；phase(title)/log(msg) 记录进度；args 为脚本内可读输入。返回 JSON {ok, output, logs, phases}。",
+			"钩子：pipeline(items, ...stages) 逐项过阶段；parallel(thunks) 批量执行（宿主侧顺序调度）；" +
+			"phase(title)/log(msg) 记录进度；args 为脚本内可读输入。返回 JSON {ok, output, logs, phases}。",
 		Parameters: objSchema(props{
-			"script": strProp("workflow 脚本体（JS，末尾 return 结果；可用 agent/pipeline/parallel/phase/log/args）"),
+			"script": strProp("workflow 脚本体（JS，末尾 return 结果；可用 pipeline/parallel/phase/log/args）"),
 			"meta":   strProp("可选：{name, description, phases} 元信息（记录用）"),
 			"args":   strProp("可选：输入参数 JSON 对象（脚本内 args 全局可读）"),
 		}, "script"),
@@ -165,32 +159,8 @@ func (r *workflowRunner) installGlobals() {
 
 	vm.Set("args", r.args)
 
-	// agent(prompt, opts?)：后台委托子 Agent 并同步等待完成，返回最终正文。
-	vm.Set("agent", func(call goja.FunctionCall) goja.Value {
-		prompt := call.Argument(0).String()
-		if strings.TrimSpace(prompt) == "" {
-			panic(vm.NewTypeError("workflow agent：prompt 不能为空"))
-		}
-		spec := SubAgentSpec{Task: prompt}
-		if a := call.Argument(1); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
-			if obj, ok := a.Export().(map[string]any); ok {
-				spec.Label = mapStr(obj, "label")
-				spec.Team = mapStr(obj, "team")
-				spec.Member = mapStr(obj, "member")
-				spec.System = mapStr(obj, "system")
-				spec.Model = mapStr(obj, "model")
-				spec.Provider = mapStr(obj, "provider")
-				spec.ReasoningEffort = mapStr(obj, "reasoningEffort")
-				spec.WsRoot = mapStr(obj, "wsRoot")
-				spec.DenyTools = mapStrSlice(obj, "denyTools")
-			}
-		}
-		text, err := r.awaitAgent(spec)
-		if err != nil {
-			panic(vm.NewGoError(fmt.Errorf("workflow agent 失败: %v", err)))
-		}
-		return vm.ToValue(text)
-	})
+	// ★ 2026-09：agent(prompt, opts?) 钩子已删除（子 Agent 委托能力随子 Agent
+	//   实现一并移除）。脚本内仍可用 pipeline/parallel/phase/log/args。
 
 	// pipeline(items, ...stages)：逐项顺序过阶段；阶段抛错 → 该项 null。
 	vm.Set("pipeline", func(call goja.FunctionCall) goja.Value {
@@ -229,9 +199,7 @@ func (r *workflowRunner) installGlobals() {
 	})
 
 	// parallel(thunks)：全部执行并等待（barrier）；thunk 抛错 → null。
-	// ★ goja 单线程模型：JS 侧顺序调度（每个 thunk 完整执行完再下一个）；
-	//   并发性由 thunk 内 agent() 委托的宿主子 Agent 承载（宿主多会话并行），
-	//   天然满足「并行上限 4」的防成员风暴约束（顺序调度不可能超发）。
+	// ★ goja 单线程模型：JS 侧顺序调度（每个 thunk 完整执行完再下一个）。
 	vm.Set("parallel", func(call goja.FunctionCall) goja.Value {
 		arrVal := call.Argument(0)
 		if arrVal == nil || goja.IsUndefined(arrVal) || goja.IsNull(arrVal) {
@@ -257,45 +225,4 @@ func (r *workflowRunner) installGlobals() {
 		}
 		return vm.ToValue(results)
 	})
-}
-
-// awaitAgent 委托子 Agent 并等待完成：SpawnSubAgent → 轮询状态到 idle →
-// SubAgentLastText 取最终正文。ctx 取消 / 超时中止。
-func (r *workflowRunner) awaitAgent(spec SubAgentSpec) (string, error) {
-	if !SubAgentSpawnerReady() {
-		return "", fmt.Errorf("子 Agent 能力未就绪（会话启动器未注入）")
-	}
-	rec, err := SpawnSubAgent(spec)
-	if err != nil {
-		return "", err
-	}
-	convID := rec.ConvID
-	deadline := time.Now().Add(workflowAgentTimeout)
-	for {
-		select {
-		case <-r.ctx.Done():
-			StopSubAgent(convID)
-			return "", r.ctx.Err()
-		case <-time.After(300 * time.Millisecond):
-		}
-		if time.Now().After(deadline) {
-			StopSubAgent(convID)
-			return "", fmt.Errorf("workflow agent 等待超时（%s）conv=%s", workflowAgentTimeout, convID)
-		}
-		info := SubAgentInfo(convID)
-		if info == nil {
-			continue
-		}
-		if info.State != "running" {
-			if info.LastError != "" {
-				return "", fmt.Errorf("workflow agent 出错 conv=%s: %s", convID, info.LastError)
-			}
-			text := SubAgentLastText(convID)
-			if strings.TrimSpace(text) == "" {
-				text = "(子 Agent 无正文输出)"
-			}
-			log.Printf("[workflow] agent 完成 conv=%s text=%d 字符", convID, len(text))
-			return text, nil
-		}
-	}
 }

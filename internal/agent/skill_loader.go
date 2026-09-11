@@ -89,7 +89,12 @@ func LoadAllSkills() []Skill {
 	if SkillProjectDir != "" {
 		agentsDir := filepath.Join(filepath.Dir(SkillProjectDir), ".agents", "skills")
 		if agentsDir != SkillProjectDir {
-			all = append(all, loadAllFrom("", agentsDir, SkillEnabled)...)
+			// ★ 2026-09-11 修复：不再经 loadAllFrom 追加——其内部固定加载
+			//   SkillGlobalDir 层，二次调用会把全局技能重复加一遍（实测
+			//   system3+project6+global6+global6=21 条 → 修复后 15 条）。
+			//   直接按 project 级扫描 + 状态覆盖（保持原 level 语义）。
+			extra := loadSkillsFromDir(agentsDir, LevelProject, SkillEnabled)
+			all = append(all, applyStatusOverride(extra, SkillStatusOverride)...)
 		}
 	}
 	return all
@@ -110,7 +115,9 @@ func LoadAllSkillsFromRoot(root, systemDir string, enabled map[string]bool) []Sk
 	all := loadAllFrom(systemDir, projectDir, enabled)
 	agentsDir := filepath.Join(root, ".agents", "skills")
 	if agentsDir != projectDir {
-		all = append(all, loadAllFrom("", agentsDir, enabled)...)
+		// ★ 2026-09-11 修复：同上——避免 SkillGlobalDir 被第二次加载。
+		extra := loadSkillsFromDir(agentsDir, LevelProject, enabled)
+		all = append(all, applyStatusOverride(extra, SkillStatusOverride)...)
 	}
 	return all
 }
@@ -463,7 +470,17 @@ func PromptSkills(skills []Skill) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("\n\n# 可用技能（按需用 load_skill 取全文；子资源传 path）\n")
+	// ★ 2026-09-11：同名技能（跨层级副本，如 cordis-plugin-development 同时存在于
+	//   内置与工作区）只列首个——与 FindSkill 的「首个匹配生效」语义一致，避免
+	//   system 动态段重复膨胀（曾出现同描述行 ×2+，白白占用每次请求的 tokens）。
+	seen := make(map[string]bool, len(skills))
 	for _, s := range skills {
+		if s.Name != "" {
+			if seen[s.Name] {
+				continue
+			}
+			seen[s.Name] = true
+		}
 		desc := s.Description
 		if desc == "" {
 			desc = "（无描述）"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/goja"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── JS 循环端到端测试（agentloop 核心外置链路）──
@@ -61,7 +61,7 @@ func TestJSLoopRealAgentloopToolThenFinal(t *testing.T) {
 		{Content: "读到了 JSLOOP_WORLD"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test-js-loop", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-js-loop",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "读 hello.txt 告诉我内容", nil)
@@ -120,7 +120,7 @@ func TestJSLoopRealAgentloopNaturalFinish(t *testing.T) {
 	loadRealAgentloop(t)
 
 	mock := &MockProvider{Responses: []Message{{Content: "任务完成"}}}
-	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: NewRegistry()}
 	if _, err := loop.Run(context.Background(), "完成", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -129,77 +129,8 @@ func TestJSLoopRealAgentloopNaturalFinish(t *testing.T) {
 	}
 }
 
-// delegate 子 agent：JS 循环内部创建子 Loop（SubAgentSink 事件过滤）。
-func TestJSLoopDelegateSubAgent(t *testing.T) {
-	if !gojaOk() {
-		t.Skip("goja 不可用")
-	}
-	if CurrentJSLoop() != nil {
-		t.Skipf("已有 JS 循环注册（%v），跳过防污染", CurrentJSLoop().id)
-	}
-	coreSettingsEnsure()
-
-	// 精简插件：run 内 delegate 一个子 agent
-	const delegatePlugin = `
-return {
-  name: 'jsloop-delegate',
-  apply(ctx) {
-    ctx.loopFactory.registerLoop({
-      id: 'delegate-e2e',
-      async run({ task, msgs, tools, meta, loop }) {
-        // 委托子 agent 执行子任务
-        const sub = loop.delegate.run({
-          task: '子任务：回复 hello',
-          agentName: 'coder',
-          maxIterations: 2,
-        });
-        // 子 agent 结果注入本 agent
-        loop.events.emit({ type: 'notice', content: '子 agent 结果: ' + (sub.error || sub.content) });
-        loop.events.emit({ type: 'done', content: '父任务完成，子结果=' + sub.content, doneReason: 'task_complete', turnReason: 'completed' });
-        return { msgs };
-      }
-    })
-  }
-}`
-	reg := NewRegistry()
-	host := NewPluginHost(reg, nil, `C:\ws`)
-	id, err := host.DefineJS(delegatePlugin, "delegate e2e")
-	if err != nil {
-		t.Fatalf("DefineJS: %v", err)
-	}
-	def, _ := host.GetJSDef(id)
-	if err := host.LoadJSDynamic(def); err != nil {
-		t.Fatalf("LoadJSDynamic: %v", err)
-	}
-	t.Cleanup(func() { _ = host.Unload(def.name) })
-
-	// MockProvider：父调用返回子结果可观察——用脚本化 provider：
-	// 第 1 次调用（父）：自然完成
-	// 子 agent 的调用也走同一 mock（按调用顺序）
-	mock := &MockProvider{Responses: []Message{
-		{Content: "父 agent 回复"},
-		{Content: "子 agent 回复 hello"},
-	}}
-	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
-		OnEvent: func(e Event) { events = append(events, e) }}
-	msgs, err := loop.Run(context.Background(), "父任务", nil)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	// 事件流应包含子 agent 标记的 notice（AgentName=coder）
-	var sawSubNotice bool
-	for _, e := range events {
-		if e.Type == EventNotice && strings.Contains(e.Content, "子 agent") {
-			sawSubNotice = true
-			break
-		}
-	}
-	if !sawSubNotice {
-		t.Error("未收到子 agent 结果 notice 事件")
-	}
-	_ = msgs
-}
+// ★ 2026-09：TestJSLoopDelegateSubAgent（循环内 loop.delegate 派生子 agent）已随
+//   子 Agent 实现删除——JS 循环不再提供派生能力，loop.delegate 对象已移除。
 
 // 回退：卸载插件 → 还原 Go 默认循环。
 func TestJSLoopUnloadRestoreGoLoop(t *testing.T) {
@@ -221,7 +152,7 @@ func TestJSLoopUnloadRestoreGoLoop(t *testing.T) {
 	}
 	// 卸载后 Run 走 Go 循环
 	mock := &MockProvider{Responses: []Message{{Content: "完成"}}}
-	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: NewRegistry()}
 	if _, err := loop.Run(context.Background(), "ok", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -246,8 +177,10 @@ func coreSettingsEnsure() {
 	}
 }
 
-// 并行工具执行：一次 LLM 返回 2 个只读工具调用 → runParallel 并行执行（非串行）。
-func TestJSLoopParallelTools(t *testing.T) {
+// 一次 LLM 返回 2 个只读工具调用 → 一律串行执行（LLM 并行调用工具能力已删除）。
+// ★ 2026-09：原「runParallel 并行执行（非串行）」用例改为验证串行等价行为——
+//   调用顺序保持、两条 tool 消息配对回灌、事件成对。
+func TestJSLoopMultipleToolCallsSerial(t *testing.T) {
 	if !gojaOk() {
 		t.Skip("goja 不可用")
 	}
@@ -271,12 +204,12 @@ func TestJSLoopParallelTools(t *testing.T) {
 		{Content: "读完两个文件"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test-js-parallel", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-js-parallel",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "读 a.txt 和 b.txt", nil)
 	if err != nil {
-		t.Fatalf("Run(并行): %v", err)
+		t.Fatalf("Run(串行): %v", err)
 	}
 	if mock.Calls() != 2 {
 		t.Errorf("LLM 应调用 2 次，得 %d", mock.Calls())
@@ -302,9 +235,9 @@ func TestJSLoopParallelTools(t *testing.T) {
 		}
 	}
 	if !sawA || !sawB {
-		t.Errorf("并行结果缺失：A=%v B=%v", sawA, sawB)
+		t.Errorf("工具结果缺失：A=%v B=%v", sawA, sawB)
 	}
-	// tool_result 事件 2 个（并行路径 Go 侧 emit）
+	// tool_result 事件 2 个（串行路径逐个 emit）
 	var results int
 	for _, e := range events {
 		if e.Type == EventToolResult {

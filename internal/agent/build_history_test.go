@@ -53,7 +53,7 @@ func TestLoopRun_多轮历史原样注入(t *testing.T) {
 		userMsg("第二轮任务"),
 		{Role: RoleAssistant, Content: "第二轮完成"},
 	}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 3}
+	loop := &Loop{Provider: mock, Registry: reg, System: "test"}
 	msgs, err := loop.Run(context.Background(), "第三轮任务", hist)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -121,7 +121,7 @@ func TestLoopRun_自闭环两轮原样(t *testing.T) {
 	prov := &funcProvider{chat: recChat}
 
 	reg := NewRegistry()
-	loop := &Loop{Provider: prov, Registry: reg, System: "test", MaxIterations: 3}
+	loop := &Loop{Provider: prov, Registry: reg, System: "test"}
 	if _, err := loop.Run(context.Background(), "第一轮任务", nil); err != nil {
 		t.Fatalf("第一轮 Run: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestLoopRun_自闭环两轮原样(t *testing.T) {
 func TestLoopRun_当前任务无时间戳(t *testing.T) {
 	reg := NewRegistry()
 	mock := &MockProvider{Responses: []Message{{Content: "收到"}}}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 3}
+	loop := &Loop{Provider: mock, Registry: reg, System: "test"}
 	msgs, err := loop.Run(context.Background(), "原始任务文本", nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)

@@ -37,7 +37,6 @@ type AppSettings struct {
 	ReviewBlacklist    []string `json:"reviewBlacklist"` // 审核黑名单：命中此列表的工具需要审核（为空=全部审核）
 	ReviewWhitelist    []string `json:"reviewWhitelist"` // 审核白名单：命中此列表的工具跳过审核（黑名单优先）
 	Autonomous         bool     `json:"autonomous"`
-	MaxIterations      int      `json:"maxIterations"`
 	AutoIterate        bool     `json:"autoIterateOnRejection"`
 	SystemInstructions string   `json:"systemInstructions"`
 	IgnoreDirs         []string `json:"ignoreDirs"`
@@ -119,7 +118,7 @@ func Default() AppSettings {
 		Provider: "", BaseURL: "", APIKey: "",
 		PlanModel: "", ExecuteModel: "", ReviewModel: "",
 		Temperature: "0.3", ThinkingMode: "high", MaxTokens: 131072, ContextMaxTokens: 64000,
-		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto",
+		AutoIterate: true, ReviewMode: "auto",
 		Theme: "dark", FontSize: 14, TabSize: 2,
 	}
 }

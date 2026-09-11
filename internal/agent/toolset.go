@@ -311,9 +311,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
 	// ★ Round5：编辑面统一 apply_patch（edit 已移除）——system 组声明同步，
 	//   否则白名单收敛后 agent 拿不到 apply_patch。
-	// ★ 2026-09-12：tool_search（按需工具发现，codex Deferred 对齐）加入 base
-	//   ——保证白名单收敛后恒可用（deferred 工具靠它发现）。
-	base := []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "run_code", "tool_search"}
+	base := []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "run_code"}
 	sysSet := map[string]bool{}
 	for _, t := range base {
 		sysSet[t] = true
@@ -831,7 +829,7 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 		plugins = append(plugins, gs...)
 		used = append(used, t.ID)
 	}
-	// ★ LLM 现场生成的项目专属插件并入（模板覆盖不到的能力缺口；对齐 
+	// ★ LLM 现场生成的项目专属插件并入（模板覆盖不到的能力缺口；对齐
 	// 「模型所写插件」模式——注册时即校验：define 预检失败剔除并给指导性错误信息，
 	// 不因单个 LLM 插件问题阻塞整个工具集）。
 	if intent != nil && len(intent.CustomPlugins) > 0 {
@@ -1496,7 +1494,7 @@ func ApplyWorkspaceToolsetWhitelist(ph *PluginHost, reg *Registry, root string) 
 //	声明的工具（builtin 条目 Tools + JS 插件工具 − DisabledTools）+ 恒可用
 //	协议/管理工具。未声明工具全部禁用（cordis/前端仍可见可管理）。
 //
-// 幂等；subagent 成员会话同样按自己的 convID 读取（spawn 时继承源会话集合）。
+// 幂等；按会话自己的 convID 读取选择的集合。
 func ApplyConvToolsetWhitelist(ph *PluginHost, reg *Registry, convID, wsRoot string) {
 	if reg == nil {
 		return
@@ -1634,9 +1632,7 @@ func ApplyToolsetWhitelistByName(ph *PluginHost, reg *Registry, name string) {
 		}
 	}
 	for _, meta := range reg.AllToolMeta() {
-		if meta.SystemTool || isCordisMgmtTool(meta.Name) || isToolsetMgmtTool(meta.Name) || meta.Name == "tool_search" {
-			// ★ tool_search 与 SystemTool 同级恒可用：按需工具（deferred）的
-			//   发现入口——若被白名单收敛禁用，低频工具将永远无法暴露。
+		if meta.SystemTool || isCordisMgmtTool(meta.Name) || isToolsetMgmtTool(meta.Name) {
 			keep[meta.Name] = true
 		}
 	}
@@ -1756,6 +1752,7 @@ func (h *PluginHost) applyPluginToolVisibility(name string) {
 //
 //	无工具集保持默认全量（工具注册即对 agent 可见，旧行为）。用户配置
 //	工具集（含预置模式播种）后即开始收敛。
+//
 // ★ 2026-09-04：工具集全局化——检查全局目录，不再依赖工作区根。
 func hasWorkspaceToolsets() bool {
 	entries, err := os.ReadDir(globalToolsetDir())

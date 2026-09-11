@@ -308,8 +308,8 @@ func toAnthropicTools(tools []ToolDefinition) []map[string]any {
 
 // anthropicSSEFrame Anthropic SSE 帧（只解析需要的字段）。
 type anthropicSSEFrame struct {
-	Type  string `json:"type"`
-	Index int    `json:"index"`
+	Type         string `json:"type"`
+	Index        int    `json:"index"`
 	ContentBlock struct {
 		Type  string          `json:"type"`
 		ID    string          `json:"id"`
@@ -344,7 +344,7 @@ type anthropicSSEFrame struct {
 
 // pendingAnthropicBlock 累积中的 content block。
 type pendingAnthropicBlock struct {
-	kind     string          // text | thinking | tool_use
+	kind     string // text | thinking | tool_use
 	id       string
 	name     string
 	inputRaw json.RawMessage // content_block_start 全量 input（部分网关在 start 帧给出，而非 delta 流）

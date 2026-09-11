@@ -40,7 +40,7 @@ func TestLiveApplyPatchCRLF(t *testing.T) {
 	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
 	var ev []string
 	loop := &Loop{
-		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}), MaxIterations: 10,
+		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}),
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
 				ev = append(ev, e.Tool)
@@ -94,7 +94,7 @@ func TestLiveGlobRecursive(t *testing.T) {
 	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
 	var ev []string
 	loop := &Loop{
-		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}), MaxIterations: 10,
+		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}),
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
 				ev = append(ev, e.Tool)
@@ -153,7 +153,7 @@ func TestLiveMCPInProcess(t *testing.T) {
 	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
 	var ev []string
 	loop := &Loop{
-		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}), MaxIterations: 10,
+		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}),
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
 				ev = append(ev, e.Tool)
@@ -218,7 +218,7 @@ func TestLiveSkills(t *testing.T) {
 	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
 	var ev []string
 	loop := &Loop{
-		Provider: prov, Registry: reg, System: sysPrompt, MaxIterations: 10,
+		Provider: prov, Registry: reg, System: sysPrompt,
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
 				ev = append(ev, e.Tool)

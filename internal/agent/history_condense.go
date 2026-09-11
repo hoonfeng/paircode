@@ -44,23 +44,38 @@ const (
 // 保持原始消息逐字节不变 → 前缀稳定 → 连续轮次共享缓存命中。
 //
 // 策略（对齐 maybeCompact 的两档阈值）：
-//   - 估算历史 token 占比 < compactRatioEarly（0.45）且未达硬地板 → 不压缩
+//   - 估算历史 token 占比 < compactRatioEarly（0.45）且未达基准量 → 不压缩
 //   - 达到阈值 → CondenseHistory 压缩（保留最近轮 + 摘要）
-//   - maxTokens <= 0（未配置窗口）→ 以 compactHardFloor 绝对量兜底
+//   - maxTokens <= 0（未配置窗口）→ 以 EffectiveCondenseBudget 兜底
 func CondenseHistoryByPressure(msgs []Message, maxTokens int) []Message {
 	if len(msgs) < 4 {
 		return msgs
 	}
-	if maxTokens <= 0 {
-		maxTokens = compactHardFloor
-	}
+	budget := EffectiveCondenseBudget(maxTokens)
 	tokens := estimateTokens(msgs)
-	ratio := float64(tokens) / float64(maxTokens)
-	// 未达预压缩阈值且未触碰硬地板：保持原始历史（KV 前缀稳定，缓存可命中）
-	if ratio < compactRatioEarly && tokens < compactHardFloor {
+	ratio := float64(tokens) / float64(budget)
+	// 未达预压缩阈值且未触碰兜底量：保持原始历史（KV 前缀稳定，缓存可命中）
+	if ratio < compactRatioEarly && tokens < budget {
 		return msgs
 	}
 	return CondenseHistory(msgs)
+}
+
+// condenseFallbackTokens 未配置窗口、也未配置硬地板时的兜底基准量（token）：
+// 跨轮次加载历史时的精简门槛。取 200K 是「典型模型有效窗口」量级——既避免
+// 未配置窗口时历史无限增长，又不会像旧固定 120K 那样在 1M 窗口模型上提前腰斩。
+const condenseFallbackTokens = 200000
+
+// EffectiveCondenseBudget 跨轮次加载的 token 基准量（0=用兜底量）。
+// 优先级：配置窗口 > 显式硬地板（PAIR_COMPACT_HARD_FLOOR）> 兜底量。
+func EffectiveCondenseBudget(maxTokens int) int {
+	if maxTokens > 0 {
+		return maxTokens
+	}
+	if floor := CompactHardFloor(); floor > 0 {
+		return floor
+	}
+	return condenseFallbackTokens
 }
 
 // CondenseHistory 将已完成的旧轮次压缩：最近 1 轮完整保留、倒数第 2 轮半压缩、

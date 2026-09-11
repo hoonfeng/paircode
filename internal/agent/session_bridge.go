@@ -48,10 +48,11 @@ func SessionConvID(ctx context.Context) string {
 
 // WithSessionWorkspaceRoot 向 ctx 注入会话绑定的工作区根路径。
 // ★ 2026-08-23 工作区隔离（重大 BUG）：工具执行必须绑定「会话启动时的工作区」，
-//   而不能读全局当前工作区（core.Folders/WorkspaceRoots——切换工作区时被覆写，
-//   正在执行的对话会因此把工具跑进新工作区，造成文件读写/命令执行串台）。
-//   SessionManager.Start 把 opts.WorkspaceRoot 注入 runCtx，与 convID 平行；
-//   Loop → Registry.Execute → 插件工具包装（jsToolToGo）沿 ctx 链提取。
+//
+//	而不能读全局当前工作区（core.Folders/WorkspaceRoots——切换工作区时被覆写，
+//	正在执行的对话会因此把工具跑进新工作区，造成文件读写/命令执行串台）。
+//	SessionManager.Start 把 opts.WorkspaceRoot 注入 runCtx，与 convID 平行；
+//	Loop → Registry.Execute → 插件工具包装（jsToolToGo）沿 ctx 链提取。
 func WithSessionWorkspaceRoot(ctx context.Context, wsRoot string) context.Context {
 	return context.WithValue(ctx, sessionWsCtxKey{}, wsRoot)
 }
@@ -102,8 +103,8 @@ var sessionBridge *SessionBridge
 // nil 时明确报错（防静默失效）。
 func init() {
 	archiveSessionTools()
-	archiveGoalTools()      // Round3 ③.1：goal 工具路由执行器（hostTool 索引）
-	archiveWorkflowTool()   // Round3 ③.3：workflow 工具路由执行器（hostTool 索引）
+	archiveGoalTools()    // Round3 ③.1：goal 工具路由执行器（hostTool 索引）
+	archiveWorkflowTool() // Round3 ③.3：workflow 工具路由执行器（hostTool 索引）
 }
 
 // SetSessionBridge 注入会话桥（web 层启动时调用；重复注入覆盖）。

@@ -89,12 +89,6 @@ func RegisterToolGroups(r *Registry, root string, groups ...string) {
 		}
 		s.apply(&PluginContext{Tools: r})
 	}
-	// ★ 2026-09-12 deferred（按需工具）在「全量持有」场景（独立二进制/测试/示例）
-	//   直接标记发现——这些场景没有会话工具面与 tool_search，deferred 不应
-	//   造成「注册了却永不可见」（幂等）。
-	for n := range DeferredToolNames {
-		r.MarkToolDiscovered(n)
-	}
 }
 
 // RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用）。
@@ -102,8 +96,6 @@ func RegisterToolGroups(r *Registry, root string, groups ...string) {
 //
 //	改用 RegisterHostFrameworkTools（工具实现已全部迁移磁盘插件）。
 func RegisterDefaultTools(r *Registry, root string) {
-	// RegisterToolGroups 内部已对 deferred（按需工具）全量标记发现
-	//（全量持有场景无会话工具面/tool_search）。
 	RegisterToolGroups(r, root)
 }
 
@@ -116,10 +108,6 @@ func RegisterHostFrameworkTools(r *Registry, root string) {
 	RegisterManagementTools(r, root) // history_search/list/count 等
 	registerToolStatsTool(r)         // tool_stats
 	registerTaskTools(r, root)       // update_tasks（会话绑定 TaskManager）
-	// ★ 按需工具搜索（codex Deferred/tool_search 对齐，2026-09-12）：低频工具
-	//   默认不进 LLM 工具面（DeferredToolNames 名单），模型搜索命中后本会话内
-	//   提升（见 deferred_tools.go）。注册在框架工具入口——所有会话统一装配。
-	RegisterToolSearchTool(r, root)
 	// ★ 2026-09 工具面合并：load_skill_resource 并入单工具 load_skill（tool-system
 	//   插件按 path 参数分派路由 ctx.hostTool.exec('load_skill_resource')）——该名
 	//   无插件同名声明，claimTool 不会存档，这里显式存档宿主执行器（幂等；handler

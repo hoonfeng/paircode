@@ -13,12 +13,13 @@ import (
 
 // TestBridgeNodeSourceExternalPriority 「外置资源优先」场景验证（Round4 repair
 // t6 F1a）：
-//  ① 外置旧版 vs 内嵌新版 → bridgeNodeSource() 返回外置内容（外部优先，F1a
-//     遮蔽根因的机制本身）；
-//  ② 外置缺失 → 回退内嵌（单文件分发兜底）；
-//  ③ 同步回归：仓库跟踪的外置资源（.pair/assets/runtime/bridge_node.js）必须
-//     与内嵌 bridge_node.js 同版本语义（归一化换行后逐字节一致）——防止
-//     「外置旧版（12,329B，2e0f36ab 起）遮蔽内嵌新版（29,834B）」再次发生。
+//
+//	① 外置旧版 vs 内嵌新版 → bridgeNodeSource() 返回外置内容（外部优先，F1a
+//	   遮蔽根因的机制本身）；
+//	② 外置缺失 → 回退内嵌（单文件分发兜底）；
+//	③ 同步回归：仓库跟踪的外置资源（.pair/assets/runtime/bridge_node.js）必须
+//	   与内嵌 bridge_node.js 同版本语义（归一化换行后逐字节一致）——防止
+//	   「外置旧版（12,329B，2e0f36ab 起）遮蔽内嵌新版（29,834B）」再次发生。
 func TestBridgeNodeSourceExternalPriority(t *testing.T) {
 	// ① 外部优先（遮蔽内嵌）
 	extDir := t.TempDir()

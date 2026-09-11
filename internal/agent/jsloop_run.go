@@ -188,8 +188,8 @@ type jsLoopParentImplKey struct{}
 // runWithJS 由 Loop.Run 在 CurrentJSLoop() 非空时调用：Go 做前置准备与收尾，
 // 循环业务委托 JS 实现。
 func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, impl *jsLoopImpl) (msgs []Message, err error) {
-	log.Printf("[loop-js] Run 开始（JS 循环实现 %q）taskLen=%d history=%d maxIter=%d autonomous=%v",
-		impl.id, len(task), len(history), l.MaxIterations, l.Autonomous)
+	log.Printf("[loop-js] Run 开始（JS 循环实现 %q）taskLen=%d history=%d iterLimit=%d stepBudget=%d toolBudget=%d autonomous=%v",
+		impl.id, len(task), len(history), l.IterationLimit(), l.StepBudgetOrDefault(), l.ToolCallBudgetOrDefault(), l.Autonomous)
 
 	// ★ 新 turn：清空 live 快照（占位消息重新累积，旧累积无效）
 	l.resetLive()
@@ -224,12 +224,12 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	}()
 
 	hist := CopyHistory(history)
-	l.compactArchive = nil // Run 开始历史完整（store 加载），压缩归档仅本 Run 有效
+	l.compactArchive = nil       // Run 开始历史完整（store 加载），压缩归档仅本 Run 有效
+	l.compactUnsentValid = false // ★ 未发送边界记账同步复位（下标口径跨 Run 不同）
+	l.resetToolCallsRun()        // ★ 段预算·工具调用闸：Run = 一个执行段，计数清零（tool_budget.go）
 	l.currentMsgs = hist
-	max := l.MaxIterations
-	if max <= 0 {
-		max = 30
-	}
+	// 段内迭代安全上限由 buildArgs 内部按段预算（双闸门取较大者）派生
+	// （tool_budget.go IterationLimit；原「最大迭代数」配置项已移除）——不再有宿主传入的迭代数。
 	msgs = make([]Message, 0, len(hist)+4)
 	if l.System != "" && !hasSystem(hist) {
 		msgs = append(msgs, Message{Role: RoleSystem, Content: l.System})
@@ -303,7 +303,7 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	//   同 goroutine 二次 Lock 会死锁）。
 	runJS := func() error {
 		return runJSWithTimeout(impl.vm, 0, func() error {
-			v, e := impl.run(goja.Undefined(), impl.vm.ToValue(runner.buildArgs(task, msgs, tools, max)))
+			v, e := impl.run(goja.Undefined(), impl.vm.ToValue(runner.buildArgs(task, msgs, tools)))
 			if e != nil {
 				return e
 			}
@@ -343,10 +343,24 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 		}
 		msgs = jmsgs
 	}
+	// ★ 段预算分段（tool_budget.go，双闸门：步数 + 工具调用）：JS 循环在 step 收尾
+	//   检测到任一闸门耗尽时返回 {segment:{reason,used,budget,steps,stepBudget}} →
+	//   标记本 Run 分段结束，SessionManager 随后自动发起下一段（同会话续跑）。
+	if sv := retObj.Get("segment"); sv != nil && !goja.IsUndefined(sv) && !goja.IsNull(sv) {
+		l.markSegmentPending()
+		// ★ 状态以宿主为真源（JS 返回的 segment 只作触发信号）：日志/续跑消息都取
+		//   宿主 segmentBudgetState，避免 JS 与宿主字段漂移导致口径不一致。
+		st := l.segmentBudgetState()
+		log.Printf("[loop-js] 段预算分段结束 reason=%s 步数=%d/%s 工具调用=%d/%s（自动续跑）",
+			st.Reason, st.UsedSteps, budgetText(st.StepBudget), st.UsedTools, budgetText(st.ToolBudget))
+	}
 	// JS 返回 error 字符串 → 转 Go 错误
 	if ev := retObj.Get("error"); ev != nil && !goja.IsUndefined(ev) && !goja.IsNull(ev) && ev.String() != "" {
 		msg := ev.String()
-		if strings.Contains(msg, "最大迭代") || strings.Contains(msg, "max_iterations") || strings.Contains(msg, ErrMaxIterations.Error()) {
+		// ★ 2026-09-12：「最大迭代数」配置项已移除——JS 侧上限由宿主按预算派生的
+		//   iterationLimit 派生，文案已改「段内迭代安全上限」；旧文案/旧插件字段
+		//   （最大迭代 / max_iterations）保留匹配以兼容存量插件。
+		if strings.Contains(msg, "迭代安全上限") || strings.Contains(msg, "最大迭代") || strings.Contains(msg, "max_iterations") || strings.Contains(msg, ErrMaxIterations.Error()) {
 			l.LastTurnReason = TurnMaxIterations
 			return msgs, ErrMaxIterations
 		}

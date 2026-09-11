@@ -1506,7 +1506,7 @@ func generateSuggestions(s SessionScore) []string {
 		suggestions = append(suggestions, "任务未完成。检查任务目标、是否存在报错或卡死。")
 	}
 	if s.EfficiencyScore < 60 {
-		suggestions = append(suggestions, "工具调用过多/轮次过长。考虑用更少的工具调用完成任务，善用并行执行。")
+		suggestions = append(suggestions, "工具调用过多/轮次过长。考虑用更少的工具调用完成任务，优先用一次到位的高价值调用。")
 	}
 	if s.ReliabilityScore < 70 {
 		suggestions = append(suggestions, "工具调用失败率高。检查高频失败工具的原因，可能需要调整调用方式或创建新工具。")

@@ -209,9 +209,13 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   装配器）。Loop 核心在 Go（会话/持久化深度耦合），本插件做「参数级装配」：
   apply 时 `ctx.loopFactory.register(apply)`，每次创建循环（会话 Start /
   自闭环 Run 统一走 CreateLoop）时收到装配快照、返回非空字段覆盖。config
-  支持 systemAppend（追加系统提示词）/maxIterations/maxContextTokens/
+  支持 systemAppend（追加系统提示词）/toolCallBudget（单段工具调用预算）/
+  maxToolBudgetSegments（最大自动续跑段数）/maxContextTokens/
   autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/
   reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
+  ★ 2026-09-12：「最大迭代数」（maxIterations）配置项已移除——段内迭代安全上限
+  改由工具预算派生（internal/agent/tool_budget.go IterationLimit），段的收束由
+  工具预算 + 自动续跑负责。
   （快照字段实现：internal/agent/jsplugin_loopfactory.go）
 - **`tool-system/`**（2026-08-16 扩容；2026-09 工具面合并）：系统内部工具 15 个——
   SystemTool 组（update_tasks/tool_stats/history_search/history_list/history_count）
@@ -306,17 +310,14 @@ packager  # 或依 packager.json pipeline 手动执行
   调度直通内嵌内核原名；`multimodal_gate` 门控与前端渲染表同步）。
 - 预设 v7：seed 版本递增重建（预设引用同步；用户自定义集合不受影响）。
 
-**按需工具（deferred）机制（对齐 codex ToolExposure::Deferred + tool_search）**：
-- `internal/agent/deferred_tools.go`：`DeferredToolNames`（低频工具名单）+
-  `tool_search` 工具（关键词加权搜索 → 命中后本会话内提升为可见，下一轮可直接调用）。
-- 语义：名单工具仍在注册表（/api/tools 可见、面板可管理），但不进 LLM 的
-  tools 参数（Definitions/EnabledNames 过滤）；直接调用未发现的按需工具会被
-  引导（Execute 拦截，提示先 tool_search）。
-- 会话隔离：发现状态=Registry 级（新会话重新隐藏；Copy/Subset 快照继承）；
-  独立宿主（RegisterDefaultTools）与内嵌内核（InitEmbeddedToolRegistry）自动
-  全量标记发现，不受会话工具面影响。
-- 元信息：`/api/tools` 返回 `deferred` 字段（前端可显示「按需」标记）；
-  `tool_search` 与 SystemTool 同级恒可用（白名单收敛不摘除）。
+**~~按需工具（deferred）机制~~ —— ★ 2026-09-11 已移除**：
+- 原机制（2026-09-12 引入）：低频工具默认不进 LLM 工具面、靠 `tool_search`
+  搜索发现；发现状态挂在「每轮对话新建的 Registry」上，跨消息即丢失，且与
+  场景（工具集白名单）叠加成「双重按需」——选中的场景工具仍被藏住，实际
+  不可用（用户判定「没有实际意义、不能真正使用」）。
+- 现行为：低频工具直接随工具面注册（范围由场景/工具集白名单 + /命令 激活
+  控制）；`DeferredToolNames`/`tool_search`/`MarkToolDiscovered` 及
+  `/api/tools` 的 `deferred` 字段全链删除。
 
 ---
 
@@ -351,3 +352,44 @@ bug_detect/bug_fix、toolset_*（7）、cordis_*（7）、codegraph_build/codegr
 
 **验证**：go build + internal/agent 全量测试 + 9095 冒烟（总 143 / deferred 81 /
 task_create 零出现 / tool_search 新域命中）。
+
+---
+
+## ★ 2026-09-11 创造模式 + 按需工具机制重构（deferred 移除；插件 29 → 30）
+
+**工具面机制变化（用户决策：「按需工具的机制没有实际意义，现在并不能真正使用」）**：
+- 移除 deferred（延迟暴露）机制全链：`internal/agent/deferred_tools.go` 删除；
+  `DeferredToolNames` / `tool_search` 工具 / `MarkToolDiscovered` /
+  `/api/tools` 的 `deferred` 字段全部移除——低频工具直接进 LLM 工具面
+  （范围由场景/工具集白名单 + /命令 激活控制，不再二次藏）。
+- 根因：deferred「发现状态」挂在每轮对话新建的 Registry 上，跨消息即丢失；
+  且与场景（工具集白名单）叠加成「双重按需」——选中场景的工具仍被藏住，
+  实际不可用（用户判定「没有实际意义」）。
+- 影响：LLM 工具面 62 → 按场景收敛的全量（默认集合 ~86）；toolset_* 等
+  低频工具随场景直接可见/可管理（/创造 依赖此点才能工作）。
+
+**/命令 激活链路修复（`internal/agent/plugin.go` + `cmd/companion/web_server.go`）**：
+- `MergePluginToolsForConv` 会话注册表改存「值拷贝」——会话级
+  `SetToolEnabled`（白名单收敛）不再经共享指针污染插件宿主全局工具对象
+  （多会话构建互踩、前端 /api/tools 状态被最近一次会话改写的根因）。
+- `handleCommandsRun`：已激活的按需命令**重复执行也唤醒** agent——此前仅
+  首次激活唤醒，二次执行「只有结果卡片、agent 不动」；/创造 每次生成新指令、
+  /agent-teams 每次都是新目标都依赖此修复。
+
+**新增插件 tool-scenario（创造模式；29 → 30）**：
+- `/创造 <需求>`（ctx.activation on-demand，同 agent-teams 模式）→ 会话激活后
+  其工具 `scenario_scan`（能力盘点）/ `scenario_create`（组合创建）注册进 agent
+  （未激活不占工具面；跨对话保持）。
+- 工具 schema 在插件、execute 经 `ctx.hostTool` 路由宿主
+  `internal/agent/scenario_tools.go`（seam 同 tool-system——编排在插件、能力在宿主）。
+- 场景 = 工具集：创建后固化到安装目录 `.pair/toolsets/<name>.json`（内置场景
+  所在；中文名放开——`validToolsetName` 允许 CJK）；对话面板选择即生效。
+- 宿主注册点：web_server initReg + AgentBase registry（claimTool 存档；
+  **不注册进会话 reg**——可见性由激活控制）。
+
+**验证**：scenario 单测 6 项 + tool-scenario 插件冒烟全绿；9097 实例 E2E——
+未激活会话 38 工具基线 → /agent-teams 激活后 48（+10 agent_teams，跨对话保持
+38→48→48）→ /创造 激活后 40（+scenario_scan/create）→ agent 真实走完创造流程：
+scenario_scan → scenario_create → 中文场景「端到端验证场景」落盘
+`.pair/toolsets/`（创建后已清理）；deferred 相关全链核对（tool_search 无、
+deferred 字段无）。

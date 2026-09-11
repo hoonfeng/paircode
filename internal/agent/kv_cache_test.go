@@ -40,10 +40,9 @@ func TestKVCachePrefixStability(t *testing.T) {
 		}}
 
 		loop := &Loop{
-			Provider:      mock,
-			Registry:      reg,
-			System:        stableSystem,
-			MaxIterations: 10,
+			Provider: mock,
+			Registry: reg,
+			System:   stableSystem,
 		}
 
 		msgs, err := loop.Run(context.Background(), "读取两个文件", nil)
@@ -97,30 +96,36 @@ func TestSystemPromptVariance(t *testing.T) {
 	}
 }
 
-// TestBuildSnapshotContentGrows 验证 buildSnapshotContent：摘要变化后内容增长，
-// 且不触及 system prompt（纯消息流快照正文；marker/框架由 syncContextSnapshot 包裹）。
+// TestBuildSnapshotContentGrows 验证 buildSnapshotContent 与历史摘要解耦：
+// ★ 2026-09：历史摘要提示段已删除——CompressedSummaries 不再注入上下文，
+//   因此「只有摘要」时快照正文为空；正文随真实状态提示（staleMsg）变化增长，
+//   且始终不触及 system prompt（纯消息流快照正文，marker/框架由 syncContextSnapshot 包裹）。
 func TestBuildSnapshotContentGrows(t *testing.T) {
 	loop := &Loop{
 		CompressedSummaries: []string{"[压缩摘要] 用户要求读取文件 a.go，已读取完毕"},
 	}
 
-	// 首次调用 buildSnapshotContent
-	result1 := loop.buildSnapshotContent()
-	if result1 == "" {
-		t.Error("有摘要时 buildSnapshotContent 不应返回空")
-	}
-	if !strings.Contains(result1, "上下文已压缩") {
-		t.Error("buildSnapshotContent 应包含压缩摘要标记")
+	// 摘要不注入正文：有无摘要的快照正文应完全一致
+	base := (&Loop{}).buildSnapshotContent()
+	if base != loop.buildSnapshotContent() {
+		t.Errorf("摘要不应影响快照正文（提示注入已删除）：base=%d withSummaries=%d", len(base), len(loop.buildSnapshotContent()))
 	}
 
-	// 模拟新增一条摘要
+	// 状态提示是真实正文来源：加入后正文应变化
+	loop.staleMsg = "⚠️ 检测到 1 条可能过期的记忆条目"
+	result1 := loop.buildSnapshotContent()
+	if !strings.Contains(result1, "过期") {
+		t.Error("正文应包含状态提示内容")
+	}
+	if strings.Contains(result1, "上下文已压缩") {
+		t.Error("历史摘要提示段已删除，正文不应包含该标记")
+	}
+
+	// 新增一条摘要：提示注入已删除 → 正文长度不变
 	loop.CompressedSummaries = append(loop.CompressedSummaries, "[压缩摘要] 用户要求修改 b.go，已修改完毕")
 	result2 := loop.buildSnapshotContent()
-	if result2 == "" {
-		t.Error("有摘要时 buildSnapshotContent 不应返回空")
-	}
-	if len(result2) <= len(result1) {
-		t.Error("新增摘要后 buildSnapshotContent 应更长")
+	if result2 != result1 {
+		t.Errorf("摘要不注入正文，新增摘要不应改变正文：%d -> %d", len(result1), len(result2))
 	}
 	t.Logf("buildSnapshotContent ✓ (result1=%d, result2=%d)", len(result1), len(result2))
 }
@@ -233,8 +238,9 @@ func min(a, b int) int {
 	if a < b {
 		return a
 	}
-return b
+	return b
 }
+
 // TestResumeContextGoesToSnapshotNotSystem 验证会话连贯性上下文（resumeCtx）迁移：
 // ★ 2026-09-03 KV 缓存修复——resumeCtx 每轮变化，若拼入 System（messages 第一条）
 //   会在 system 尾部切断 provider 前缀缓存（其后历史全部 miss → 命中率低）。

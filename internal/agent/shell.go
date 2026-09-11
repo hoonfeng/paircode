@@ -109,7 +109,7 @@ type bgProc struct {
 	stdin   io.WriteCloser // ★ stdin 管道（会话式交互写入；nil = 不可写）
 	mu      sync.Mutex
 	buf     bytes.Buffer
-	readOff int           // ★ 增量读取游标：write_stdin 每次从上次读完处继续
+	readOff int // ★ 增量读取游标：write_stdin 每次从上次读完处继续
 	done    bool
 	exitErr string
 	doneCh  chan struct{} // ★ 结束通知（Wait 完成时 close）
@@ -387,8 +387,8 @@ func execStatusLine(sessionID int, done bool, exitCode int, exitErr string, hint
 // 共享同一份 bgRegistry）。库侧实现（独立宿主/测试）；生产同源工具在 tool-exec 插件。
 func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 	r.Register(&Tool{
-		Name:       "exec_command",
-		UsageGuide: "统一 shell 执行：短命令（git/构建/测试/文件查询）同步返回结果；长进程（dev server/watch/TCP 监听）等待 yield_time_ms 后返回 session_id，用 write_stdin 轮询输出/写 stdin、kill_process 终止。原生 shell 语法（bash 优先、cmd 兜底），比 run_code 包装更直接。",
+		Name:        "exec_command",
+		UsageGuide:  "统一 shell 执行：短命令（git/构建/测试/文件查询）同步返回结果；长进程（dev server/watch/TCP 监听）等待 yield_time_ms 后返回 session_id，用 write_stdin 轮询输出/写 stdin、kill_process 终止。原生 shell 语法（bash 优先、cmd 兜底），比 run_code 包装更直接。",
 		Description: "执行一条 shell 命令。yield_time_ms 内完成返回全量输出与退出码；超时仍在运行返回 session_id（会话可续：write_stdin 轮询/交互，kill_process 停止）。",
 		Parameters: objSchema(props{
 			"command":           strProp("要执行的 shell 命令（bash 语法；无 bash 时 cmd 兜底）"),

@@ -12,10 +12,9 @@ func noopHandler(_ context.Context, _ map[string]any) (string, error) { return "
 // mkHarnessReg 构造含 harness 工具 + pair 独有工具的注册表（供过滤测试）。
 func mkHarnessReg() *Registry {
 	reg := NewRegistry()
-	// harness 工具集（含别名与原生 web + 按需工具搜索 tool_search）
-	// ★ 2026-09 Round4/5：str_replace_editor/edit 系已移除（不再注册）；
-	//   ★ 2026-09-12：tool_search 加入保留名单（deferred 工具发现入口）。
-	for _, n := range []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "write_stdin", "kill_process", "web_search", "web_fetch", "run_code", "tool_search"} {
+	// harness 工具集（含别名与原生 web）
+	// ★ 2026-09 Round4/5：str_replace_editor/edit 系已移除（不再注册）。
+	for _, n := range []string{"read", "write", "apply_patch", "glob", "grep", "exec_command", "write_stdin", "kill_process", "web_search", "web_fetch", "run_code"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 对话协议基础设施
@@ -36,13 +35,6 @@ func mkHarnessReg() *Registry {
 		"codegraph_search", "memory", "project_info", "git_diff",
 		"binary_hash", "csv_read", "web_debug", "go_build", "fix_flex_autoheight"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
-	}
-	// ★ 2026-09-12 剩余插件审查轮：按需工具（deferred）与 harness 保留是正交
-	// 维度——对保留清单中的按需工具（toolset_*/cordis_* 等）标记「已发现」，
-	// 使本文件的「保留/禁用」断言聚焦 harness 语义（deferred 隐藏语义由
-	// deferred_tools_test.go 覆盖）。
-	for name := range HarnessAlignedToolNames {
-		reg.MarkToolDiscovered(name)
 	}
 	return reg
 }

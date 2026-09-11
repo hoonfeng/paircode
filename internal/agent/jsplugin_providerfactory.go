@@ -29,10 +29,10 @@ type jsProviderFactoryBridge struct {
 func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 	snap := map[string]any{
 		"provider":                 current.Provider,
-		"preset":                   current.Preset, // ★ 2026-09-03 当前生效配置名（会话级>全局激活；装配器按名整套展开）
+		"preset":                   current.Preset,       // ★ 2026-09-03 当前生效配置名（会话级>全局激活；装配器按名整套展开）
 		"convProvider":             current.ConvProvider, // ★ 2026-09-03 会话选定服务商（空=未设置）
-		"convModel":                current.ConvModel, // ★ 2026-09-03 会话选定模型（空=未设置）
-		"convPreset":               current.ConvPreset, // ★ 2026-09-03 会话选定配置名（空=未选配置）
+		"convModel":                current.ConvModel,    // ★ 2026-09-03 会话选定模型（空=未设置）
+		"convPreset":               current.ConvPreset,   // ★ 2026-09-03 会话选定配置名（空=未选配置）
 		"baseURL":                  current.BaseURL,
 		"protocol":                 current.Protocol, // ★ 2026-09-02 LLM 协议（空=跟随服务商/默认）
 		"apiKey":                   current.APIKey,

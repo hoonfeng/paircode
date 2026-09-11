@@ -206,14 +206,14 @@ module.exports = {
 
 // builtinLibAliases 内置库别名表（npm 风格名 → 实现名）。
 var builtinLibAliases = map[string]string{
-	"path":       "path",
-	"path/posix": "path",
-	"path/win32": "path",
-	"node:path":  "path",
-	"events":     "events",
+	"path":        "path",
+	"path/posix":  "path",
+	"path/win32":  "path",
+	"node:path":   "path",
+	"events":      "events",
 	"node:events": "events",
-	"util":       "util",
-	"node:util":  "util",
+	"util":        "util",
+	"node:util":   "util",
 }
 
 // builtinLibFor 查询内置库：返回（实现名, 源码, 命中）。

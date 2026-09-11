@@ -15,8 +15,8 @@ package agent
 import "sync"
 
 var (
-	convReviewMu     sync.RWMutex
-	convReviewGetFn  func(convID, wsRoot string) (string, error)
+	convReviewMu      sync.RWMutex
+	convReviewGetFn   func(convID, wsRoot string) (string, error)
 	convReviewApplyFn func(convID, wsRoot, mode string) error
 )
 

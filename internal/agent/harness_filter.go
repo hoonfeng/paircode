@@ -63,8 +63,6 @@ var HarnessAlignedToolNames = map[string]bool{
 	// 对话协议基础设施
 	"update_tasks": true,
 	"ask_user":     true,
-	// 按需工具搜索（deferred 工具发现——harness 模式下同样保留）
-	"tool_search": true,
 	// 插件管理（cordis 单工具 op 分派）：登记/装载/停止/回收/查看 JS 动态插件
 	"cordis": true,
 	// 工具集管理（toolset_*）：工具集=插件组合的固化单元，agent 自主构建/查看/导出/管理

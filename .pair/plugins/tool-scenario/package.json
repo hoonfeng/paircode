@@ -1,0 +1,8 @@
+{
+  "name": "tool-scenario",
+  "purpose": "场景创造（创造模式）：/创造 <需求> 按需激活——scenario_scan 盘点能力、scenario_create 组合创建场景工具集并固化到安装目录 .pair/toolsets/",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0",
+  "main": "index.js"
+}

@@ -7,6 +7,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -183,6 +185,20 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	}
 	return parseVerdict(resp.Content), nil
 }
+
+// reviewUserPrompt 构造送审 prompt（审核模型看到的唯一输入）。
+//
+// ★ 2026-09 修复（三方 agentloop 补丁 P2/P3 的宿主侧根治版）：原先只读
+//
+//	args["path"] / args["content"]（content 空再回退 old_string），而现代工具
+//	与插件的参数名并非如此——write 用 file_path、edit 用 new_string / edits[]、
+//	git_* 用 message / files / target / action —— 送审 prompt 于是成了
+//	「路径空 + 内容空」，审核模型看不到真实变更，只能保守驳回
+//	（git 类工具实测驳回率 100%）。现统一做「送审字段归一化」：
+//	  path    ← path / file_path / target / file / files[] / 补丁文件头
+//	  content ← content / new_string / edits[] / patch / old_string
+//	  git_*   ← project / 仓库根兜底 path，关键参数汇总为 content
+//	只读 args，不修改 tc——执行路径（loop.tools.run）零副作用。
 func reviewUserPrompt(name string, args map[string]any) string {
 	if name == "run_command" || name == "run_background" || name == "bash" || name == "exec_command" {
 		cmd, _ := args["command"].(string)
@@ -192,45 +208,180 @@ func reviewUserPrompt(name string, args map[string]any) string {
 			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n" +
 			"5. 【会话检查】长驻命令（dev server / watch / go run 服务 / npm run dev）由 exec_command 的 yield_time_ms 自动转会话（不阻塞）——如疑似长驻，确认是否合理\n\n以 JSON 格式输出审核结果。"
 	}
-	path, _ := args["path"].(string)
-	content, _ := args["content"].(string)
-	if content == "" {
-		content, _ = args["old_string"].(string)
-	}
-	// ★ Round5：apply_patch 的变更载荷与目标路径在 patch 文本里（无 path/content
-	//   参数）——提取首个文件头与补丁正文，供审核 prompt 展示（否则审核看不到内容）。
-	if patchStr, _ := args["patch"].(string); patchStr != "" {
-		if content == "" {
-			content = patchStr
-		}
+	path := reviewPath(args)
+	content := reviewContent(args)
+	// git 类工具：参数是 project/message/files/target/action 等（无 path/content）
+	// → path 用 project / 仓库根兜底，content 汇总关键参数，让审核器看到
+	//   「操作类型 + 提交信息 + 目标对象」，而不是空串。
+	if strings.HasPrefix(name, "git_") {
 		if path == "" {
-			for _, ln := range strings.Split(patchStr, "\n") {
-				ln = strings.TrimSpace(ln)
-				for _, pfx := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
-					if strings.HasPrefix(ln, pfx) {
-						path = strings.TrimSpace(strings.TrimPrefix(ln, pfx))
-						break
-					}
-				}
-				if path != "" {
-					break
-				}
+			if proj := strings.TrimSpace(argStr(args, "project")); proj != "" {
+				path = "（项目）" + proj
+			} else {
+				path = "（git 仓库工作区）"
 			}
+		}
+		if content == "" {
+			content = gitArgsSummary(name, args)
 		}
 	}
 	op := "写入（新建/覆盖）"
-	if name == "apply_patch" {
+	switch {
+	case name == "apply_patch":
 		op = "编辑（补丁应用）"
-	} else if strings.Contains(name, "edit") {
+	case strings.HasPrefix(name, "git_"):
+		op = "Git 操作"
+	case strings.Contains(name, "edit"):
 		op = "编辑（字符串替换）"
-	} else if strings.Contains(name, "delete") {
+	case strings.Contains(name, "delete"):
 		op = "删除"
-	} else if strings.Contains(name, "move") {
+	case strings.Contains(name, "move"):
 		op = "移动/重命名"
 	}
 	return "[审核：代码变更]\n文件：" + path + "\n操作：" + op + "\n内容预览：" + truncRunesAgent(content, 500) +
 		"\n\n请严格检查：\n1. 安全性（注入/XSS/路径穿越）\n2. 编码处理（.bat/.cmd 须 GBK；.ps1 建议 UTF-8 BOM）\n" +
 		"3. 结构完整性（JSON/XML/YAML 不被破坏）\n4. 向后兼容（不破坏已有 API/配置格式）\n5. 错误处理\n\n以 JSON 格式输出审核结果。"
+}
+
+// reviewPath 送审路径归一化（首个非空者胜出）：
+// path → file_path → target → file → files[] → apply_patch 补丁里的首个文件头。
+func reviewPath(args map[string]any) string {
+	for _, key := range []string{"path", "file_path", "target", "file"} {
+		if s := strings.TrimSpace(argStr(args, key)); s != "" {
+			return s
+		}
+	}
+	if files := reviewStrList(args, "files"); len(files) > 0 {
+		return strings.Join(files, ", ")
+	}
+	return applyPatchFirstPath(argStr(args, "patch"))
+}
+
+// reviewContent 送审内容归一化（首个非空者胜出）：
+// content → new_string → edits[]（各段新代码）→ patch（补丁正文）→ old_string（旧行为保留）。
+func reviewContent(args map[string]any) string {
+	if s := argStr(args, "content"); s != "" {
+		return s
+	}
+	if s := argStr(args, "new_string"); s != "" {
+		return s
+	}
+	if s := editsReviewText(args); s != "" {
+		return s
+	}
+	if s := argStr(args, "patch"); s != "" {
+		return s
+	}
+	return argStr(args, "old_string")
+}
+
+// applyPatchFirstPath 从 codex 补丁文本提取首个文件头路径
+// （*** Add File: / *** Update File: / *** Delete File:）——补丁载荷里才有目标路径。
+func applyPatchFirstPath(patchStr string) string {
+	if patchStr == "" {
+		return ""
+	}
+	for _, raw := range strings.Split(patchStr, "\n") {
+		ln := strings.TrimSpace(raw)
+		for _, pfx := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
+			if strings.HasPrefix(ln, pfx) {
+				if p := strings.TrimSpace(strings.TrimPrefix(ln, pfx)); p != "" {
+					return p
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// editsReviewText 把 edits[] 各段新代码拼成送审文本（multi_edit 类工具的兜底；
+// 无 new_string 的条目跳过）。
+func editsReviewText(args map[string]any) string {
+	raw, ok := args["edits"].([]any)
+	if !ok || len(raw) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, item := range raw {
+		m, _ := item.(map[string]any)
+		if m == nil {
+			continue
+		}
+		ns, _ := m["new_string"].(string)
+		if ns == "" {
+			continue
+		}
+		b.WriteString("#edit" + strconv.Itoa(i+1) + ":\n" + ns + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// reviewStrList 取字符串列表参数（兼容 JSON 解出的 []any 与宿主侧 []string；非数组返回 nil）。
+func reviewStrList(args map[string]any, key string) []string {
+	switch v := args[key].(type) {
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, s := range v {
+			if strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// gitArgsSummary 汇总 git 类工具的关键参数（送审 content 兜底：git 操作无文件内容
+// 变更，让审核器仍能判断「操作类型 + 提交信息 + 目标对象」）。
+func gitArgsSummary(name string, args map[string]any) string {
+	kv := make([]string, 0, 12)
+	addVal := func(key string, val any) {
+		switch v := val.(type) {
+		case []any:
+			ss := make([]string, 0, len(v))
+			for _, it := range v {
+				ss = append(ss, fmt.Sprint(it))
+			}
+			kv = append(kv, key+"="+strings.Join(ss, ", "))
+		case []string:
+			kv = append(kv, key+"="+strings.Join(v, ", "))
+		case string:
+			s := v
+			if key == "message" {
+				s = truncRunesAgent(s, 2000)
+			}
+			kv = append(kv, key+"="+s)
+		case nil:
+			kv = append(kv, key+"=null")
+		default:
+			kv = append(kv, key+"="+fmt.Sprint(v))
+		}
+	}
+	for _, key := range []string{"files", "message", "commit", "target", "name", "file", "count", "all", "staged", "action"} {
+		if v, ok := args[key]; ok {
+			addVal(key, v)
+		}
+	}
+	if s, ok := args["start"]; ok {
+		if e, ok2 := args["end"]; ok2 {
+			kv = append(kv, "lines="+fmt.Sprint(s)+"-"+fmt.Sprint(e))
+		}
+	}
+	if v, ok := args["project"]; ok {
+		addVal("project", v)
+	}
+	if len(kv) == 0 {
+		kv = append(kv, "(无)")
+	}
+	return "git 操作「" + name + "」参数：" + strings.Join(kv, "; ")
 }
 
 // parseVerdict 抽 JSON 裁决（首 { 到末 }）。解析失败→「需要修改」（复刻参考 fallback：不放行、提示人工）。

@@ -17,8 +17,11 @@ import (
 
 var ErrCirclingLoop = errors.New("绕圈检测连续 3 次触发，仍在重复同一操作，已停止")
 
-// ErrMaxIterations 已达最大迭代数仍未完成，由 Loop.Run 返回。
-var ErrMaxIterations = errors.New("已达最大迭代数，停止")
+// ErrMaxIterations 段内迭代已达安全上限仍未完成，由 Loop.Run 返回。
+// ★ 2026-09-12：原「最大迭代数」配置项已移除——上限由段预算（★ 双闸门：步数 /
+// 工具调用，取较大者）派生（Loop.IterationLimit，见 tool_budget.go），
+// 仅作防失控的最后一道保险；正常流程由段预算耗尽触发分段续跑，不会命中本错误。
+var ErrMaxIterations = errors.New("已达段内迭代安全上限，停止")
 
 // EventType 循环对外广播的事件类型（供 UI 流式展示）。
 type EventType string
@@ -31,7 +34,7 @@ const (
 	EventToolUpdate EventType = "tool_update" // 工具执行中间结果（流式更新，供 UI 逐步展示）
 	EventFinal      EventType = "final"       // 任务完成（仅 delegate 单轮委托用；主 Loop 用 EventDone）
 	EventError      EventType = "error"       // 出错/止损
-	EventCompacted  EventType = "compacted"   // 上下文已压缩（中段老消息压成摘要；UI 显示一行素色提示）
+	EventCompacted  EventType = "compacted"   // 上下文已精简（中段老消息压成摘要；UI 显示一行素色提示）
 	EventEvaluation EventType = "evaluation"  // 任务评测评分（完成后评测模型打分；UI 显示评分卡）
 	EventCircling   EventType = "circling"    // 检测到重复绕圈，已注入「换思路」提示打破死循环（UI 显示一行提示）
 	// EventApproval 等待用户审批某次写类工具调用。由宿主（UI 桥）在 Approve 钩子里 emit，
@@ -65,16 +68,16 @@ var (
 )
 
 // backgroundCtxMarker 背景上下文消息标记前缀。
-// 注入到 ephemeral 消息的背景信息（历史摘要/执行日志/记忆知识库过期检查等）以此开头，
+// 注入到 ephemeral 消息的背景信息（执行日志/记忆知识库过期检查等）以此开头，
 // buildCallContext 据此将其插入到「当前任务（最后一条 user 消息）」之前：
-// 若背景信息追加在任务之后，LLM 会把最新一条 user 消息（如历史摘要）误认为当前输入，
+// 若背景信息追加在任务之后，LLM 会把最新一条 user 消息（如背景快照）误认为当前输入，
 // 导致只核对历史而不执行任务（2026-08-08 排查结论）。
 const backgroundCtxMarker = "【背景上下文·非当前任务】\n"
 
 // systemReminderFrame 把背景内容包进系统提醒框架（对齐
 // agent-instructions 的 <system-reminder> 注入格式）。背景信息注入为 user-role
 // ephemeral 消息（不持久化），框架让模型明确区分「背景信息」与「当前任务」，
-// 避免把历史摘要/执行日志等误当作待执行输入。
+// 避免把执行日志等背景信息误当作待执行输入。
 func systemReminderFrame(kind, body string) string {
 	return "<system-reminder>\n以下为" + kind + "（背景信息，非当前任务，仅作参考，请勿当作待执行任务）：\n\n" +
 		body + "\n</system-reminder>"
@@ -114,13 +117,38 @@ type Event struct {
 }
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
-// 停止：自然终止（无 tool_call + 有正文）/ 达最大迭代 / 外部取消。
+// 停止：自然终止（无 tool_call + 有正文）/ 段预算耗尽（★ 双闸门：步数或工具调用，
+// 结束本段并自动续跑）/ 段内迭代安全上限（由预算派生，防失控）/ 外部取消。
 type Loop struct {
-	Provider      Provider
-	Registry      *Registry
-	System        string // 系统提示词
-	MaxIterations int    // 默认 30
-	OnEvent       func(Event)
+	Provider Provider
+	Registry *Registry
+	System   string // 系统提示词
+
+	// ToolCallBudget 单段工具调用预算（工具调用轮次上限）：
+	//   0 = 默认（DefaultToolCallBudget=120）；负数 = 不限；超上限由
+	//   ToolCallBudgetOrDefault 钳制（见 tool_budget.go / NormalizeToolCallBudget）。
+	//   达到上限 → 结束当前执行段并自动续跑（见 tool_budget.go）。
+	ToolCallBudget int
+
+	// StepBudget 单段步数预算（段内 LLM 调用轮数上限，一步 = 一次 LLM 调用）：
+	//   0 = 默认（DefaultStepBudget=120）；负数 = 不限；超上限由
+	//   StepBudgetOrDefault 钳制（见 tool_budget.go / NormalizeStepBudget）。
+	//   ★ 2026-09-12 双闸门：与 ToolCallBudget **任一**达上限即结束当前执行段
+	//   并自动续跑（段内步数取 StepNo，每段 Run 由 openTurn 归零）。
+	StepBudget int
+
+	// MaxToolBudgetSegments 单轮任务最多自动续跑段数（SessionManager 在分段结束后
+	//   自动发起下一段的上限；0 = 默认（MaxToolBudgetSegments=20））。
+	//   ★ 2026-09-12 配置化：来源 agentloop 插件注册的 maxToolBudgetSegments
+	//   （pluginSettings.agentloop，装配时经 overrides 透传；归一化见
+	//   tool_budget.go / NormalizeMaxToolBudgetSegments）。
+	MaxToolBudgetSegments int
+
+	// toolCallsRun 本段（本 Run）已执行的工具调用数；segmentPending 表示
+	// 本 Run 因预算分段结束（待 SessionManager 消费续跑）。见 tool_budget.go。
+	toolCallsRun   int
+	segmentPending bool
+	OnEvent        func(Event)
 	// Approve 审批钩子（可空）。设置后，每次执行 RequiresApproval 的写类工具前调用它，
 	// 返回 (false, feedback) 即拒绝执行——feedback 非空则作为观察回灌（让模型据此改道），空则用默认拒绝语。
 	// 只读工具永不经过它。nil = 自动审核（全部放行）。宿主可在此阻塞等用户点「允许/拒绝」(人工审核)，
@@ -146,17 +174,16 @@ type Loop struct {
 	// （如将委派任务/关键消息作为独立用户消息存储，使前端看到清晰的层次）。
 	OnMessagePersist func(msg Message) error
 
-	// ── 上下文压缩（可空；复刻参考 context/manager.ts，见 compress.go）──
+	// ── 上下文精简（可空；复刻参考 context/manager.ts，见 compress.go）──
 	// MaxContextTokens>0 时启用：每次 LLM 调用前，若 tokens/Max 超阈值，把中段老消息压成一条摘要。
-	// Compressor 非空→用它（轻量压缩模型）做 LLM 摘要，否则/失败→规则式摘要。
+	// Compressor 非空→用它（轻量精简模型）做 LLM 摘要，否则/失败→规则式摘要。
 	Compressor       Provider
 	MaxContextTokens int
 
-	// CompressedSummaries 累积的上下文压缩摘要列表。
-	// 每次 maybeCompact 压缩中段老消息后追加一条摘要。
-	// 这些摘要不作为 system message 的可变部分注入（那会破坏 KV Cache 前缀），
-	// 而是经 buildSnapshotContent 构建进「背景上下文快照」并作为 user 消息
-	// 持久化到消息流（syncContextSnapshot；快照内容变化时追加新快照）。
+	// CompressedSummaries 累积的上下文精简摘要列表。
+	// 每次 maybeCompact 精简中段老消息后追加一条摘要。
+	// ★ 仅作数据留存：不注入 system、不构建进「背景上下文快照」、不进消息流——
+	// 上下文里不再出现任何「已精简/历史摘要」提示块（字段保留供数据面读取）。
 	CompressedSummaries []string
 
 	// staleMsg Run 启动时记忆/知识库过期检查结果（固定内容）。
@@ -170,16 +197,43 @@ type Loop struct {
 	//   经 buildSnapshotContent 注入背景快照（消息流尾部 append-only，见 syncContextSnapshot）。
 	ResumeContext string
 
-	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
-	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
+	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动精简阈值，比纯估算可信）
 
 	// compactArchive 本 Run 内被 compact 丢弃的中段消息归档（按原时间序追加）。
-	// ★ 落盘/展示线还原（2026-08-27）：压缩视图仅供 LLM 提交，绝不允许压缩版
-	//   覆盖落盘 store——否则前端刷新后只剩压缩摘要、完整历史丢失（1214 排查中
-	//   实锤：唯一 user 被压缩删除后 lastUser 锚点失效走兜底分支，压缩版直接落盘）。
+	// ★ 落盘/展示线还原（2026-08-27）：精简视图仅供 LLM 提交，绝不允许精简版
+	//   覆盖落盘 store——否则前端刷新后只剩精简摘要、完整历史丢失（1214 排查中
+	//   实锤：唯一 user 被精简删除后 lastUser 锚点失效走兜底分支，精简版直接落盘）。
 	//   所有持久化点经 l.persist（内部 fullHistory 还原）；展示同步点（currentMsgs）
 	//   同样经 fullHistory。Run 开始时重置（此时历史自 store 加载，本身完整）。
 	compactArchive []Message
+
+	// compactSlots 精简视图已追加的占位块数量（★ 只增不改：见 compress.go compact）。
+	// 前缀缓存要求已发送字节不被改写——每次精简只在「已有占位块之后」追加一个新槽位，
+	// 旧槽位文本恒定（compactPlaceholderText(i)），因此相邻请求公共前缀稳定，
+	// 被保留的尾部无需重新 prefill（旧「删中段」实现每次精简都断整窗前缀）。
+	compactSlots int
+	// compactTrailing 精简摘要块文本（★ 首次精简时写定，之后字节不变）。
+	// 内容 = 原始目标锚点 + 此前进展（stableTrailingSummary），
+	// 经 buildCompactView 注入为视图中的一条固定背景消息（非真实历史，落盘前剔除）。
+	compactTrailing string
+	// compactTrailingPinned 摘要块是否已钉位（已被发送过）。
+	// ★ 一旦为 true，后续精简只能把新占位块**追加在摘要块之后**——
+	//   否则摘要块整体后移一位，等于把已缓存的整段尾部作废（前缀必须逐字节单调延展）。
+	compactTrailingPinned bool
+	// compactSlotsAtPin 首次写定摘要块时已存在的占位块数 P（视图顺序：
+	// [槽位#1..P] + [摘要块] + [槽位#P+1..N] + 保留段）。P 一旦写定不再变化，
+	// 因此已发送过的槽位与摘要块下标恒定——这是缓存前缀逐字节延展的前提。
+	compactSlotsAtPin int
+	// compactUnsentFrom 上一次已发送视图里「未发送段」的起点（视图下标）。
+	// ★ 缓存对齐的关键记账：下次精简把这个下标之前的消息并入被精简段
+	//   （它们已被视图里的视图块替代、不再逐字发送），保留段因此始终是
+	//   「上一条已发送过的消息」开始的连续切片——两次请求逐字节共享前缀，
+	//   只有边界推进掉的那几条需要重新 prefill。
+	// ★ 仅在同一 Run 内有效：Run 开始时必须重置（此时历史从 store 重新加载，
+	//   是全量真实历史，下标口径与上一 Run 的视图下标不同）。
+	compactUnsentFrom int
+	// compactUnsentValid 标记 compactUnsentFrom 是否可信（Run 内首次精简后置位）。
+	compactUnsentValid bool
 
 	// cacheDiagOn 缓存诊断开关（WB_CACHE_DIAG=1 启用；前缀形状/累计状态为包级全局，
 	// 跨 Loop/Run 共享，见 cacheDiagPrev/cacheDiagSession）。
@@ -210,7 +264,7 @@ type Loop struct {
 	approveState *ApproveState
 
 	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
-	CompactRequested bool   // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
+	CompactRequested bool   // 外部设置后下轮迭代触发上下文精简（供主动精简 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
 
 	mu sync.Mutex // 保护 ReviewMode 的并发读写（SetReviewMode/getReviewMode）
@@ -597,8 +651,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		log.Printf("[loop] ⚠ Go 默认循环已 deprecated——装载 agentloop 插件（.pair/plugins/agentloop）后循环逻辑由 JS 驱动；本路径保留为回退")
 	})
 	// ★ Run 启动日志（排查「无响应」：确认 Loop 确实进入运行，以及每次启动时间）
-	log.Printf("[loop] Run 开始 taskLen=%d history=%d maxIter=%d autonomous=%v",
-		len(task), len(history), l.MaxIterations, l.Autonomous)
+	log.Printf("[loop] Run 开始 taskLen=%d history=%d iterLimit=%d toolBudget=%d autonomous=%v",
+		len(task), len(history), l.IterationLimit(), l.ToolCallBudgetOrDefault(), l.Autonomous)
 	// 自闭环：history 为 nil 时使用持久化的 l.History
 	if history == nil {
 		history = l.History
@@ -622,7 +676,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	defer func() {
 		l.History = l.fullHistory(msgs)
 		// 最终写盘兜底：OnBatchPersist 非空则调用一次（经 fullHistory 还原完整时间线，
-		// 防止压缩视图覆盖 store——否则前端刷新后只剩压缩摘要）
+		// 防止精简视图覆盖 store——否则前端刷新后只剩精简摘要）
 		if l.OnBatchPersist != nil && msgs != nil {
 			l.persist(msgs)
 		}
@@ -634,13 +688,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 	// 深复制 history，避免下层 append 污染原切片
 	hist := CopyHistory(history)
-	l.compactArchive = nil // Run 开始历史完整（store 加载），压缩归档仅本 Run 有效
+	l.compactArchive = nil // Run 开始历史完整（store 加载），精简归档仅本 Run 有效
+	l.resetToolCallsRun()  // ★ 段预算·工具调用闸：Run = 一个执行段，计数清零（tool_budget.go）
 	l.currentMsgs = hist
 
-	max := l.MaxIterations
-	if max <= 0 {
-		max = 30
-	}
+	// 段内迭代安全上限：由段预算（双闸门取较大者）派生（见 tool_budget.go IterationLimit——
+	// 原「最大迭代数」配置项已移除，段结束由段预算 + 自动续跑负责）。
+	max := l.IterationLimit()
 	msgs = make([]Message, 0, len(hist)+4)
 	if l.System != "" && !hasSystem(hist) {
 		msgs = append(msgs, Message{Role: RoleSystem, Content: l.System})
@@ -682,11 +736,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 	}
 
-	// ★ 上下文压缩（仅 Run 开始时执行一次，兜底处理超大历史）：
-	//   跨 run 历史已在加载时经 CondenseHistory 压缩，此处再按窗口阈值检查一次，
-	//   确保即使历史未压缩 / 配置窗口较小也不会撑爆上下文。
-	//   run 内迭代不再自动压缩——早期工具输出（read / bash / search 结果）
-	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
+	// ★ 上下文精简（仅 Run 开始时执行一次，兜底处理超大历史）：
+	//   跨 run 历史已在加载时经 CondenseHistory 精简，此处再按窗口阈值检查一次，
+	//   确保即使历史未精简 / 配置窗口较小也不会撑爆上下文。
+	//   run 内迭代不再自动精简——早期工具输出（read / bash / search 结果）
+	//   是 LLM 后续轮次引用的关键上下文，run 内精简会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
 	// ★ 背景上下文快照同步已停用（2026-09-04）：快照正文含 ResumeContext（任务进度/
@@ -733,13 +787,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条托管消息，已注入上下文", len(steerMsgs))})
 		}
 
-		// ★ run 内自动压缩已关闭：自动阈值压缩仅在 Run 开始时执行一次（见上）。
-		//   此处仅响应前端手动压缩按钮（CompactRequested），保留用户主动压缩能力。
+		// ★ run 内自动精简已关闭：自动阈值精简仅在 Run 开始时执行一次（见上）。
+		//   此处仅响应前端手动精简按钮（CompactRequested），保留用户主动精简能力。
 		if l.CompactRequested {
 			msgs = l.maybeCompact(ctx, msgs)
 		}
 
-		// ── 压缩摘要/执行日志背景由 buildCallContext 统一构建并每次迭代注入 ──
+		// ── 执行日志背景由 buildCallContext 统一构建并每次迭代注入 ──
 		// （固定内容插到当前任务之前保持 KV 前缀稳定；动态日志追加末尾，见 buildCallContext）
 
 		// ── 检查用户运行时反馈（补充/纠正）──
@@ -806,7 +860,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.emit(Event{Type: EventContent, Content: c.Content})
 			}
 			if c.Usage != nil && c.Usage.PromptTokens > 0 {
-				l.lastPromptTokens = c.Usage.PromptTokens // 实测用量驱动下轮压缩判定
+				l.lastPromptTokens = c.Usage.PromptTokens // 实测用量驱动下轮精简判定
 				// 发射 token 用量事件，供 UI 侧栏统计缓存命中/未命中
 				usage := *c.Usage
 				if usage.PromptBreakdown.SystemTokens == 0 { // 仅 Provider 未返回时估算
@@ -874,99 +928,94 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 
 		if !truncated {
-			var parMsgs []Message
-			var didParallel bool
-			parMsgs, didParallel = l.tryParallelExecute(ctx, assistant.ToolCalls, msgs)
-			if didParallel {
-				msgs = parMsgs
-			} else {
+			// ★ 工具调用一律串行执行（并行执行能力已彻底移除）：逐个 emit tool_call →
+			//   审批 → 执行 → emit tool_result → 预算计数。
+			for _, tc := range assistant.ToolCalls {
+				l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
-				for _, tc := range assistant.ToolCalls {
-					l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
-
-					// ★ 审批门：Loop 内部根据 ReviewMode + 黑白名单自决审核策略 ★
-					// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
-					// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
-					// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
-					// ★ 黑白名单优先于 ReviewMode：
-					//   - 若 ReviewBlacklist 非空且命中 → 强制审核
-					//   - 若 ReviewWhitelist 非空且命中 → 跳过审核
-					//   - 黑名单优先于白名单
-					approveFn := l.Approve
-					toolName := tc.Function.Name
-					// 检查黑白名单
-					inBlacklist := false
-					for _, name := range l.ReviewBlacklist {
+				// ★ 审批门：Loop 内部根据 ReviewMode + 黑白名单自决审核策略 ★
+				// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
+				// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
+				// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
+				// ★ 黑白名单优先于 ReviewMode：
+				//   - 若 ReviewBlacklist 非空且命中 → 强制审核
+				//   - 若 ReviewWhitelist 非空且命中 → 跳过审核
+				//   - 黑名单优先于白名单
+				approveFn := l.Approve
+				toolName := tc.Function.Name
+				// 检查黑白名单
+				inBlacklist := false
+				for _, name := range l.ReviewBlacklist {
+					if strings.Contains(toolName, name) {
+						inBlacklist = true
+						break
+					}
+				}
+				inWhitelist := false
+				if !inBlacklist {
+					for _, name := range l.ReviewWhitelist {
 						if strings.Contains(toolName, name) {
-							inBlacklist = true
+							inWhitelist = true
 							break
 						}
 					}
-					inWhitelist := false
-					if !inBlacklist {
-						for _, name := range l.ReviewWhitelist {
-							if strings.Contains(toolName, name) {
-								inWhitelist = true
-								break
-							}
-						}
-					}
-					if inBlacklist {
-						// 黑名单命中：按 ReviewMode 审核（即使 mode=off 也审核）
-						switch l.getReviewMode() {
-						case "auto":
-							approveFn = l.aiReviewApprove
-						default:
-							approveFn = l.Approve
-						}
-					} else if inWhitelist {
-						// 白名单命中：跳过审核
-						approveFn = nil
-					} else {
-						// 不在黑白名单中：按 ReviewMode 执行
-						switch l.getReviewMode() {
-						case "auto":
-							approveFn = l.aiReviewApprove
-						case "off":
-							approveFn = nil
-						}
-					}
-					if approveFn != nil {
-						if tool, ok := l.Registry.Get(tc.Function.Name); ok && (tool.RequiresApproval || (tool.DynamicApproval != nil && tool.DynamicApproval(tc))) {
-							if approved, feedback := approveFn(ctx, tc); !approved {
-								rej := strings.TrimSpace(feedback)
-								if rej == "" {
-									rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
-								}
-								// ★ 2026-08-27 错误计数移除：驳回仅反馈继续（打破死循环由
-								//   绕圈检测兜底）；驳回记录进共享审核状态（approveState）。
-								l.getApproveState().recordReject(tc.Function.Name, rej)
-								l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
-								msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
-								l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
-								continue
-							}
-							// 审批通过 → 清掉该工具的最近驳回标记
-							l.getApproveState().clearTool(tc.Function.Name)
-						}
-					}
-
-					result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
-					if terr != nil {
-						result = "Error: " + terr.Error()
-					} else {
-						// ★ 图片读取（read_image 插件）：工具结果含 __SUBMIT_IMAGE__ 标记 →
-						//   准入/归一化/内容寻址落盘，图片认领到该 tool 消息（进持久化历史），
-						//   标记从文本剥离（净化后发 LLM）。
-						result = l.parseImageSubmitResult(result, tc.ID)
-					}
-					l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
-					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result,
-						Images: l.takeCallImages(tc.ID)})
-					l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
-
 				}
-			} // end else (serial tool execution)
+				if inBlacklist {
+					// 黑名单命中：按 ReviewMode 审核（即使 mode=off 也审核）
+					switch l.getReviewMode() {
+					case "auto":
+						approveFn = l.aiReviewApprove
+					default:
+						approveFn = l.Approve
+					}
+				} else if inWhitelist {
+					// 白名单命中：跳过审核
+					approveFn = nil
+				} else {
+					// 不在黑白名单中：按 ReviewMode 执行
+					switch l.getReviewMode() {
+					case "auto":
+						approveFn = l.aiReviewApprove
+					case "off":
+						approveFn = nil
+					}
+				}
+				if approveFn != nil {
+					if tool, ok := l.Registry.Get(tc.Function.Name); ok && (tool.RequiresApproval || (tool.DynamicApproval != nil && tool.DynamicApproval(tc))) {
+						if approved, feedback := approveFn(ctx, tc); !approved {
+							rej := strings.TrimSpace(feedback)
+							if rej == "" {
+								rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
+							}
+							// ★ 2026-08-27 错误计数移除：驳回仅反馈继续（打破死循环由
+							//   绕圈检测兜底）；驳回记录进共享审核状态（approveState）。
+							l.getApproveState().recordReject(tc.Function.Name, rej)
+							l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
+							msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
+							l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
+							continue
+						}
+						// 审批通过 → 清掉该工具的最近驳回标记
+						l.getApproveState().clearTool(tc.Function.Name)
+					}
+				}
+
+				result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
+				l.noteToolCall() // ★ 段预算·工具调用闸计数（见 tool_budget.go）
+				if terr != nil {
+					result = "Error: " + terr.Error()
+				} else {
+					// ★ 图片读取（read_image 插件）：工具结果含 __SUBMIT_IMAGE__ 标记 →
+					//   准入/归一化/内容寻址落盘，图片认领到该 tool 消息（进持久化历史），
+					//   标记从文本剥离（净化后发 LLM）。
+					result = l.parseImageSubmitResult(result, tc.ID)
+				}
+				l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
+				msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result,
+					Images: l.takeCallImages(tc.ID)})
+				l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
+
+			}
 		} // end if !truncated
 
 		// 先同步 currentMsgs（包含 tool results，还原完整时间线），供 persist worker/前端获取完整历史
@@ -1007,6 +1056,17 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete", TurnReason: string(l.LastTurnReason)})
 				return msgs, nil
 			}
+		}
+
+		// ★ 段预算（tool_budget.go，双闸门：步数 + 工具调用）：任一达上限 →
+		//   结束当前执行段（不再发起新的 LLM 调用），标记续跑——SessionManager
+		//   在 Run 返回后自动发起下一段（同会话、历史保留、精简走既有机制）。
+		if st := l.segmentBudgetState(); st.Exhausted {
+			l.markSegmentPending()
+			l.emit(Event{Type: EventNotice, Content: segmentEndNotice(st)})
+			l.LastTurnReason = l.turnStickyReason(TurnCompleted)
+			l.emit(Event{Type: EventDone, Content: "", DoneReason: "tool_budget", TurnReason: string(l.LastTurnReason)})
+			return msgs, nil
 		}
 
 		// ★ content-only 防护：连续多轮只输出文字不调工具 → 死循环兜底
@@ -1163,11 +1223,17 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 	result = l.hydrateImages(result)
 	// ★ GLM 兼容兜底（2026-08-27）：GLM（智谱）硬校验 messages 中必须至少存在一条
 	//   user 消息，否则 HTTP 400 code=1214「messages 参数非法」（实测 T6/T10；
-	//   OpenAI/DeepSeek 无此校验）。触发路径：循环中途压缩（compact）把唯一 user
+	//   OpenAI/DeepSeek 无此校验）。触发路径：循环中途精简（compact）把唯一 user
 	//   消息丢进中段摘要——摘要只进 CompressedSummaries，快照要等下次 Run 开始
 	//   才经 syncContextSnapshot 落盘，此间隙 callMsgs 可能全为 system+assistant+tool。
-	//   最终兜底：无 user 时在 system 前缀之后插入一条 user 消息（仅调用副本不落盘，
-	//   不破坏 system 前缀；实测 GLM 接受 user 后接 assistant/tool/孤立 tool）。
+	//   最终兜底：无 user 时追加一条 user 消息（仅调用副本不落盘）。
+	//   ★ 2026-09-11 修复（缓存前缀断裂根因 A）：原实现插在 system 之后（msg#1），
+	//   会把整段历史向后挤一位——只要「msgs 中是否存在 user」在相邻两次请求间翻转
+	//   （运行时用户反馈/steer 临时注入、精简后 user 被并入摘要、新 Run 首请求带新 user），
+	//   前后请求的公共前缀就断在 msg#1，system 之后全部历史 miss
+	//   （实测同一 turn 内 32→34→37 连续两次断裂即此，单次可损失整窗）。
+	//   改为「末尾追加」：历史段在消息序列中的位置逐字节稳定，翻转只影响占位符自身
+	//   （数十字符）；GLM「至少一条 user」校验同样满足（实测 GLM 接受 tool 后接 user）。
 	hasUser := false
 	for _, m := range result {
 		if m.Role == RoleUser {
@@ -1176,13 +1242,8 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 		}
 	}
 	if !hasUser {
-		ph := Message{Role: RoleUser,
-			Content: "【系统提示】历史任务消息已压缩为背景摘要（将随后续快照注入），请基于系统提示与工具结果继续执行当前任务。"}
-		at := 0
-		for at < len(result) && result[at].Role == RoleSystem {
-			at++
-		}
-		result = append(result[:at], append([]Message{ph}, result[at:]...)...)
+		result = append(result, Message{Role: RoleUser,
+			Content: "【系统提示】请基于系统提示与工具结果继续执行当前任务。"})
 	}
 	l.ephemeralMsgs = nil // 清空，确保不会重复注入
 	// ★ 缓存诊断：每次构建后快照前缀形状（Go/JS 循环统一在构建处诊断，
@@ -1208,13 +1269,13 @@ func findLastSnapshotContent(msgs []Message) (string, bool) {
 
 // syncContextSnapshot 同步「背景上下文快照」到持久化消息流（对齐 dsh
 // RuntimeContextProjection，缓存前缀稳定的核心机制）：
-//   - 快照内容 = 状态提示（staleMsg）+ 历史摘要（CompressedSummaries）+
+//   - 快照内容 = 会话连贯性上下文 + 状态提示（staleMsg）+
 //     自主模式提示 + 记忆 + 知识库（由 buildSnapshotContent 组装）。
 //   - 与历史中最后一条快照比较：内容相同 → 不动（前缀稳定，零注入）；
 //     不同 → 追加新快照到 msgs 末尾（当前任务之后，随 tail 落盘）；
 //     旧快照保留（append-only，位置固定，前缀单调延展）。
 //   - 空内容时不注入（历史已有旧快照也保留不动，避免删消息破坏前缀）。
-//   - 调用时机：Run 开始且 maybeCompact 之后（压缩更新摘要后再同步）。
+//   - 调用时机：Run 开始且 maybeCompact 之后（精简更新摘要数据后再同步）。
 //   - 返回追加后的 msgs（可能原样返回）。
 func (l *Loop) syncContextSnapshot(msgs []Message) []Message {
 	content := l.buildSnapshotContent()
@@ -1222,21 +1283,22 @@ func (l *Loop) syncContextSnapshot(msgs []Message) []Message {
 		return msgs
 	}
 	last, ok := findLastSnapshotContent(msgs)
-	if ok && last == backgroundCtxMarker+systemReminderFrame("会话上下文摘要与状态提示", content) {
+	if ok && last == backgroundCtxMarker+systemReminderFrame("会话背景与状态提示", content) {
 		return msgs // 内容未变：零注入，前缀稳定
 	}
-	msg := Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("会话上下文摘要与状态提示", content)}
+	msg := Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("会话背景与状态提示", content)}
 	msgs = append(msgs, msg)
 	// ★ 立即落盘：快照位于当前任务之后（tail），随 OnBatchPersist 的
 	//   originalHist+tail 重组写入 JSONL → 下次 Run 加载历史即含快照。
-	//   ★ 经 l.persist 还原完整时间线（防压缩视图覆盖 store）。
+	//   ★ 经 l.persist 还原完整时间线（防精简视图覆盖 store）。
 	l.persist(msgs)
 	return msgs
 }
 
 // buildSnapshotContent 构建快照正文（Go 默认实现；JS 循环下由 agentloop 插件
 // 经 loop.context.snapshotParts 取数据后自行组装策略文本）。
-// 内容 = 记忆/知识库过期状态提示 + 历史摘要 + 自主模式提示 + 记忆 + 知识库。
+// 内容 = 会话连贯性上下文 + 记忆/知识库过期状态提示 + 自主模式提示 + 记忆 + 知识库。
+// ★ 不再注入任何「历史摘要 / 已精简」提示块：CompressedSummaries 仅作数据留存。
 // ★ 2026-08-27 缓存优化：记忆/知识库从 system 动态后缀移入快照（高频变化
 //
 //	不再破坏 system 整体前缀；变化只断快照之后的尾部）。
@@ -1257,22 +1319,6 @@ func (l *Loop) buildSnapshotContent() string {
 			b.WriteString("\n\n")
 		}
 		b.WriteString(systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg))
-	}
-
-	// ③ 历史摘要（上下文压缩后产生）
-	if len(l.CompressedSummaries) > 0 {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString("# 上下文已压缩——历史摘要\n\n")
-		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n")
-		b.WriteString("> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n")
-		for i, s := range l.CompressedSummaries {
-			if i > 0 {
-				b.WriteString("\n\n---\n\n")
-			}
-			b.WriteString(s)
-		}
 	}
 
 	// ④ 自主模式系统提示（固定内容）
@@ -1498,7 +1544,7 @@ func harnessSystemPrompt(roots []string) string {
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
-		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（历史摘要/\n" +
+		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（会话连贯性\n" +
 		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
 		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
 		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
@@ -1592,7 +1638,7 @@ func fullSystemPrompt(roots []string) string {
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用提交信息记录工具（名称与用法见 tools 参数 schema）记录本次变更，然后输出最终完成总结。" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
-		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（历史摘要/\n" +
+		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（会话连贯性\n" +
 		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
 		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
 		"# 多轮对话（历史轮次识别）\n" +
@@ -1630,7 +1676,7 @@ func fullSystemPrompt(roots []string) string {
 		"- 了解文件对外接口时，优先用符号清单工具。\n" +
 		"- 查看 struct/interface 完整层次结构时，优先用类型结构工具。\n" +
 		"- 修改文件前，先调用影响分析类工具（函数级影响链或文件级导入依赖）了解影响范围。\n" +
-		"- 每次最多并行 2 个读操作（仅在两文件明显互不依赖时）。\n" +
+		"- 需要看多个文件时分多轮逐个读（工具调用一律串行执行，不要在一轮里堆多个读操作）。\n" +
 		"- 写操作和读操作不要混在同一轮——先读完确认，再写。\n\n" +
 
 		"# 错误恢复\n" +
@@ -1739,4 +1785,63 @@ func readCapped(root, name string) string {
 		s = s[:8000] + "\n…（已截断）"
 	}
 	return s
+}
+
+// ── 审批判定（原 loop_parallel.go 迁入，串行工具执行路径使用）──
+// ★ 工具调用已一律串行执行：并行的 tryParallelExecute/executeReadOnlyParallel/
+// canParallelize 及 loop_parallel.go 已整体删除，仅保留本审批判定函数供
+// JS 循环（jsloop_runner.go 的 approve.ask）与串行路径复用。
+
+// resolveApproval 检查单个工具调用是否需要审批并执行审批流程。
+// 返回 (approved, feedback)。
+func (l *Loop) resolveApproval(ctx context.Context, tc ToolCall) (bool, string) {
+	approveFn := l.Approve
+	toolName := tc.Function.Name
+
+	// 检查黑白名单
+	inBlacklist := false
+	for _, name := range l.ReviewBlacklist {
+		if strings.Contains(toolName, name) {
+			inBlacklist = true
+			break
+		}
+	}
+	inWhitelist := false
+	if !inBlacklist {
+		for _, name := range l.ReviewWhitelist {
+			if strings.Contains(toolName, name) {
+				inWhitelist = true
+				break
+			}
+		}
+	}
+	if inBlacklist {
+		switch l.getReviewMode() {
+		case "auto":
+			approveFn = l.aiReviewApprove
+		default:
+			approveFn = l.Approve
+		}
+	} else if inWhitelist {
+		approveFn = nil
+	} else {
+		switch l.getReviewMode() {
+		case "auto":
+			approveFn = l.aiReviewApprove
+		case "off":
+			approveFn = nil
+		}
+	}
+
+	if approveFn == nil {
+		return true, ""
+	}
+
+	tool, ok := l.Registry.Get(toolName)
+	if !ok || !tool.RequiresApproval {
+		return true, ""
+	}
+
+	approved, feedback := approveFn(ctx, tc)
+	return approved, feedback
 }

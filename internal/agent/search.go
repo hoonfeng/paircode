@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 const (
@@ -42,25 +44,52 @@ var extLangMap = map[string]string{
 	".zig": "zig", ".svelte": "svelte", ".vue": "vue",
 }
 
-// defaultSkipDirs 内置基线：搜索/探索时跳过的依赖库/模块库/构建产物/缓存/VCS 目录（跨生态，全包共用）。
-// 仍可显式把 path 指进某个被跳目录来搜它（跳过只作用于自动递归下降，不挡显式起点）。
-// 用户可经 SetExtraSkipDirs 追加（全局设置 + 项目级，companion 注入）。
+// ═══════════════════════════════════════════════════════════════
+// 忽略目录（搜索/探索时剪枝）——分两级，避免「一刀切」漏搜源码
+//
+//   - defaultSkipDirs   ：任意深度剪枝。依赖库/构建产物/缓存/VCS——跨生态语义稳定，
+//     深层同名目录同样是噪音（子包 node_modules、dist 等）。
+//   - rootLevelSkipDirs ：仅「工作区项目根的第一层」剪枝。IDE/工具自身运行数据与产物
+//     目录（日志、临时、截图、发布包、二进制输出…）——这些名字与用户源码目录高度可能
+//     重名（bin/ logs/ tmp/），深层同名目录不剪枝，避免漏搜。
+//
+// 跳过只作用于「自动递归下降」，不挡显式起点：把 path 直接指进某被跳目录仍可搜它。
+// 用户追加：设置项 ignoreDirs（core.Settings，UI 可配，实时生效）+ SetExtraSkipDirs
+// （程序化注入/测试）。
+// ═══════════════════════════════════════════════════════════════
+
+// defaultSkipDirs 内置基线：任意深度跳过的依赖库/模块库/构建产物/缓存/VCS 目录（跨生态，全包共用）。
 var defaultSkipDirs = map[string]bool{
 	// VCS / 编辑器
-	".git": true, ".svn": true, ".hg": true, ".idea": true, ".vscode": true,
+	".git": true, ".svn": true, ".hg": true, ".idea": true, ".vscode": true, ".vs": true,
 	// 依赖库 / 模块库
 	"node_modules": true, "bower_components": true, "jspm_packages": true, "vendor": true, "Pods": true,
-	"venv": true, ".venv": true, "__pycache__": true, ".pytest_cache": true, ".mypy_cache": true, ".tox": true,
+	".pnpm-store": true, ".yarn": true, ".dart_tool": true, ".bundle": true,
+	"venv": true, ".venv": true, "__pycache__": true, ".pytest_cache": true, ".mypy_cache": true,
+	".ruff_cache": true, ".tox": true,
 	// 构建产物
 	"dist": true, "build": true, "out": true, "target": true,
-	".next": true, ".nuxt": true, ".svelte-kit": true, ".output": true,
+	".next": true, ".nuxt": true, ".svelte-kit": true, ".output": true, ".angular": true,
 	// 缓存 / 覆盖率 / 基建
-	".gradle": true, ".cache": true, ".turbo": true, "coverage": true, ".nyc_output": true, ".terraform": true,
+	".gradle": true, ".cache": true, ".turbo": true, ".parcel-cache": true, ".eslintcache": true,
+	"coverage": true, ".nyc_output": true, ".terraform": true,
 	// 本项目自身数据 / 备份
 	".pair": true, "源码备份": true,
 }
 
-// extraSkipDirs 用户配置的额外忽略目录（全局设置 + 项目级 .pair/ignore，由 companion 合并后注入）。
+// rootLevelSkipDirs 仅当目录位于工作区项目根第一层时跳过：IDE/工具自身的运行数据与
+// 产物目录（如 .agent-teams 团队数据、_temp 临时验证、logs/tmp 运行日志、gocache 构建
+// 缓存、screenshots 截图、release 打包产物、bin 二进制输出）以及模块缓存副本。
+// 深层同名目录（用户源码里的 logs/、tmp/ 等）照常搜索。
+var rootLevelSkipDirs = map[string]bool{
+	".agent-teams": true, ".chrome-test": true, ".verify-tmp": true,
+	"_temp": true, "_desktop-archive": true,
+	"tmp": true, "logs": true, "gocache": true, "screenshots": true,
+	"release": true, "bin": true, "obj": true,
+	"gomod": true, "gomodcache": true,
+}
+
+// extraSkipDirs 程序化注入的额外忽略目录（SetExtraSkipDirs；宿主/测试用）。
 var extraSkipDirs = map[string]bool{}
 
 // SetExtraSkipDirs 设置额外忽略目录名（覆盖上次）。companion 合并 全局+项目 配置后调用。
@@ -74,8 +103,49 @@ func SetExtraSkipDirs(dirs []string) {
 	extraSkipDirs = m
 }
 
-// isSkipDir 该目录名是否跳过（内置基线 ∪ 用户额外）。
-func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
+// isSkipDirName 目录名是否命中忽略集（任意深度）：内置基线 ∪ 程序化注入 ∪ 设置项
+// ignoreDirs（core.Settings，实时读取——UI 改设置无需重启即生效；忽略目录数量小，
+// 线性匹配开销可忽略）。
+func isSkipDirName(name string) bool {
+	if defaultSkipDirs[name] || extraSkipDirs[name] {
+		return true
+	}
+	for _, d := range core.Settings.IgnoreDirs {
+		if d = strings.TrimSpace(d); d != "" && strings.EqualFold(d, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSkipDirAt 递归下降时该目录是否剪枝：任意深度集命中，或根层集命中且该目录确实
+// 位于某工作区项目根的第一层（projRoot 或其他工作区根的直接子目录）。
+func isSkipDirAt(projRoot, p, name string) bool {
+	if isSkipDirName(name) {
+		return true
+	}
+	if rootLevelSkipDirs[name] && isWorkspaceRootChild(projRoot, p) {
+		return true
+	}
+	return false
+}
+
+// isWorkspaceRootChild 目录 p 是否为工作区某项目根的直接子目录。
+func isWorkspaceRootChild(projRoot, p string) bool {
+	parent := filepath.Dir(p)
+	if projRoot != "" && samePath(parent, projRoot) {
+		return true
+	}
+	for _, r := range workspaceRootsSnapshot() {
+		if r != "" && samePath(parent, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSkipDir 兼容旧签名（仅名字判定，不含根层规则）。
+func isSkipDir(name string) bool { return isSkipDirName(name) }
 
 // listFilesHandler 目录列举 handler（原 list_files，Round3 并入 glob：
 // glob 无 pattern 时走本分支）。
@@ -165,7 +235,7 @@ func searchContentHandler(root string) ToolHandler {
 				return err
 			}
 			if d.IsDir() {
-				if p != base && isSkipDir(d.Name()) {
+				if p != base && isSkipDirAt(projRoot, p, d.Name()) {
 					return fs.SkipDir
 				}
 				return nil
@@ -242,7 +312,7 @@ func searchFilesHandler(root string) ToolHandler {
 				return err
 			}
 			if d.IsDir() {
-				if p != base && isSkipDir(d.Name()) {
+				if p != base && isSkipDirAt(projRoot, p, d.Name()) {
 					return fs.SkipDir
 				}
 				return nil

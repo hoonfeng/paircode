@@ -23,7 +23,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径（工作区内）",
+          "description": "文件路径（工作区内）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -45,7 +45,7 @@ const tools = [
           "type": "string"
         },
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -72,7 +72,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -98,7 +98,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         },
         "text": {
@@ -128,7 +128,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -148,7 +148,7 @@ const tools = [
     "parameters": {
       "properties": {
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -166,7 +166,7 @@ const tools = [
     "parameters": {
       "properties": {
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -188,7 +188,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径",
+          "description": "文件路径；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },

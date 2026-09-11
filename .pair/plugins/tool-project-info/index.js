@@ -223,7 +223,19 @@ function infoKeyFile(n) {
 }
 
 // isSkipDir 常见忽略目录（explore/文件树统计用）。
-const skipDirs = new Set(['node_modules', '.git', 'dist', 'build', 'release', '.cache', 'logs', 'tmp', '_temp', '.verify-tmp', '.agent-teams', 'bin', '.pair', '.agents'])
+// ★ 与内核搜索忽略集（internal/agent/search.go defaultSkipDirs/rootLevelSkipDirs）
+//   保持同源：依赖库/构建产物/VCS + IDE 运行数据目录（_temp/logs/bin/release/…）。
+const skipDirs = new Set([
+  '.git', '.svn', '.hg', '.idea', '.vscode', '.vs',
+  'node_modules', 'bower_components', 'jspm_packages', 'vendor', 'pods',
+  '.pnpm-store', '.yarn', '.dart_tool', '.bundle',
+  'venv', '.venv', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.tox',
+  'dist', 'build', 'out', 'target', '.next', '.nuxt', '.svelte-kit', '.output', '.angular',
+  '.gradle', '.cache', '.turbo', '.parcel-cache', '.eslintcache', 'coverage', '.nyc_output', '.terraform',
+  '.pair', '源码备份', '.agents',
+  '.agent-teams', '.chrome-test', '.verify-tmp', '_temp', '_desktop-archive',
+  'tmp', 'logs', 'gocache', 'screenshots', 'release', 'bin', 'obj', 'gomod', 'gomodcache',
+])
 function isSkipDir(n) {
   return skipDirs.has(String(n).toLowerCase())
 }

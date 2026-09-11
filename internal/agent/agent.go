@@ -43,8 +43,9 @@ type AgentConfig struct {
 	// OnFeedback 用户反馈回调（可选）。每次 LLM 调用前检查。
 	OnFeedback func() string
 
-	// 最大迭代数（<=0 使用内部默认 30）
-	MaxIterations int
+	// ★ 2026-09-12：「最大迭代数」配置项已移除——段内迭代安全上限由段预算
+	//   （★ 双闸门：步数 + 工具调用，取二者较大者）派生（tool_budget.go
+	//   IterationLimit），段的收束由段预算 + 自动续跑负责。
 	// 上下文 token 上限（>0 启用压缩）
 	MaxContextTokens int
 
@@ -138,6 +139,10 @@ func (a *AgentBase) Init() error {
 	//   不再以插件形态装配（不可启停、不出现在插件列表）。
 	// ★ 工具集管理工具 + 启动自动装载（.pair/toolsets/ + 全局）
 	RegisterToolsetTools(registry, root, ph)
+	// ★ 2026-09-11 场景创造（scenario_scan/scenario_create）：宿主框架面注册——
+	//   供 tool-scenario 磁盘插件 claimTool 存档（须早于 LoadAllToolsets 装载）；
+	//   会话可见性由 /创造 命令按需激活控制（不进会话 reg）。
+	RegisterScenarioTools(registry, root, ph)
 	LoadAllToolsets(ph, root)
 	SetGlobalPluginHost(ph)
 	a.Plugins = ph
@@ -213,7 +218,6 @@ func (a *AgentBase) Run(ctx context.Context) error {
 		Provider:         a.Config.Provider,
 		Registry:         a.Registry,
 		System:           a.Config.SystemPrompt,
-		MaxIterations:    a.Config.MaxIterations,
 		MaxContextTokens: a.Config.MaxContextTokens,
 		Compressor:       a.Config.Compressor,
 		Autonomous:       a.Config.Autonomous,

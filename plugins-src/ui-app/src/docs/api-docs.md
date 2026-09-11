@@ -59,6 +59,11 @@ GET /api/health
 
 浏览、读写和管理工作区内的文件与目录。
 
+> **路径语义（多项目工作区）**
+> - **相对路径一律相对「主项目根」解析**（主项目 = 工作区第一个文件夹，不是进程 cwd）；返回与记录的文件路径均为主项目根相对路径（跨项目时形如 `../<项目名>/…`）。
+> - 访问**工作区其他文件夹（其他项目）**必须传**绝对路径**——相对路径不会自动跳到其他项目，越界会直接报「路径不在当前项目内」，请勿反复重试同一相对路径。
+> - Agent 侧工具（`read`/`write`/`glob`/`grep`/`exec_command`）另有 `project` 参数（项目目录名 / 相对主项目的路径 / 绝对路径）可直接把解析根切到目标项目；HTTP 接口无此参数，用绝对路径等价。
+
 ### 2.1 列出目录
 
 ```
@@ -68,7 +73,7 @@ GET /api/fs/list?path={目录路径}
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| path | string | 否 | 目录路径，省略时返回工作区根目录 |
+| path | string | 否 | 目录路径（相对主项目根解析；跨项目请传绝对路径），省略时返回主项目根目录 |
 
 **响应示例：**
 ```json
@@ -96,7 +101,7 @@ GET /api/fs/read?path={文件路径}
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| path | string | 是 | 文件路径 |
+| path | string | 是 | 文件路径（相对主项目根解析；跨项目请传绝对路径） |
 
 **响应：** 返回文件文本内容（字符串）。
 
@@ -118,7 +123,7 @@ POST /api/fs/write
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| path | string | 是 | 文件路径（相对于工作区或绝对路径） |
+| path | string | 是 | 文件路径（相对主项目根解析；跨项目请传绝对路径） |
 | content | string | 是 | 文件内容（覆盖写入，自动创建目录） |
 
 **响应：** `{"ok": true}`
@@ -135,7 +140,7 @@ GET /api/fs/search?q={关键词}&path={搜索路径}
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | q | string | 是 | 搜索关键词 |
-| path | string | 否 | 搜索目录，省略时使用工作区根目录 |
+| path | string | 否 | 搜索目录（相对主项目根解析；跨项目请传绝对路径），省略时使用主项目根 |
 
 **响应示例：**
 ```json
@@ -151,7 +156,16 @@ GET /api/fs/search?q={关键词}&path={搜索路径}
 | line | number | 行号 |
 | text | string | 匹配行的内容 |
 
-**自动忽略的目录：** `.git`、`node_modules`、`vendor`、`.pair`、`__pycache__`、`bin` 等。**仅搜索文本文件扩展名**（`.go` `.js` `.ts` `.vue` `.html` `.css` `.json` `.md` `.py` `.rs` `.java` 等 50+ 种）。
+**自动忽略的目录**（与内核搜索忽略集 `internal/agent/search.go` 同源）：
+- 依赖库/模块库：`node_modules` `bower_components` `jspm_packages` `vendor` `pods` `.pnpm-store` `.yarn` `.dart_tool` `.bundle` `venv` `.venv` `__pycache__` `.pytest_cache` `.mypy_cache` `.ruff_cache` `.tox`
+- 构建产物/缓存：`dist` `build` `out` `target` `.next` `.nuxt` `.svelte-kit` `.output` `.angular` `.gradle` `.cache` `.turbo` `.parcel-cache` `.eslintcache` `coverage` `.nyc_output` `.terraform`
+- VCS/IDE：`.git` `.svn` `.hg` `.idea` `.vscode` `.vs`
+- IDE 运行数据：`.pair` `_temp` `tmp` `logs` `bin` `release` `obj` `screenshots` `gocache` `.agent-teams` `.verify-tmp` `.chrome-test` `源码备份` 等
+
+> 本接口按**目录名任意深度**剪枝；Agent 工具（`grep`/`glob`，内核实现）对 IDE 运行数据目录更精细——`_temp`/`bin`/`release`/`logs`/`screenshots` 等仅当位于项目根第一层时才剪枝。
+> 跳过只作用于**递归下降**：把 `path` 直接指进被忽略目录，仍可搜索其内容。可用设置项 `ignoreDirs` 追加自定义忽略目录名（实时生效，无需重启）。
+
+**仅搜索文本文件扩展名**（`.go` `.js` `.ts` `.vue` `.html` `.css` `.json` `.md` `.py` `.rs` `.java` 等 50+ 种）。
 
 ---
 
@@ -354,56 +368,77 @@ POST /api/workspace
 GET /api/settings
 ```
 
-**响应：** 返回完整 `AppSettings` 对象（字段较多，按需取用）：
+**响应：** 返回全局设置、插件配置描述与加载状态三部分：
+
+- `settings` — 全局设置对象（落盘 `config/settings.json`），只含**当前版本仍支持**的字段
+- `schemas` — 各插件通过 `ctx.registerSettings` 注册的配置项描述（`key` / `title` / `fields[]`），
+  设置面板按此动态渲染；插件配置的取值在 `settings.pluginSettings.<插件key>` 下
+- `loaded` — 配置文件是否成功加载
 
 ```json
 {
-  "provider": "deepseek",
-  "baseURL": "https://api.deepseek.com/v1/chat/completions",
-  "apiKey": "sk-xxx",
-  "planModel": "deepseek-v4-pro",
-  "executeModel": "deepseek-v4-flash",
-  "reviewModel": "deepseek-v4-pro",
-  "temperature": "0.3",
-  "thinkingMode": "thinking",
-  "maxTokens": 131072,
-  "contextMaxTokens": 64000,
-  "lastProject": "F:/projects/my-app",
-  "workspaceFolders": ["F:/projects/my-app"],
-  "recentProjects": ["F:/projects/app1"],
-  "reviewMode": "auto",
-  "reviewBlacklist": [],
-  "reviewWhitelist": [],
-  "autonomous": false,
-  "autoCollapse": true,
-  "maxIterations": 50,
-  "maxParallelAgents": 3,
-  "maxReviewRetries": 3,
-  "autoIterateOnRejection": true,
-  "requireHumanApprovalForDestructive": true,
-  "aiReview": false,
-  "autoCommit": true,
-  "luaTools": true,
-  "enableBenchmarking": true,
-  "systemInstructions": "",
-  "searxngUrl": "",
-  "ignoreDirs": [],
-  "defaultShell": "auto",
-  "termFontSize": 13,
-  "termEncoding": "auto",
-  "theme": "dark",
-  "fontFamily": "'Cascadia Code', Consolas, monospace",
-  "editorFontSize": 14,
-  "tabSize": 2,
-  "wordWrap": false,
-  "hideMinimap": false,
-  "autoConnectMCP": true,
-  "skillEnabledOverrides": {},
-  "skillStatusOverrides": {},
-  "mcpEnabledOverrides": {},
-  "customProviders": []
+  "loaded": true,
+  "settings": {
+    "provider": "deepseek",
+    "baseURL": "https://api.deepseek.com/v1/chat/completions",
+    "apiKey": "sk-xxx",
+    "model": "deepseek-v4-flash",
+    "planModel": "deepseek-v4-pro",
+    "executeModel": "deepseek-v4-flash",
+    "reviewModel": "deepseek-v4-pro",
+    "preset": "默认",
+    "modelParams": {},
+    "temperature": "0.3",
+    "thinkingMode": "thinking",
+    "maxTokens": 131072,
+    "contextMaxTokens": 64000,
+    "lastProject": "F:/projects/my-app",
+    "workspaceFolders": ["F:/projects/my-app"],
+    "workspaceFolderLists": {"F:/projects/my-app": ["F:/projects/my-app"]},
+    "recentProjects": ["F:/projects/app1"],
+    "reviewMode": "auto",
+    "reviewBlacklist": [],
+    "reviewWhitelist": [],
+    "autonomous": false,
+    "autoIterateOnRejection": true,
+    "systemInstructions": "",
+    "ignoreDirs": [],
+    "theme": "dark",
+    "fontSize": 14,
+    "tabSize": 2,
+    "skillEnabledOverrides": {},
+    "skillStatusOverrides": {},
+    "pluginSettings": {
+      "agentloop": {
+        "stepBudget": 120,
+        "toolCallBudget": 120,
+        "maxToolBudgetSegments": 20
+      }
+    }
+  },
+  "schemas": [
+    {
+      "key": "agentloop",
+      "title": "Agent 循环（agentloop）",
+      "fields": [
+        {"name": "stepBudget", "label": "单段步数预算", "type": "number", "default": 120},
+        {"name": "toolCallBudget", "label": "单段工具调用预算", "type": "number", "default": 120},
+        {"name": "maxToolBudgetSegments", "label": "最大自动续跑段数", "type": "number", "default": 20}
+      ]
+    }
+  ]
 }
 ```
+
+**段预算（双闸门）字段说明：**
+
+| 字段（`pluginSettings.agentloop`） | 默认 | 语义 |
+|------|------|------|
+| stepBudget | 120 | 单段步数预算（一步 = 一次模型调用；一次回复并列多个工具调用仍算 1 步）。0 或留空 = 默认，负数 = 不限 |
+| toolCallBudget | 120 | 单段工具调用预算（仅统计实际执行，审批驳回 / 截断不计数）。0 或留空 = 默认，负数 = 不限 |
+| maxToolBudgetSegments | 20 | 自动续跑段数上限（不允许「不限」，防失控）。0 / 留空 / 负数 = 默认 20 |
+
+> 任一闸门达上限即结束当前段并自动开启续跑段（同会话历史保留）；修改后立即生效，无需重启。
 
 ### 4.2 保存设置
 
@@ -436,7 +471,7 @@ GET /api/system/info
   "goos": "windows",
   "workspace": "F:/projects/my-app",
   "folders": ["F:/projects/my-app"],
-  "version": "v1.4.15"
+  "version": "v1.6.0"
 }
 ```
 

@@ -256,6 +256,26 @@ func TestPromptSkills(t *testing.T) {
 	}
 }
 
+// TestPromptSkillsDedup 同名技能（跨层级副本）只列首个：与 FindSkill
+// 「首个匹配生效」一致，防止 system 动态段重复膨胀（2026-09-11）。
+func TestPromptSkillsDedup(t *testing.T) {
+	skills := []Skill{
+		{Name: "a", Description: "描述A-内置"},
+		{Name: "b", Description: "描述B"},
+		{Name: "a", Description: "描述A-工作区"},
+	}
+	out := PromptSkills(skills)
+	if n := strings.Count(out, "- a："); n != 1 {
+		t.Errorf("同名技能应只列一次，实际 %d 次\n%s", n, out)
+	}
+	if strings.Contains(out, "描述A-工作区") {
+		t.Error("应保留首个（生效版本），不应出现第二个同名描述")
+	}
+	if !strings.Contains(out, "描述B") {
+		t.Error("非同名技能不应受影响")
+	}
+}
+
 // ─── L2 正文（Body）已在前述加载测试覆盖，此处补 FindSkill ──
 
 func TestFindSkill(t *testing.T) {

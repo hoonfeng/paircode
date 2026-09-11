@@ -16,7 +16,8 @@ import (
 // testProviderAssembler 测试专用装配器：模拟插件装配器的决策语义
 // （配置整套展开 → 会话覆盖 → 服务商兜底 → Key 选择 → 统一模型同步）。
 // ★ 2026-09-03 决策迁插件后，展开决策在 agentloop 装配器实现，Go 单测以
-//   等价装配器验证「ForConv 正确注入装配上下文（Preset/Conv*）」的链路契约。
+//
+//	等价装配器验证「ForConv 正确注入装配上下文（Preset/Conv*）」的链路契约。
 type testProviderAssembler struct{}
 
 func (testProviderAssembler) Apply(cur ProviderParams) ProviderParams {
@@ -129,8 +130,8 @@ func TestSetConvModel_PersistsPreset(t *testing.T) {
 func seedConvTestPresets(t *testing.T) {
 	t.Helper()
 	core.SetAiPresets(map[string]core.AiPreset{
-		"激活预设": {Provider: "deepseek", BaseURL: "https://ds.example", APIKey: "DKEY", ExecuteModel: "d-model"},
-		"ddd":    {Provider: "硅基流动", BaseURL: "https://s.example", APIKey: "BAD-KEY", ExecuteModel: "ddd-model"},
+		"激活预设":    {Provider: "deepseek", BaseURL: "https://ds.example", APIKey: "DKEY", ExecuteModel: "d-model"},
+		"ddd":     {Provider: "硅基流动", BaseURL: "https://s.example", APIKey: "BAD-KEY", ExecuteModel: "ddd-model"},
 		"硅基flash": {Provider: "硅基流动", BaseURL: "https://s.example", APIKey: "GOOD-KEY", ExecuteModel: "flash-model"},
 	})
 	core.Settings.Preset = "激活预设"

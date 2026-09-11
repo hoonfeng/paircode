@@ -41,19 +41,33 @@ type Compressor = Provider
 // LoopOpts 创建 Loop 所需的全部参数（供 SessionManager.Start 使用）。
 // 把原本散落在 web 层的 Loop 构造逻辑收敛到一处，便于并行会话统一创建。
 type LoopOpts struct {
-	Provider             Provider   // LLM 提供方
-	Registry             *Registry  // 工具注册表（Start 会在此注册 ask_user 工具）
-	System               string     // 系统提示词
-	MaxIterations        int        // 最大迭代数（<=0 时 Loop 内部默认 30）
-	MaxContextTokens     int        // 上下文 token 上限（>0 启用压缩）
-	Compressor           Compressor // 上下文压缩器（可空）
-	History              []Message  // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
-	HistoryOriginal      []Message  // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
-	CompressedSummaries  []string   // 已持久化的压缩摘要（页面刷新后恢复）
-	Autonomous           bool       // 自主模式标志
-	MaxAutonomousMinutes int        // 自主模式时间预算（分钟，0=无限制）
-	CheckpointInterval   int        // 检查点间隔（迭代数，0=默认5）
-	WorkspaceRoot        string     // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
+	Provider Provider  // LLM 提供方
+	Registry *Registry // 工具注册表（Start 会在此注册 ask_user 工具）
+	System   string    // 系统提示词
+	// ★ 2026-09-12：「最大迭代数」配置项已移除——段内迭代安全上限由工具预算派生
+	//   （tool_budget.go IterationLimit），段结束由预算 + 自动续跑（下端两项）负责。
+	// StepBudget 单段（一次 Run）步数预算（一步 = 一次 LLM 调用）：0=默认 120；负数=不限。
+	//   ★ 2026-09-12 配置化：来源 agentloop 插件注册的 stepBudget
+	//   （pluginSettings.agentloop，装配时经 overrides 透传；见 tool_budget.go）。
+	//   ★ 双闸门：与 ToolCallBudget 任一达上限即结束本段并自动续跑。
+	StepBudget int
+	// ToolCallBudget 单段（一次 Run）工具调用轮次预算：0=默认 120；负数=不限。
+	//   ★ 2026-09-12 配置化：来源 agentloop 插件注册的 toolCallBudget
+	//   （pluginSettings.agentloop，装配时经 overrides 透传；见 tool_budget.go）。
+	ToolCallBudget int
+	// MaxToolBudgetSegments 单轮任务最多自动续跑段数：0=默认 20。
+	//   ★ 2026-09-12 配置化：来源 agentloop 插件注册的 maxToolBudgetSegments
+	//   （pluginSettings.agentloop，装配时经 overrides 透传；见 tool_budget.go）。
+	MaxToolBudgetSegments int
+	MaxContextTokens      int        // 上下文 token 上限（>0 启用压缩）
+	Compressor            Compressor // 上下文压缩器（可空）
+	History               []Message  // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
+	HistoryOriginal       []Message  // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
+	CompressedSummaries   []string   // 已持久化的压缩摘要（页面刷新后恢复）
+	Autonomous            bool       // 自主模式标志
+	MaxAutonomousMinutes  int        // 自主模式时间预算（分钟，0=无限制）
+	CheckpointInterval    int        // 检查点间隔（迭代数，0=默认5）
+	WorkspaceRoot         string     // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
 	ReviewMode string
@@ -95,6 +109,29 @@ type AskAnswer struct {
 
 var DefaultApproved = ApprovalResult{Approved: true, Reply: ""}
 var DefaultDenied = ApprovalResult{Approved: false, Reply: "用户拒绝了此操作"}
+
+// ─── 全局会话管理器引用（web 层启动时注入一次）─────────────────
+// ★ 2026-09：原 subagent_registry.go 负责，注册表删除后迁到此处。
+// 消费方：工具结果路由（storeForConvLookup）、会话唤醒投递（session_wake.go）。
+
+var (
+	globalSessionMgrMu sync.RWMutex
+	globalSessionMgr   *SessionManager
+)
+
+// SetGlobalSessionManager 注入全局会话管理器（web 层启动时调用一次）。
+func SetGlobalSessionManager(m *SessionManager) {
+	globalSessionMgrMu.Lock()
+	globalSessionMgr = m
+	globalSessionMgrMu.Unlock()
+}
+
+// GlobalSessionManager 取全局会话管理器（未注入返回 nil）。
+func GlobalSessionManager() *SessionManager {
+	globalSessionMgrMu.RLock()
+	defer globalSessionMgrMu.RUnlock()
+	return globalSessionMgr
+}
 
 // Session 一次 agent 运行会话。从 web 层 webAgentSession 下沉而来，
 // Session 一次 agent 运行会话。从 web 层 webAgentSession 下沉而来，
@@ -426,6 +463,35 @@ func TrimInterruptedHistory(history []Message) []Message {
 // ErrSessionNotRunning 会话未在运行（向已结束的会话发交互信号）。
 var ErrSessionNotRunning = errors.New("会话未在运行")
 
+// composePersistMessages 组合持久化消息：已落盘基准 + 锚点之后的新增。
+//
+// 锚点 = msgs 中最后一条「真实任务」RoleUser（非 backgroundCtxMarker 前缀）——
+// 背景快照（【背景上下文·非当前任务】）也是 RoleUser，但它是循环同步进消息流的
+// 背景信息（位于任务之后），不能作为锚点（否则 tail 为空、快照与后续消息全部
+// 丢失——快照落盘即失效）。tail = 锚点之后的所有消息（含快照 + 本轮新增）。
+//
+// ★ 2026-09-11 配套「可变底账」（refreshPersistBase）：分段续跑时基准会推进为
+// store 当前内容，「基准 + tail」在每段上继续追加——修复此前固定 originalHist
+// 导致第二段全量覆盖写丢「第一段新增消息」的问题。
+// 兜底（异常：msgs 无 user 消息）：直接返回 msgs 全量。
+func composePersistMessages(base []Message, msgs []Message) []Message {
+	lastUserIdx := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == RoleUser && !strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx < 0 {
+		return msgs
+	}
+	tail := msgs[lastUserIdx+1:]
+	combined := make([]Message, 0, len(base)+len(tail))
+	combined = append(combined, base...)
+	combined = append(combined, tail...)
+	return combined
+}
+
 // Start 为 convID 创建并启动一个新会话。
 //
 // 流程：
@@ -624,15 +690,39 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// ★ 2026-08-30：用会话自己的 store（sessStore = opts.WorkspaceRoot 路由）而非全局
 	//   m.store——会话运行中用户切换工作区时，旧写法会把消息落到新工作区
 	//   的库（串库）；Start 也不再全程持锁，无需旧的“避开 m.Store() 死锁”约束。
+	// ★ 2026-09-11 持久化基准（可变底账）：修「多段续跑全量覆盖丢消息」。
+	//   历史：combined = originalHist(固定) + tail(最后一条真实 user 之后)。
+	//   分段续跑第二段的 tail 从续跑消息之后算起，「第一段新增消息」既不在
+	//   originalHist 也不在 tail → 第二段的全量覆盖写把它们丢掉（刷新后缺段）。
+	//   现在：持久化基准改为可变底账，每段/每轮 Run 前经 refreshPersistBase
+	//   推进为 store 当前内容（=上一段已落盘的完整时间线），
+	//   保证 combined = 已落盘完整时间线 + 本轮新增（continue 追加语义）。
+	var persistBaseMu sync.Mutex
+	persistBase := opts.HistoryOriginal
+	refreshPersistBase := func() {
+		if sessStore == nil {
+			return
+		}
+		saved, lerr := sessStore.LoadAll(convID)
+		if lerr != nil {
+			fmt.Printf("[persist] 持久化基准推进失败 conv=%s: %v\n", convID, lerr)
+			return
+		}
+		if len(saved) == 0 {
+			return
+		}
+		persistBaseMu.Lock()
+		persistBase = saved
+		persistBaseMu.Unlock()
+	}
+
 	if sessStore != nil {
 		store := sessStore
-		// ★ 捕捉原始（未压缩）历史，用作持久化的基准。
-		// msgs 中头部是 CondenseHistory 压缩后的版本（通常更短），尾部是本轮新增消息。
-		// 直接用 msgs 持久化会写回压缩版、丢失原始消息结构。
-		// 正确做法：原始历史 + 新增尾部 = 持久化版本。
-		originalHist := opts.HistoryOriginal
+		// ★ 基准来源（persistBase）：首段 = opts.HistoryOriginal（原始未压缩历史，
+		//   防 msgs 头部压缩版写回覆盖）；后续段由 refreshPersistBase 推进。
+		//   正确做法：已落盘完整时间线 + 新增尾部 = 持久化版本。
 		loop.OnBatchPersist = func(msgs []Message) {
-			// ★ 重组：原始历史（未压缩）+ 本轮新增消息 = 持久化版本。
+			// ★ 重组：已落盘基准（未压缩）+ 本轮新增消息 = 持久化版本。
 			// msgs 结构：[system(可能), ...历史, 当前用户消息, 背景上下文快照?, ...本轮新增(assistant/tool)]
 			// 锚点：最后一条「真实任务」RoleUser = 当前任务（Run 保证存在）——
 			//   ★ 2026-08-27 背景快照（backgroundCtxMarker 前缀）也是 RoleUser，
@@ -640,27 +730,14 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			//   （否则 tail 为空、快照与后续消息全部丢失——快照落盘即失效）。
 			//   tail = 锚点之后的所有消息（含快照 + 本轮新增）。
 			// ⚠️ 不能再用「condensedLen 固定偏移」定位 tail：
-			//   Run 开头的 maybeCompact（compact 分支，历史 token 超阈值）会压缩 msgs、
+			//   Run 开头的跨段精简/历史 condense 会改写 msgs（段内只追加，但跨段会精简）、
 			//   删除中段历史 → len(msgs) 可能 < condensedLen → 旧逻辑误走兜底把压缩版
 			//   写回 store，原始历史被覆盖、assistant 消息丢失（表现为 user 后直接 tool）。
 			//   lastUser 锚点与历史长度无关，压缩/未压缩均正确。
-			var combined []Message
-			lastUserIdx := -1
-			for i := len(msgs) - 1; i >= 0; i-- {
-				if msgs[i].Role == RoleUser && !strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
-					lastUserIdx = i
-					break
-				}
-			}
-			if lastUserIdx >= 0 {
-				tail := msgs[lastUserIdx+1:]
-				combined = make([]Message, 0, len(originalHist)+len(tail))
-				combined = append(combined, originalHist...)
-				combined = append(combined, tail...)
-			} else {
-				// 兜底（异常：msgs 无 user 消息）：直接用 msgs
-				combined = msgs
-			}
+			persistBaseMu.Lock()
+			base := persistBase
+			persistBaseMu.Unlock()
+			combined := composePersistMessages(base, msgs)
 			err := store.PersistNewMessages(convID, combined)
 			if err != nil {
 				fmt.Printf("[persist] OnBatchPersist 失败 conv=%s err=%v\n", convID, err)
@@ -879,12 +956,66 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 		sess.History = msgs
 
+		// ★ 段预算分段续跑（2026-09，tool_budget.go；★ 2026-09-12 双闸门）：
+		//   本 Run 因达到段预算而结束（步数默认 120 步 / 工具调用默认 120 次，
+		//   由 agentloop 插件注册的 stepBudget / toolCallBudget 覆盖；**任一达上限
+		//   即触发**，命中闸门见 SegmentState.Reason）→ 自动发起下一段
+		//   （同会话、历史保留；段内只追加不精简，体积控制见 tool_budget.go 与
+		//    compress.go maybeCompact 的说明——分段边界 + 跨段精简）。
+		//   segmentNo 统计本轮任务的自动续跑段数，超过生效上限 segLimit
+		//   停止（防失控；用户再发消息即可继续）。用户停止（sess.stopped）即退出。
+		segmentNo := 0
+		// ★ 2026-09-12 配置化：续跑段数上限取本 Loop 生效值（装配参数
+		//   maxToolBudgetSegments 透传；0/缺省 = 默认 20，见 tool_budget.go）。
+		segLimit := loop.MaxToolBudgetSegmentsOrDefault()
 		// ★ Round3 ③.1 goal 自动续轮（对齐 DSH「同会话完成目标」语义）：
 		//   会话 Run 结束后，goal Armed && 非终态 && Rounds < RoundLimit →
 		//   自动发起下一轮（continuation 消息）。pause 停续轮、resume 重挂；
 		//   同一阻塞条件连续 ≥3 轮自动 blocked（MarkRound 内判定）。
 		//   零行为变化保证：无 goal(op=create) 时 goalManager.Get 返回 nil，循环直接退出。
 		for !sess.stopped {
+			if seg, segOK := loop.TakeSegmentContinue(); segOK {
+				segmentNo++
+				if segmentNo > segLimit {
+					notice := fmt.Sprintf("段预算分段已达上限（%d 段），自动续跑停止；如仍需继续，请再发一条消息。", segLimit)
+					log.Printf("[session] 分段续跑达上限 conv=%s segments=%d limit=%d", convID, segmentNo-1, segLimit)
+					select {
+					case sess.Events <- Event{Type: EventNotice, Content: notice}:
+					default:
+					}
+					break
+				}
+				contMsg := SegmentContinueMessage(seg)
+
+				// ★ 2026-09-11 会话交接（handoff.go）：段边界对累计历史做一次判断/整理——
+				//   达阈值时用一次 LLM 把上一段历史折叠为「提交消息」，替代全量历史注入
+				//   下一段（防续跑上下文膨胀）；未达阈值保持原样（同会话历史保留）。
+				//   整理只替换喂 LLM 的历史视图；落盘/展示仍为完整时间线。
+				nextHist := []Message(nil)
+				if view, hok := buildLoopHandoffView(runCtx, loop, store, convID, contMsg); hok {
+					nextHist = view
+					select {
+					case sess.Events <- Event{Type: EventNotice, Content: fmt.Sprintf(
+						"已把此前对话整理为「会话交接·提交消息」（历史 %d 条 → 交接要点 + 近期 %d 条），本段从交接要点继续",
+						len(loop.History), len(view)-1)}:
+					default:
+					}
+				}
+
+				log.Printf("[session] 段预算分段续跑 conv=%s segment=%d reason=%s 步数=%d/%s 工具调用=%d/%s",
+					convID, segmentNo, seg.Reason,
+					seg.UsedSteps, budgetText(seg.StepBudget), seg.UsedTools, budgetText(seg.ToolBudget))
+				select {
+				case sess.Events <- Event{Type: EventNotice, Content: contMsg}:
+				default:
+				}
+				// ★ 开新一轮前推进持久化基准（防多段全量覆盖丢消息；见 refreshPersistBase）。
+				refreshPersistBase()
+				msgs, err = loop.Run(runCtx, contMsg, nextHist)
+				sess.History = msgs
+				continue
+			}
+			segmentNo = 0 // 非分段结束 → 段计数归零（goal 续轮属于新一轮任务阶段）
 			g := goalManager.MarkRound(opts.WorkspaceRoot, convID, err)
 			if g == nil || g.ContinueMessage() == "" {
 				break
@@ -902,6 +1033,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			case sess.Events <- Event{Type: EventNotice, Content: lmsg}:
 			default:
 			}
+			// ★ 开新一轮前推进持久化基准（goal 续轮同样适用：防上一轮新增被覆盖）。
+			refreshPersistBase()
 			msgs, err = loop.Run(runCtx, lmsg, nil)
 			sess.History = msgs
 		}
@@ -1227,19 +1360,6 @@ func (m *SessionManager) GetCurrentHistoryRaw(convID string) []Message {
 	return nil
 }
 
-// 页面刷新后恢复时使用。会话不存在或 Loop 尚未开始返回 nil。
-func (m *SessionManager) GetCurrentCompressedSummaries(convID string) []string {
-	m.mu.RLock()
-	sess, ok := m.sessions[convID]
-	m.mu.RUnlock()
-	if !ok || sess.Loop == nil {
-		return nil
-	}
-	out := make([]string, len(sess.Loop.CompressedSummaries))
-	copy(out, sess.Loop.CompressedSummaries)
-	return out
-}
-
 // ListRunning 返回所有 Running=true 的 convID 列表。
 func (m *SessionManager) ListRunning() []string {
 	m.mu.RLock()
@@ -1396,6 +1516,22 @@ func (m *SessionManager) PushStartError(convID, errMsg string) {
 		}
 	}
 	log.Printf("[session] PushStartError conv=%s err=%s", convID, errMsg)
+}
+
+// PushNotice 向全局订阅者推送提示事件（非错误；web 层异步路径的用户可见提示，
+// 如会话交接整理完成）。前端按 convID 路由显示为 notice。
+func (m *SessionManager) PushNotice(convID, text string) {
+	m.globalSubMu.RLock()
+	gsubs := m.globalSubscribers
+	m.globalSubMu.RUnlock()
+	ge := GlobalEvent{ConvID: convID, Event: Event{Type: EventNotice, Content: text}}
+	for _, gsub := range gsubs {
+		select {
+		case gsub <- ge:
+		default:
+		}
+	}
+	log.Printf("[session] PushNotice conv=%s text=%s", convID, shortenErr(text, 80))
 }
 
 // UnsubscribeAll 取消全局订阅并 close 该 channel。

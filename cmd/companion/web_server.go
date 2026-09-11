@@ -212,9 +212,13 @@ func startWebUI(port int) {
 		port:      port,
 		eventRing: newEventRing(1000), // 缓存最近 1000 个全局事件用于断连回放
 	}
-	// ★ 2026-08-28 多智能体团队：注入成员会话（可续聊子 Agent）启动器，
-	//   JS 插件经 ctx.agents.start/followup/stop 驱动（agent-teams 插件依赖）。
-	ws.installSubAgentSpawner()
+	// ★ 2026-09 会话唤醒投递：子 Agent 派生面已删除，只保留「向已存在会话投递
+	//   一条输入把它唤醒跑一轮」的能力（JS 插件经 ctx.agents.followup 调用；
+	//   agent-teams 插件 Web 面板「批准并运行」唤醒队长会话依赖它）。
+	ws.installSessionWake()
+	// ★ 2026-09 精简策略可见化：硬地板默认关闭（只用窗口比例阈值），
+	//   想恢复绝对量保护设 PAIR_COMPACT_HARD_FLOOR=<token>。
+	log.Printf("[compact] 精简策略：%s", agent.CompactPolicy(core.Settings.ContextMaxTokens))
 	// ★ 钩子系统（t1 L2 闭环）：装载配置钩子（.pair/settings.json + ~/.pair/settings.json），
 	//   与桌面端 Init 同一入口；无配置时全部 no-op。
 	agent.InitLoopHooks()
@@ -315,6 +319,11 @@ func startWebUI(port int) {
 	ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
 	agent.RegisterCordisTools(initReg, ph, root)
 	agent.RegisterToolsetTools(initReg, root, ph)
+	// ★ 2026-09-11 场景创造（scenario_scan/scenario_create）：注册在宿主框架面——
+	//   供 tool-scenario 磁盘插件 claimTool 存档（宿主能力库，ctx.hostTool 执行；
+	//   须早于下方 LoadAllToolsets 装载插件）；不注册进会话 reg——会话可见性由
+	//   /创造 命令按需激活控制。
+	agent.RegisterScenarioTools(initReg, root, ph)
 	if root != "" {
 		// ★ 迁移旧版 builtin.json（内置组条目并入工作区工具集 default.json 后删除）；
 		//   内置工具包与工作区工具集统一为一套逻辑
@@ -1336,7 +1345,6 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 // ★ 2026-08-31：规划文档 API（/api/taskplan）已随 plan 体系移除——
 //   任务追踪统一由 task 工具 + /api/tasks 承担（前端无调用点，纯死接口）。
 
-
 // ─── 模型列表 API ──────────────────────────────────────────
 
 func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
@@ -2198,23 +2206,40 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	//   原实现按轮数（>2 轮历史）强制压缩，小对话也被改写历史前缀，
 	//   导致 KV 缓存前缀每轮断裂、命中率骤降；现估算 token 占比，
 	//   未达阈值（45% 窗口）保持原始历史逐字节不变（缓存可连续命中）。
-	history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
-
-	maxIter := core.Settings.MaxIterations
-
-	if autonomous {
-		if maxIter <= 0 {
-			maxIter = 60
-		} else {
-			maxIter *= 2
+	// ★ 2026-09-11 会话交接（handoff.go）：先做一次「判断 + 整理」——历史达阈值
+	//   （窗口 30%/地板 24K token 或 ≥100 条）时，用一次 LLM 整理成「会话交接·提交消息」，
+	//   替代全量历史注入（防上下文膨胀；复用/刷新见 handoff.go）；未达阈值/关闭时
+	//   保持原逻辑（按 token 压力精简，未达压力阈值即逐字节原样，缓存连续命中）。
+	handoffApplied := false
+	if store := agentMgr.StoreFor(root); store != nil {
+		// ★ 判官实例（B/C 语义复检）：独立轻量实例——non-thinking + 极小输出
+		//   （只输出一个词），与主对话通道隔离；构建为纯参数装配（无网络），每轮现建。
+		judge := agent.HandoffJudgeProvider(agent.ResolveProviderParamsForConv(convID, root))
+		if view, ok := agent.BuildHandoffView(context.Background(), prov, judge, store, convID, history, message, core.Settings.ContextMaxTokens); ok {
+			log.Printf("[handoff] conv=%s 已启用交接视图（历史 %d 条 → %d 条）", convID, len(history), len(view))
+			history = view
+			handoffApplied = true
+			agentMgr.PushNotice(convID, "已把此前对话整理为「会话交接·提交消息」（完整历史仍保存在会话记录中），后续基于交接要点继续")
 		}
 	}
+	if !handoffApplied {
+		history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
+	}
+
+	// ★ 2026-09-12：「最大迭代数」配置已移除（原此处读 core.Settings.MaxIterations，
+	//   自主模式再 ×2 放大）——段内迭代安全上限改由 agent 侧按工具预算派生
+	//   （internal/agent/tool_budget.go IterationLimit），段的收束由工具预算 +
+	//   自动续跑（受 maxToolBudgetSegments 约束）负责，宿主不再传迭代数。
 
 	return agent.LoopOpts{
-		Provider:            prov,
-		Registry:            reg,
-		System:              sys,
-		MaxIterations:       maxIter,
+		Provider:      prov,
+		Registry:      reg,
+		System:        sys,
+		// ★ 2026-09-12 分段续跑配置化：单段工具调用预算 / 续跑段数上限由
+		//   agentloop 插件注册配置（pluginSettings.agentloop）经装配器透传
+		//   （见 .pair/plugins/agentloop/index.js 的 ctx.loopFactory.register）；
+		//   宿主不设默认值——0 = agent 侧默认（120 次 / 20 段），
+		//   负数预算 = 不限（归一化见 agent/tool_budget.go）。
 		MaxContextTokens:    core.Settings.ContextMaxTokens,
 		Compressor:          webCompressor(),
 		History:             history,         // 压缩版：供 LLM 上下文使用
@@ -2565,13 +2590,17 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 	//   被误判为「插件呼不出/没生效」。现在：激活成功且非纯查询子命令（status）→
 	//   以命令原文 `/name <args>` 为 task 启动一次会话运行，队长当轮即按协议建队
 	//   （launchConvRun 会重建工具面，agent-teams 工具同步可见）。
-	if activated != "" && req.ConvID != "" {
-		if task := agentCommandTaskText(req.Name, req.Args); task != "" {
+	// ★ 2026-09-11：已激活的按需命令重复执行也唤醒——命令是「会话动作入口」：
+	//   /创造 <需求> 每次都要生成新指令、/agent-teams <目标> 每次都是新目标；
+	//   仅首次激活唤醒会让二次执行「只有结果卡片、agent 不动」。
+	if req.ConvID != "" {
+		_, isOnDemandCmd := agent.OnDemandCommandMapping()[req.Name]
+		if task := agentCommandTaskText(req.Name, req.Args); task != "" && (activated != "" || isOnDemandCmd) {
 			wsRoot := req.WorkspaceRoot
 			if wsRoot == "" {
 				wsRoot = core.Root()
 			}
-			log.Printf("[activation] 会话 %s /%s 激活 %s → 自动唤醒 agent（task=%s）",
+			log.Printf("[activation] 会话 %s /%s（activated=%q）→ 自动唤醒 agent（task=%s）",
 				req.ConvID, req.Name, activated, trimForLog(task, 80))
 			s.launchConvRun(req.ConvID, wsRoot, task, false)
 		}

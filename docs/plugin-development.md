@@ -3,9 +3,10 @@
 > 面向用户的完整插件开发指南。编写插件前请先通读本文件；
 > Agent 侧另有精简版技能（`cordis-plugin-development`）供 LLM 写作时参考。
 >
-> 最近更新 2026-09-12：工具面合并（单工具 + op 分派规范）、`dynamicApproval`
-> 动态审批、hostTool 存档语义、`ctx.provider.register` 实现级插槽、
-> deferred 按需工具（tool_search 发现）。
+> 最近更新 2026-09-11：工具面合并（单工具 + op 分派规范）、`dynamicApproval`
+> 动态审批、hostTool 存档语义、`ctx.provider.register` 实现级插槽。
+> ★ 2026-09-11：deferred 按需工具（tool_search 发现）已移除——工具直接注册，
+> 按需性由「场景（工具集）+ /命令 激活」承担。
 
 ---
 
@@ -130,7 +131,7 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 | `readOnly` | 只读工具标记（审批面提示依据之一） |
 | `requiresApproval` | 静态审批：每次调用都需人工确认 |
 | `dynamicApproval` | ★ 动态审批：`(args) => bool` 按本次调用参数决定是否走审批门（见 §7.2） |
-| `systemTool` | 系统级工具（与 tool_search 同级恒可用，不受工具集白名单收敛影响） |
+| `systemTool` | 系统级工具（恒可用，不受工具集白名单收敛影响） |
 | `timeout` | 秒数（>0 启用 goja Interrupt 强制中断护栏；默认不限时，执行时长由插件自律） |
 
 ### 4.3 HTTP / 实时通道

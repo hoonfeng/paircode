@@ -57,6 +57,10 @@ func registerTaskTools(r *Registry, root string) {
 	updateTasksHandler := func(ctx context.Context, args map[string]any) (string, error) {
 		tasksRoot := taskRuntimeRoot(ctx, args, root)
 		tm := UseTaskManager(tasksRoot)
+		// ★ 2026-09-12 会话绑定：任务写入时带上会话 ID（见 taskRuntimeConvID）。
+		//   工作区级 .pair/tasks/ 目录被所有会话共享，无 ConvID 的任务在
+		//   `GET /api/tasks?convId=X` 中会被过滤掉（前端任务面板恒空白）。
+		convID := taskRuntimeConvID(ctx, args)
 		tasksRaw, _ := args["tasks"].([]any)
 		if len(tasksRaw) == 0 {
 			return "", fmt.Errorf("tasks 为空")
@@ -73,6 +77,7 @@ func registerTaskTools(r *Registry, root string) {
 				Description:  argStr(m, "description"),
 				Status:       TaskPending,
 				Dependencies: strSliceArg(m, "dependencies"),
+				ConvID:       convID,
 			}
 			if id := argStr(m, "id"); id != "" {
 				t.ID = id
@@ -83,7 +88,8 @@ func registerTaskTools(r *Registry, root string) {
 			newTasks = append(newTasks, t)
 		}
 
-		if err := tm.ReplaceAll(newTasks); err != nil {
+		// ★ 按会话隔离替换：只清理本会话的旧任务，不误删其它会话任务
+		if err := tm.ReplaceAllForConv(newTasks, convID); err != nil {
 			return "", fmt.Errorf("保存任务失败: %w", err)
 		}
 
@@ -132,11 +138,11 @@ func registerTaskTools(r *Registry, root string) {
 					"items": map[string]any{
 						"type": "object",
 						"properties": props{
-							"id":              strProp("任务 ID（可选，不传则自动生成）"),
-							"subject":         strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
-							"description":     strProp("详细描述（可选）：做什么、涉及哪些文件"),
-							"status":          map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
-							"dependencies":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
+							"id":           strProp("任务 ID（可选，不传则自动生成）"),
+							"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+							"description":  strProp("详细描述（可选）：做什么、涉及哪些文件"),
+							"status":       map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
+							"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
 						},
 						"required": []string{"subject", "status"},
 					},
@@ -164,10 +170,10 @@ func registerTaskTools(r *Registry, root string) {
 					"items": map[string]any{
 						"type": "object",
 						"properties": props{
-							"id":          strProp("任务 ID（可选，不传则自动生成）"),
-							"subject":     strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
-							"description": strProp("详细描述（可选）：做什么、涉及哪些文件"),
-							"status":      map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
+							"id":           strProp("任务 ID（可选，不传则自动生成）"),
+							"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+							"description":  strProp("详细描述（可选）：做什么、涉及哪些文件"),
+							"status":       map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
 							"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
 						},
 						"required": []string{"subject", "status"},
@@ -198,6 +204,19 @@ func taskRuntimeRoot(ctx context.Context, args map[string]any, registerRoot stri
 		return roots[0]
 	}
 	return registerRoot
+}
+
+// taskRuntimeConvID 任务工具的会话归属解析（★ 2026-09-12 会话隔离修复）。
+// 优先级：args._convID（JS 插件工具链会话注入，见 jsplugin 的会话标识注入）
+// → ctx 会话 ID（SessionConvID，SessionManager.Start 注入）→ 空串（保持旧行为：全局任务）。
+// 与 taskRuntimeRoot 同构：注册时无法得知会话，只能执行时解析。
+func taskRuntimeConvID(ctx context.Context, args map[string]any) string {
+	if args != nil {
+		if v, ok := args["_convID"].(string); ok && v != "" {
+			return v
+		}
+	}
+	return SessionConvID(ctx)
 }
 
 func buildProgressBar(done, total, width int) string {

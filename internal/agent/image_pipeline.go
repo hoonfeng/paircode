@@ -2,20 +2,24 @@
 // image_pipeline.go — 图片准入/归一化/请求投影管线
 //
 // ★ 对齐参考（2026-09）：deepseek-harness/packages/attachment/attachment-local
-//   image.ts（探测）· normalization.ts（归一化）· request-image.ts（请求变体）
-//   · encoding.ts（质量阶梯 IMAGE_ENCODING_QUALITIES=[85,75,60]）
+//
+//	image.ts（探测）· normalization.ts（归一化）· request-image.ts（请求变体）
+//	· encoding.ts（质量阶梯 IMAGE_ENCODING_QUALITIES=[85,75,60]）
 //
 // ★ 三级限制（dsh 语义）：
-//   1) 准入 admission        单图 ≤20MiB、总像素 ≤64M、长边 ≤8192
-//   2) 归一化 normalization  总像素 ≤2048×2048、长边 ≤8192、字节 ≤4MiB（持久化、provider 无关）
-//   3) 请求 request          按路由预算再投影（DeepSeek 640k 像素 / 1MiB；其他 2048² / 1MiB）
+//  1. 准入 admission        单图 ≤20MiB、总像素 ≤64M、长边 ≤8192
+//  2. 归一化 normalization  总像素 ≤2048×2048、长边 ≤8192、字节 ≤4MiB（持久化、provider 无关）
+//  3. 请求 request          按路由预算再投影（DeepSeek 640k 像素 / 1MiB；其他 2048² / 1MiB）
 //
 // ★ 透传规则（对齐 canPassThroughNormalization）：非 GIF、非动画、无元数据、
-//   8bit、sRGB、字节/像素/长边均在限内 → 原样透传，不做任何重编码。
+//
+//	8bit、sRGB、字节/像素/长边均在限内 → 原样透传，不做任何重编码。
 //
 // ★ 偏离记录：dsh 用 sharp 的 WebP 编码器保留透明通道；Go 标准库无 WebP 编码器
-//   （x/image/webp 仅解码）→ 有 alpha 时用 PNG 无损编码（字节超目标时逐级降采样）。
-//   不透明图仍走 JPEG 质量阶梯 [85,75,60]，与 dsh 一致。
+//
+//	（x/image/webp 仅解码）→ 有 alpha 时用 PNG 无损编码（字节超目标时逐级降采样）。
+//	不透明图仍走 JPEG 质量阶梯 [85,75,60]，与 dsh 一致。
+//
 // ═══════════════════════════════════════════════════════════════
 package agent
 

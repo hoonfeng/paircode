@@ -43,7 +43,6 @@ func runCompactRound(t *testing.T, store *MessageStore, convID, task string, rou
 		Provider:         prov,
 		Registry:         reg,
 		System:           "test-system",
-		MaxIterations:    3,
 		MaxContextTokens: maxTokens,
 		History:          CopyHistory(condensed),
 	}

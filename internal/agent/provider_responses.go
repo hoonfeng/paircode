@@ -230,8 +230,8 @@ func toResponsesTools(tools []ToolDefinition) []map[string]any {
 type responsesSSEFrame struct {
 	Type        string `json:"type"`
 	Delta       string `json:"delta"`
-	Text        string `json:"text"`       // output_text.done / reasoning_summary_text.done
-	Arguments   string `json:"arguments"`  // function_call_arguments.done 帧的完整参数
+	Text        string `json:"text"`      // output_text.done / reasoning_summary_text.done
+	Arguments   string `json:"arguments"` // function_call_arguments.done 帧的完整参数
 	ItemID      string `json:"item_id"`
 	OutputIndex int    `json:"output_index"` // 部分实现无 item_id 时的兜底关联键
 	Item        struct {
@@ -242,8 +242,8 @@ type responsesSSEFrame struct {
 		Arguments string `json:"arguments"`
 	} `json:"item"`
 	Response struct {
-		Status string `json:"status"`
-		Usage  *Usage `json:"usage"`
+		Status            string `json:"status"`
+		Usage             *Usage `json:"usage"`
 		IncompleteDetails *struct {
 			Reason string `json:"reason"`
 		} `json:"incomplete_details"`
@@ -267,7 +267,7 @@ func parseResponsesSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 		callID string
 		name   string
 	}
-	fcItems := map[string]*fcItem{}   // item_id → {callID,name}
+	fcItems := map[string]*fcItem{}          // item_id → {callID,name}
 	argBufs := map[string]*strings.Builder{} // item_id → arguments 增量
 	var toolCalls []ToolCall
 	var usage *Usage

@@ -4,7 +4,7 @@
 
 PairCode 运行在本地（Windows / Linux / macOS），提供 Web IDE 界面（`http://localhost:9090`），
 核心是一个 **Go 实现的 Agent 运行时**：双层循环（turn/step）驱动模型，**一切皆插件**
-（磁盘优先、不重编译改 UI），内置代码图谱、语义搜索、持久记忆与知识库、子 Agent 编排、
+（磁盘优先、不重编译改 UI），内置代码图谱、语义搜索、持久记忆与知识库、任务 DAG 团队编排、
 MCP 支持与 HTTP 接口插件化。
 
 > Web 界面由「壳 + 区域插件」构成：`web-ui`（壳）只保留骨架，全部 UI 区域
@@ -13,7 +13,15 @@ MCP 支持与 HTTP 接口插件化。
 ## 特性
 
 - **Agent 核心（Go）**：turn/step 双层循环状态模型，支持 max-tokens 粘滞、内容循环兜底、
-  token 压力触发历史精简、会话级审核（review）与断线重连消息重同步。
+  token 压力触发历史精简、绕圈/重复检测、会话级审核（review）与断线重连消息重同步。
+  ★ 工具调用一律串行执行（不并行调用工具）；子 Agent 默认关闭，需 `PAIR_ALLOW_SUBAGENTS=1` 显式开启。
+- **段预算双闸门 + 自动分段续跑**：单段同时受**步数预算**与**工具调用预算**约束，任一达上限
+  即结束本段并自动续跑（同会话历史保留），续跑段数有上限；三项（`stepBudget` /
+  `toolCallBudget` / `maxToolBudgetSegments`，默认 120 / 120 / 20）在「设置 → Agent」实时可配，
+  长任务不再中断。
+- **会话交接（提交消息）**：续跑与新提交对话两个时机自动整理上下文——超阈值时生成
+  「会话交接·提交消息」（相关性 + 目标/已完成/当前状态/下一步），未达阈值逐字节原样注入
+  （缓存前缀零影响）；复用期内轻量语义复检、相关性变化驱动保留深度。
 - **一切皆插件**：插件 = 磁盘目录（`<workspace>/.pair/plugins/<id>/`），无需重编译；
   `cordis(op=define)` 运行时定义（goja 沙箱），版本化 package 模型，插件可常驻/按需激活，
   装载状态与诊断可查询。
@@ -21,21 +29,25 @@ MCP 支持与 HTTP 接口插件化。
   事件流（`/ws`）由插件推送，Web 前端与外部客户端可订阅。
 - **UI 区域插件化**：`dsh.ui.slot` 槽位注册表（跨副本共享），壳 + 7 大区域包；
   client 半（浏览器端）与 host 半分离，`boot()` 单入口两源合并装载。
-- **工具体系**：内置工具（文件/搜索/编辑/执行/验证/代码图谱/记忆/knowledge）
+- **工具体系**：内置工具（文件读写 / 内容搜索 / `apply_patch` 补丁编辑 / 命令执行 / 代码图谱 / 记忆 / 知识库）
   + 磁盘插件工具 + Node 桥插件（`@deepseek-ai/*` cordis 生态），同名工具并存可切换生效方。
 - **代码图谱**：结构化符号索引（function/struct/interface/call_site/import…），
   支持影响分析、符号定位、跨文件调用链。
 - **语义搜索**：本地 ONNX 向量模型（`config/models/bge-small-zh-v1.5`）离线嵌入，
   无网络依赖（CGO 不可用时自动降级关键词搜索）。
 - **多项目工作区**：一个进程管理多个项目文件夹，工具/上下文按项目隔离。
-- **子 Agent 与团队**：队长会话派生可续聊成员会话、任务 DAG 自动调度、质量门禁修复循环。
+- **任务 DAG 团队编排**：任务依赖门禁、质量门禁（契约 / verdict / findings，修复 + 复审自动派生）、
+  两阶段批准（staged → approve → running），由队长会话单 Agent 多步执行完成。
+- **创造模式（`/创造 <需求>`）**：按一句需求自主创建「场景」工具集——能力盘点 → 组合现有插件 →
+  固化到 `.pair/toolsets/<场景名>.json`，对话面板工具集选择器即时可切换。
+- **LLM 追踪**：`llm-trace` 插件逐请求落盘前缀命中分析（JSONL），定位缓存前缀断裂与成本热点。
 - **MCP 支持**：接入外部 MCP 服务器（scope: user/project）。
 - **跨平台打包**：`packager` 一键产出 windows/linux/darwin 三平台发布包。
 
 ## 快速开始
 
 ```bash
-# Windows（CGO 开启，前端产物已随仓库提供时可不构建 web-ui）
+# Windows（CGO 开启；前端产物已随仓库提供，无需重建）
 set CGO_ENABLED=1
 go build -o companion.exe ./cmd/companion
 ./companion.exe
@@ -52,10 +64,8 @@ go build -o companion.exe ./cmd/companion
 | 入口/Web | `cmd/companion` | HTTP API、WS 事件流、静态资源、插件装配 |
 | Agent 核心 | `internal/agent` | 双层循环、工具执行器、插件宿主（goja 沙箱 + 磁盘插件）、Node 桥 |
 | 服务层 | `internal/server` | HTTP handler、UI boot、插件 API |
-| 桌面壳 | `cmd/desktop` | wb-ui 桌面窗口（goskia + webview，可选） |
 | 工具库 | `pkg/` | codegraph（tsit 语法树）、db（sqlite）、executil、memory、summary、verify |
-| 前端壳 | `web-ui` | 薄壳（唯一入口 `index.html` + `__PAIRCODE_CORE` 共享核心） |
-| UI 区域插件源 | `plugins-src/ui-app` | 各区域 Vue 组件源，`build-ui.mjs` 逐插件构建 |
+| Web 前端源 | `plugins-src/ui-app` | 壳（vite 构建）+ 各区域 Vue 组件源（`build-ui.mjs` 逐插件构建） |
 | 磁盘插件 | `<workspace>/.pair/plugins/<id>/` | 运行时插件（host 半 + client 半 + assets） |
 | 运行时资源 | `.pair/assets/runtime/` | cordis bundle / bridge_node.js / web 前端产物（外部优先 + embed 兜底） |
 
@@ -66,8 +76,8 @@ go build -o companion.exe ./cmd/companion
 set CGO_ENABLED=1
 go test ./internal/agent/ ./pkg/...
 
-# Web 壳构建（web-ui，产出 cmd/companion/web-ui/dist）
-cd web-ui && npm install && npm run build
+# Web 前端构建（plugins-src/ui-app → .pair/assets/runtime/web + cmd/companion/web-ui/dist embed 兜底）
+cd plugins-src/ui-app && npm install && npm run build
 
 # UI 区域插件构建（plugins-src/ui-app → .pair/plugins/ui-*/assets）
 cd plugins-src/ui-app && npm install && npm run build:ui

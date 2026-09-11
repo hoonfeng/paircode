@@ -36,7 +36,7 @@ func TestLoopToolThenFinal(t *testing.T) {
 		{Content: "读到了 WORLD_123"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "读 hello.txt 告诉我内容", nil)
@@ -84,7 +84,7 @@ func TestLoopNaturalFinish(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{
 		{Content: "任务完成"},
 	}}
-	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: NewRegistry()}
 	if _, err := loop.Run(context.Background(), "完成", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestLoopNaturalFinish(t *testing.T) {
 	}
 }
 
-// 永远调用工具、从不自然终止 → 在 MaxIterations 处止损。
+// 永远调用工具、从不自然终止 → 由工具预算耗尽结束本段（并标记自动续跑）。
 type alwaysToolProvider struct{ n int }
 
 func (a *alwaysToolProvider) Name() string { return "always" }
@@ -104,25 +104,24 @@ func (a *alwaysToolProvider) Chat(ctx context.Context, m []Message, td []ToolDef
 	}}, nil
 }
 
-func TestLoopMaxIterations(t *testing.T) {
+// ★ 2026-09-12：原「最大迭代数」配置项已移除——段不再由「迭代数」止损，改由
+// 工具预算（本测试用 3 次）结束本段并标记续跑（SessionManager 自动开下一段）；
+// 段内迭代安全上限由预算派生（tool_budget.go IterationLimit），仅作防失控兜底。
+func TestLoopToolBudgetSegment(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "x.txt"), []byte("x"), 0o644)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	prov := &alwaysToolProvider{}
-	var lastErr string
-	loop := &Loop{Provider: prov, Registry: reg, MaxIterations: 3,
-		OnEvent: func(e Event) {
-			if e.Type == EventError {
-				lastErr = e.Content
-			}
-		}}
-	loop.Run(context.Background(), "loop forever", nil)
-	if prov.n != 3 {
-		t.Errorf("应调用 3 次(=MaxIterations)，得 %d", prov.n)
+	loop := &Loop{Provider: prov, Registry: reg, ToolCallBudget: 3}
+	if _, err := loop.Run(context.Background(), "loop forever", nil); err != nil {
+		t.Fatalf("预算耗尽应正常结束本段（不报错），得 %v", err)
 	}
-	if !strings.Contains(lastErr, "最大迭代") {
-		t.Errorf("应因最大迭代停止，lastErr=%q", lastErr)
+	if prov.n != 3 {
+		t.Errorf("应调用 3 次(=工具预算)，得 %d", prov.n)
+	}
+	if st, ok := loop.TakeSegmentContinue(); !ok || st.UsedTools != 3 || st.ToolBudget != 3 {
+		t.Errorf("应标记分段续跑（工具闸 3/3），得 ok=%v state=%+v", ok, st)
 	}
 }
 
@@ -136,7 +135,7 @@ func TestLoopApprovalReject(t *testing.T) {
 		{Content: "放弃写文件"},
 	}}
 	var approvedTools []string
-	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg,
 		Approve: func(ctx context.Context, tc ToolCall) (bool, string) {
 			approvedTools = append(approvedTools, tc.Function.Name)
 			return false, ""
@@ -172,7 +171,7 @@ func TestLoopApprovalApprove(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
 		{Content: "已写入文件"},
 	}}
-	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg,
 		Approve: func(ctx context.Context, tc ToolCall) (bool, string) { return true, "" }}
 	if _, err := loop.Run(context.Background(), "写个文件", nil); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -193,7 +192,7 @@ func TestLoopApprovalSkipsReadOnly(t *testing.T) {
 		{Content: "已读取文件"},
 	}}
 	called := false
-	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg,
 		Approve: func(ctx context.Context, tc ToolCall) (bool, string) { called = true; return false, "" }}
 	if _, err := loop.Run(context.Background(), "读 x.txt", nil); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -208,7 +207,7 @@ func TestLoopContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	mock := &MockProvider{Responses: []Message{{Content: "已取消"}}}
-	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: NewRegistry()}
 	if _, err := loop.Run(ctx, "task", nil); err == nil {
 		t.Error("已取消的 ctx 应使 Run 返回错误")
 	}
@@ -216,32 +215,10 @@ func TestLoopContextCancel(t *testing.T) {
 
 // ── 新增组件单元测试 ──
 
-// TestCanParallelize 验证工具并行判断。
-func TestCanParallelize(t *testing.T) {
-	reg := NewRegistry()
-	reg.Register(&Tool{Name: "read", ReadOnly: true})
-	reg.Register(&Tool{Name: "search", ReadOnly: true})
-	reg.Register(&Tool{Name: "write", ReadOnly: false})
-
-	if canParallelize(nil, reg) {
-		t.Error("空调用不应并行")
-	}
-	if canParallelize([]ToolCall{{Function: FunctionCall{Name: "read"}}}, reg) {
-		t.Error("单个调用不应并行")
-	}
-	if !canParallelize([]ToolCall{
-		{Function: FunctionCall{Name: "read"}},
-		{Function: FunctionCall{Name: "search"}},
-	}, reg) {
-		t.Error("两个只读工具应可并行")
-	}
-	if canParallelize([]ToolCall{
-		{Function: FunctionCall{Name: "read"}},
-		{Function: FunctionCall{Name: "write"}},
-	}, reg) {
-		t.Error("含写工具不应并行")
-	}
-}
+// ★ 2026-09：TestCanParallelize 已随「工具并行执行」能力删除——
+//   canParallelize / tryParallelExecute / executeReadOnlyParallel（loop_parallel.go）
+//   整体移除，工具调用一律串行执行。串行等价行为由
+//   jsloop_e2e_test.go TestJSLoopMultipleToolCallsSerial 覆盖。
 
 // TestToolError 验证统一错误类型。
 func TestToolError(t *testing.T) {

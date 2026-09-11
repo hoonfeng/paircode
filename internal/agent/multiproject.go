@@ -43,7 +43,9 @@ func resolveProjectRoot(primaryRoot, project string) (string, error) {
 // projectSchemaProp 生成工具参数里标准 project 字段（多项目路由用）。
 // 所有支持多项目的工具统一使用此描述，保证模型行为一致。
 func projectSchemaProp() map[string]any {
-	return strProp("可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。")
+	return strProp("可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。" +
+		"★ 多项目工作区（gou-ide、wb-ui、ref 等）：不传本参数时，path 内所有相对路径一律相对「主项目根」解析，" +
+		"访问其他项目的文件/目录必须传 project（项目目录名）或直接传绝对路径——否则会报「路径不在当前项目内」，请勿反复重试相对路径。")
 }
 
 // projRootFromArgs 从工具参数解析项目根（project 缺省 = primaryRoot）。

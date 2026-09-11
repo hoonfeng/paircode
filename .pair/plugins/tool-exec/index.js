@@ -23,13 +23,25 @@ const DEFAULT_YIELD_MS = 10000;
 const MIN_YIELD_MS = 250;
 const MAX_YIELD_MS = 30000;
 
-// 项目路由：project 非空 → 以 ../<project>/ 前缀拼相对路径（多根归属由宿主 resolve 检查）
+// 是否绝对路径（Windows 盘符 / Unix 根 / 反斜杠开头）。
+function isAbsPath(p) {
+  const s = String(p == null ? '' : p);
+  return /^[a-zA-Z]:[\\/]/.test(s) || s.startsWith('/') || s.startsWith('\\');
+}
+
+// 项目路由：project 非空 → 目标项目（工作区另一根）下的路径。
+//   · path 为绝对路径 → 原样返回（越界由宿主 resolve 拦截）
+//   · project 为绝对路径 → 直接作为前缀拼接
+//   · 其余 → 以 ../<project>/ 前缀拼相对路径（宿主多根归属检查通过）
 function projPath(args, path) {
   const project = args.project;
-  if (project && path && !/^[a-zA-Z]:[\\/]/.test(path) && !path.startsWith('/')) {
-    return '../' + String(project).replace(/[\\/]+$/, '') + '/' + path.replace(/^[\\/]+/, '');
-  }
-  return path;
+  if (!project) return path;
+  if (isAbsPath(path)) return path;
+  const rel = String(path == null ? '' : path).replace(/^[\\/]+/, '');
+  if (!rel) return path;
+  const proj = String(project).replace(/[\\/]+$/, '');
+  if (isAbsPath(proj)) return proj + '/' + rel;
+  return '../' + proj.replace(/^[\\/]+/, '') + '/' + rel;
 }
 
 // yield 毫秒解析：缺省/非法 → def；否则钳制到 [250, 30000]
@@ -93,17 +105,17 @@ async function killProcess(ctx, args) {
 const tools = [
   {
     name: 'exec_command',
-    description: '执行一条 shell 命令并返回输出（统一执行入口：短命令同步返回；长命令超时转会话，用 write_stdin 继续轮询/交互，kill_process 终止）。',
-    usageGuide: '统一 shell 执行。短查询（git/构建/测试/文件操作）直接传 command 同步拿结果；长进程（dev server/watch）等待 yield_time_ms 后返回 session_id，用 write_stdin 轮询输出、kill_process 停止。比 run_code 包装更直接，比异步工具链少一次往返。',
+    description: '执行一条 shell 命令并返回输出（统一执行入口：短命令同步返回；长命令超时转会话，用 write_stdin 继续轮询/交互，kill_process 终止）。默认工作目录=主项目根；多项目工作区在其他项目下执行请传 workdir（相对主项目根）或 project（项目目录名）。',
+    usageGuide: '统一 shell 执行。短查询（git/构建/测试/文件操作）直接传 command 同步拿结果；长进程（dev server/watch）等待 yield_time_ms 后返回 session_id，用 write_stdin 轮询输出、kill_process 停止。cwd 语义：workdir 相对「主项目根」解析，也可用 project 参数切到其他项目根，或直接给绝对路径。比 run_code 包装更直接，比异步工具链少一次往返。',
     category: '执行',
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string', description: '要执行的 shell 命令（bash 语法；无 bash 时 cmd 兜底）' },
-        workdir: { type: 'string', description: '可选：工作目录（工作区内，省略=会话工作区根）' },
+        workdir: { type: 'string', description: '可选：工作目录（工作区内；相对主项目根解析，省略=主项目根；跨项目可传绝对路径或用 project 参数）' },
         yield_time_ms: { type: 'integer', description: '可选：等待毫秒（默认 10000，范围 250-30000）；超时仍在跑则返回 session_id' },
         max_output_tokens: { type: 'integer', description: '可选：输出 token 预算（默认 10000，超限保留尾部）' },
-        project: { type: 'string', description: '可选：目标项目（多项目工作区）。省略 = 主项目。' },
+        project: { type: 'string', description: '可选：目标项目（工作区项目目录名如 ref，或相对主项目的路径/绝对路径）——命令工作目录切到该项目根。省略 = 主项目。' },
       },
       required: ['command'],
     },

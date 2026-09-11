@@ -1176,8 +1176,11 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 
 	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 setFactory 单槽位）。
 	// apply(opts) → overrides | null：
-	//   opts = { system, maxIterations, maxContextTokens, autonomous,
-	//            maxAutonomousMinutes, checkpointInterval, workspaceRoot, reviewMode }
+	//   opts = { system, stepBudget, toolCallBudget, maxToolBudgetSegments, maxContextTokens,
+	//            autonomous, maxAutonomousMinutes, checkpointInterval,
+	//            workspaceRoot, reviewMode }
+	//            ★ 2026-09-12：maxIterations 已移除（迭代安全上限由段预算——★ 双闸门
+	//            步数/工具调用取较大者——派生，装配器不可覆盖；两个预算可覆盖）。
 	//   返回同形状对象时非空字段覆盖默认装配参数（如追加提示词/调迭代上限/切换审核模式）；
 	//   返回 null/undefined 表示不改动。注册即替换全局 LoopFactory 单槽位（后注册覆盖先注册），
 	//   插件卸载时自动还原默认工厂。真正替换循环内核留给宿主 Go 代码（ReplaceLoopFactory）。
@@ -1843,11 +1846,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		case "plugins":
 			ctxObj.Set("plugins", p.buildPluginsService(pc))
 		case "agents":
-			// ★ 2026-08-28 多智能体团队支持：成员会话（可续聊子 Agent）编排
+			// ★ 2026-09：会话唤醒投递（子 Agent 派生面已删除，只保留 followup 唤醒）
 			ctxObj.Set("agents", p.buildAgentsService(pc))
-		case "llm":
-			// ★ 2026-08-28：模型目录/当前模型（成员模型覆盖用）
-			ctxObj.Set("llm", p.buildLLMService(pc))
 		case "commands":
 			// ★ Round3 ④.2：slash 命令注册面（ctx.commands；卸载自动注销）
 			ctxObj.Set("commands", p.buildCommandsService(pc))
@@ -2207,7 +2207,9 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	//   path  相对工作区根（默认 "."）
 	//   depth 递归深度（默认 3；<=0 用默认）
 	//   path 字段为相对请求根的 "/" 分隔路径（前端展开/定位文件用）；
-	//   自动忽略常见目录（.git/node_modules/dist/…）与 Settings.IgnoreDirs 配置。
+	//   忽略集与搜索（grep/glob）同源（isSkipDirAt）：依赖/构建/VCS 目录任意深度
+	//   忽略，IDE 运行数据目录（_temp/logs/bin/…）仅项目根第一层忽略；另叠加
+	//   Settings.IgnoreDirs 用户配置。
 	fs.Set("tree", func(call goja.FunctionCall) goja.Value {
 		rel := call.Argument(0).String()
 		if rel == "" {
@@ -2221,18 +2223,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
-		ignores := map[string]bool{
-			".git": true, "node_modules": true, ".next": true, "dist": true,
-			"build": true, ".cache": true, "__pycache__": true, ".venv": true,
-			"vendor": true, ".idea": true, ".vscode": true, "tmp": true,
-			"logs": true, "coverage": true,
-		}
-		if len(core.Settings.IgnoreDirs) > 0 {
-			for _, d := range core.Settings.IgnoreDirs {
-				ignores[strings.ToLower(strings.TrimSpace(d))] = true
-			}
-		}
-		nodes, err := buildFileTree(full, full, ignores, depth)
+		nodes, err := buildFileTree(full, full, root, depth)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -2303,8 +2294,9 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 }
 
 // buildFileTree 递归构建文件树节点列表（ctx.fs.tree 用）。
-// dir 为当前目录，base 为请求根（path 字段的相对基准）；忽略目录命中即剪枝。
-func buildFileTree(dir, base string, ignores map[string]bool, depth int) ([]map[string]any, error) {
+// dir 为当前目录，base 为请求根（path 字段的相对基准），projRoot 为所属项目根
+// （根层忽略判定基准）；忽略目录命中即剪枝（规则与搜索同源，见 isSkipDirAt）。
+func buildFileTree(dir, base, projRoot string, depth int) ([]map[string]any, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -2320,12 +2312,12 @@ func buildFileTree(dir, base string, ignores map[string]bool, depth int) ([]map[
 			node["path"] = name
 		}
 		if e.IsDir() {
-			if ignores[strings.ToLower(name)] {
+			if isSkipDirAt(projRoot, full, name) {
 				continue
 			}
 			node["isDir"] = true
 			if depth > 1 {
-				if children, cerr := buildFileTree(full, base, ignores, depth-1); cerr == nil {
+				if children, cerr := buildFileTree(full, base, projRoot, depth-1); cerr == nil {
 					node["children"] = children
 				}
 			}

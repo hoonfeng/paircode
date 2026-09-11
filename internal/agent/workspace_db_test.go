@@ -56,8 +56,9 @@ func TestIsActiveRoot(t *testing.T) {
 
 // TestSetWorkspaceRootClosesOldDB 验证：SetWorkspaceRoot 切换 root 后（多工作区隔离），
 // ★ 2026-08-23 语义更新：旧 root 的 DB/store 句柄保留在缓存（运行中会话绑定旧工作区，
-//   需要继续读写）——切换不再关闭；删除工作区时经 CloseWorkspaceDB 显式关闭（Windows
-//   句柄释放 → 可删除该工作区 .pair 目录）。
+//
+//	需要继续读写）——切换不再关闭；删除工作区时经 CloseWorkspaceDB 显式关闭（Windows
+//	句柄释放 → 可删除该工作区 .pair 目录）。
 func TestSetWorkspaceRootClosesOldDB(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()

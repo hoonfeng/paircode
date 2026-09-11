@@ -83,7 +83,7 @@ func TestLoopService_GetState(t *testing.T) {
 	dir, prov := loopSvcEnv(t)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	loop := &Loop{Provider: prov, Registry: reg, MaxIterations: 100, WorkspaceRoot: dir}
+	loop := &Loop{Provider: prov, Registry: reg, WorkspaceRoot: dir}
 
 	done := make(chan struct{})
 	go func() {
@@ -120,7 +120,7 @@ func TestLoopService_PauseResume(t *testing.T) {
 	dir, prov := loopSvcEnv(t)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	loop := &Loop{Provider: prov, Registry: reg, MaxIterations: 100, WorkspaceRoot: dir}
+	loop := &Loop{Provider: prov, Registry: reg, WorkspaceRoot: dir}
 
 	done := make(chan struct{})
 	go func() {
@@ -164,7 +164,7 @@ func TestLoopService_RequestStop(t *testing.T) {
 	dir, prov := loopSvcEnv(t)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	loop := &Loop{Provider: prov, Registry: reg, MaxIterations: 100, WorkspaceRoot: dir}
+	loop := &Loop{Provider: prov, Registry: reg, WorkspaceRoot: dir}
 
 	done := make(chan struct{})
 	var runErr error
@@ -199,7 +199,7 @@ func TestLoopService_GojaView(t *testing.T) {
 	dir, prov := loopSvcEnv(t)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	loop := &Loop{Provider: prov, Registry: reg, MaxIterations: 100, WorkspaceRoot: dir}
+	loop := &Loop{Provider: prov, Registry: reg, WorkspaceRoot: dir}
 
 	done := make(chan struct{})
 	go func() {

@@ -254,7 +254,7 @@ const tools = [
     parameters: {
       type: 'object',
       properties: {
-        file_path: { type: 'string', description: '图片文件路径（工作区内绝对路径或相对路径），支持 PNG/JPEG/WebP/GIF' },
+        file_path: { type: 'string', description: '图片文件路径（工作区内；相对路径相对主项目根解析，跨项目请传绝对路径），支持 PNG/JPEG/WebP/GIF' },
         prompt: { type: 'string', description: '可选：想让 LLM 关注的问题（默认：描述图片内容、识别文字、分析布局）' },
       },
       required: ['file_path'],

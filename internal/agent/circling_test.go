@@ -57,7 +57,7 @@ func TestLoopRunBreaksCircling(t *testing.T) {
 		resp = append(resp, Message{ToolCalls: []ToolCall{{ID: "c", Type: "function", Function: FunctionCall{Name: "boom", Arguments: "{}"}}}})
 	}
 	var circled int
-	l := &Loop{Provider: &MockProvider{Responses: resp}, Registry: reg, MaxIterations: 10,
+	l := &Loop{Provider: &MockProvider{Responses: resp}, Registry: reg,
 		OnEvent: func(e Event) {
 			if e.Type == EventCircling {
 				circled++

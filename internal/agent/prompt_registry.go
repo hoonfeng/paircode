@@ -193,8 +193,9 @@ func uniqueStrings(in []string) []string {
 // 无插件段时返回 ""（零影响）。供 web_server/AgentBase 在构建 system prompt 时调用。
 //
 // ★ 2026-08-31 按需激活：声明为 on-demand 的插件（agent-teams 等）段仅在
-//   convID 会话内已激活时注入；否则全部隐藏（工具同样隐藏，见 MergePluginTools）。
-//   convID 为空 = 未开会话，按需插件的段一律不注入。
+//
+//	convID 会话内已激活时注入；否则全部隐藏（工具同样隐藏，见 MergePluginTools）。
+//	convID 为空 = 未开会话，按需插件的段一律不注入。
 func PluginPromptSections(host *PluginHost, convID string) (string, error) {
 	if host == nil {
 		return "", nil

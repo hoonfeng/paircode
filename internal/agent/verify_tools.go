@@ -47,7 +47,8 @@ func registerVerifyTools(r *Registry, root string) {
 
 // runMemoryVerify 执行记忆验证，返回可读报告文本。
 // ★ 2026-08-23 工作区隔离：优先会话绑定的工作区根（Verify 覆盖范围=发起会话的工作区），
-//   无会话上下文时回落全局 WorkspaceRoots（与原逻辑一致）。
+//
+//	无会话上下文时回落全局 WorkspaceRoots（与原逻辑一致）。
 func runMemoryVerify(ctx context.Context) (string, error) {
 	roots := sessionRootsOrGlobal(ctx)
 	if len(roots) == 0 {

@@ -29,7 +29,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "文件路径（工作区内）",
+          "description": "文件路径（工作区内）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -59,7 +59,7 @@ const tools = [
           "type": "string"
         },
         "path": {
-          "description": "文件路径（工作区内）",
+          "description": "文件路径（工作区内）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -129,8 +129,8 @@ const tools = [
   },
   {
     "name": "text_report",
-    "description": "扫描工作区目录树，按文件扩展名分组统计行数。支持统计总行数、代码行（非空非纯注释）、注释行、空行。path 限定扫描子目录（默认工作区根）；extensions 限定文件扩展名（逗号分隔，如 \".go,.ts,.vue\"）；group_by 分组方式：\"ext\"（按扩展名，默认）或 \"dir\"（按目录）。自动跳过 .git/node_modules/vendor 等目录。",
-    "usageGuide": "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 bash wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
+    "description": "扫描工作区目录树，按文件扩展名分组统计行数。支持统计总行数、代码行（非空非纯注释）、注释行、空行。path 限定扫描子目录（默认主项目根；相对主项目根解析，跨项目请传绝对路径）；extensions 限定文件扩展名（逗号分隔，如 \".go,.ts,.vue\"）；group_by 分组方式：\"ext\"（按扩展名，默认）或 \"dir\"（按目录）。自动跳过依赖库（node_modules/vendor/.venv…）、构建产物、VCS 与项目根下的 IDE 运行数据目录。",
+    "usageGuide": "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。path 相对主项目根解析（跨项目传绝对路径）。比 bash wc -l 更智能（自动跳过依赖库/构建产物/VCS/IDE 运行数据目录+按类型分组）。",
     "parameters": {
       "properties": {
         "extensions": {
@@ -146,7 +146,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "可选：要扫描的目录路径（默认工作区根）",
+          "description": "可选：要扫描的目录路径（默认工作区根）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -169,7 +169,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "Word 文件路径（工作区内，.docx 格式）",
+          "description": "Word 文件路径（工作区内，.docx 格式）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },
@@ -191,7 +191,7 @@ const tools = [
           "type": "string"
         },
         "path": {
-          "description": "输出文件路径（工作区内，.docx 扩展名）",
+          "description": "输出文件路径（工作区内，.docx 扩展名）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         },
         "title": {
@@ -218,7 +218,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "Excel 文件路径（工作区内，.xlsx 格式）",
+          "description": "Excel 文件路径（工作区内，.xlsx 格式）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         },
         "sheet": {
@@ -244,7 +244,7 @@ const tools = [
           "type": "string"
         },
         "path": {
-          "description": "输出文件路径（工作区内，.xlsx 扩展名）",
+          "description": "输出文件路径（工作区内，.xlsx 扩展名）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         },
         "sheet": {
@@ -275,7 +275,7 @@ const tools = [
           "type": "integer"
         },
         "path": {
-          "description": "PDF 文件路径（工作区内）",
+          "description": "PDF 文件路径（工作区内）；相对主项目根解析，跨项目请传绝对路径",
           "type": "string"
         }
       },

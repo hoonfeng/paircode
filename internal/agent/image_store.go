@@ -2,15 +2,19 @@
 // image_store.go — 图片附件内容寻址存储 + 请求变体缓存
 //
 // ★ 对齐参考（2026-09）：deepseek-harness/packages/attachment/attachment-local
-//   · 归一化图按内容寻址落盘（sha256 即引用 id）
-//   · 请求变体按「附件 id + 路由预算」哈希缓存（request-image.ts requestImageVariantId）
+//
+//	· 归一化图按内容寻址落盘（sha256 即引用 id）
+//	· 请求变体按「附件 id + 路由预算」哈希缓存（request-image.ts requestImageVariantId）
 //
 // ★ 目录布局（工作区根下）：
-//   .pair/attachments/<sha256>.<ext>                      归一化附件（provider 无关）
-//   .pair/attachments/request-images/<hh>/<sha256>        路由请求变体缓存（无扩展名，同 dsh）
+//
+//	.pair/attachments/<sha256>.<ext>                      归一化附件（provider 无关）
+//	.pair/attachments/request-images/<hh>/<sha256>        路由请求变体缓存（无扩展名，同 dsh）
 //
 // ★ 设计：归一化图只落盘一次，会话消息只存引用（Ref）+ 事实（宽高/字节），
-//   发送时按当前路由预算投影成 data URL——历史图片不再重复占用消息存储体积。
+//
+//	发送时按当前路由预算投影成 data URL——历史图片不再重复占用消息存储体积。
+//
 // ═══════════════════════════════════════════════════════════════
 package agent
 

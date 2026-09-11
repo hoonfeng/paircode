@@ -129,7 +129,23 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
     }
 
     // ── search：GET ?q=&path= → [{file,line,text}]（复刻内核逻辑：跳过目录/文本扩展名/内容匹配）──
-    const SKIP = { '.git': 1, 'node_modules': 1, 'vendor': 1, '.pair': 1, '.trae': 1, '.dbg': 1, '.context': 1, '__pycache__': 1, '.venv': 1, 'venv': 1, 'bin': 1, 'obj': 1, '.vs': 1 }
+    // ★ 忽略集与内核搜索（internal/agent/search.go）保持同源：依赖库/构建产物/VCS
+    //   + IDE 运行数据目录（_temp/logs/bin/release/screenshots/gocache…）。
+    const SKIP = {
+      '.git': 1, '.svn': 1, '.hg': 1, '.idea': 1, '.vscode': 1, '.vs': 1,
+      'node_modules': 1, 'bower_components': 1, 'jspm_packages': 1, 'vendor': 1, 'pods': 1,
+      '.pnpm-store': 1, '.yarn': 1, '.dart_tool': 1, '.bundle': 1,
+      'venv': 1, '.venv': 1, '__pycache__': 1, '.pytest_cache': 1, '.mypy_cache': 1,
+      '.ruff_cache': 1, '.tox': 1,
+      'dist': 1, 'build': 1, 'out': 1, 'target': 1, '.next': 1, '.nuxt': 1, '.svelte-kit': 1,
+      '.output': 1, '.angular': 1,
+      '.gradle': 1, '.cache': 1, '.turbo': 1, '.parcel-cache': 1, '.eslintcache': 1,
+      'coverage': 1, '.nyc_output': 1, '.terraform': 1,
+      '.pair': 1, '源码备份': 1, '.trae': 1, '.dbg': 1, '.context': 1,
+      '.agent-teams': 1, '.chrome-test': 1, '.verify-tmp': 1, '_temp': 1, '_desktop-archive': 1,
+      'tmp': 1, 'logs': 1, 'gocache': 1, 'screenshots': 1, 'release': 1, 'bin': 1, 'obj': 1,
+      'gomod': 1, 'gomodcache': 1,
+    }
     const TEXTS = {}
     for (const e of ['.go','.js','.ts','.vue','.html','.css','.scss','.json','.md','.yml','.yaml','.xml','.py','.java','.rs','.c','.h','.cpp','.hpp','.sh','.bat','.ps1','.env','.gitignore','.dockerfile','.sql','.rb','.php','.swift','.kt','.toml','.ini','.cfg','.conf','.txt','.log','.csv','.tsv','.svg','.svelte','.astro','.gradle','.cmake','.lua','.pl','.pm','.r','.dart','.scala','.zig','.nim','.hbs','.ejs']) TEXTS[e] = 1
     const fsSearch = (req) => {

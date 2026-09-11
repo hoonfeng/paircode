@@ -25,8 +25,8 @@ var conciseToolDescriptions = map[string]string{
 	"tool_stats":   "观工具调用统计（次数/成败/成功率）；min_calls 滤低频、recent 观近录。",
 
 	// ── 文件编辑 ──
-	"read":        "读文件内容（工作区内 path；可 offset+limit 读片段，缺省读全，超 2000 行截断）。",
-	"write":       "写 content 至 path（覆盖，父目录自动建）；需审核批准。",
+	"read":        "读文件内容；path 相对主项目根（跨项目传 project 或绝对路径），可 offset+limit 读片段，缺省读全（超 2000 行截断）。",
+	"write":       "写 content 至 path（覆盖，父目录自动建）；path 相对主项目根（跨项目传 project 或绝对路径）；需审核批准。",
 	"apply_patch": "应用 codex 语法补丁修改文件（*** Begin Patch/Add File/Update File/Delete File/Move to/*** End Patch）；一次多文件多操作，上下文行定位（免行号/免 JSON 转义）。",
 
 	// ── 代码执行 / 命令 ──
@@ -37,8 +37,8 @@ var conciseToolDescriptions = map[string]string{
 
 	// ── 搜索 ──
 	// ★ Round3：search_content/search_files 旧名注册已删除（并入 glob/grep），死条目随删
-	"glob": "按通配符递归找文件返相对路径；含 / 或 ** 按路径模式，否则按文件名；path 限子目录；无 pattern 时列目录（目录在前）。",
-	"grep": "以 RE2 正则搜文件内容返「路径:行号: 行」；path/glob/case_insensitive 可限。",
+	"glob": "按通配符递归找文件返相对路径；含 / 或 ** 按路径模式，否则按文件名；path 限子目录（相对主项目根，跨项目传 project 或绝对路径）；无 pattern 时列目录（目录在前）；自动跳过依赖/VCS/构建/IDE 运行数据目录。",
+	"grep": "以 RE2 正则搜文件内容返「路径:行号: 行」；path/glob/case_insensitive 可限（path 相对主项目根，跨项目传 project 或绝对路径）；自动跳过依赖/VCS/构建/IDE 运行数据目录。",
 
 	// ── 网络 ──
 	"web_fetch":  "抓取 http(s) 网页返纯文本（去标签，超长截断）。",

@@ -7,7 +7,6 @@
 //
 //     loop.llm.chat(msgs, tools, onChunk) → assistant
 //     loop.tools.list() / loop.tools.run(name, argsJson)
-//     loop.tools.runParallel([{id,name,args}]) → 结果|null（纯只读并行）
 //     loop.events.emit(event)
 //     loop.persist.batch(msgs)
 //     loop.approve.ask(tc) → {approved, feedback}  // 审核门（动作执行；驳回记录进共享状态）
@@ -16,7 +15,6 @@
 //     loop.compact(msgs) → msgs
 //     loop.circling.track(name, args, failed) / loop.circling.detect()
 //     loop.store.get(key) / loop.store.set(key, value)
-//     loop.delegate.run({task, system?, maxIterations?, agentName?}) → 子 agent
 //     loop.ctrl.*（暂停/停止/队列/钩子/日志/step 边界）
 //
 //   本插件实现循环业务（策略层）：
@@ -73,7 +71,21 @@ return {
       title: 'Agent',
       fields: [
         { name: 'systemAppend', label: '系统提示词追加', type: 'textarea', default: '', hint: '追加到系统提示词末尾（如行为规范/角色设定）' },
-        { name: 'maxIterations', label: '最大迭代数', type: 'number', default: 0, hint: '0=不覆盖（默认 50）' },
+        // ★ 2026-09-12：「最大迭代数」配置项已移除——段内迭代安全上限由宿主按工具
+        //   预算派生（tool_budget.go IterationLimit = 生效预算 + 5），段的结束由
+        //   段预算 + 自动续跑（maxToolBudgetSegments）负责，不再提供迭代数配置。
+        // ★ 2026-09-12 分段续跑配置化 + 双闸门（宿主 internal/agent/tool_budget.go）：
+        //   配置项全部在本插件注册（存 settings.json 的 pluginSettings.agentloop），
+        //   装配时经 ctx.loopFactory.register 的 overrides 透传给宿主 Loop。
+        //   段结束 = 双闸门任一达上限：stepBudget（步数，一步 = 一次模型调用）
+        //   或 toolCallBudget（段内实际执行的工具调用次数）；两者同时达上限时
+        //   按步数闸报告（SegmentState.Reason = step_budget）。
+        { name: 'stepBudget', label: '单段步数预算', type: 'number', default: 120,
+          hint: '每个执行段内最多走多少步（一步 = 一次模型调用；模型一轮并列多个工具调用仍只算一步），达上限即结束本段并自动续跑下一段（同会话、历史保留）。0=默认 120；负数=不限' },
+        { name: 'toolCallBudget', label: '单段工具调用预算', type: 'number', default: 120,
+          hint: '每个执行段内最多执行多少次工具调用，达上限即结束本段并自动续跑下一段（同会话、历史保留）。0=默认 120；负数=不限' },
+        { name: 'maxToolBudgetSegments', label: '最大自动续跑段数', type: 'number', default: 20,
+          hint: '单轮任务最多自动续跑多少段（防失控），超过后停止续跑，再发一条消息即可继续。0=默认 20' },
         { name: 'autonomous', label: '自主模式', type: 'checkbox', default: false, hint: '勾选=强制开启自主（不勾=跟随全局开关，不再强制关闭）' },
         { name: 'maxAutonomousMinutes', label: '自主时间预算（分钟）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'checkpointInterval', label: '检查点间隔（迭代数）', type: 'number', default: 0, hint: '0=不覆盖' },
@@ -241,14 +253,25 @@ return {
     // ── 参数级装配（保留）：CreateLoop 时覆盖装配参数（提示词/迭代/审核模式）──
     ctx.loopFactory.register((opts) => {
       // ★ 2026-08-21 修复：动态读取配置（registerSettings 返回的 value 是 apply 时
-      //   静态快照，设置面板保存后不刷新 → 装配器一直用旧值 → maxIterations 等
+      //   静态快照，设置面板保存后不刷新 → 装配器一直用旧值 → 提示词/预算等
       //   设置保存不生效）。改为每次 Create 时实时读 pluginSettings.agentloop。
       const cfg = ctx.getSettings('agentloop') || {};
       const over = {};
       if (typeof cfg.systemAppend === 'string' && cfg.systemAppend) {
         over.system = (opts.system || '') + '\n\n' + cfg.systemAppend;
       }
-      if (cfg.maxIterations != null && Number(cfg.maxIterations) > 0) over.maxIterations = Number(cfg.maxIterations);
+      // ★ 2026-09-12 分段续跑配置化（宿主 tool_budget.go，双闸门）：单段步数预算、
+      //   单段工具调用预算与续跑段数上限经装配参数透传。0 = 不覆盖（宿主默认
+      //   120 步 / 120 次 / 20 段），预算负数 = 不限（故仅排除 0，负值照传）。
+      if (cfg.stepBudget != null && Number.isFinite(Number(cfg.stepBudget)) && Number(cfg.stepBudget) !== 0) {
+        over.stepBudget = Number(cfg.stepBudget);
+      }
+      if (cfg.toolCallBudget != null && Number.isFinite(Number(cfg.toolCallBudget)) && Number(cfg.toolCallBudget) !== 0) {
+        over.toolCallBudget = Number(cfg.toolCallBudget);
+      }
+      if (cfg.maxToolBudgetSegments != null && Number(cfg.maxToolBudgetSegments) > 0) {
+        over.maxToolBudgetSegments = Number(cfg.maxToolBudgetSegments);
+      }
       if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) over.maxContextTokens = Number(cfg.maxContextTokens);
       // ★ 2026-08-19 修复：仅强制开启（true 才覆盖）——false 不再覆盖全局，
       //   消除「保存设置面板即强制关闭全局自主模式」的默认值缺陷。
@@ -272,13 +295,27 @@ return {
     // ═══════════════════════════════════════════════════════════
     // ★ JS 循环实现（agentloop 核心外置）：Loop.Run 委托本 run() 驱动循环。
     //   Go 侧前置：msgs 组装（system+历史+任务）、staleMsg、工具精简、
-    //   OnToolUpdate 桥、Run 开始时压缩一次——全部完成后再调本函数。
+    //   OnToolUpdate 桥、Run 开始时精简一次——全部完成后再调本函数。
     //   返回 { msgs, error? }：msgs = 完整消息列表（Go 更新 History 并收尾）。
     // ═══════════════════════════════════════════════════════════
     ctx.loopFactory.registerLoop({
       id: 'agentloop',
       async run({ task, msgs, tools, meta, loop }) {
-        const maxIter = meta.maxIterations || 30;
+        // ★ 2026-09-12：「最大迭代数」配置项已移除——段内迭代安全上限由宿主按段
+        //   预算派生（internal/agent/tool_budget.go IterationLimit =
+        //   max(生效步数预算, 生效工具调用预算) + 5，双闸门均不限时以预算钳制上限
+        //   兜底），经 meta.iterationLimit 传入。
+        //   此处仅在旧宿主/参数缺失时按同一公式兜底自算；段的结束由双闸门预算 +
+        //   自动续跑负责（见下方 step 14.5），本上限只是防失控的最后一道保险。
+        const ITER_SLACK = 5;       // 对齐宿主 LoopIterationSlack
+        const BUDGET_LIMIT = 10000; // 对齐宿主 MaxToolCallBudgetLimit
+        const tbBudget = Number(meta.toolCallBudget || 0);
+        const sbBudget = Number(meta.stepBudget || 0);
+        // 双闸门取较大者派生迭代上限（任一闸门关闸时上限必须仍有余量）
+        const budgetMax = Math.max(tbBudget > 0 ? tbBudget : 0, sbBudget > 0 ? sbBudget : 0);
+        let maxIter = Number(meta.iterationLimit) > 0
+          ? Number(meta.iterationLimit)
+          : (budgetMax > 0 ? budgetMax + ITER_SLACK : BUDGET_LIMIT + ITER_SLACK);
         const autonomous = !!meta.autonomous;
         const maxBudgetMin = meta.maxAutonomousMinutes || 0;
 
@@ -297,31 +334,26 @@ return {
         const NUDGE_CONTENT = '[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，直接自然总结；如还需继续，请调用工具推进。';
 
         // ═══════════════════════════════════════════════════════
-        // ★ 策略外置常量（2026-08-27）：压缩/绕圈/审批的「判定策略」本插件自持
+        // ★ 策略外置常量（2026-08-27）：精简/绕圈/审批的「判定策略」本插件自持
         //   （阈值/窗口/提示文本均可在此自定义；数据面/执行面在 Go）。
         // ═══════════════════════════════════════════════════════
-        // 压缩策略：两档阈值 + 冷却 + 硬地板（对齐 Go 原实现默认值，可调）
-        const COMPACT = { thresholdEarly: 0.45, thresholdFull: 0.90, cooldownEarly: 3, cooldownFull: 10, hardFloor: 120000 };
+        // ★ 2026-09 决策：**段内只追加，不中途精简**。
+        //   段内删历史 = 改写已发送过的字节 → provider 前缀缓存必断在删改点，
+        //   被保留内容要全额重新 prefill（实测单次 miss 13K~54K tokens）。
+        //   体积控制改由两道更强的闸负责：
+        //     ① 双闸门任一达上限即结束本段并自动续跑下一段（宿主 tool_budget.go）：
+        //        stepBudget 步（默认 120 步，一步 = 一次模型调用）或
+        //        toolCallBudget 次工具调用（默认 120 次）；
+        //     ② 下一段（下一次 Run）开始时重载历史并做跨段精简
+        //        （宿主 CondenseHistoryByPressure / maybeCompact）。
+        //   因此本函数只保留「前端精简按钮」路径；阈值只用于诊断日志。
+        const COMPACT = { thresholdEarly: 0.45, thresholdFull: 0.90 };
         // 绕圈检测策略：窗口 + 重复/失败阈值
         const CIRCLING = { window: 12, repeatStop: 3, failStop: 2 };
 
-        // 压缩判定（策略 JS / 执行 Go compact.apply）：返回处理后的 msgs
+        // 段内精简：不再自动触发（只追加）。仅当上游显式请求时才走宿主 compact.apply。
         function maybeCompact(msgs) {
-          if (!loop.compact || !loop.compact.estimate) return msgs; // 无数据面（回退路径）→ 不动
-          const est = loop.compact.estimate(msgs);
-          if (!est.maxContextTokens || est.maxContextTokens <= 0) return msgs; // 未配置窗口 → 压缩关闭
-          if ((est.cooldown || 0) > 0) return msgs; // 冷却期（apply 后 Go 侧自动设置）
-          let ratio = est.ratio;
-          if (est.maxContextTokens > COMPACT.hardFloor && est.tokens >= COMPACT.hardFloor) {
-            ratio = COMPACT.thresholdFull; // 绝对硬地板：超大窗口强制全量压缩
-          }
-          if (ratio < COMPACT.thresholdEarly) return msgs; // 未超任何阈值
-          if (ratio < COMPACT.thresholdFull) {
-            const r = loop.compact.apply(msgs, 'early');
-            return (r && r.msgs) ? r.msgs : msgs;
-          }
-          const r = loop.compact.apply(msgs, 'full');
-          return (r && r.dropped > 0 && r.msgs) ? r.msgs : msgs;
+          return msgs; // ★ 段内只追加
         }
 
         // 绕圈判定（策略 JS / 数据 Go circling.state）：
@@ -381,16 +413,44 @@ return {
           if (pol.reviewMode === 'off') return false;
           return !!(pol.requiresApproval || {})[name];
         }
-        // 共享审核状态驱动：同一工具最近被驳回（<5 分钟）→ 免打扰自动驳回。
-        // （依据 state 的 lastRejectedTool/lastRejectedAt 判断，不依赖计数。）
+        // 共享审核状态驱动：同一工具 + 同一参数最近被驳回（<5 分钟）→ 免打扰自动驳回。
+        // （依据 state 的 lastRejectedTool/lastRejectedAt + 本地参数指纹判断，不依赖计数。）
+        // ★ 2026-09-10 修复：原实现只比工具名，一次驳回后 5 分钟内该工具的所有调用
+        //   （哪怕参数完全不同、内容完全合法）都被免审驳回——实测占全部驳回的 66%。
+        //   现增加参数指纹比对：只有「同工具 + 完全相同的参数 + 5 分钟内」才短路；
+        //   参数一旦变化或指纹缺失，一律重新送审（防无意义重试，且不误伤正常调用）。
         const REJECT_REMIND_MS = 5 * 60 * 1000;
+        // 最近一次驳回的（工具, 参数指纹, 理由）：Go ApproveState 无指纹字段，故存插件本地
+        let lastRejectFp = { tool: '', fp: '', at: 0, reason: '' };
+        // argsFingerprint：工具名 + 原始参数串的 FNV-1a 32 位指纹（稳定、无外部依赖）
+        function argsFingerprint(tc) {
+          const name = tc.function ? tc.function.name : (tc.name || '');
+          const rawArgs = tc.function ? (tc.function.arguments || '') : (tc.arguments || '');
+          let h = 2166136261;
+          const s = name + '\u0001' + rawArgs;
+          for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+          }
+          return (h >>> 0).toString(16);
+        }
         function autoRejectFromState(tc) {
           const st = appState();
-          if (!st || !st.lastRejectedTool || st.lastRejectedTool !== (tc.function ? tc.function.name : (tc.name || ''))) return null;
+          const name = tc.function ? tc.function.name : (tc.name || '');
+          if (!st || !st.lastRejectedTool || st.lastRejectedTool !== name) return null;
           if (!st.lastRejectedAt || Date.now() - st.lastRejectedAt > REJECT_REMIND_MS) return null;
+          // ★ 参数指纹比对：仅「同工具 + 完全相同参数」短路；不同 → 视为新请求，正常送审
+          const fp = argsFingerprint(tc);
+          if (lastRejectFp.tool !== name || !lastRejectFp.fp || lastRejectFp.fp !== fp) return null;
           const last = (st.rejectedHistory && st.rejectedHistory.length > 0) ? st.rejectedHistory[st.rejectedHistory.length - 1] : null;
-          return (last && last.reason ? last.reason : '') || '该工具刚被驳回';
+          return lastRejectFp.reason || (last && last.reason ? last.reason : '') || '该工具刚被驳回';
         }
+
+        // ★ 2026-09-10 送审字段归一化（补丁 P2/P3）：已上移到宿主 Go 侧根治——
+        //   reviewer.go 的 reviewUserPrompt() 统一做别名归一化（file_path/target/file/
+        //   files[] → path；new_string/edits[]/patch → content；git_* 用 project/仓库根
+        //   兜底 path 并汇总关键参数）→ 插件侧不再构造「送审副本」，避免两套真相源。
+        //   本插件保留上方参数指纹比对（P1）：审核策略属插件面，指纹状态属插件本地。
 
         // ═══════════════════════════════════════════════════════
         // ★ 背景上下文快照同步（2026-08-27 缓存优化，对齐 RuntimeContextProjection）：
@@ -417,14 +477,6 @@ return {
           if (parts.stale) {
             if (b) b += '\n\n';
             b += parts.stale;
-          }
-          // ③ 历史摘要（上下文压缩后产生）
-          if (Array.isArray(parts.summaries) && parts.summaries.length > 0) {
-            b += '# 上下文已压缩——历史摘要\n\n' +
-              '> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n' +
-              '> 请勿重复执行摘要中已包含的任务。\n' +
-              '> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n';
-            b += parts.summaries.join('\n\n---\n\n');
           }
           // ④ 自主模式两级追踪提示（固定内容）
           if (parts.autonomous) {
@@ -464,7 +516,7 @@ return {
         //   }
         // }
 
-        // ── run 入口自动压缩（策略 JS：阈值/冷却/硬地板；执行 Go compact.apply）──
+        // ── run 入口：段内不精简（只追加）。跨段体积控制由宿主在 Run 开始时完成 ──
         msgs = maybeCompact(msgs);
 
         for (let iter = 0; iter < maxIter; iter++) {
@@ -489,7 +541,7 @@ return {
             loop.events.emit({ type: 'notice', content: `收到 ${steerMsgs.length} 条托管消息，已注入上下文` });
           }
 
-          // ── 3. 手动压缩请求（前端压缩按钮）──
+          // ── 3. 手动精简请求（前端精简按钮）──
           if (loop.ctrl.compactRequested()) {
             const cr = loop.compact.apply(msgs, 'full');
             if (cr && cr.msgs) msgs = cr.msgs;
@@ -516,7 +568,7 @@ return {
           }
 
           // ── 6. THINK：构建 callMsgs（背景注入/日志由 Go buildCallContext 完成）──
-          msgs = maybeCompact(msgs); // 每步 LLM 前自动压缩判定（原 Go maybeCompact 语义）
+          msgs = maybeCompact(msgs); // 段内只追加（不中途精简）——见文件上半部说明
           let callMsgs = loop.context.build(msgs, ephemeral);
           ephemeral.length = 0; // Go 侧已消费，JS 清空防重复注入
 
@@ -582,6 +634,9 @@ return {
                 }
                 if (!ap.approved) {
                   const rej = (ap.feedback || '').trim() || REJ_DEFAULT;
+                  // ★ 记录本次驳回的工具 + 参数指纹（供 autoRejectFromState 精确比对，
+                  //   避免误伤「同名工具但参数不同」的正常调用）
+                  lastRejectFp = { tool: tc.function.name, fp: argsFingerprint(tc), at: Date.now(), reason: rej };
                   loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: rej, callId: tc.id });
                   msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: rej });
                   loop.circling.track(tc.function.name, tc.function.arguments, true);
@@ -589,37 +644,17 @@ return {
                 }
                 approved.push(tc);
               }
-              // 12b. 执行：≥2 个先试并行（纯只读），runParallel 返回 null（含写/需审批）
-              //      或 <2 个 → 串行退回。契约：runParallel 已 emit tool_result + track，
-              //      JS 只组装消息；串行路径 JS 自己 emit + track。
-              if (approved.length >= 2) {
-                const par = loop.tools.runParallel(approved.map(tc => ({
-                  id: tc.id, name: tc.function.name, args: tc.function.arguments,
-                })));
-                if (par) {
-                  for (const r of par) {
-                    const output = r.error ? 'Error: ' + r.error : r.content;
-                    msgs.push({ role: 'tool', toolCallId: r.id, name: r.name, content: output });
-                  }
-                } else {
-                  for (const tc of approved) {
-                    const res = loop.tools.run(tc.function.name, tc.function.arguments, tc.id);
-                    const output = res.error ? 'Error: ' + res.error : res.content;
-                    loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
-                    msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
-                    loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
-                  }
-                }
-              } else if (approved.length === 1) {
-                const tc = approved[0];
+              // 12b. 执行：一律串行（并行工具执行能力已彻底移除，无 runParallel 优先路径）——
+              //      逐个执行 + emit tool_result + track，再组装 tool 消息（不再并行优先）。
+              for (const tc of approved) {
                 const res = loop.tools.run(tc.function.name, tc.function.arguments, tc.id);
                 const output = res.error ? 'Error: ' + res.error : res.content;
                 loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                 msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
                 loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
               }
-          }
             }
+          }
 
           // ── 13. step 收尾 ──
           const tcCount = (assistant.toolCalls || []).length;
@@ -657,6 +692,22 @@ return {
             }
           }
 
+          // ── 14.5 段预算（双闸门，分段执行，2026-09）──
+          //   宿主 tool_budget.go：本段（Run）内**步数达 stepBudget（默认 120 步，
+          //   一步 = 一次模型调用）或工具调用达 toolCallBudget（默认 120 次）**
+          //   → 结束本段（不再发起新的 LLM 调用），返回 segment 标记；
+          //   宿主 SessionManager 自动续跑下一段（同会话、历史保留，上下文精简
+          //   走既有 maybeCompact 机制）。被驳回/截断未执行的调用不计数。
+          const tb = loop.ctrl.toolBudget ? loop.ctrl.toolBudget() : null;
+          if (tb && tb.exhausted) {
+            const isStepGate = tb.reason === 'step_budget';
+            const stepsTxt = tb.stepBudget > 0 ? `${tb.steps}/${tb.stepBudget} 步` : `${tb.steps} 步（不限）`;
+            const toolsTxt = tb.budget > 0 ? `${tb.used}/${tb.budget} 次` : `${tb.used} 次（不限）`;
+            loop.events.emit({ type: 'notice', content: `本段已达${isStepGate ? '步数' : '工具调用'}预算上限（已执行 ${stepsTxt}；工具调用 ${toolsTxt}），分段结束，自动开启下一段继续` });
+            loop.events.emit({ type: 'done', content: '', doneReason: 'tool_budget', turnReason: 'tool_budget' });
+            return { msgs, segment: { reason: tb.reason || 'tool_budget', used: tb.used, budget: tb.budget, steps: tb.steps, stepBudget: tb.stepBudget } };
+          }
+
           // ── 15. content-only 防护（连续文字不调工具 → 死循环兜底）──
           if (!hasTools && hasContent) {
             contentOnlyIters++;
@@ -683,9 +734,11 @@ return {
           loop.persist.batch(msgs);
         }
 
-        // ── 达到最大迭代上限 ──
-        loop.events.emit({ type: 'error', content: `达到最大迭代次数 (${maxIter}) 自动停止` });
-        return { msgs, error: '达到最大迭代次数 (' + maxIter + ') 自动停止' };
+        // ── 达到段内迭代安全上限（由工具预算派生，非配置项）──
+        //   正常流程由 step 14.5 的预算分段先触发（预算默认 120 次工具调用），
+        //   本分支仅在预算与轮次严重不同步（如大量无工具调用的空转轮）时兜底。
+        loop.events.emit({ type: 'error', content: `达到段内迭代安全上限 (${maxIter}) 自动停止` });
+        return { msgs, error: '达到段内迭代安全上限 (' + maxIter + ') 自动停止' };
       },
     });
 

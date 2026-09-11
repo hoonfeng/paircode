@@ -52,7 +52,7 @@ func registerCSVRead(r *Registry, root string) {
 			"columns 按列索引过滤（从 0 开始，逗号分隔，如 \"0,2,3\"）。" +
 			"limit 限制返回行数（默认 100，-1=全部），offset 跳过前 N 行。",
 		Parameters: objSchema(props{
-			"path":      strProp("文件路径（工作区内）"),
+			"path":      strProp("文件路径（工作区内；相对主项目根，跨项目请传绝对路径）"),
 			"delimiter": strProp("可选：分隔符，\"comma\"（逗号）或 \"tab\"（制表符），默认 \"comma\""),
 			"columns":   strProp("可选：要显示的列索引（从 0 开始，逗号分隔），省略显示全部"),
 			"limit":     intProp("可选：最大返回行数（默认 100，-1 表示全部）"),
@@ -133,7 +133,7 @@ func registerCSVWrite(r *Registry, root string) {
 			"delimiter 可选 \"comma\"（逗号, 默认）或 \"tab\"（制表符）。" +
 			"header 为可选的表头行 JSON 数组，省略则从 data 首行自动提取。",
 		Parameters: objSchema(props{
-			"path":      strProp("文件路径（工作区内）"),
+			"path":      strProp("文件路径（工作区内；相对主项目根，跨项目请传绝对路径）"),
 			"data":      strProp("表格数据：JSON 二维数组字符串，或 Markdown 表格文本"),
 			"delimiter": strProp("可选：分隔符 \"comma\" 或 \"tab\"，默认 \"comma\""),
 			"header":    strProp("可选：表头行 JSON 数组，如 \"[\"姓名\",\"年龄\"]\""),
@@ -539,7 +539,7 @@ func registerTextReport(r *Registry, root string) {
 			"group_by 分组方式：\"ext\"（按扩展名，默认）或 \"dir\"（按目录）。" +
 			"自动跳过 .git/node_modules/vendor 等目录。",
 		Parameters: objSchema(props{
-			"path":       strProp("可选：要扫描的目录路径（默认工作区根）"),
+			"path":       strProp("可选：要扫描的目录路径（默认主项目根；相对主项目根解析，跨项目请传绝对路径）"),
 			"extensions": strProp("可选：限定文件扩展名，逗号分隔（如 \".go,.ts,.vue\"）"),
 			"group_by":   strProp("可选：分组方式 \"ext\"（按扩展名，默认）或 \"dir\"（按目录）"),
 			"max_files":  intProp("可选：最大扫描文件数（默认 5000）"),

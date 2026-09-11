@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/hoonfeng/paircode/goja"
@@ -24,7 +22,6 @@ import (
 //	llm.chat(msgs, tools, onChunk) → assistant      // Provider.Chat 流式
 //	tools.list() → [ToolDefinition]                 // ApplyConcise 后的定义
 //	tools.run(name, argsJson) → {content, error}    // Registry.Execute
-//	tools.runParallel([{id,name,args}]) → 结果|null // 纯只读并行（含写退回串行）
 //	events.emit(event)                              // l.emit（自动回填 turn/step）
 //	persist.batch(msgs)                             // OnBatchPersist + currentMsgs 同步
 //	approve.ask(tc) → {approved, feedback}                 // 审核门（黑白名单/mode；驳回记录进 state）
@@ -42,7 +39,7 @@ type jsLoopRunner struct {
 }
 
 // buildArgs 构造传给 JS run 的完整参数字典。
-func (r *jsLoopRunner) buildArgs(task string, msgs []Message, tools []ToolDefinition, max int) map[string]any {
+func (r *jsLoopRunner) buildArgs(task string, msgs []Message, tools []ToolDefinition) map[string]any {
 	l := r.loop
 	vm := r.impl.vm
 	return map[string]any{
@@ -50,7 +47,13 @@ func (r *jsLoopRunner) buildArgs(task string, msgs []Message, tools []ToolDefini
 		"msgs":  msgsToJS(vm, msgs),
 		"tools": toolsToJS(vm, tools),
 		"meta": map[string]any{
-			"maxIterations":        max,
+			// ★ 2026-09-12：「最大迭代数」配置项已移除——段内迭代安全上限改由宿主
+			//   按段预算派生（tool_budget.go IterationLimit），JS 循环只读不改。
+			// ★ 2026-09-12 双闸门：stepBudget（步数）+ toolCallBudget（工具调用），
+			//   任一达上限即分段续跑（判定在宿主 segmentBudgetState，JS 仅读结果）。
+			"iterationLimit":       l.IterationLimit(),
+			"toolCallBudget":       l.ToolCallBudgetOrDefault(),
+			"stepBudget":           l.StepBudgetOrDefault(),
 			"autonomous":           l.Autonomous,
 			"reviewMode":           l.getReviewMode(),
 			"workspaceRoot":        l.WorkspaceRoot,
@@ -228,6 +231,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			callID = v.String()
 		}
 		result, terr := l.Registry.Execute(r.ctx, name, argsJSON)
+		l.noteToolCall() // ★ 段预算·工具调用闸计数（已实际执行，见 tool_budget.go）
 		out := map[string]any{"content": result, "error": nil, "id": callID}
 		if terr != nil {
 			out["content"] = "Error: " + terr.Error()
@@ -237,89 +241,6 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			out["content"] = l.parseImageSubmitResult(result, callID)
 		}
 		return vm.ToValue(out)
-	})
-	// tools.runParallel([{id, name, args}, ...]) → 结果数组 或 null
-	// 契约：调用方（JS）负责先逐个 emit tool_call；本函数仅对「纯只读」工具
-	//   并行执行（与 Go 默认 canParallelize 保守策略一致：含写/需审批 → 返回
-	//   null 退回串行）。执行后按传入顺序 emit tool_result + trackCall，
-	//   返回 [{id, name, content, error}]。调用方收到结果后只负责组装 tool
-	//   消息（不再 emit / 不再 track，避免重复）。
-	toolsObj.Set("runParallel", func(call goja.FunctionCall) goja.Value {
-		v := call.Argument(0)
-		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-			return goja.Null()
-		}
-		exp := v.Export()
-		arr, ok := exp.([]any)
-		if !ok || len(arr) < 2 {
-			return goja.Null()
-		}
-		calls := make([]ToolCall, 0, len(arr))
-		for _, item := range arr {
-			m, ok := item.(map[string]any)
-			if !ok {
-				return goja.Null()
-			}
-			id, _ := m["id"].(string)
-			name, _ := m["name"].(string)
-			args := ""
-			if s, ok := m["args"].(string); ok {
-				args = s
-			}
-			if name == "" {
-				return goja.Null()
-			}
-			calls = append(calls, ToolCall{ID: id, Function: FunctionCall{Name: name, Arguments: args}})
-		}
-		// 仅纯只读才并行（含写/需审批 → 退回串行）
-		for _, tc := range calls {
-			t, ok := l.Registry.Get(tc.Function.Name)
-			if !ok || !t.ReadOnly || t.RequiresApproval {
-				return goja.Null()
-			}
-		}
-		log.Printf("[loop-js] 并行执行 %d 个只读工具（turn=%d step=%d）", len(calls), l.TurnNo, l.StepNo)
-		// 并行执行（结果按原始顺序收集）
-		type presult struct {
-			tc     ToolCall
-			output string
-			err    error
-		}
-		results := make([]presult, len(calls))
-		var wg sync.WaitGroup
-		for i, tc := range calls {
-			wg.Add(1)
-			go func(idx int, tc ToolCall) {
-				defer wg.Done()
-				out, err := l.Registry.Execute(r.ctx, tc.Function.Name, tc.Function.Arguments)
-				results[idx] = presult{tc: tc, output: out, err: err}
-			}(i, tc)
-		}
-		wg.Wait()
-		// 按序 emit tool_result + trackCall + 组装返回值
-		outArr := make([]any, 0, len(calls))
-		for _, pr := range results {
-			output := pr.output
-			if pr.err != nil {
-				output = "Error: " + pr.err.Error()
-			} else {
-				// ★ 图片读取（read_image）：标记 → 准入/归一化/落盘，图片挂该次调用
-				output = l.parseImageSubmitResult(output, pr.tc.ID)
-			}
-			l.emit(Event{Type: EventToolResult, Tool: pr.tc.Function.Name, Content: output, CallID: pr.tc.ID})
-			l.trackCall(pr.tc.Function.Name, pr.tc.Function.Arguments, pr.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
-			errAny := any(nil)
-			if pr.err != nil {
-				errAny = pr.err.Error()
-			}
-			outArr = append(outArr, map[string]any{
-				"id":      pr.tc.ID,
-				"name":    pr.tc.Function.Name,
-				"content": output,
-				"error":   errAny,
-			})
-		}
-		return vm.ToValue(outArr)
 	})
 	proxy.Set("tools", toolsObj)
 
@@ -497,7 +418,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if text == "" {
 			return msgsArg // 无内容：不注入（历史已有旧快照保留，避免删消息破坏前缀）
 		}
-		full := backgroundCtxMarker + systemReminderFrame("会话上下文摘要与状态提示", text)
+		full := backgroundCtxMarker + systemReminderFrame("会话背景与状态提示", text)
 		if last, ok := findLastSnapshotContent(jmsgs); ok && last == full {
 			return msgsArg // 内容未变：零注入，前缀稳定
 		}
@@ -527,7 +448,9 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if max > 0 {
 			ratio = float64(tokens) / float64(max)
 		}
-		if max > compactHardFloor && tokens >= compactHardFloor {
+		// ★ 2026-09 硬地板可配（默认关闭）：Go 侧唯一口径，JS 插件不再自持常量。
+		floor := CompactHardFloor()
+		if HardFloorExceeded(tokens, max) {
 			ratio = compactRatio
 		}
 		return vm.ToValue(map[string]any{
@@ -535,14 +458,20 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			"lastPromptTokens": l.lastPromptTokens,
 			"maxContextTokens": max,
 			"ratio":            ratio,
-			"cooldown":         l.compactCooldown,
-			"cooldownEarly":    compactCooldownEarly,
-			"cooldownFull":     compactCooldownTurns,
 			"thresholdEarly":   compactRatioEarly,
 			"thresholdFull":    compactRatio,
-			"hardFloor":        compactHardFloor,
+			"hardFloor":        floor,
+			"hardFloorOn":      floor > 0,
 			"minDrop":          compactMinDrop,
+			"slots":            l.compactSlots,
+			"maxSlots":         maxCompactSlots,
+			"autoCompact":      false, // ★ 段内只追加：自动精简已停用（体积控制靠分段 + 跨段精简）
 		})
+	})
+	// compact.tick()：兼容保留的空操作（冷却机制已随「段内只追加」停用，
+	// 保留该桥位避免旧插件调用报错）。
+	compactObj.Set("tick", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(0)
 	})
 	compactObj.Set("apply", func(call goja.FunctionCall) goja.Value {
 		jmsgs, jerr := jsToMsgs(vm, call.Argument(0))
@@ -551,18 +480,16 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		}
 		mode := call.Argument(1).String()
 		if mode == "early" {
-			out := l.earlyCompact(jmsgs)
+			out := l.earlyCompact(r.ctx, jmsgs)
 			return vm.ToValue(map[string]any{"msgs": msgsToJS(vm, out), "dropped": 0, "mode": "early"})
 		}
 		out, summary, dropped := l.compact(r.ctx, jmsgs)
 		if dropped > 0 {
-			const maxSummaries = 3
-			l.CompressedSummaries = append(l.CompressedSummaries, summary)
-			if len(l.CompressedSummaries) > maxSummaries {
-				l.CompressedSummaries = l.CompressedSummaries[len(l.CompressedSummaries)-maxSummaries:]
-			}
-			l.compactCooldown = compactCooldownTurns
+			l.noteCompactSummary(summary)
 			l.lastPromptTokens = 0
+			// ★ 2026-09-11：JS 路径补发精简事件（compact.apply 直调 l.compact，不带 emit）。
+			// ★ 2026-09：文案中性化——不再向用户提示「上下文已压缩」。
+			l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("已精简早期 %d 条历史对话，保留最近 %d 条", dropped, prefixLen(out))})
 		}
 		return vm.ToValue(map[string]any{"msgs": msgsToJS(vm, out), "dropped": dropped, "mode": "full"})
 	})
@@ -628,79 +555,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 	})
 	proxy.Set("store", storeObj)
 
-	// ── delegate({task, system?, maxIterations?, agentName?}) → 子 agent ──
-	// 子 Loop 复用父 Provider/Registry，独立消息历史；事件经 SubAgentSink 过滤
-	// （丢弃子生命周期事件，工具/思考/内容/用量转发并标记 agentName）。
-	// 子 Loop 同样走 JS 循环（CurrentJSLoop 生效），可嵌套（深度限制 3 层）。
-	delegateObj := vm.NewObject()
-	delegateObj.Set("run", func(call goja.FunctionCall) goja.Value {
-		arg := call.Argument(0)
-		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
-			panic(vm.NewTypeError("loop.delegate.run: 需要一个对象 {task, system?, maxIterations?, agentName?}"))
-		}
-		obj := arg.ToObject(vm)
-		task := obj.Get("task").String()
-		if task == "" {
-			panic(vm.NewTypeError("loop.delegate.run: task 不能为空"))
-		}
-		agentName := "sub"
-		if v := obj.Get("agentName"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
-			agentName = v.String()
-		}
-		// 嵌套深度限制（防无限 delegate 递归）
-		depth := jsLoopDepth(r.ctx)
-		if depth >= 3 {
-			return vm.ToValue(map[string]any{"error": "delegate 嵌套超过 3 层上限", "content": "", "msgs": nil})
-		}
-		subOpts := LoopOpts{
-			Provider:            l.getProvider(),
-			Registry:            l.Registry,
-			WorkspaceRoot:       l.WorkspaceRoot,
-			Autonomous:          false,
-			ReviewMode:          l.getReviewMode(),
-			ReviewBlacklist:     l.ReviewBlacklist,
-			ReviewWhitelist:     l.ReviewWhitelist,
-			ReviewProvider:      l.getReviewProvider(),
-			MaxContextTokens:    l.MaxContextTokens,
-			Compressor:          l.Compressor,
-			MaxIterations:       10,
-			System:              l.System,
-			CompressedSummaries: nil,
-		}
-		if v := obj.Get("system"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
-			subOpts.System = v.String()
-		}
-		if v := obj.Get("maxIterations"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.ToInteger() > 0 {
-			subOpts.MaxIterations = int(v.ToInteger())
-		}
-		sub := newLoop(subOpts)
-		// 子事件经 SubAgentSink 过滤（父 EventFinal/Done/Error/Circling/Compacted 不泄漏）
-		sub.OnEvent = SubAgentSink(l.OnEvent, agentName)
-		sub.OnFeedback = l.OnFeedback
-		// 子 Loop 深度 +1（嵌套限制）；★ 2026-08-30 实例池：传父实例引用——
-		// 子 runWithJS 优先租借独立实例（正常加锁），池满时复用父实例不重复加锁。
-		subCtx := context.WithValue(context.WithValue(r.ctx, jsLoopDepthKey{}, depth+1), jsLoopParentImplKey{}, r.impl)
-		_, subErr := sub.Run(subCtx, task, nil) // 子 Loop 自己处理 History
-		// 结果：最后一条 assistant 正文（无则空）
-		content := ""
-		msgs := CopyHistory(sub.History)
-		for i := len(msgs) - 1; i >= 0; i-- {
-			if msgs[i].Role == RoleAssistant {
-				content = msgs[i].Content
-				break
-			}
-		}
-		errStr := ""
-		if subErr != nil {
-			errStr = subErr.Error()
-		}
-		return vm.ToValue(map[string]any{
-			"content": content,
-			"msgs":    msgsToJS(vm, msgs),
-			"error":   errStr,
-		})
-	})
-	proxy.Set("delegate", delegateObj)
+	// ★ 2026-09：loop.delegate（子 Agent 派生）已删除——循环内不再派生子 Loop/子 Agent。
 
 	// ── ctrl.*（暂停/停止/队列/钩子/日志/step 边界）──
 	ctrlObj := vm.NewObject()
@@ -840,6 +695,22 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 	ctrlObj.Set("resetCompactRequest", func(call goja.FunctionCall) goja.Value {
 		l.CompactRequested = false
 		return goja.Undefined()
+	})
+	// toolBudget()：段预算状态（★ 2026-09-12 双闸门）
+	//   {used, budget, steps, stepBudget, exhausted, reason}
+	//   · used/budget   = 本段已执行工具调用数 / 生效工具调用预算（0=不限）
+	//   · steps/stepBudget = 本段已走步数（= StepNo）/ 生效步数预算（0=不限）
+	//   · exhausted     = 任一闸门达上限（判定在宿主 segmentBudgetState，单一真源）
+	//   · reason        = 命中的闸门："step_budget" / "tool_budget"
+	// ★ 2026-09（tool_budget.go）：agentloop 在 step 收尾检查；exhausted=true 时
+	//   JS 循环应结束本段（返回 {msgs, segment:{…}}），宿主自动续跑下一段。
+	ctrlObj.Set("toolBudget", func(call goja.FunctionCall) goja.Value {
+		st := l.segmentBudgetState()
+		return vm.ToValue(map[string]any{
+			"used": st.UsedTools, "budget": st.ToolBudget,
+			"steps": st.UsedSteps, "stepBudget": st.StepBudget,
+			"exhausted": st.Exhausted, "reason": st.Reason,
+		})
 	})
 	// truncStr(s, n)：截断长字符串（进入下一阶段提示用）
 	ctrlObj.Set("truncStr", func(call goja.FunctionCall) goja.Value {

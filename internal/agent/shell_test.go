@@ -110,7 +110,7 @@ func TestRunCommandInLoop(t *testing.T) {
 		{Content: "done"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test-loop-run-cmd", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-loop-run-cmd",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "执行 echo RUNCMD_OK", nil)
@@ -155,7 +155,7 @@ func TestRunCommandContextCancelled(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "exec_command", Arguments: `{"command":"ping -n 10 127.0.0.1","yield_time_ms":250}`}}}},
 		{Content: "done"},
 	}}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test-cancel", MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-cancel"}
 
 	go func() {
 		time.Sleep(500 * time.Millisecond)

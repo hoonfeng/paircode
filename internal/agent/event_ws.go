@@ -203,6 +203,15 @@ func buildWSPayload(ge GlobalEvent) []byte {
 	if e.Usage != nil {
 		msg["usage"] = e.Usage
 	}
+	// ★ 运行统计（前端耗时/步数/token 速度展示）：Turn = 第几轮对话，
+	//   Step = 本 turn 内「LLM 调用 + 工具执行」步序号（Loop.emit 自动回填）。
+	//   此前不下发 → 前端只能数 tool_call 段估算步数，无法显示权威步骤号。
+	if e.Turn > 0 {
+		msg["turn"] = e.Turn
+	}
+	if e.Step > 0 {
+		msg["step"] = e.Step
+	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("[WS] JSON encode error: %v", err)

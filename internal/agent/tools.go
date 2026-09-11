@@ -86,12 +86,6 @@ type Registry struct {
 	tools map[string]*Tool
 	order []string // 保持注册顺序，传给 LLM 时稳定
 
-	// discovered 按需工具（DeferredToolNames）的「本会话已发现」集合——
-	// 未发现的按需工具不进 LLM 工具面（Definitions/EnabledNames 过滤），
-	// tool_search 命中后 MarkToolDiscovered 提升（对齐 codex Deferred 暴露）。
-	// 会话隔离：每会话独立 Registry 实例（Copy/Subset 快照继承）。
-	discovered map[string]bool
-
 	// 钩子（均可空）：
 	//   BeforeTool：执行前调用；返回 proceed=false 则短路——用 override/overrideErr 作结果，不执行 handler。
 	//               用途：审批拒绝、缓存命中、参数校验拦截。
@@ -113,7 +107,7 @@ type Registry struct {
 
 // NewRegistry 创建空注册表。
 func NewRegistry() *Registry {
-	return &Registry{tools: map[string]*Tool{}, discovered: map[string]bool{}}
+	return &Registry{tools: map[string]*Tool{}}
 }
 
 // Register 注册一个工具（同名覆盖，顺序不变）。
@@ -201,9 +195,6 @@ func (r *Registry) EnabledNames() []string {
 	out := make([]string, 0, len(r.order))
 	for _, name := range r.order {
 		if t := r.tools[name]; t != nil && t.Enabled {
-			if isDeferredToolName(name) && !r.discovered[name] {
-				continue // 按需工具（未发现）不暴露（防 run_code 沙箱绕过）
-			}
 			out = append(out, name)
 		}
 	}
@@ -227,7 +218,6 @@ func (r *Registry) Copy() *Registry {
 	out := &Registry{
 		tools:        map[string]*Tool{},
 		order:        append([]string(nil), r.order...),
-		discovered:   discoveredCopy(r.discovered),
 		BeforeTool:   r.BeforeTool,
 		AfterTool:    r.AfterTool,
 		OnToolError:  r.OnToolError,
@@ -247,7 +237,6 @@ func (r *Registry) Subset(names []string) *Registry {
 	defer r.mu.RUnlock()
 	out := &Registry{
 		tools:        map[string]*Tool{},
-		discovered:   discoveredCopy(r.discovered),
 		BeforeTool:   r.BeforeTool,
 		AfterTool:    r.AfterTool,
 		OnToolError:  r.OnToolError,
@@ -266,33 +255,6 @@ func (r *Registry) Subset(names []string) *Registry {
 	return out
 }
 
-// MarkToolDiscovered 标记按需工具为「本会话已发现」（tool_search 命中后调用）——
-// 该工具自此进入本会话的 LLM 工具面（Definitions/EnabledNames 不再过滤）。
-func (r *Registry) MarkToolDiscovered(name string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.discovered == nil {
-		r.discovered = map[string]bool{}
-	}
-	r.discovered[name] = true
-}
-
-// IsToolDiscovered 查询按需工具是否已在本会话被发现。
-func (r *Registry) IsToolDiscovered(name string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.discovered[name]
-}
-
-// discoveredCopy 拷贝发现集合（nil 安全）。
-func discoveredCopy(m map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
-}
-
 // ToolMeta 工具的完整元信息（供前端 UI 展示）。
 type ToolMeta struct {
 	Name        string `json:"name"`
@@ -300,7 +262,6 @@ type ToolMeta struct {
 	Category    string `json:"category"`
 	UsageGuide  string `json:"usageGuide"`
 	Enabled     bool   `json:"enabled"`
-	Deferred    bool   `json:"deferred"` // 按需工具（默认不进 LLM 工具面；tool_search 可发现）
 	ReadOnly    bool   `json:"readOnly"`
 	SystemTool  bool   `json:"systemTool"`
 }
@@ -318,7 +279,6 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 			Category:    t.Category,
 			UsageGuide:  t.UsageGuide,
 			Enabled:     t.Enabled,
-			Deferred:    isDeferredToolName(t.Name),
 			ReadOnly:    t.ReadOnly,
 			SystemTool:  t.SystemTool,
 		})
@@ -342,9 +302,6 @@ func (r *Registry) Definitions() []ToolDefinition {
 		t := r.tools[name]
 		if !t.Enabled {
 			continue // 禁用的工具不暴露给 LLM
-		}
-		if isDeferredToolName(name) && !r.discovered[name] {
-			continue // 按需工具（未发现）：不进 LLM 工具面，经 tool_search 搜索提升
 		}
 		desc := trimToolDesc(t.Description)
 		defs = append(defs, ToolDefinition{
@@ -407,12 +364,6 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 		// 但模型幻觉/手动调用仍可能到达这里，明确报错防绕过。
 		return "", fmt.Errorf("工具 %s 已禁用（未加入工作区工具集；可用 toolset_edit add_builtin 或工具集面板启用）", name)
 	}
-	// ★ 按需工具（deferred）只影响「LLM 工具面」（Definitions/EnabledNames
-	//   过滤），不限制直接执行——对齐 codex ToolExposure::Deferred 的
-	//   「可见性管理」语义（仅 omit from model-visible list；历史回放/
-	//   内部调用等直达路径照常执行）。
-	// ★ 注入会话注册表到 Context（tool_search 等需要访问注册表状态的内置工具用）
-	ctx = withRegistry(ctx, r)
 	args := map[string]any{}
 	if s := strings.TrimSpace(argsJSON); s != "" {
 		if err := json.Unmarshal([]byte(s), &args); err != nil {
@@ -491,9 +442,9 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 func registerCoreTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:        "read",
-		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
-		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
-		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp()}, "path"),
+		UsageGuide:  "读取文件内容，限工作区内路径。path 相对「主项目根」解析——多项目工作区访问其他项目请传 project（项目目录名）或绝对路径，勿反复重试相对路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
+		Description: "读取文件内容。path 为工作区内路径（相对主项目根；跨项目传 project 或绝对路径）。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
+		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内；相对主项目根，跨项目用 project 参数或绝对路径）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp()}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePathFor(root, args, argStr(args, "path"))
@@ -534,9 +485,9 @@ func registerCoreTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "write",
-		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read 读入再加上新内容后 write 覆盖。",
-		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。",
-		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容"), "project": projectSchemaProp()}, "path", "content"),
+		UsageGuide:       "写入文件，父目录自动创建。需审核批准。path 相对「主项目根」解析——多项目工作区写其他项目文件请传 project（项目目录名）或绝对路径。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read 读入再加上新内容后 write 覆盖。",
+		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。path 相对主项目根（跨项目传 project 或绝对路径）。",
+		Parameters:       objSchema(props{"path": strProp("文件路径（相对主项目根，跨项目用 project 参数或绝对路径）"), "content": strProp("完整文件内容"), "project": projectSchemaProp()}, "path", "content"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePathFor(root, args, argStr(args, "path"))
@@ -575,10 +526,10 @@ func registerCoreTools(r *Registry, root string) {
 		// ★ Round3：原 list_files（目录列举）+ search_files（递归查找）合并为 glob 基座
 		//   （Go 侧仅测试/归档基座；生产语义以 tool-harness JS 插件为准）。
 		//   有 pattern → 递归查找（searchFilesHandler）；仅 path → 目录列举（listFilesHandler）。
-		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前），或按通配符递归查找文件。比 bash dir /s 更高效（跳过 .git/node_modules、结果结构化排序）。提供 pattern（如 *.go）时递归查找；仅给 path（或空参数）时列目录。",
-		Description: "按通配符递归查找文件（pattern 含 / 或 ** 按路径模式，如 internal/**/*.go），返回相对路径列表；pattern 省略则列出 path（省略=工作区根）下的文件/子目录（目录在前，pattern 可选过滤如 *.go）。跳过 .git/node_modules 等。",
+		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前），或按通配符递归查找文件。path 相对「主项目根」解析——多项目工作区搜其他项目请传 project（项目目录名）或绝对路径。比 bash dir /s 更高效（自动跳过依赖库/VCS/IDE 运行数据目录、结果结构化排序）。提供 pattern（如 *.go）时递归查找；仅给 path（或空参数）时列目录。",
+		Description: "按通配符递归查找文件（pattern 含 / 或 ** 按路径模式，如 internal/**/*.go），返回相对路径列表；pattern 省略则列出 path（省略=主项目根）下的文件/子目录（目录在前，pattern 可选过滤如 *.go）。path 相对主项目根（跨项目传 project 或绝对路径）。自动跳过依赖库（node_modules/vendor/.venv…）、构建产物（dist/build/out/target…）、VCS（.git…）与项目根下的 IDE 运行数据目录（_temp/logs/bin/release/screenshots…）。",
 		Parameters: objSchema(props{
-			"path":        strProp("目录路径（省略=工作区根；列举模式）或限定子目录（查找模式）"),
+			"path":        strProp("目录路径（省略=主项目根；列举模式）或限定子目录（查找模式）；相对主项目根，跨项目用 project 参数或绝对路径"),
 			"pattern":     strProp("可选通配符：提供则递归查找文件（如 *.go、internal/**/*.go），省略则列目录"),
 			"language":    strProp("可选：查找模式按语言过滤，如 \"go\"、\"typescript\""),
 			"max_results": intProp("可选：查找模式结果上限（默认 500）"),
@@ -593,19 +544,18 @@ func registerCoreTools(r *Registry, root string) {
 		},
 	})
 
-
 	// grep：工作区内正则全文搜索（原 search_content，并入 core 组；生产语义以
 	// tool-harness JS 插件为准，Go 侧仅测试/归档基座）
 	r.Register(&Tool{
 		Name: "grep",
 		Description: "在工作区内按正则搜索文件内容，返回匹配的「相对路径:行号: 行文本」。" +
-			"pattern 为 RE2 正则；path 限定子目录（省略=根）；glob 按文件名过滤（如 *.go）；" +
-			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过 .git/node_modules 等与二进制/超大文件。",
-		UsageGuide: "搜索文件内容（全文搜索）。比 bash findstr/grep 更精确（跳过 .git/node_modules、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
+			"pattern 为 RE2 正则；path 限定子目录（省略=主项目根，相对主项目根解析，跨项目传 project 或绝对路径）；glob 按文件名过滤（如 *.go）；" +
+			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过依赖库（node_modules/vendor/.venv…）、构建产物（dist/build/out/target…）、VCS（.git…）、项目根下的 IDE 运行数据目录（_temp/logs/bin/release/screenshots…）与二进制/超大文件。",
+		UsageGuide: "搜索文件内容（全文搜索）。path 相对「主项目根」解析——多项目工作区搜其他项目请传 project（项目目录名）或绝对路径。比 bash findstr/grep 更精确（自动跳过依赖库/VCS/IDE 运行数据目录、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
 		Category:   "代码搜索",
 		Parameters: objSchema(props{
 			"pattern":          strProp("RE2 正则表达式"),
-			"path":             strProp("限定子目录（省略=工作区根）"),
+			"path":             strProp("限定子目录（省略=主项目根；相对主项目根，跨项目用 project 参数或绝对路径）"),
 			"glob":             strProp("文件名通配过滤，如 *.go"),
 			"case_insensitive": boolProp("忽略大小写"),
 			"max_results":      intProp("结果行数上限（默认 200）"),
@@ -760,7 +710,43 @@ func resolvePath(root, p string) (string, error) {
 	if rel, err := filepath.Rel(root, full); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return full, nil
 	}
+	// ★ 诊断增强（2026-09）：相对路径在其他工作区项目下存在（同工作区跨项目场景）→
+	//   直接给出候选路径与 project 用法，而不是笼统「超出工作区范围」。
+	if cands := otherRootCandidates(root, p); len(cands) > 0 {
+		parts := make([]string, 0, len(cands))
+		for _, c := range cands {
+			parts = append(parts, fmt.Sprintf("%s（project=%q）", c.path, filepath.Base(c.root)))
+		}
+		return "", fmt.Errorf("路径 %q 不在当前项目（%s）内；同工作区其他项目下存在同名路径：%s。跨项目请用 project 参数（如 project=%q）或直接传绝对路径。",
+			p, filepath.Base(root), strings.Join(parts, "、"), filepath.Base(cands[0].root))
+	}
 	return "", fmt.Errorf("路径 %q 超出工作区范围（root: %s）", p, root)
+}
+
+// rootPathCandidate 跨项目寻址候选（诊断提示用）。
+type rootPathCandidate struct {
+	root string // 命中路径所属的工作区项目根
+	path string // 该根下真实存在的完整路径
+}
+
+// otherRootCandidates 扫其他工作区根，收集「同为该相对路径且真实存在」的候选。
+// 仅用于路径解析失败时的诊断提示（引导 LLM 改用 project 参数或绝对路径），
+// 不参与任何自动回退解析（避免跨项目误读/误写）。
+func otherRootCandidates(root, p string) []rootPathCandidate {
+	if filepath.IsAbs(p) {
+		return nil
+	}
+	var out []rootPathCandidate
+	for _, r := range workspaceRootsSnapshot() {
+		if r == "" || samePath(r, root) {
+			continue
+		}
+		cand := filepath.Join(r, p)
+		if pathExists(cand) {
+			out = append(out, rootPathCandidate{root: r, path: cand})
+		}
+	}
+	return out
 }
 
 // capOutput 截断过长输出（保头 3/4 + 尾 1/4），防工具结果撑爆上下文。
@@ -919,5 +905,3 @@ func extractBaseCommand(cmd string) string {
 	cmd = strings.TrimPrefix(cmd, "npx ")
 	return cmd
 }
-
-

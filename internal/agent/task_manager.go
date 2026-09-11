@@ -274,9 +274,25 @@ func (tm *TaskManager) GetBlocked() []BlockedTask {
 	return blocked
 }
 
-// ReplaceAll 全量替换任务列表（原子操作：先清空旧文件，再批量写入）。
+// ReplaceAll 全量替换任务列表（原子操作：先清旧文件，再批量写入）。
 // 与 update_plan 的全量替换模式对齐——Agent 每次传入完整任务列表即可。
+// 兼容入口：等价 ReplaceAllForConv(tasks, "")（只替换「未绑定会话」的任务）。
 func (tm *TaskManager) ReplaceAll(tasks []Task) error {
+	return tm.ReplaceAllForConv(tasks, "")
+}
+
+// ReplaceAllForConv 按会话全量替换任务列表（★ 2026-09-12 会话隔离修复）。
+//
+// 语义（两点均为缺陷修复，勿回退）：
+//  1. 入参任务统一绑定 convID（convID 为空则保留任务自带 ConvID）——原实现
+//     从不写 ConvID 字段，导致 `GET /api/tasks?convId=X` 按会话过滤后恒为空，
+//     前端「刷新页面/切换对话后任务面板空白」（运行中靠 WS 事件兜住了表象）。
+//  2. 只清理「同会话」且不在新列表中的旧任务文件——原实现删除所有不在列表中的
+//     任务，多会话并行时各自 update_tasks 会互相清空对方的任务。
+//
+// 任务文件位于工作区级共享目录（.pair/tasks/*.json 混放各会话任务），
+// 因此会话归属必须落在文件里（Task.ConvID）才能按会话读取。
+func (tm *TaskManager) ReplaceAllForConv(tasks []Task, convID string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -300,19 +316,26 @@ func (tm *TaskManager) ReplaceAll(tasks []Task) error {
 		if t.Status == "" {
 			t.Status = TaskPending
 		}
+		if convID != "" {
+			t.ConvID = convID
+		}
 		keep[t.ID] = true
 		tm.writeTaskLocked(t)
 	}
 
-	// 删除不在新列表中的旧任务
+	// 删除「同会话」且不在新列表中的旧任务（其它会话任务保留）
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
 		id := strings.TrimSuffix(e.Name(), ".json")
-		if !keep[id] {
-			os.Remove(filepath.Join(tm.tasksDir, e.Name()))
+		if keep[id] {
+			continue
 		}
+		if old := tm.readTaskLocked(id); old != nil && old.ConvID != convID {
+			continue
+		}
+		os.Remove(filepath.Join(tm.tasksDir, e.Name()))
 	}
 
 	return nil

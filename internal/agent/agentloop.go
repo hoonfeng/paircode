@@ -38,7 +38,9 @@ const (
 	TurnBlocked TurnEndReason = "blocked"
 	// TurnContentLoop 连续多轮只输出文字不调工具，内容循环兜底结束。
 	TurnContentLoop TurnEndReason = "content-loop"
-	// TurnMaxIterations 达到最大迭代数仍未完成。
+	// TurnMaxIterations 达到段内迭代安全上限仍未完成（上限由段预算——★ 双闸门
+	// 步数/工具调用取较大者——派生，见 tool_budget.go IterationLimit；
+	// ★ 2026-09-12 原「最大迭代数」配置项已移除）。
 	TurnMaxIterations TurnEndReason = "max-iterations"
 )
 

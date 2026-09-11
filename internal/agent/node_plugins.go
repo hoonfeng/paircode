@@ -197,7 +197,7 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	if projectRoot == "" {
 		return "", fmt.Errorf("无工作区根，无法安装插件")
 	}
-runtime := nodePluginRuntime(info.Manifest)
+	runtime := nodePluginRuntime(info.Manifest)
 	if runtime == "" {
 		runtime = "node"
 	}

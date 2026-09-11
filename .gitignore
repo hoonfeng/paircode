@@ -75,7 +75,12 @@ build_err.txt
 
 # Python temporary scripts
 *.py
+__pycache__/
+*.pyc
 internal/agent/.pair/
+
+# 探针脚本路径转义失误产生的镜像目录（F:\syproject\gou-ide → F:syprojectgou-ide）
+syprojectgou-ide/
 
 # PairCode 内置 bash（含 npm 登录凭据 .npmrc，禁止进仓库）
 bin/bash/

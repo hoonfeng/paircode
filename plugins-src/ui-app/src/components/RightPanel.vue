@@ -18,13 +18,16 @@
       <template v-else>
       <!-- 左侧：聊天消息 + 输入区 -->
       <div class="chat-area">
-        <!-- 阶段指示器（自主模式多阶段切换） -->
-        <div v-if="currentPhase || agentRunning" class="phase-bar">
+        <!-- 阶段指示器（自主模式多阶段切换）+ 本次运行统计（耗时/步数/token 速度） -->
+        <div v-if="currentPhase || agentRunningConv || runStatsVisible" class="phase-bar">
           <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
-          <span class="phase-text">{{ currentPhase || '执行中…' }}</span>
+          <span class="phase-text">{{ currentPhase || (agentRunningConv ? '执行中…' : '本次运行') }}</span>
           <span class="phase-stats">
-            <span v-if="phaseToolCount > 0" class="phs-item"><SvgIcon name="zap" :size="10" /> {{ phaseToolCount }} 次调用</span>
-            <span v-if="phaseElapsed" class="phs-item"><SvgIcon name="clock" :size="10" /> {{ phaseElapsed }}</span>
+            <span v-if="runSteps > 0" class="phs-item" :title="'步数：LLM 决策 + 工具执行（本 turn）'"><SvgIcon name="list" :size="10" /> {{ runSteps }} 步</span>
+            <span v-if="runToolCalls > 0" class="phs-item" title="工具调用次数"><SvgIcon name="tool" :size="10" /> {{ runToolCalls }} 次</span>
+            <span v-if="runElapsedText" class="phs-item" title="本次运行耗时"><SvgIcon name="clock" :size="10" /> {{ runElapsedText }}</span>
+            <span v-if="runTokenSpeed" class="phs-item" title="输出速度（输出 token / 耗时）"><SvgIcon name="output" :size="10" /> {{ runTokenSpeed }}</span>
+            <span v-if="runOutputTokens > 0" class="phs-item" title="本次运行输出 token"><SvgIcon name="database" :size="10" /> {{ formatTokens(runOutputTokens) }}</span>
           </span>
           <span class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
         </div>
@@ -1005,44 +1008,77 @@ let pendingAskCallId = ''
 const currentTasks = ref([])
 const tasksExpanded = ref(false)
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
-const phaseToolCount = computed(() => {
-  const msgs = state.messagesByConv[state.currentConvId]
-  if (!msgs) return 0
-  let count = 0
-  for (const m of msgs) {
-    if (m.segments) {
-      for (const s of m.segments) {
-        if (s.type === 'tool_call') count++
-      }
-    }
-  }
-  return count
+// ★ 当前对话是否运行中（原模板引用的 agentRunning 未定义 → phase-bar 仅靠 currentPhase
+//   显示，运行中无 phase 事件时统计条整条不出现；现显式声明）
+const agentRunningConv = computed(() => !!state.agentRunningByConv[state.currentConvId])
+
+// ── ★ 本次运行统计（耗时计时 · 步数 · token 速度）──
+// 数据源：agent-events 的 runStatsByConv（usage/step 事件 + status 运行集合维护）；
+// 展示位置：消息区顶部 phase-bar（运行时跟随阶段、结束后定格为本轮结果）。
+const currentRunStat = computed(() => state.runStatsByConv[state.currentConvId] || null)
+const runTick = ref(0)   // 计时 tick（运行中每秒 +1 驱动刷新）
+let runTickTimer = null
+
+// formatDuration 耗时人性化（12s / 1m 23s / 1h 05m）
+function formatDuration(ms) {
+  const sec = Math.floor(ms / 1000)
+  if (sec < 60) return sec + 's'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return min + 'm ' + String(sec % 60).padStart(2, '0') + 's'
+  return Math.floor(min / 60) + 'h ' + String(min % 60).padStart(2, '0') + 'm'
+}
+
+// formatTokens 紧凑 token 数（2.4k / 12k / 1.2M）
+function formatTokens(n) {
+  const v = Number(n) || 0
+  if (v < 1000) return String(v)
+  if (v < 1000000) return (v / 1000).toFixed(v < 10000 ? 1 : 0) + 'k'
+  return (v / 1000000).toFixed(1) + 'M'
+}
+
+// runElapsedMs 本次运行耗时：运行中随 tick 每秒增长，结束后定格为 endAt - startAt
+const runElapsedMs = computed(() => {
+  const rs = currentRunStat.value
+  void runTick.value   // 依赖 tick → 运行中每秒重算
+  if (!rs || !rs.startAt) return 0
+  return (rs.endAt || Date.now()) - rs.startAt
+})
+const runElapsedText = computed(() => (runElapsedMs.value >= 1000 ? formatDuration(runElapsedMs.value) : ''))
+const runSteps = computed(() => { const rs = currentRunStat.value; return rs && rs.steps > 0 ? rs.steps : 0 })
+const runToolCalls = computed(() => (currentRunStat.value ? currentRunStat.value.toolCalls : 0))
+const runOutputTokens = computed(() => (currentRunStat.value ? currentRunStat.value.completionTokens : 0))
+// runTokenSpeed 输出速度：输出 token / 耗时（不足 1s 不显示，避免首 token 前抖动）
+const runTokenSpeed = computed(() => {
+  const rs = currentRunStat.value
+  const sec = runElapsedMs.value / 1000
+  if (!rs || rs.completionTokens <= 0 || sec < 1) return ''
+  const tps = rs.completionTokens / sec
+  return (tps >= 100 ? Math.round(tps) : tps.toFixed(1)) + ' t/s'
+})
+// runStatsVisible 统计条显示条件：本次运行有任一数据（结束定格后仍显示，切会话即切换）
+const runStatsVisible = computed(() => {
+  const rs = currentRunStat.value
+  return !!(rs && rs.startAt && (rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0))
 })
 
-// ★ 进度可视化：运行耗时
-const agentStart = ref(null)
-const phaseElapsed = ref('')
-let elapsedTimer = null
+// 计时 tick：仅运行中启动（结束后停止 → 定格值不再变化）
 watch(() => state.agentRunningByConv[state.currentConvId], (running) => {
   if (running) {
-    agentStart.value = Date.now()
-    elapsedTimer = setInterval(() => {
-      const sec = Math.floor((Date.now() - agentStart.value) / 1000)
-      if (sec < 60) phaseElapsed.value = sec + 's'
-      else phaseElapsed.value = Math.floor(sec / 60) + 'm ' + (sec % 60) + 's'
-    }, 2000)
-  } else {
-    phaseElapsed.value = ''
-    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
+    if (!runTickTimer) runTickTimer = setInterval(() => { runTick.value++ }, 1000)
+  } else if (runTickTimer) {
+    clearInterval(runTickTimer)
+    runTickTimer = null
+    runTick.value++   // 立即重算一次，显示定格后的最终耗时
   }
-})
+}, { immediate: true })
 
-// ★ 进度条：基于总耗时估算（长时任务最多 60 分钟）
+// ★ 进度条：运行中按总耗时估算（长时任务最多 60 分钟，顶值 95%）；结束定格 100%
 const phaseProgress = computed(() => {
-  if (!agentStart.value || !state.agentRunningByConv[state.currentConvId]) return 0
+  const rs = currentRunStat.value
+  if (!state.agentRunningByConv[state.currentConvId]) return (rs && rs.endAt) ? 100 : 0
+  if (!rs || !rs.startAt) return 0
   const maxSec = 60 * 60 // 60 分钟
-  const elapsed = (Date.now() - agentStart.value) / 1000
-  return Math.min(Math.round((elapsed / maxSec) * 100), 95) // 高顶 95%
+  return Math.min(Math.round((runElapsedMs.value / 1000 / maxSec) * 100), 95)
 })
 let phaseTimer = null
 
@@ -2021,6 +2057,28 @@ const refreshConvMeta = async () => {
     console.warn('[RP] refreshConvMeta 失败:', e)
   }
 }
+// loadConvTasks 拉取指定会话的任务清单（TaskPanel 数据源）。
+// ★ 2026-09-12 修复「刷新页面/切换对话后任务面板空白」：任务按会话持久化在
+//   工作区 `.pair/tasks/*.json`（task.convId），前端此前只有运行时 WS 事件
+//   更新它 —— 刷新或切会话后无事件可补，面板恒空白。切会话必须重拉。
+// 竞态保护：返回时该会话已不是当前会话则丢弃结果（快速连点不串味）。
+const loadConvTasks = async (convId) => {
+  if (!convId) { currentTasks.value = []; return }
+  try {
+    const taskData = await api.apiGet('/tasks', { convId })
+    if (state.currentConvId !== convId) return
+    const list = (taskData && Array.isArray(taskData.tasks)) ? taskData.tasks : []
+    currentTasks.value = list.map(t => ({
+      step: t.step || t.subject || '',
+      status: t.status,
+      _taskId: t.taskId || t.id,
+    }))
+  } catch (e) {
+    console.warn('[RP] loadConvTasks 失败 conv=%s', convId, e)
+    if (state.currentConvId === convId) currentTasks.value = []
+  }
+}
+
 const switchConv = async (id) => {
   if (!id || _loadingConvs.has(id)) return
   _loadingConvs.add(id)
@@ -2078,15 +2136,8 @@ const switchConv = async (id) => {
     }
   }
 
-  // 加载任务状态
-  try {
-    const taskData = await api.apiGet('/tasks', { convId: id })
-    if (taskData && taskData.tasks && taskData.tasks.length > 0) {
-      currentTasks.value = taskData.tasks.map(t => ({
-        step: t.step || t.subject || '', status: t.status, _taskId: t.taskId,
-      }))
-    } else { currentTasks.value = [] }
-  } catch { currentTasks.value = [] }
+  // 加载任务状态（★ 任务按会话持久化在 .pair/tasks/*.json，见 loadConvTasks）
+  await loadConvTasks(id)
 
   // ★ 2026-08-31：plan 体系已移除，不再从消息重建计划（currentPlan 下线）。
   applyAutoCollapse()
@@ -2280,6 +2331,10 @@ watch(() => state.currentConvId, (id, oldId) => {
   window.addEventListener('ws-connection-change', (e) => {
     if (e.detail?.connected && state.currentConvId) {
       const id = state.currentConvId
+      // ★ 2026-09-12 重连补偿：断线期间 agent 推送的 update_tasks 事件已丢失
+      //   （任务面板会停在断开前状态）→ 重连即从服务端重拉该会话任务清单
+      //   （任务持久化在 .pair/tasks，不依赖 WS 事件）。
+      loadConvTasks(id)
       const msgs = state.messagesByConv[id]
       // 断连重连后，如果消息数量和 API 返回不匹配，触发 reload
       // 但只在用户没有正在发送消息时执行（avoid conflict with sendMessage）
@@ -2375,22 +2430,9 @@ onMounted(() => {
   // 按钮在 textarea 外部下方，无需动态调整 padding
   nextTick(() => updateInputPadding())
 
-  // ⚡ 初始加载：若已有当前对话，从 API 加载任务状态
+  // ⚡ 初始加载：若已有当前对话，从 API 加载任务状态（走统一入口，含竞态保护）
   // （页面刷新或从其他工作区切换回来时，currentTasks 为空，需要从 TaskManager 恢复）
-  nextTick(async () => {
-    if (state.currentConvId) {
-      try {
-        const taskData = await api.apiGet('/tasks', { convId: state.currentConvId })
-        if (taskData && taskData.tasks && taskData.tasks.length > 0) {
-          currentTasks.value = taskData.tasks.map(t => ({
-            step: t.step || t.subject || '',
-            status: t.status,
-            _taskId: t.taskId,
-          }))
-        }
-      } catch {}
-    }
-  })
+  nextTick(() => { if (state.currentConvId) loadConvTasks(state.currentConvId) })
 
   // ★ 直接检查是否需要恢复对话（替换 restore-conversation 事件机制：
   //   App.vue onMounted 中 dispatchEvent 时 RightPanel 尚未挂载，事件永远丢失。
@@ -2488,6 +2530,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
+  if (runTickTimer) { clearInterval(runTickTimer); runTickTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   stopContentResizeObserver()
   chatSlot.stop()

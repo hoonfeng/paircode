@@ -1,5 +1,5 @@
 {
-  "version": "1.5.4",
+  "version": "1.6.0",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -60,6 +60,11 @@
     "dirName": "PairCode",
     "format": "zip",
     "include": [
+      {
+        "src": "README.md",
+        "dst": "README.md",
+        "optional": true
+      },
       {
         "src": "config/skills",
         "dst": "config/skills",

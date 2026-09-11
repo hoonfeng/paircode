@@ -2,16 +2,21 @@
 // dsh_bridge_test.go — 外部运行时桥测试（dsh 服务面与事件转发，2026-09 策略闸门）
 //
 // 覆盖：
-//   - TestDSHBridgeServices：dshService 服务面（agents/subagents/llm/
+//   - TestDSHBridgeServices：dshService 服务面（agents/llm/
 //     systemPrompt/commands）参数映射与错误路径
 //   - TestBridgeEventSubscription：host 事件订阅白名单门控 + 载荷序列化
-//   - TestNodeBridgeAgentStatusEvent：子 Agent 状态变更 → agent/status
-//     事件经桥转发（载荷对齐 DSH scheduler 消费面）
 //   - TestBridgeSkipsExternalDSHEntries：2026-09 策略端到端——runtime="dsh"
 //     外部 dsh 生态条目被桥过滤（零装载/零工具），防 dsh 环境安装的插件影响
 //     IDE。原 TestNodeBridgeDSHPluginE2E（npm 装 dsh-agent-teams → 装载 13
 //     工具）已随策略废止替换；node 轨（cordis3）装载由 node_bridge_e2e_test.go
 //     TestNodeBridgeE2EHelloBridge 继续覆盖。
+//
+// ★ 2026-09 子 Agent 实现删除：subagents.* 服务面、agents.start/fork/stop/
+//
+//	report/list/lastText、agent/status 事件桥（原 TestNodeBridgeAgentStatusEvent）
+//	一并不存在——ctx.agents 只保留 followup/inject/steer（唤醒已存在会话）
+//	与 ready。本文件用例同步收敛到该面。
+//
 // ═══════════════════════════════════════════════════════════
 package agent
 
@@ -34,38 +39,35 @@ func TestDSHBridgeServices(t *testing.T) {
 	if handled, _, _ := b.dshService("fs", "read", map[string]any{"path": "x"}, "", nil); handled {
 		t.Fatal("fs 服务不应由 dshService 处理")
 	}
-	// agents.get 未登记 → null
-	handled, data, err := b.dshService("agents", "get", map[string]any{"convId": "conv-none"}, "", nil)
-	if !handled || err != nil || data != "null" {
-		t.Fatalf("agents.get 未登记应返回 null: handled=%v data=%q err=%v", handled, data, err)
-	}
 	// agents.followup 缺参数
-	handled, _, err = b.dshService("agents", "followup", map[string]any{"convId": "c1"}, "", nil)
+	handled, _, err := b.dshService("agents", "followup", map[string]any{"convId": "c1"}, "", nil)
 	if !handled || err == nil {
 		t.Fatal("agents.followup 缺 text 应报错")
 	}
-	// agents.start 缺 task
-	handled, _, err = b.dshService("agents", "start", map[string]any{"label": "x"}, "", nil)
-	if !handled || err == nil || !strings.Contains(err.Error(), "task") {
-		t.Fatalf("agents.start 缺 task 应报错: %v", err)
+	// agents.followup 缺 convId
+	handled, _, err = b.dshService("agents", "followup", map[string]any{"text": "hi"}, "", nil)
+	if !handled || err == nil || !strings.Contains(err.Error(), "convId") {
+		t.Fatalf("agents.followup 缺 convId 应报错: %v", err)
 	}
-	// subagents.getProvider('spawn') → 提供者描述
-	handled, data, err = b.dshService("subagents", "getProvider", map[string]any{"name": "spawn"}, "", nil)
-	if !handled || err != nil || !strings.Contains(data, `"capabilities"`) {
-		t.Fatalf("subagents.getProvider(spawn) 异常: data=%q err=%v", data, err)
+	// 子 Agent 派生面已删除：start/fork/stop/report/list/lastText 一律报「未知方法」
+	for _, m := range []string{"start", "fork", "stop", "report", "list", "lastText", "get", "running"} {
+		handled, _, err = b.dshService("agents", m, map[string]any{"convId": "c1"}, "", nil)
+		if !handled || err == nil || !strings.Contains(err.Error(), "未知 agents 服务方法") {
+			t.Fatalf("agents.%s 应报未知方法（子 Agent 派生面已删除）: handled=%v err=%v", m, handled, err)
+		}
 	}
-	// subagents.startContinuable 无 spawner → 明确错误（非挂起）
-	handled, _, err = b.dshService("subagents", "startContinuable", map[string]any{
-		"label": "agent-teams:t1:m1", "prompt": "welcome", "persona": "you are m1",
-		"parentConvId": "conv-cap", "provider2": "deepseek", "model": "deepseek-chat",
-	}, "", nil)
-	if !handled || err == nil || !strings.Contains(err.Error(), "未就绪") {
-		t.Fatalf("startContinuable 无 spawner 应报错: %v", err)
+	// subagents 服务面整体删除 → 不是 dshService 的处理范围
+	if handled, _, _ := b.dshService("subagents", "list", map[string]any{}, "", nil); handled {
+		t.Fatal("subagents 服务面已删除，不应由 dshService 处理")
 	}
-	// llm.current 无 spawner → {}
-	handled, data, err = b.dshService("llm", "current", map[string]any{}, "", nil)
+	// llm.current / models 空目录（模型目录随子 Agent 实现删除）
+	handled, data, err := b.dshService("llm", "current", map[string]any{}, "", nil)
 	if !handled || err != nil || data != "{}" {
 		t.Fatalf("llm.current 空目录应返回 {}: data=%q err=%v", data, err)
+	}
+	handled, data, err = b.dshService("llm", "listModels", map[string]any{}, "", nil)
+	if !handled || err != nil || data != "[]" {
+		t.Fatalf("llm.listModels 应返回空集: data=%q err=%v", data, err)
 	}
 	// 未知方法
 	if handled, _, _ = b.dshService("agents", "bogus", map[string]any{}, "", nil); !handled {
@@ -147,68 +149,9 @@ func TestBridgeEventSubscription(t *testing.T) {
 	}
 }
 
-// TestNodeBridgeAgentStatusEvent 子 Agent 状态变更 → agent/status 事件载荷。
-func TestNodeBridgeAgentStatusEvent(t *testing.T) {
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pr.Close()
-	b := &nodeBridge{stdin: bufio.NewWriter(pw), subs: map[string]bool{"agent/status": true}, ready: true}
-	globalNodeBridge = b
-	defer func() { globalNodeBridge = nil }()
-
-	// 假 spawner（web 层注入同构）
-	SetSubAgentSpawner(&SubAgentSpawner{Start: func(spec SubAgentSpec) error { return nil }})
-	defer SetSubAgentSpawner(nil)
-
-	rec, err := SpawnSubAgent(SubAgentSpec{Task: "调研 X", Label: "t1:r", Team: "t1", Member: "r", WsRoot: t.TempDir()})
-	if err != nil {
-		t.Fatalf("SpawnSubAgent 失败: %v", err)
-	}
-
-	// 读桥输出：应收到 t=event name=agent/status 载荷 {agent:{id,status,session.header.cwd},status}
-	_ = pw.Close()
-	scanner := bufio.NewScanner(pr)
-	got := false
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && scanner.Scan() {
-		var msg struct {
-			T       string          `json:"t"`
-			Name    string          `json:"name"`
-			Payload json.RawMessage `json:"payload"`
-		}
-		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
-			continue
-		}
-		if msg.T != "event" || msg.Name != "agent/status" {
-			continue
-		}
-		var payload struct {
-			Agent  map[string]any `json:"agent"`
-			Status string         `json:"status"`
-		}
-		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			t.Fatalf("事件载荷解析失败: %v", err)
-		}
-		if payload.Status != "running" {
-			t.Fatalf("状态应 running，实际 %q", payload.Status)
-		}
-		if payload.Agent["id"] != rec.ConvID {
-			t.Fatalf("事件 agent.id 应 %s 实际 %v", rec.ConvID, payload.Agent["id"])
-		}
-		session, _ := payload.Agent["session"].(map[string]any)
-		header, _ := session["header"].(map[string]any)
-		if cwd, _ := header["cwd"].(string); cwd == "" {
-			t.Fatal("事件载荷应含 session.header.cwd（DSH scheduler 消费面）")
-		}
-		got = true
-		break
-	}
-	if !got {
-		t.Fatalf("未收到 agent/status 事件（subs=%v）", b.subs)
-	}
-}
+// ★ 2026-09：TestNodeBridgeAgentStatusEvent（子 Agent 状态变更 → agent/status
+//   事件桥）已随子 Agent 实现删除——宿主不再派生成员会话，也就没有该事件源。
+//   事件订阅门控由 TestBridgeEventSubscription 继续覆盖。
 
 // TestNodeBridgeDSHPluginE2E 端到端：npm 安装 dsh-agent-teams → cordis4 装载 →
 // 13 个 agent_teams_* 工具注册 → create/status/delete 冒烟（临时端口、零 FATAL）。
@@ -218,8 +161,9 @@ func TestNodeBridgeAgentStatusEvent(t *testing.T) {
 // 零工具注册（dsh 条目跳过即不 import 任何外部包，无需 npm 安装/网络）。
 // 防止 dsh 环境安装的插件影响 IDE 工具面（round4 验证残留曾致桥反复崩溃）。
 // ★ 原 TestNodeBridgeDSHPluginE2E（真实 npm 装 dsh-agent-teams → 装载 13 工具）
-//   已随策略废止替换为闸门验证：外部 dsh 生态不再桥接，node 轨（cordis3）
-//   装载路径由 node_bridge_e2e_test.go TestNodeBridgeE2EHelloBridge 继续覆盖。
+//
+//	已随策略废止替换为闸门验证：外部 dsh 生态不再桥接，node 轨（cordis3）
+//	装载路径由 node_bridge_e2e_test.go TestNodeBridgeE2EHelloBridge 继续覆盖。
 func TestBridgeSkipsExternalDSHEntries(t *testing.T) {
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
@@ -276,8 +220,6 @@ func TestBridgeSkipsExternalDSHEntries(t *testing.T) {
 	}
 	t.Log("闸门生效：外部 dsh 生态条目被过滤，桥正常 ready（零工具/零插件）")
 }
-
-
 
 // ═══════════════════════════════════════════════════════════
 // dsh_prestep_test.go 段 —— DSH agent/pre-step 中间件瀑布桥

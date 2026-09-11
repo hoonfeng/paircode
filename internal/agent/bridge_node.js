@@ -11,7 +11,7 @@
 // ★ Round4（2026-09）：cordis4 插件运行时。
 //   插件形态：npm 包，peer 依赖 @deepseek-ai/cordis ^4 + @deepseek-ai/dsh-*，
 //   apply(ctx) 使用 cordis4 Context 语义（inject/get/effect/on）+ cordis4 服务面
-//   （ctx.agents / ctx.subagents / ctx.llm / ctx.systemPrompt / ctx.commands /
+//   （ctx.agents / ctx.llm / ctx.systemPrompt / ctx.commands /
 //   ctx.logger / ctx.get('webServer'|'workspaceRegistry')）。plugins.json 条目
 //   runtime=="dsh" 时走本轨：import('@deepseek-ai/cordis') new Context() +
 //   cordis4 门面（decorateDshCtx）；其余条目沿用 cordis3 轨（@cordisjs/core）。
@@ -164,9 +164,11 @@ function textOfMessage(msg) {
   return '';
 }
 
-// ── 外部 Agent 句柄（ctx.agents.get / exec.agent）──
-// 宿主会话 = 一个可续聊子 Agent（convID 标识）。句柄是轻量投影：
-// 状态经 Go 服务查询；followup/inject/steer/cancel 转发 Go 侧对应能力。
+// ── 会话句柄（exec.agent / ctx.agents.get）──
+// 宿主会话 = 可续聊会话（convID 标识）。句柄是轻量投影：followup/inject/steer
+// 转发 Go 侧「向已存在会话投递输入」的唤醒能力。
+// ★ 2026-09：子 Agent 派生面已删除——句柄不再有 cancel/whenIdle（依赖已删的
+//   成员会话注册表），ctx.subagents 整体删除。
 function makeAgent(convId, wsRoot, status, currentRoute) {
   const route = currentRoute || null;
   const session = {
@@ -179,7 +181,7 @@ function makeAgent(convId, wsRoot, status, currentRoute) {
     requestHeader: () => (route && route.provider && route.model
       ? { config: { provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) } }
       : undefined),
-    append: () => {}, // 会话事件面（agent-teams/team-*）：宿主不落会话事件，无副作用
+    append: () => {}, // 会话事件面：宿主不落会话事件，无副作用
   };
   const agent = {
     id: convId || '',
@@ -189,22 +191,11 @@ function makeAgent(convId, wsRoot, status, currentRoute) {
     followup: (msg) => svc('agents', 'followup', { convId, text: textOfMessage(msg) }),
     inject: (msg) => svc('agents', 'inject', { convId, text: textOfMessage(msg) }),
     steer: (msg) => svc('agents', 'steer', { convId, text: textOfMessage(msg) }),
-    cancel: (reason, opts) => svc('agents', 'cancel', { convId, reason: reason || {}, keepInbox: !!(opts && opts.keepInbox) }),
-    whenIdle: async () => {
-      // 轮询宿主运行态直到非 running（未登记会话视为已 idle）。
-      for (let i = 0; i < 1200; i++) {
-        try {
-          const r = await svc('agents', 'running', { convId });
-          if (String(r).trim() !== 'true') return;
-        } catch (_) { return; }
-        await new Promise((res) => setTimeout(res, 500));
-      }
-    },
   };
   return agent;
 }
 
-// 缓存 外部 Agent 句柄（ctx.agents.get 同步读；list/status 事件/startContinuable 刷新）。
+// 缓存 会话句柄（ctx.agents.get 同步读）。
 const agentCache = new Map(); // convId → agent
 let currentRoute = null; // 宿主当前模型路由（llm.current 缓存）
 
@@ -215,17 +206,10 @@ async function refreshCurrentRoute() {
   } catch (_) {}
 }
 
+// ★ 2026-09：子 Agent 派生面删除后，宿主不再提供 agents.list（成员列表）
+//   查询——缓存只由工具执行/命令调用的会话句柄填充。
 async function refreshAgentCache() {
-  try {
-    const list = await svc('agents', 'list', {});
-    if (Array.isArray(list)) {
-      for (const rec of list) {
-        if (rec && typeof rec === 'object' && rec.convId) {
-          agentCache.set(rec.convId, makeAgent(rec.convId, rec.wsRoot, rec.state, currentRoute));
-        }
-      }
-    }
-  } catch (_) {}
+  return;
 }
 
 // ── decorateCtx（cordis3 轨）给插件 apply 的 ctx 挂 harness 门面 ──
@@ -299,7 +283,7 @@ function decorateCtx(ctx, plugin) {
 }
 
 // ── decorateDshCtx（cordis4 轨）cordis4 服务面门面 ──
-// 对齐插件运行时：agents / subagents / llm / systemPrompt /
+// 对齐插件运行时：agents / llm / systemPrompt /
 // commands / logger / tools / get('webServer'|'workspaceRegistry') / effect /
 // on（host 事件订阅桥）/ inject（服务就绪即同步回调）。
 function decorateDshCtx(ctx, plugin) {
@@ -401,61 +385,13 @@ function decorateDshCtx(ctx, plugin) {
     list() { return [...commands.keys()]; },
   };
 
-  // agents：宿主子 Agent 编排面（Go 侧 SubAgentRegistry）
+  // agents：会话句柄查询面（ctx.agents.get）。
+  // ★ 2026-09：子 Agent 派生面（subagents）已整体删除——不再提供 startContinuable/
+  //   followup/interrupt；插件要唤醒某个已存在会话，用句柄的 followup(...) 转发
+  //   Go 侧 ctx.agents.followup。
   ctx.agents = {
     get(id) {
       return agentCache.get(id);
-    },
-  };
-
-  // subagents：成员派生面（Go 侧 SpawnSubAgent/FollowupSubAgent/StopSubAgent）
-  ctx.subagents = {
-    getProvider(name) {
-      if (name === 'spawn') {
-        return {
-          name: 'spawn',
-          prepareContinuable: () => undefined,
-          capabilities: { persona: true, toolFilter: true },
-        };
-      }
-      return undefined;
-    },
-    list() { return ['spawn']; },
-    async startContinuable({ provider, label, request, signal }) {
-      const persona = request && request.persona;
-      const prompt = request && request.prompt ? textOfMessage({ content: request.prompt }) : '';
-      const deny = request && request.toolFilter && Array.isArray(request.toolFilter.deny) ? request.toolFilter.deny : undefined;
-      const agentOptions = request && request.agentOptions ? request.agentOptions : {};
-      const parentConvId = request && request.parent ? request.parent.id : '';
-      const res = await svc('subagents', 'startContinuable', {
-        provider: provider || 'spawn',
-        label: label || '',
-        prompt,
-        persona,
-        parentConvId,
-        provider2: agentOptions.provider,
-        model: agentOptions.model,
-        maxDepth: request && request.maxDepth,
-        denyTools: deny,
-      }, 120000);
-      const childId = res && (res.childId || res.convId);
-      if (childId) {
-        agentCache.set(childId, makeAgent(childId, request && request.parent ? request.parent.session.header.cwd : WORKSPACE_ROOT, 'running', currentRoute));
-      }
-      return { childId };
-    },
-    async followup(parent, childId, content, options) {
-      await svc('subagents', 'followup', { childId, text: textOfMessage({ content }) }, 120000);
-    },
-    async interrupt(childId, reason) {
-      await svc('subagents', 'interrupt', { childId, reason: reason || {} }).catch((e) => {
-        ctx.logger.warn(`subagents.interrupt ${childId} 失败: ${String(e && e.message || e)}`);
-      });
-    },
-    registerContinuableSetup(cb) {
-      // 子会话模型选择运行时：宿主在 startContinuable 直接透传 provider/model，
-      // 无需回调装配；保留注册面（调用方 dispose 语义）。
-      return () => {};
     },
   };
 
@@ -474,11 +410,10 @@ function decorateDshCtx(ctx, plugin) {
 
   // get：可选服务面（webServer/workspaceRegistry 宿主未装配 → undefined，
   // 插件保持 tool-only 不阻塞装载——与 headless profile 语义一致）
-  const provided = new Set(['tools', 'llm', 'subagents', 'systemPrompt', 'agents', 'commands', 'logger', 'fs', 'web', 'bash', 'store', 'loop']);
+  const provided = new Set(['tools', 'llm', 'systemPrompt', 'agents', 'commands', 'logger', 'fs', 'web', 'bash', 'store', 'loop']);
   const getService = (name) => {
     if (name === 'tools') return ctx.tools;
     if (name === 'llm') return ctx.llm;
-    if (name === 'subagents') return ctx.subagents;
     if (name === 'systemPrompt') return ctx.systemPrompt;
     if (name === 'agents') return ctx.agents;
     if (name === 'commands') return ctx.commands;

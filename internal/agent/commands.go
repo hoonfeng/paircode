@@ -28,10 +28,10 @@ type HostCommand struct {
 }
 
 var (
-	hostCmdMu      sync.RWMutex
-	hostCommands   = map[string]*HostCommand{} // name → 命令
-	hostCmdOwner   = map[string]string{}       // name → 归属插件（卸载自动注销）
-	hostCmdOrder   []string                    // 注册顺序（稳定清单）
+	hostCmdMu    sync.RWMutex
+	hostCommands = map[string]*HostCommand{} // name → 命令
+	hostCmdOwner = map[string]string{}       // name → 归属插件（卸载自动注销）
+	hostCmdOrder []string                    // 注册顺序（稳定清单）
 )
 
 // RegisterHostCommand 注册宿主命令。owner 非空时按插件归属（同名重复注册覆盖；

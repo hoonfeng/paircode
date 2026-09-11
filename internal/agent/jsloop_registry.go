@@ -34,8 +34,8 @@ type jsLoopImpl struct {
 }
 
 var (
-	jsLoopMu   sync.RWMutex
-	jsLoopVal  *jsLoopImpl
+	jsLoopMu      sync.RWMutex
+	jsLoopVal     *jsLoopImpl
 	jsLoopPoolCur *jsLoopPool // 当前生效实现的实例池（并行会话隔离）
 )
 

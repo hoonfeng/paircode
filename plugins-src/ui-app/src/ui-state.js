@@ -127,6 +127,10 @@ export const state = reactive({
   phaseByConv: {},           // { [convId]: string } 各对话当前阶段（自主模式）
   nudgeByConv: {},           // { [convId]: string } 各对话 nudge 提示文本
   convCtxStatsByConv: {},    // { [convId]: reactive({...}) } 各对话上下文 token 统计
+  // ★ 各对话「本次运行」统计（耗时计时/步数/token 速度展示）——
+  //   由 agent-events 的 usage/step 事件与 status 运行集合维护，RightPanel 渲染。
+  //   运行中实时刷新（1s tick），结束后 endAt 定格保留（切会话显示各自的）。
+  runStatsByConv: {},        // { [convId]: { startAt, endAt, steps, toolCalls, llmCalls, promptTokens, completionTokens } }
   msgTotalByConv: {},        // { [convId]: number } 各对话总消息数（懒加载判断是否还有更早消息）
   msgLoadedByConv: {},       // { [convId]: number } 各对话已加载消息数
   runningByWorkspace: {},    // { [wsRoot]: count } 各工作区运行中 agent 计数（供工作区列表显示脉冲点）

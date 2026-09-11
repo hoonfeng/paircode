@@ -44,11 +44,10 @@ func runWebRound(t *testing.T, store *MessageStore, convID, task string, round i
 	// ── Start: 全新 Loop，History = 压缩版 ──
 	mock := &MockProvider{Responses: []Message{{Content: fmt.Sprintf("第%d轮回复", round)}}}
 	loop := &Loop{
-		Provider:      mock,
-		Registry:      NewRegistry(),
-		System:        "test-system",
-		MaxIterations: 3,
-		History:       CopyHistory(condensed),
+		Provider: mock,
+		Registry: NewRegistry(),
+		System:   "test-system",
+		History:  CopyHistory(condensed),
 	}
 
 	// ── OnBatchPersist: 复刻 session_manager.Start 的重组逻辑（lastUser 锚点）──

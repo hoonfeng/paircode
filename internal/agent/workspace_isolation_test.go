@@ -45,7 +45,8 @@ func TestSessionWorkspaceRootCtx(t *testing.T) {
 // TestAdapterToolCallRoot 验证：插件 ctx 服务根解析优先级（2026-08-27 双上下文）——
 // 当前工具调用会话根（会话上下文）＞ UI invoke 绑定主根（UI 上下文）＞ 插件装载快照。
 // ★ 不再回落全局主根 primaryWorkspaceRoot：正在执行的对话（Loop 内非工具 JS
-//   调用）必须保持装载/会话根，切换全局工作区不得带偏。
+//
+//	调用）必须保持装载/会话根，切换全局工作区不得带偏。
 func TestAdapterToolCallRoot(t *testing.T) {
 	pc := &PluginContext{WorkspaceRoot: `F:\mount-snapshot`}
 	oldRoots := WorkspaceRoots

@@ -50,7 +50,7 @@ const imageSubmitMaxBytes = 20 << 20
 //     返回剥离标记后的净化文本（含 dsh 风格信封）
 //   - 未命中：原样返回（快速路径，无额外开销）
 //
-// ★ 线程安全：并行工具执行（runParallel/executeParallel）并发调用本函数，
+// ★ 线程安全：工具结果后处理可能在多个会话/协程下被调用，
 //
 //	挂载均在 imageMu 锁内完成。
 func (l *Loop) parseImageSubmitResult(result, callID string) string {

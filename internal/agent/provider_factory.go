@@ -26,23 +26,23 @@ import (
 
 // ProviderParams LLM Provider 可装配参数（基线 + 插件覆盖合并后的最终值）。
 type ProviderParams struct {
-	Provider     string // 当前服务商（装配器按服务商取模型级参数）
-	Preset       string // ★ 2026-09-03 当前生效配置名（会话级 > 全局激活；装配器按名整套展开）
-	ConvProvider string // ★ 2026-09-03 会话选定服务商（空=会话未设置；装配器决策覆盖用）
-	ConvModel    string // ★ 2026-09-03 会话选定模型（空=会话未设置）
-	ConvPreset   string // ★ 2026-09-03 会话选定配置名（空=会话未选配置）
-	BaseURL      string // ★ API 基础地址（不含协议路径；完整端点由 ResolveEndpointURL 按 Protocol 拼接）
-	Protocol     string // ★ 2026-09-02 LLM 协议（openai-completions/openai-responses/anthropic-messages；空=默认 openai-completions）
-	APIKey       string // 服务商密钥
-	Model        string // 主执行模型
-	Temperature  float64 // 随机性（-1=不传）
-	MaxTokens    int // 最大输出 token（0=不传）
-	ThinkingMode string // non-thinking/thinking/thinking_max；空=不下发
-	Multimodal   bool // ★ 2026-08-21 多模态：当前模型支持图片输入（装配器按模型级参数标记）
-	PlanModel    string // 规划模型（自主模式分解任务用）
-	ReviewModel  string // 审核模型（AI 审核用）
-	ContextMaxTokens         int // ★ 模型级上下文窗口（0=不传）
-	ProviderContextMaxTokens int // ★ 服务商级默认上下文窗口（models.json 每服务商配置；0=未配置，供装配器兜底）
+	Provider                 string                                     // 当前服务商（装配器按服务商取模型级参数）
+	Preset                   string                                     // ★ 2026-09-03 当前生效配置名（会话级 > 全局激活；装配器按名整套展开）
+	ConvProvider             string                                     // ★ 2026-09-03 会话选定服务商（空=会话未设置；装配器决策覆盖用）
+	ConvModel                string                                     // ★ 2026-09-03 会话选定模型（空=会话未设置）
+	ConvPreset               string                                     // ★ 2026-09-03 会话选定配置名（空=会话未选配置）
+	BaseURL                  string                                     // ★ API 基础地址（不含协议路径；完整端点由 ResolveEndpointURL 按 Protocol 拼接）
+	Protocol                 string                                     // ★ 2026-09-02 LLM 协议（openai-completions/openai-responses/anthropic-messages；空=默认 openai-completions）
+	APIKey                   string                                     // 服务商密钥
+	Model                    string                                     // 主执行模型
+	Temperature              float64                                    // 随机性（-1=不传）
+	MaxTokens                int                                        // 最大输出 token（0=不传）
+	ThinkingMode             string                                     // non-thinking/thinking/thinking_max；空=不下发
+	Multimodal               bool                                       // ★ 2026-08-21 多模态：当前模型支持图片输入（装配器按模型级参数标记）
+	PlanModel                string                                     // 规划模型（自主模式分解任务用）
+	ReviewModel              string                                     // 审核模型（AI 审核用）
+	ContextMaxTokens         int                                        // ★ 模型级上下文窗口（0=不传）
+	ProviderContextMaxTokens int                                        // ★ 服务商级默认上下文窗口（models.json 每服务商配置；0=未配置，供装配器兜底）
 	ModelParams              map[string]map[string]core.ModelParamEntry // ★ 模型级参数表（服务商 → 模型 → 参数），供装配器按当前模型取
 }
 
@@ -109,10 +109,13 @@ func logResolvedParams(tag, convID string, p ProviderParams) {
 //	settings 顶层字段仅兜底（兼容无预设的旧配置）。
 //
 // ★ 2026-09-01 Key 回归 AI 配置：API Key 以激活预设携带的 Key 为准（预设 Key 优先），
-//   服务商级 Key（models.json）仅当预设未填 Key 时兜底（旧数据迁移兼容）。
+//
+//	服务商级 Key（models.json）仅当预设未填 Key 时兜底（旧数据迁移兼容）。
+//
 // ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律跟随执行模型。
 // ★ 2026-09-03 决策迁插件：上述展开规则全部由装配器（agentloop）实现；Go 只传
-//   裸基线 + Preset（全局激活配置名），不重复任何决策。
+//
+//	裸基线 + Preset（全局激活配置名），不重复任何决策。
 func ResolveProviderParams() ProviderParams {
 	p := ProviderFactoryNow().Apply(resolveProviderBase())
 	logResolvedParams("global", "", p)
@@ -212,9 +215,11 @@ func LookupConvModel(convID, wsRoot string) (string, string, string) {
 }
 
 // ResolveProviderParamsForConv 解析会话级 Provider 参数（★ 2026-09-03 机制收敛）：
-//   Go 只做三件事：① 查会话三元组（LookupConvModel，web 层注入的数据面钩子）；
-//   ② 注入装配上下文（Preset=会话配置>全局激活；Conv* 透传会话选定值）；③ 委托装配器决策。
-//   配置整套展开（含 Key/协议/参数）与旧服务商匹配链路全部在插件装配器内实现。
+//
+//	Go 只做三件事：① 查会话三元组（LookupConvModel，web 层注入的数据面钩子）；
+//	② 注入装配上下文（Preset=会话配置>全局激活；Conv* 透传会话选定值）；③ 委托装配器决策。
+//	配置整套展开（含 Key/协议/参数）与旧服务商匹配链路全部在插件装配器内实现。
+//
 // 会话未设置模型时与 ResolveProviderParams 完全一致（零行为变化）。
 func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
 	provider, model, preset := LookupConvModel(convID, wsRoot)

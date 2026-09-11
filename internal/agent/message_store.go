@@ -565,6 +565,40 @@ func (s *MessageStore) LoadCompressedSummaries(convID string) ([]string, error) 
 	return summaries, nil
 }
 
+// convHandoffPath 返回 {root}/.pair/conversations/{convID}.handoff.json 路径。
+// 会话交接记录（handoff.go）：跨轮复用「提交消息」的增量基点与文本。
+func (s *MessageStore) convHandoffPath(convID string) string {
+	return filepath.Join(s.conversationsDir(), convID+".handoff.json")
+}
+
+// SaveHandoff 持久化会话交接记录（单条 JSON 对象）。
+func (s *MessageStore) SaveHandoff(convID string, rec HandoffRecord) error {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf("SaveHandoff: JSON 编码失败: %w", err)
+	}
+	return os.WriteFile(s.convHandoffPath(convID), data, 0o644)
+}
+
+// LoadHandoff 读取会话交接记录；文件不存在或损坏返回 (nil, nil)。
+func (s *MessageStore) LoadHandoff(convID string) (*HandoffRecord, error) {
+	data, err := os.ReadFile(s.convHandoffPath(convID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("LoadHandoff: 读取失败: %w", err)
+	}
+	var rec HandoffRecord
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return nil, nil // 容错：损坏文件视同无记录
+	}
+	if strings.TrimSpace(rec.Text) == "" {
+		return nil, nil
+	}
+	return &rec, nil
+}
+
 // indexPath 返回 {root}/.pair/conversations/index.json 路径。
 // indexPath 返回 {root}/.pair/conversations/index.json 路径。
 func (s *MessageStore) indexPath() string {
@@ -1496,10 +1530,6 @@ func (s *MessageStore) DeleteConversation(convID string) error {
 
 // ListConversations 列出指定工作区的对话（按 UpdatedAt 倒序）。
 // 兼容旧数据：WorkspaceRoot 为空视为属于传入的 workspaceRoot（一并返回）。
-// ★ 2026-08-31 成员会话隔离：多智能体团队的成员会话（conv_sub_*，见
-//   subagent_registry.newSubAgentConvID）是「船长会话的子会话」，只在团队活动
-//   面板内通过 openMember 打开，不占顶层会话列表（对齐 DSH ActivityPanel 的
-//   子会话语义），因此此处统一过滤，避免成员会话污染会话列表/记忆重建等消费方。
 func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMeta, error) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
@@ -1511,13 +1541,10 @@ func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMe
 
 	out := make([]ConversationMeta, 0, len(metas))
 	// ★ 路径归一化匹配：历史数据中 Windows 路径存在单/双反斜杠混写
-	//   （如 F:\syproject\gou-ide vs F:\\syproject\gou-ide），精确匹配会漏掉。
+	//   （如 F:\syproject\gou-ide vs F:\\syproject\\gou-ide），精确匹配会漏掉。
 	//   filepath.Clean + EqualFold（Windows 路径不区分大小写）统一比较。
 	normRoot := strings.TrimSpace(filepath.Clean(workspaceRoot))
 	for _, m := range metas {
-		if IsSubAgentConvID(m.ID) {
-			continue // 团队成员子会话不出现在顶层会话列表（团队面板内打开）
-		}
 		if m.WorkspaceRoot == "" {
 			out = append(out, m)
 			continue

@@ -30,7 +30,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		Description: "从二进制提取可打印字符串（ASCII + UTF-16LE，逆向找嵌入文本/URL/符号/提示语常用）。" +
 			"min_length 最短长度(默认 4)；max_results(默认 200)。返回 偏移: 字符串。",
 		Parameters: objSchema(props{
-			"path":        strProp("文件路径"),
+			"path":        strProp("文件路径（相对主项目根，跨项目请传绝对路径）"),
 			"min_length":  intProp("最短字符串长度（默认 4）"),
 			"max_results": intProp("结果上限（默认 200）"),
 		}, "path"),
@@ -52,7 +52,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		Description: "在二进制里查找字节模式（hex 如 4d5a 或 'ff d8 ff'）或文本（text），返回命中字节偏移（十六进制）。" +
 			"hex 与 text 二选一；max_results 默认 100。",
 		Parameters: objSchema(props{
-			"path":        strProp("文件路径"),
+			"path":        strProp("文件路径（相对主项目根，跨项目请传绝对路径）"),
 			"hex":         strProp("十六进制字节模式（与 text 二选一）"),
 			"text":        strProp("文本模式（与 hex 二选一）"),
 			"max_results": intProp("上限（默认 100）"),
@@ -106,7 +106,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		Description: "在指定字节偏移处覆盖写入字节（hex），逆向打补丁用（如把跳转改 9090=两个 NOP）。" +
 			"offset 字节偏移(0 基)；hex 要写入的字节。仅覆盖、不改文件大小。",
 		Parameters: objSchema(props{
-			"path":   strProp("文件路径"),
+			"path":   strProp("文件路径（相对主项目根，跨项目请传绝对路径）"),
 			"offset": intProp("字节偏移（0 基）"),
 			"hex":    strProp("要写入的字节（十六进制）"),
 		}, "path", "offset", "hex"),
@@ -150,7 +150,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		Name:        "binary_info",
 		UsageGuide:  "解析可执行文件结构（PE/ELF/Mach-O）。查看区段/符号表/入口点等结构信息。比 objdump/readelf 更方便（纯 Go 实现无需外部工具）。",
 		Description: "解析可执行文件结构（PE/ELF/Mach-O，stdlib 解析）：架构、入口、节区(名/大小/地址)、导入库与符号、导出符号——逆向起步。",
-		Parameters:  objSchema(props{"path": strProp("文件路径")}, "path"),
+		Parameters:  objSchema(props{"path": strProp("文件路径（相对主项目根，跨项目请传绝对路径）")}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePath(root, argStr(args, "path"))
@@ -165,7 +165,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		Name:        "binary_hash",
 		UsageGuide:  "计算文件哈希（MD5+SHA1+SHA256）。用于校验文件完整性、识别样本（从恶意软件到编译产物）。比 bash certutil -hashfile 更方便（一次性出三种哈希）。",
 		Description: "计算文件 大小 + MD5 + SHA1 + SHA256（识别样本/校验完整性）。流式计算，不全量载入。",
-		Parameters:  objSchema(props{"path": strProp("文件路径")}, "path"),
+		Parameters:  objSchema(props{"path": strProp("文件路径（相对主项目根，跨项目请传绝对路径）")}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePath(root, argStr(args, "path"))
@@ -191,7 +191,7 @@ func registerBinaryRETools(r *Registry, root string) {
 		UsageGuide:  "按块计算香农熵（0~8）。高熵(>7.5)提示压缩/加密/加壳。逆向分析查壳常用。比手动计算更快（分块扫描+视觉化结果）。",
 		Description: "按块计算香农熵（0~8）：高熵(>7.5)提示压缩/加密/加壳区段，逆向识别壳常用。chunk_size 默认 4096。",
 		Parameters: objSchema(props{
-			"path":       strProp("文件路径"),
+			"path":       strProp("文件路径（相对主项目根，跨项目请传绝对路径）"),
 			"chunk_size": intProp("块大小字节（默认 4096）"),
 		}, "path"),
 		ReadOnly: true,

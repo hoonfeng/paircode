@@ -25,7 +25,7 @@ func TestLoopPersistTurnStepConsistency(t *testing.T) {
 		{Content: "任务完成"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "一致性验证", nil)

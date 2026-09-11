@@ -123,7 +123,7 @@ func registerGitTools(r *Registry, root string) {
 		Name:        "git_blame",
 		UsageGuide:  "逐行查看某文件每行的最后修改提交和作者。用 start/end 限定行范围避免输出过多。比 bash git blame 更方便（自动处理行范围参数格式）。",
 		Description: "逐行查看某文件每行的最后修改提交/作者。file 必填；可选 start/end 限定行范围。",
-		Parameters:  objSchema(props{"file": strProp("文件路径"), "start": intProp("起始行"), "end": intProp("结束行"), "project": projectSchemaProp()}, "file"),
+		Parameters:  objSchema(props{"file": strProp("文件路径（相对主项目根，跨项目请传绝对路径）"), "start": intProp("起始行"), "end": intProp("结束行"), "project": projectSchemaProp()}, "file"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			projRoot, err := projRootFromArgs(root, args)

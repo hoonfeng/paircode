@@ -20,7 +20,7 @@ func TestLoopTurnStepFields(t *testing.T) {
 		{Content: "任务完成"},
 	}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test",
 		OnEvent: func(e Event) { events = append(events, e) }}
 
 	msgs, err := loop.Run(context.Background(), "测试 turn/step", nil)
@@ -81,7 +81,7 @@ func TestLoopPreStepReject(t *testing.T) {
 	reg := NewRegistry()
 	mock := &MockProvider{Responses: []Message{{Content: "不应被调用"}}}
 	var events []Event
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test",
 		OnEvent: func(e Event) { events = append(events, e) },
 		// 拒绝所有 step → turn 以 blocked 结束
 		PreStep: func(ctx context.Context, callMsgs []Message, turn, step int) ([]Message, bool, error) {
@@ -154,7 +154,7 @@ func (m *stopReasonProvider) Chat(ctx context.Context, messages []Message, tools
 func TestLoopPreStepRewrite(t *testing.T) {
 	var got []Message
 	prov := &stopReasonProvider{responses: []Message{{Content: "完成"}}, capture: &got}
-	loop := &Loop{Provider: prov, Registry: NewRegistry(), System: "test", MaxIterations: 5,
+	loop := &Loop{Provider: prov, Registry: NewRegistry(), System: "test",
 		PreStep: func(ctx context.Context, callMsgs []Message, turn, step int) ([]Message, bool, error) {
 			// 追加一条引导消息，验证 LLM 收到改写后的上下文
 			rewritten := append([]Message(nil), callMsgs...)
@@ -192,7 +192,7 @@ func TestLoopMaxTokensSticky(t *testing.T) {
 		},
 		stopReasons: []string{"length", "stop"},
 	}
-	loop := &Loop{Provider: prov, Registry: reg, System: "test", MaxIterations: 5}
+	loop := &Loop{Provider: prov, Registry: reg, System: "test"}
 
 	if _, err := loop.Run(context.Background(), "测试 max-tokens", nil); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -212,7 +212,7 @@ func TestLoopCancelAborted(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 		{Content: "继续"},
 	}}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: reg, System: "test"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 立即取消
@@ -242,7 +242,7 @@ func TestLoopFollowUpOpensNextTurn(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 		{Content: "第二段完成"},
 	}}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5}
+	loop := &Loop{Provider: mock, Registry: reg, System: "test"}
 	loop.followUpQueue = []Message{{Role: RoleUser, Content: "继续做第二件事"}}
 
 	msgs, err := loop.Run(context.Background(), "测试 follow-up", nil)

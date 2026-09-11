@@ -374,3 +374,106 @@ tool 描述 UTF-8 截断、Definitions 字典序排序、Usage OpenAI 兼容拼�
 3. **快照体积**：每轮 resume 变化追加一条快照，历史中快照会累积（每轮 1 条）。
    旧快照保留是前缀连续的前提；若会话极长（>50 轮），可考虑「快照段落整体
    作为压缩候选」——但压缩会断前缀，权衡后暂不处理。
+
+---
+
+## 9. 2026-09-11 修复：两个可修的前缀断裂根因（占位符错位 + 冷却不递减）
+
+> 背景：真实会话 trace（`.pair/logs/llm-trace/llm-trace-20260911.jsonl`，235 请求 /
+> DeepSeek-V4-Flash）逐前缀比对：整体命中 98.9%，但 **每次新 Run（用户发新消息）
+> 首请求仅 30~49%**（hit≈9216=整个 system，其余整窗 miss），且 turn 内 7 处断裂
+> （S35→S36、S38→S39、S46→S47→S48、S200→S1、S24→S1）。
+
+### 9.1 根因 A：GLM 兜底占位 user 插在 msg#1（全窗错位）
+
+- **现象**：turn 内连续两次断裂 `32→34→37`（S46→S47→S48），断裂点恒在 **msg#1**：
+  A=占位符 user（52 字符）、B=历史 assistant —— 公共前缀只剩 system。
+- **机制**：`buildCallContext`（loop.go）在「msgs 无 user」时把兜底占位 user 插到
+  **system 之后（位置 1）**，把整段历史向后挤一位。只要「msgs 是否存在 user」在相邻
+  两次请求间翻转（运行时用户反馈/steer 临时注入、压缩把 user 并入摘要、新 Run 带新
+  user），前后请求的 msg#1 就不同 → provider 缓存从 msg#1 起**整段 miss**。
+- **修复**：占位符改为**追加到消息末尾**（loop.go buildCallContext）。历史段位置逐字节
+  稳定，翻转只影响占位符自身（52 字符）；GLM「至少一条 user」校验同样满足。
+- **测试**：`buildcall_glm_test.go`（3 个用例改写 + 新增翻转前缀稳定性用例）。
+
+### 9.2 根因 B：JS 路径 compactCooldown 永不递减（Run 内只压缩一次 → 膨胀 → 跨轮大压缩）
+
+- **现象**：本会话 Run 内历史涨到 **354 条 / 27 万 tokens** 却不再压缩（S39 之后 161 步
+  无压缩），直到新 Run 入口才触发大压缩（354→16、66→16），跨轮首请求固定 miss 一整窗。
+- **机制**：压缩策略 2026-08-27 外置到 agentloop（JS）后，`jsloop_run.go:257` 明确注释
+  「此处不再前置 maybeCompact」——而**冷却递减只写在 Go 的 maybeCompact
+  （compress.go:53-54）**里。JS 侧 `compact.estimate` 只读 `l.compactCooldown`、
+  `compact.apply` 只设（=10）——**无人递减** → 冷却一经设置就永不归零。
+- **修复**：Go 桥新增 **`loop.compact.tick()`**（递减，jsloop_runner.go）；
+  agentloop 的 `maybeCompact` 在冷却期调用（与 Go 原版「每次 maybeCompact 递减 1」一致）。
+- **附带修复**：JS 路径 `compact.apply` 的 full 压缩**补发 EventCompacted**（原缺口：
+  Go 路径由 maybeCompact 发事件，JS 直调 l.compact 不发 → 前端看不到「上下文已压缩」）。
+- **测试**：`cache_prefix_jsloop_test.go`（30 步长 Run 断言压缩 ≥2 次；已用「临时禁用
+  tick」验证回归 —— 修复前恒 1 次）。
+
+### 9.3 跨轮首请求 miss 的剩余部分（设计权衡，不修）
+
+- 压缩窗口重建（[S]+最近 16 条 vs 旧序列 [S]+N 条）**必然无法共享前缀** —— 这是
+  「省 token（窗口 1.2 万）」与「前缀连续（旧序列 27 万）」的根本矛盾；命中价≈1/10
+  miss 价时压缩仍更省（1.2 万 miss vs 27 万 hit ≈ 2.7 万等价单位）。
+- 修复 B 后 Run 内上下文稳定在硬地板（12 万）附近：每步输入从 27 万降到 ~6-12 万，
+  新 Run 入口大压缩的规模同步下降（但"窗口重建 miss"本身仍在）。
+
+### 9.4 与「工具并行」无关（排查结论）
+
+- 并行路径（`jsloop_runner.go` runParallel / `loop_parallel.go` tryParallelExecute）
+  **结果按原始顺序收集**，消息序列与串行执行完全一致；7 处断裂全部归因于
+  「压缩 / 占位符 / 临时注入 / 新 Run」，无一处与工具批次顺序或并行相关。
+
+---
+
+## 10. 2026-09-11 官方文档核对（DeepSeek《上下文硬盘缓存》）与技能列表去重修复
+
+> 按官方文档（https://api-docs.deepseek.com/zh-cn/guides/kv_cache）逐条核对当前实现。
+> 官方核心规则：缓存前缀是**独立完整单元**（请求输入结束位置 / 模型输出结束位置 /
+> 公共前缀检测 / 按固定 token 间隔落盘）；**后续请求完整匹配单元才命中**；
+> usage 返回 prompt_cache_hit_tokens / miss_tokens；文档未承诺 64 对齐
+> （实测命中值恒为 64 的倍数 = 实现粒度）。
+
+### 10.1 逐条对照结论（全部符合）
+
+| 机制 | 现状 | 判定 |
+|---|---|---|
+| system 静态段 | `DefaultSystemPrompt` 纯函数 + CacheBoundary 边界 | ✓ 稳定 |
+| system 动态段 | skills/rules/env（30s TTL 缓存）+ 插件段（会话级） | ✓ 低频变化 |
+| 时间戳/记忆/知识库 | 不入 system（快照停用后不再注入） | ✓ |
+| 历史追加 | append-only，用户消息先落盘再 Start | ✓（官方例一） |
+| 临时消息（反馈/日志） | 追加末尾、调用后清空 | ✓ |
+| 工具结果瘦身 | 确定性截断（同消息同结果） | ✓ |
+| 图片管线 | offload「最老优先」单调；投影确定 + 缓存 | ✓（低频一次断裂） |
+| 压缩 | 跨轮压力触发（45%）/ Run 内（已修 cooldown） | ✓ 官方例二（公共前缀落盘） |
+| 跨轮首请求 30-49% | = 命中已落盘公共前缀（system 等），非缺陷 | ✓ |
+
+- 实测印证官方例二：新会话首请求命中 2816（64×44）＝命中由其他请求落盘的公共前缀单元。
+- 既有设计（CacheBoundary、末尾追加、快照停用 2026-09-04、压力触发压缩）与官方标准一致。
+
+### 10.2 修复：技能加载 global 层重复 + L1 列表同名重复（token 浪费，非缓存断裂）
+
+- **实证**：`LoadAllSkills()` 返回 21 条 = system3 + project6 + global6 + **global6**。
+  - 根因：`.pair/.agents/skills` 兼容分支用 `loadAllFrom("", agentsDir, ...)` 追加，
+    而 `loadAllFrom` 内部固定加载 `SkillGlobalDir` → 全局层被二次加载（任何环境）。
+  - 本环境叠加 project 目录 == global 目录（InstallDir==工作区根）→ 6×3。
+- **修复**：
+  - `LoadAllSkills` / `LoadAllSkillsFromRoot`：agents 分支改直扫 `loadSkillsFromDir` +
+    `applyStatusOverride`（21→15 条；非本环境为 system+project+global 各一次）。
+  - `PromptSkills`：同名技能只列首个（与 `FindSkill`「首个匹配生效」一致）→ 输出 8 条。
+- **实测收益**：`[cache-diag] dynamic 段 skills=3747→1337 字符`（-64%）、技能行 21→8、
+  system 总量 23028→20618 字符（≈每请求省 ~1000 tokens 的固定段）。
+- **测试**：`TestLoadAllSkillsGlobalLayerSingleLoad`（已用「临时反转修复」验证回归可捕获：
+  旧行为 global=2 断言失败）、`TestPromptSkillsDedup`。
+
+### 10.3 表述校正
+
+- 「64 对齐」为实测实现粒度（hit 恒为 64 倍数：2816、9216、9728…），官方文档表述为
+  「按固定 token 间隔落盘 + 完整匹配单元」。修复方向（前缀逐字节稳定）不依赖该粒度。
+
+### 10.4 停用残留（已记录，未动）
+
+- 快照停用后 `ResumeContext` 无消费者：`session_manager.go` 的 goal 段（543/924 行）
+  仍向 `loop.ResumeContext` 追加但不再注入 —— goal 续轮上下文实际不达（独立于缓存）。
+- `web_server.go:1982` 日志承诺「快照变化见 [cache-diag] snapshot 行」随停用永久不发。

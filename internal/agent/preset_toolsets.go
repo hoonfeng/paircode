@@ -78,9 +78,9 @@ func isPresetName(name string) bool {
 
 // presetMode 预置模式定义。
 type presetMode struct {
-	Name     string   // 模式名（工具集名，中文）
-	Desc     string   // 描述
-	Plugins  []string // 磁盘插件名（Name 引用；空=全部 tool-* 磁盘插件，全功能用）
+	Name    string   // 模式名（工具集名，中文）
+	Desc    string   // 描述
+	Plugins []string // 磁盘插件名（Name 引用；空=全部 tool-* 磁盘插件，全功能用）
 }
 
 // presetModes 预置模式全表（按展示顺序）。
@@ -96,9 +96,12 @@ type presetMode struct {
 //   - 全栈开发去低频重叠项（tool-entryconfig 与 project-info/codegraph 重叠、
 //     tool-asset 低频）；视觉依赖工具由多模态门控（multimodal_gate.go）运行时
 //     二次收敛，预设只管场景职责。
+//
 // ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳、无组合逻辑），
-//   全栈开发/调试预设同步摘除其引用；全功能预设 Plugins=nil 动态扫描全部
-//   磁盘插件（diskPluginCodeAvailable 过滤），自动不含已移除插件。
+//
+//	全栈开发/调试预设同步摘除其引用；全功能预设 Plugins=nil 动态扫描全部
+//	磁盘插件（diskPluginCodeAvailable 过滤），自动不含已移除插件。
+//
 // 顺序即前端展示顺序（计划讨论 → 全栈开发 → 办公 → 调试 → 基础 → 全功能）。
 var presetModes = []presetMode{
 	{
@@ -154,8 +157,10 @@ const presetSeedMarker = ".preset-seeded"
 // v5：工具重构（新增 tool-exec 执行组，exec_command/write_stdin 取代 run_background 等）；
 // v6：编辑面重构（tool-core 插件移除，apply_patch 统一编辑面）；
 // v7：codex 精简轮（tool-git/tool-entryconfig 删除；tool-vision→tool-web、
-//     tool-snapshot→tool-harness、tool-asset→tool-resource 合并）
-//（预设文件删除重建——预设内容属框架维护责任域，用户对预设的定制请复制为自定义集合）。
+//
+//	tool-snapshot→tool-harness、tool-asset→tool-resource 合并）
+//
+// （预设文件删除重建——预设内容属框架维护责任域，用户对预设的定制请复制为自定义集合）。
 const presetSeedVersion = 7
 
 // presetLegacyNames v1 起不再保留的旧预置模式（dev/test/docs 被全栈开发/办公取代；

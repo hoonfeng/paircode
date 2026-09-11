@@ -67,10 +67,10 @@ func TestJSLoopParallelSessionsNotSerialized(t *testing.T) {
 	RegisterDefaultTools(regB, dir)
 
 	pa := &blockingProvider{entered: make(chan struct{}), release: make(chan struct{})}
-	loopA := &Loop{Provider: pa, Registry: regA, System: "并行测试-A", MaxIterations: 3,
+	loopA := &Loop{Provider: pa, Registry: regA, System: "并行测试-A",
 		OnEvent: func(Event) {}}
 	loopB := &Loop{Provider: &MockProvider{Responses: []Message{{Content: "会话B完成"}}},
-		Registry: regB, System: "并行测试-B", MaxIterations: 3, OnEvent: func(Event) {}}
+		Registry: regB, System: "并行测试-B", OnEvent: func(Event) {}}
 
 	doneA := make(chan error, 1)
 	go func() {
@@ -134,7 +134,7 @@ func TestSessionManagerParallelStartNotBlocked(t *testing.T) {
 	regA := NewRegistry()
 	RegisterDefaultTools(regA, dir)
 	optsA := LoopOpts{Provider: pa, Registry: regA, System: "并行会话-A",
-		MaxIterations: 3, WorkspaceRoot: dir}
+		WorkspaceRoot: dir}
 	if err := m.Start(context.Background(), "convA", "任务 A（长 LLM 调用）", optsA); err != nil {
 		t.Fatalf("会话 A Start 失败: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestSessionManagerParallelStartNotBlocked(t *testing.T) {
 	regB := NewRegistry()
 	RegisterDefaultTools(regB, dir)
 	optsB := LoopOpts{Provider: &MockProvider{Responses: []Message{{Content: "会话B完成"}}},
-		Registry: regB, System: "并行会话-B", MaxIterations: 3, WorkspaceRoot: dir}
+		Registry: regB, System: "并行会话-B", WorkspaceRoot: dir}
 	startB := make(chan error, 1)
 	go func() {
 		startB <- m.Start(context.Background(), "convB", "任务 B（应立即启动）", optsB)

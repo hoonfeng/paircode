@@ -120,9 +120,9 @@ func (u *Usage) UnmarshalJSON(b []byte) error {
 	// ★ 2026-09-02 OpenAI Responses API 用量字段为 input_tokens/output_tokens
 	//   （与 chat/completions 的 prompt_tokens/completion_tokens 不同）——归一化。
 	var raw struct {
-		InputTokens    int `json:"input_tokens"`
-		OutputTokens   int `json:"output_tokens"`
-		InputDetails   struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+		InputDetails struct {
 			CachedTokens int `json:"cached_tokens"`
 		} `json:"input_tokens_details"`
 	}

@@ -58,7 +58,7 @@ func TestJSLoopLLMTracePluginWritesJSONL(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"hello.txt"}`}}}},
 		{Content: "读到了 LLMTRACE_E2E"},
 	}}
-	loop := &Loop{Provider: mock, Registry: reg, System: "test-llm-trace", MaxIterations: 5,
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-llm-trace",
 		OnEvent: func(e Event) {}}
 
 	if _, err := loop.Run(context.Background(), "读 hello.txt", nil); err != nil {

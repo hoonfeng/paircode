@@ -450,13 +450,12 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 		_ = json.Unmarshal(argsRaw, &args)
 	}
 	// ★ Round4 repair（t6）：先锁内取 ph 快照再传入下游——dshService 与
-	//   subAgentSpecFromArgs 共用同一快照（杜绝与 bindHost 的 b.ph 写并发
-	//   数据竞争；也保证同一请求内 agents.start 的 spec.WsRoot 回退与
-	//   工具 Execute 落在同一宿主上）。
+	//   工具 Execute 共用同一快照（杜绝与 bindHost 的 b.ph 写并发数据竞争）。
 	b.mu.Lock()
 	ph := b.ph
 	b.mu.Unlock()
-	// ★ Round4：外部服务面（agents/subagents/llm/systemPrompt/commands/logger）
+	// ★ Round4：外部服务面（agents/llm/systemPrompt/commands/logger）
+	//   ★ 2026-09：subagents 面已随子 Agent 实现删除。
 	if handled, data, err := b.dshService(svcName, method, args, plugin, ph); handled {
 		if err != nil {
 			b.sendResult(id, false, "", err.Error())
@@ -495,10 +494,12 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 	b.sendResult(id, true, result, "")
 }
 
-// ─── Round4 外部服务面（cordis4 轨插件 ctx.agents/subagents/llm/systemPrompt/
+// ─── Round4 外部服务面（cordis4 轨插件 ctx.agents/llm/systemPrompt/
 // commands 的门面后端）────────────────────────────────────────
-// 直接映射现有 Go 能力（SubAgentRegistry / 模型目录 / PluginHost 段 / 命令表），
-// 与 goja 轨 ctx.agents/ctx.llm（jsplugin_agents.go）同源，行为一致。
+// 直接映射现有 Go 能力（会话唤醒投递 / PluginHost 段 / 命令表），
+// 与 goja 轨 ctx.agents（jsplugin_agents.go）同源，行为一致。
+// ★ 2026-09：subagents 面与 agents 派生方法（start/fork/stop/list/…）已随子
+//   Agent 实现删除；ctx.agents 仅保留 followup/inject/steer/ready。
 // 返回 (handled, data, err)：handled=false 表示非 外部服务（走 mapBridgeService）。
 
 // handleSubscribeMsg 记录插件事件订阅白名单（agent/status 等按名转发）。
@@ -540,79 +541,15 @@ func emitBridgeEvent(name string, payload any) {
 	}
 }
 
-// dshService 外部服务面实现（Node 插件 ctx.agents/subagents/llm/systemPrompt/commands）。
-// ★ Round4 repair（t6）：ph 由 handleServiceMsg 锁内快照传入（与
-//   subAgentSpecFromArgs 共用同一宿主快照），调用方不得传 b.ph。
+// dshService 外部服务面实现（Node 插件 ctx.agents/llm/systemPrompt/commands）。
+// ★ 2026-09：子 Agent 派生面（agents.start/fork/stop/list 与 subagents.*）随
+//   子 Agent 实现一并删除；ctx.agents 只保留「向已存在会话投递输入」的唤醒语义
+//   （followup/inject/steer → WakeSession）。
 func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plugin string, ph *PluginHost) (handled bool, data string, err error) {
 	switch svcName {
 	case "agents":
 		convID := argStr(args, "convId")
 		switch method {
-		case "get":
-			rec := SubAgentInfo(convID)
-			if rec == nil {
-				return true, "null", nil
-			}
-			return true, bridgeJSON(map[string]any{
-				"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
-				"label": rec.Label, "team": rec.Team, "member": rec.Member,
-				"parentConvId": rec.ParentConv, "report": rec.Report,
-			}), nil
-		case "list":
-			recs := ListSubAgents("", "")
-			out := make([]any, 0, len(recs))
-			for _, rec := range recs {
-				out = append(out, map[string]any{
-					"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
-					"label": rec.Label, "team": rec.Team, "member": rec.Member,
-					"parentConvId": rec.ParentConv, "report": rec.Report,
-				})
-			}
-			return true, bridgeJSON(out), nil
-		case "status":
-			rec := SubAgentInfo(convID)
-			if rec == nil {
-				return true, "null", nil
-			}
-			return true, bridgeJSON(map[string]any{
-				"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
-				"label": rec.Label, "team": rec.Team, "member": rec.Member,
-				"parentConvId": rec.ParentConv, "turns": rec.Turns, "report": rec.Report,
-			}), nil
-		case "running":
-			if convID == "" {
-				return true, "false", nil
-			}
-			if rec := SubAgentInfo(convID); rec != nil {
-				return true, fmt.Sprint(rec.State == "running"), nil
-			}
-			if mgr := GlobalSessionManager(); mgr != nil {
-				return true, fmt.Sprint(mgr.IsRunning(convID)), nil
-			}
-			return true, "false", nil
-		case "ready":
-			return true, fmt.Sprint(SubAgentSpawnerReady()), nil
-		case "start":
-			spec, serr := subAgentSpecFromArgs(args, ph)
-			if serr != nil {
-				return true, "", serr
-			}
-			rec, serr := SpawnSubAgent(spec)
-			if serr != nil {
-				return true, "", serr
-			}
-			return true, bridgeJSON(map[string]any{"convId": rec.ConvID, "state": rec.State, "label": rec.Label}), nil
-		case "fork":
-			spec, serr := subAgentSpecFromArgs(args, ph)
-			if serr != nil {
-				return true, "", serr
-			}
-			spec.ForkOf = argStr(args, "forkFrom")
-			rec, serr := ForkSubAgent(spec)
-			if serr != nil {
-				return true, "", serr
-			}
-			return true, bridgeJSON(map[string]any{"convId": rec.ConvID, "state": rec.State}), nil
 		case "followup", "inject", "steer":
 			if convID == "" {
 				return true, "", fmt.Errorf("agents.%s 缺少 convId", method)
@@ -621,104 +558,25 @@ func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plu
 			if text == "" {
 				return true, "", fmt.Errorf("agents.%s 缺少 text", method)
 			}
-			queued, serr := FollowupSubAgent(convID, text)
+			queued, serr := WakeSession(convID, text)
 			if serr != nil {
 				return true, "", serr
 			}
 			return true, bridgeJSON(map[string]any{"ok": true, "queued": queued, "convId": convID}), nil
-		case "cancel", "stop":
-			if convID == "" {
-				return true, "", fmt.Errorf("agents.%s 缺少 convId", method)
-			}
-			if serr := StopSubAgent(convID); serr != nil {
-				return true, "", serr
-			}
-			return true, "true", nil
-		case "report":
-			if convID == "" {
-				return true, "", fmt.Errorf("agents.report 缺少 convId")
-			}
-			if serr := ReportSubAgent(convID, argStr(args, "text")); serr != nil {
-				return true, "", serr
-			}
-			return true, bridgeJSON(map[string]any{"ok": true, "convId": convID}), nil
-		case "lastText":
-			return true, SubAgentLastText(convID), nil
+		case "ready":
+			return true, fmt.Sprint(SessionWakeReady()), nil
 		}
-		return true, "", fmt.Errorf("未知 agents 服务方法: %s", method)
-	case "subagents":
-		switch method {
-		case "getProvider":
-			if argStr(args, "name") == "spawn" {
-				return true, bridgeJSON(map[string]any{
-					"name": "spawn", "prepareContinuable": true,
-					"capabilities": map[string]any{"persona": true, "toolFilter": true},
-				}), nil
-			}
-			return true, "null", nil
-		case "list":
-			return true, bridgeJSON([]string{"spawn"}), nil
-		case "startContinuable":
-			spec := SubAgentSpec{
-				Label:           argStr(args, "label"),
-				Task:            argStr(args, "prompt"),
-				System:          argStr(args, "persona"),
-				ParentConv:      argStr(args, "parentConvId"),
-				Provider:        argStr(args, "provider2"),
-				Model:           argStr(args, "model"),
-				DenyTools:       argStrSlice(args, "denyTools"),
-				MaxIter:         0,
-				ReasoningEffort: argStr(args, "reasoningEffort"),
-			}
-			if spec.WsRoot == "" {
-				spec.WsRoot = npmPluginProjectRoot()
-			}
-			rec, serr := SpawnSubAgent(spec)
-			if serr != nil {
-				return true, "", serr
-			}
-			return true, bridgeJSON(map[string]any{"childId": rec.ConvID, "convId": rec.ConvID, "state": rec.State}), nil
-		case "followup":
-			childID := argStr(args, "childId")
-			if childID == "" {
-				return true, "", fmt.Errorf("subagents.followup 缺少 childId")
-			}
-			if _, serr := FollowupSubAgent(childID, argStr(args, "text")); serr != nil {
-				return true, "", serr
-			}
-			return true, "true", nil
-		case "interrupt":
-			if serr := StopSubAgent(argStr(args, "childId")); serr != nil {
-				return true, "", serr
-			}
-			return true, "true", nil
-		}
-		return true, "", fmt.Errorf("未知 subagents 服务方法: %s", method)
+		return true, "", fmt.Errorf("未知 agents 服务方法: %s（子 Agent 派生面已删除，仅支持 followup/inject/steer/ready）", method)
 	case "llm":
 		switch method {
-		case "models":
-			models := SubAgentModels()
-			if models == nil {
+		case "models", "listModels":
+			// ★ 2026-09：模型目录已随子 Agent 实现删除（原成员模型覆盖用），返回空集。
+			if method == "listModels" {
 				return true, "[]", nil
 			}
-			return true, bridgeJSON(models), nil
+			return true, "[]", nil
 		case "current":
-			cur := SubAgentCurrentModel()
-			if cur == nil {
-				return true, "{}", nil
-			}
-			return true, bridgeJSON(cur), nil
-		case "listModels":
-			provider := argStr(args, "provider")
-			models := SubAgentModels()
-			out := make([]any, 0)
-			for _, m := range models {
-				if provider != "" && m["provider"] != provider {
-					continue
-				}
-				out = append(out, map[string]any{"id": m["model"], "name": m["label"]})
-			}
-			return true, bridgeJSON(out), nil
+			return true, "{}", nil
 		case "resolveCallConfig":
 			provider := argStr(args, "provider")
 			model := argStr(args, "model")
@@ -808,36 +666,6 @@ func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plu
 		return true, "ok", nil
 	}
 	return false, "", nil
-}
-
-// subAgentSpecFromArgs 从 agents.start/fork 服务参数构造 SubAgentSpec。
-func subAgentSpecFromArgs(args map[string]any, ph *PluginHost) (SubAgentSpec, error) {
-	spec := SubAgentSpec{
-		ConvID:          argStr(args, "convId"),
-		ParentConv:      argStr(args, "parentConvId"),
-		Label:           argStr(args, "label"),
-		Team:            argStr(args, "team"),
-		Member:          argStr(args, "member"),
-		Task:            argStr(args, "task"),
-		System:          argStr(args, "system"),
-		Model:           argStr(args, "model"),
-		Provider:        argStr(args, "provider"),
-		ReasoningEffort: argStr(args, "reasoningEffort"),
-		WsRoot:          argStr(args, "wsRoot"),
-		DenyTools:       argStrSlice(args, "denyTools"),
-		MaxIter:         mapInt(args, "maxIterations"),
-	}
-	if spec.WsRoot == "" {
-		if ph != nil && ph.Context() != nil && ph.Context().WorkspaceRoot != "" {
-			spec.WsRoot = ph.Context().WorkspaceRoot
-		} else {
-			spec.WsRoot = npmPluginProjectRoot()
-		}
-	}
-	if strings.TrimSpace(spec.Task) == "" {
-		return spec, fmt.Errorf("agents.start 缺少 task（首轮输入）")
-	}
-	return spec, nil
 }
 
 // runNodeCommand 执行 Node 侧注册的插件命令 handler（cmdrun 消息，等待结果）。
@@ -967,7 +795,6 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 					return "", fmt.Errorf("会话管理器未注入（host 未就绪）")
 				}
 				hist := nodeBridgeManager.GetCurrentHistory(convID)
-				summaries := nodeBridgeManager.GetCurrentCompressedSummaries(convID)
 				running := nodeBridgeManager.IsRunning(convID)
 				out := make([]map[string]any, 0, len(hist))
 				for _, m := range hist {
@@ -975,7 +802,7 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 				}
 				b, _ := json.Marshal(map[string]any{
 					"convId": convID, "running": running,
-					"messages": out, "summaries": summaries,
+					"messages": out,
 				})
 				return string(b), nil
 			}, nil

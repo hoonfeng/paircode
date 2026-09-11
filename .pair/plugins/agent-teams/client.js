@@ -7,9 +7,12 @@
 //     （不经周期轮询，避免占用 goja VM 锁；事件由浏览器侧 2s 事件轮询带过来）
 //   · 任务 DAG：按依赖深度分层展示，每层显示依赖链/阻塞来源；终态任务可删除
 //     （ui.invoke 'deleteTask'，宿主清理依赖引用）
-//   · 折叠/收缩：团队卡片 / 成员区 / 任务区 / DAG 层均可点击折叠（DOM 纯切换）
-//   · staged 计划：批准并运行 / 返回对话修改 / 废弃
-//   · 正在运行的团队：暂停（halt）/ 展开成员列 / 任务状态徽章
+//   · hover/pin 聚焦链高亮 = applyFocus 原地 data-* 更新（不重建 DOM，
+//     保证节点/删除按钮实例稳定可点）
+//   · 折叠/收缩：团队卡片 / 分区 / 任务区 / DAG 层均可点击折叠（DOM 纯切换）
+//   · staged 计划：批准并运行 / 返回对话修改 / 废弃（归档）
+//   · 运行中团队：暂停（halt，取消未完成任务）/ 删除（deleteTeam = 取消未完成任务 + 归档）
+//   · 已暂停团队：删除（deleteTeam，归档后从面板消失；等价 agent_teams_delete）
 // 纯 DOM 实现（不依赖 Vue bundle），CSS 变量跟随 IDE 主题。
 // ═══════════════════════════════════════════════════════════════
 (ui) => {
@@ -64,17 +67,6 @@
 .agteams-sec:hover{background:var(--bg-hover,#2d333b)}
 .agteams-sec .hint{font-weight:400;font-size:9px;margin-left:auto}
 .agteams-sec-body{overflow:hidden}
-.agteams-member{display:flex;align-items:center;gap:7px;padding:5px 10px;border-left:2px solid transparent}
-.agteams-member:hover{background:var(--bg-hover,#2d333b)}
-.agteams-member.working{border-left-color:var(--accent-color,#4f8cff)}
-.agteams-member .av{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--bg-secondary,#161b22);border:1px solid var(--border-color,#30363d);color:var(--text-secondary,#c9d1d9);font-size:9px;font-weight:700;flex-shrink:0}
-.agteams-member .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary,#e6edf3)}
-.agteams-member .rl{font-size:10px;color:var(--text-muted,#8b949e);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
-.agteams-member .st{font-size:10px;color:var(--text-muted,#8b949e);flex-shrink:0}
-.agteams-member .st .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;background:#6e7681}
-.agteams-member.working .st .dot{background:#3fb950;animation:agteams-pulse 1.2s ease-in-out infinite}
-.agteams-member .pg{width:56px;height:4px;background:var(--bg-secondary,#161b22);border-radius:2px;overflow:hidden;flex-shrink:0}
-.agteams-member .pg i{display:block;height:100%;background:var(--accent-color,#4f8cff)}
 .agteams-task{display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:11px}
 .agteams-task:hover{background:var(--bg-hover,#2d333b)}
 .agteams-task .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
@@ -88,7 +80,7 @@
 .agteams-task .tid{font-family:Consolas,Menlo,monospace;font-size:10px;color:var(--text-muted,#8b949e);flex-shrink:0}
 .agteams-task .sub{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agteams-task .as{font-size:10px;color:var(--text-muted,#8b949e);flex-shrink:0}
-.agteams-mail{padding:4px 10px;font-size:10px;color:var(--text-muted,#8b949e)}
+.agteams-ready{padding:4px 10px;font-size:10px;color:var(--accent-color,#4f8cff);border-left:2px solid var(--accent-color,#4f8cff);background:var(--bg-secondary,#161b22);margin:4px 0}
 .agteams-actions{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--border-color,#30363d)}
 .agteams-btnx{padding:4px 10px;font-size:11px;border-radius:4px;border:1px solid var(--border-color,#30363d);background:var(--bg-secondary,#161b22);color:var(--text-secondary,#c9d1d9);cursor:pointer}
 .agteams-btnx:hover{border-color:var(--accent-color,#4f8cff);color:var(--text-primary,#e6edf3)}
@@ -129,7 +121,7 @@
 .agteams-task .agteams-del{display:none;align-items:center;justify-content:center;width:16px;height:16px;border:none;background:none;color:var(--text-muted,#8b949e);cursor:pointer;border-radius:3px;padding:0;flex-shrink:0}
 .agteams-task:hover .agteams-del{display:inline-flex}
 .agteams-task .agteams-del:hover{color:#ff7b72;background:rgba(255,123,114,.12)}
-/* ── 成员卡片：子会话打开入口（openMember）── */\n.agteams-member.clickable{cursor:pointer}\n.agteams-member .open{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;color:var(--text-muted,#8b949e);border-radius:3px;flex-shrink:0;margin-left:2px}\n.agteams-member.clickable:hover .open{color:var(--accent-color,#4f8cff)}\n/* ── 任务 DAG 流程图（compact 左→右；对齐 dagViewport/dagEdges/dagNode）── */
+/* ── 任务 DAG 流程图（compact 左→右；对齐 dagViewport/dagEdges/dagNode）── */
 .agteams-viewport{overflow-x:auto;padding:6px 10px 8px;scrollbar-width:thin}
 .agteams-canvas{position:relative}
 .agteams-edges{position:absolute;inset:0;overflow:visible;pointer-events:none}
@@ -172,6 +164,7 @@
   let pinnedTaskId = null
   let hoverTaskId = null
   let hoverTimer = null
+  let lastTeams = null // 最近一次渲染的数据快照（applyFocus 原地更新高亮用）
 
   // relatedTaskIds 计算某任务的全部上下游相关链（上游依赖 + 下游被依赖；环安全）。
   // 对齐 activity-model.relatedTaskIds：focus 一个任务时高亮其整条链、其余降亮。
@@ -219,40 +212,22 @@
 
   function render(teams) {
     if (!panelEl) return
+    lastTeams = teams && teams.length ? teams : null
     const body = panelEl.querySelector('.agteams-body')
     if (!teams || teams.length === 0) {
-      body.innerHTML = '<div class="agteams-empty"><div class="t">当前没有进行中的多智能体团队</div><div>在对话里说「用 AgentTeams 做 X」即可让当前会话成为队长</div></div>'
+      body.innerHTML = '<div class="agteams-empty"><div class="t">当前没有进行中的团队任务编排</div><div>在对话里说「用 AgentTeams 做 X」即可让当前会话成为队长，按任务 DAG 多步执行</div></div>' 
       return
     }
     body.innerHTML = teams.map((team) => {
-      const members = (team.members || []).filter((m) => m.status !== 'removed')
-      const total = members.length
-      const done = members.filter((m) => m.done > 0 && m.done === m.total && m.total > 0).length
-      const pct = total === 0 ? 0 : Math.round((done / total) * 100)
       const tasks = (team.tasks || [])
-      const doneTasks = tasks.filter((t) => t.status === 'completed').length
+      const progress = team.progress || {}
+      const total = Number(progress.total || tasks.length)
+      const doneTasks = Number(progress.completed || tasks.filter((t) => t.status === 'completed').length)
+      const pct = total === 0 ? 0 : Math.round((doneTasks / total) * 100)
+      const readyTasks = (team.readyTasks || [])
       const phaseCls = team.halted ? 'halted' : (team.phase === 'staged' ? 'staged' : 'running')
       const phaseTxt = team.halted ? '已暂停' : (team.phase === 'staged' ? '待批准' : '运行中')
       const cardKey = 'card:' + team.teamId
-      // ── 成员区 ──
-      const memberHtml = members.map((m) => {
-        const initial = (m.name || '?').slice(0, 1).toUpperCase()
-        const activity = m.activity === 'working' ? 'working' : ''
-        const st = m.activity === 'working' ? '工作中' : (m.activity === 'idle' ? '空闲' : '—')
-        const pg = m.total === 0 ? 0 : Math.round((m.done / m.total) * 100)
-        const unread = m.unread > 0 ? '<span style="color:#f0883e">' + m.unread + ' 未读</span>' : ''
-        // ★ 2026-08-31 子会话入口：成员会话（conv_sub_*）不出现在顶层会话列表，
-        //   从团队面板内 openMember 打开（派发 open-conversation 事件 → 前端切换会话）。
-        return '<div class="agteams-member' + (m.id ? ' clickable' : '') + ' ' + activity + '"' +
-          (m.id ? ' data-act="openMember" data-conv="' + esc(m.id) + '" title="打开成员会话（子会话，不占顶层列表）"' : '') + '>' +
-          '<span class="av">' + esc(initial) + '</span>' +
-          '<span class="nm">' + esc(m.name) + '</span>' +
-          (m.role ? '<span class="rl">' + esc(m.role) + '</span>' : '<span class="rl"></span>') +
-          '<span class="pg"><i style="width:' + pg + '%"></i></span>' +
-          '<span class="st"><span class="dot"></span>' + st + (m.currentTask ? ' · ' + esc(m.currentTask) : '') + ' ' + unread + '</span>' +
-          (m.id ? '<span class="open" title="打开会话">' + SVG.external + '</span>' : '') +
-        '</div>'
-      }).join('')
       // ── 任务 DAG 区：compact 左→右依赖流程图（节点卡片 + SVG 贝塞尔连线，对齐 compactDagLayout）──
       const STATUS_TXT = { pending: '待办', claimed: '已认领', in_progress: '执行中', completed: '完成', failed: '失败', cancelled: '已取消' }
       const TERMINAL = ['completed', 'failed', 'cancelled']
@@ -295,7 +270,6 @@
       const nodeTitle = (t) => {
         const parts = [t.id + ' [' + (STATUS_TXT[t.status] || t.status) + ']']
         if (t.kind && t.kind !== 'work') parts.push('[' + t.kind + (t.round ? ' r' + t.round : '') + ']')
-        if (t.assignee) parts.push('@' + t.assignee)
         if (t.state === 'blocked') parts.push('⛔ 等待依赖完成')
         return esc(parts.join(' '))
       }
@@ -323,10 +297,6 @@
             dagNodes.map(taskNodeHtml).join('') +
           '</div></div>'
         : '<div class="agteams-empty" style="padding:8px">（暂无任务）</div>'
-      // ── 队长信箱预览 ──
-      const mailPreview = (team.captainInbox || []).slice(-2).map((m) => {
-        return '<div class="agteams-mail">' + esc(m.from) + ' → 队长: ' + esc(m.content.length > 60 ? m.content.slice(0, 57) + '…' : m.content) + '</div>'
-      }).join('')
       // ── 操作区 ──
       let actions = ''
       if (team.phase === 'staged' && !team.halted) {
@@ -338,9 +308,13 @@
       } else if (!team.halted) {
         actions = '<div class="agteams-actions">' +
           '<button class="agteams-btnx danger" data-act="halt" data-team="' + esc(team.teamId) + '">' + SVG.stop + ' 暂停团队</button>' +
+          '<button class="agteams-btnx danger" data-act="deleteTeam" data-team="' + esc(team.teamId) + '" data-name="' + esc(team.name) + '">' + SVG.xmark + ' 删除团队</button>' +
         '</div>'
       } else {
-        actions = '<div class="agteams-actions"><span style="font-size:10px;color:var(--text-muted,#8b949e)">团队已暂停（队长可用 agent_teams_resume 恢复）</span></div>'
+        actions = '<div class="agteams-actions">' +
+          '<span style="font-size:10px;color:var(--text-muted,#8b949e)">团队已暂停（队长可用 agent_teams_resume 恢复）</span>' +
+          '<button class="agteams-btnx danger" style="margin-left:auto" data-act="deleteTeam" data-team="' + esc(team.teamId) + '" data-name="' + esc(team.name) + '">' + SVG.xmark + ' 删除团队</button>' +
+        '</div>'
       }
       return '<div class="agteams-card">' +
         '<div class="agteams-card-head' + (collapsedHeads.has(cardKey) ? ' collapsed' : '') + '" data-act="toggleCard" data-team="' + esc(team.teamId) + '" title="点击折叠/展开">' +
@@ -351,15 +325,51 @@
         '<div class="agteams-card-body">' +
         (team.description ? '<div class="agteams-card-desc">' + esc(team.description) + '</div>' : '') +
         '<div class="agteams-progress"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="agteams-stats">成员 ' + total + ' · 任务 ' + doneTasks + '/' + tasks.length + ' 完成' + (team.escalated ? ' · <span style="color:#f0883e">已升级</span>' : '') + '</div>' +
-        (members.length ? '<div class="agteams-sec' + (collapsedHeads.has('members:' + team.teamId) ? ' collapsed' : '') + '" data-act="toggleSec" data-sec="members:' + team.teamId + '" data-team="' + esc(team.teamId) + '"><span class="agteams-chevr">' + SVG.caret + '</span>成员<span class="hint">' + total + '</span></div><div class="agteams-sec-body">' + memberHtml + '</div>' : '') +
+        '<div class="agteams-stats">执行者 队长（本会话）· 任务 ' + doneTasks + '/' + total + ' 完成 · ' + Number(progress.ready || readyTasks.length) + ' 就绪' + (team.escalated ? ' · <span style="color:#f0883e">已升级</span>' : '') + '</div>' +
+        (readyTasks.length > 0 && team.phase !== 'staged' ? '<div class="agteams-ready">下一步：' + readyTasks.slice(0, 3).map((t) => esc(t.id) + (t.subject ? ' ' + esc(t.subject) : '')).join(' · ') + (readyTasks.length > 3 ? ' …' : '') + '</div>' : '') +
         '<div class="agteams-sec' + (collapsedHeads.has('tasks:' + team.teamId) ? ' collapsed' : '') + '" data-act="toggleSec" data-sec="tasks:' + team.teamId + '" data-team="' + esc(team.teamId) + '"><span class="agteams-chevr">' + SVG.caret + '</span>任务 DAG<span class="hint">' + tasks.length + '</span></div>' +
         '<div class="agteams-sec-body">' + taskHtml + '</div>' +
-        mailPreview +
         actions +
         '</div>' +
       '</div>'
     }).join('')
+  }
+
+  // applyFocus：原地更新聚焦链高亮（只改 data-* 属性，不重建 DOM）
+  // ★ 2026-09-11 修复「删除按钮点不动」：原实现在 mouseover/mouseout/focusTask 时
+  //   调 refresh() 全量重建 body.innerHTML——鼠标下的节点被替换为新实例后又会触发
+  //   mouseover，形成 ~250ms 一次的无限重建循环；真实点击的 press/release 落在不同
+  //   实例上，click 事件不生成，删除按钮被吞。改为原地更新后 DOM 实例稳定。
+  function applyFocus() {
+    if (!panelEl || !lastTeams) return
+    const focusId = pinnedTaskId || hoverTaskId
+    panelEl.querySelectorAll('.agteams-card').forEach((cardEl) => {
+      const head = cardEl.querySelector('.agteams-card-head')
+      const teamId = head ? head.getAttribute('data-team') || '' : ''
+      const team = lastTeams.find((x) => x.teamId === teamId)
+      if (!team) return
+      const tasks = team.tasks || []
+      const related = focusId && tasks.length ? relatedTaskIds(focusId, tasks) : null
+      cardEl.querySelectorAll('.agteams-node').forEach((n) => {
+        const id = n.getAttribute('data-task') || ''
+        n.setAttribute('data-focused', id === focusId ? 'true' : 'false')
+        n.setAttribute('data-dimmed', related !== null && !related.has(id) ? 'true' : 'false')
+      })
+      cardEl.querySelectorAll('path[data-from]').forEach((p) => {
+        const from = p.getAttribute('data-from')
+        const to = p.getAttribute('data-to')
+        if (related !== null && related.has(from) && related.has(to)) {
+          p.setAttribute('data-active', 'true')
+          p.removeAttribute('data-dimmed')
+        } else if (related !== null) {
+          p.removeAttribute('data-active')
+          p.setAttribute('data-dimmed', 'true')
+        } else {
+          p.removeAttribute('data-active')
+          p.removeAttribute('data-dimmed')
+        }
+      })
+    })
   }
 
   async function refresh() {
@@ -427,16 +437,7 @@
       if (act === 'focusTask') {
         const taskId = t.getAttribute('data-task') || ''
         pinnedTaskId = (pinnedTaskId === taskId ? null : taskId)
-        refresh()
-        return
-      }
-      // 成员卡片点击：打开成员子会话（openMember）——成员会话不在顶层会话列表，
-      // 经 open-conversation 全局事件切到前端会话视图（app-actions handler 设置
-      // state.currentConvId → RightPanel watch → switchConv 加载消息）。
-      if (act === 'openMember') {
-        const convId = t.getAttribute('data-conv') || ''
-        if (!convId) return
-        window.dispatchEvent(new CustomEvent('open-conversation', { detail: { id: convId } }))
+        applyFocus() // 原地更新高亮（不重建 DOM，保住节点/删除按钮实例稳定）
         return
       }
       const teamId = t.getAttribute('data-team') || ''
@@ -458,6 +459,11 @@
           const taskId = t.getAttribute('data-task') || ''
           if (!confirm('删除任务 ' + taskId + '？（仅已结束任务可删，依赖引用将被清理）')) { t.disabled = false; return }
           await ui.invoke(PLUGIN, 'deleteTask', { teamId, taskId })
+        } else if (act === 'deleteTeam') {
+          const name = t.getAttribute('data-name') || teamId
+          if (!confirm('删除团队「' + name + '」？\n将取消所有未完成任务，完整记录归档到 .agent-teams/archive/（不可恢复）')) { t.disabled = false; return }
+          await ui.invoke(PLUGIN, 'deleteTeam', { teamId })
+          alert('已删除团队「' + name + '」（记录已归档）')
         }
       } catch (err) {
         console.warn('[agent-teams] ' + act + ' 失败', err)
@@ -473,8 +479,9 @@
       if (!n) return
       const id = n.getAttribute('data-task') || ''
       if (!id) return
+      if (id === hoverTaskId) return // 已是当前 hover 目标：无需重复调度
       if (hoverTimer) clearTimeout(hoverTimer)
-      hoverTimer = setTimeout(() => { hoverTimer = null; hoverTaskId = id; refresh() }, 180)
+      hoverTimer = setTimeout(() => { hoverTimer = null; hoverTaskId = id; applyFocus() }, 180)
     })
     panelEl.addEventListener('mouseout', (e) => {
       const from = e.target.closest('.agteams-node')
@@ -482,7 +489,7 @@
       const to = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('.agteams-node') : null
       if (to) return // 移到另一节点：mouseover 会重新调度
       if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null }
-      if (hoverTaskId) { hoverTaskId = null; refresh() }
+      if (hoverTaskId) { hoverTaskId = null; applyFocus() }
     })
 
     refresh()

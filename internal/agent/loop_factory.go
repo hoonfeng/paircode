@@ -83,21 +83,25 @@ func CreateLoop(opts LoopOpts) (LoopHandle, error) {
 // 公共构造逻辑；会话级回调/状态由调用方在 Create 后挂载，保持与现状一致）。
 func newLoop(opts LoopOpts) *Loop {
 	return &Loop{
-		Provider:             opts.Provider,
-		Registry:             opts.Registry,
-		System:               opts.System,
-		MaxIterations:        opts.MaxIterations,
-		MaxContextTokens:     opts.MaxContextTokens,
-		Compressor:           opts.Compressor,
-		Autonomous:           opts.Autonomous,
-		maxAutonomousMinutes: opts.MaxAutonomousMinutes,
-		checkpointInterval:   opts.CheckpointInterval,
-		History:              CopyHistory(opts.History),
-		CompressedSummaries:  opts.CompressedSummaries,
-		WorkspaceRoot:        opts.WorkspaceRoot,
-		ReviewMode:           opts.ReviewMode,
-		ReviewBlacklist:      opts.ReviewBlacklist,
-		ReviewWhitelist:      opts.ReviewWhitelist,
-		ReviewProvider:       opts.ReviewProvider,
-}
+		Provider: opts.Provider,
+		Registry: opts.Registry,
+		System:   opts.System,
+		// ★ 2026-09-12 配置化：分段预算/续跑段数上限随装配参数透传（来源见
+		//   tool_budget.go；0 = 用默认，负数预算 = 不限）。
+		StepBudget:            opts.StepBudget,
+		ToolCallBudget:        opts.ToolCallBudget,
+		MaxToolBudgetSegments: opts.MaxToolBudgetSegments,
+		MaxContextTokens:      opts.MaxContextTokens,
+		Compressor:            opts.Compressor,
+		Autonomous:            opts.Autonomous,
+		maxAutonomousMinutes:  opts.MaxAutonomousMinutes,
+		checkpointInterval:    opts.CheckpointInterval,
+		History:               CopyHistory(opts.History),
+		CompressedSummaries:   opts.CompressedSummaries,
+		WorkspaceRoot:         opts.WorkspaceRoot,
+		ReviewMode:            opts.ReviewMode,
+		ReviewBlacklist:       opts.ReviewBlacklist,
+		ReviewWhitelist:       opts.ReviewWhitelist,
+		ReviewProvider:        opts.ReviewProvider,
+	}
 }

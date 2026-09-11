@@ -50,9 +50,9 @@ func TestWebDebugTimeoutMs(t *testing.T) {
 	// ── 路径 2：timeoutMs=20000 > 页面 8s → 必须成功 ──
 	t0 = time.Now()
 	out, err := webDebugRun(context.Background(), root, srv.URL, webDebugOpts{
-		waitMs:      500,
-		timeoutMs:   20000,
-		vpWidth:     800, vpHeight: 600,
+		waitMs:    500,
+		timeoutMs: 20000,
+		vpWidth:   800, vpHeight: 600,
 		extractText: true,
 	})
 	el = time.Since(t0)

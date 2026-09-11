@@ -48,7 +48,6 @@ func loadJSCodeForTest(t *testing.T, code string, dirs ...string) (*PluginHost, 
 // execJSTool 经 registry 执行工具（Json 参数）并返回文本。
 func execJSTool(t *testing.T, reg *Registry, name, argsJSON string) string {
 	t.Helper()
-	reg.MarkToolDiscovered(name) // 按需工具（deferred）：测试直接执行前标记发现（对齐会话内 tool_search 语义）
 	out, err := reg.Execute(context.Background(), name, argsJSON)
 	if err != nil {
 		t.Fatalf("%s 执行失败: %v", name, err)

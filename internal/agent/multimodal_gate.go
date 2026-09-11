@@ -13,8 +13,8 @@ package agent
 //     走 pendingImages 队列，由 Loop.injectPendingImages 按 supportsMultimodal 独立门控）
 var visionDependentTools = []string{
 	"read_image",
-	"submit_image", // 兼容旧名（若旧版插件仍在磁盘上）
-	"screenshot",   // 2026-09-12 合并后的单工具（target=desktop/window/area）
+	"submit_image",       // 兼容旧名（若旧版插件仍在磁盘上）
+	"screenshot",         // 2026-09-12 合并后的单工具（target=desktop/window/area）
 	"screenshot_desktop", // 旧名兼容（内核回退/旧插件场景）
 	"screenshot_window",
 	"screenshot_area",

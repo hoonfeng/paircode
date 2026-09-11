@@ -55,8 +55,11 @@ var toolPluginModes = map[string]string{
 	//   tool-snapshot→tool-harness、tool-asset→tool-resource（仅剩 tool-resource 独立行）
 	"tool-resource": "hostTool", // ★ 2026-09-04 tool-verify 并入；2026-09-12 tool-asset（asset_delete/evolution_*）并入
 	// ★ Round3 ③/⑤：goal/workflow 宿主机制工具面（execute → ctx.hostTool）；
-	//   subagent 系列 2026-09 ③.4 并入 tool-workflow（ctx.agents 服务，JS 原生编排）
-	"tool-workflow": "mixed", // workflow→hostTool 执行器；subagent 系列→ctx.agents 服务（均不在内嵌内核，别名声明）
+	//   ★ 2026-09：subagent 系列六工具随子 Agent 实现删除，tool-workflow 仅剩 workflow。
+	"tool-workflow": "mixed", // workflow→hostTool 执行器（不在内嵌内核，别名声明）
+	// ★ 2026-09-11 场景创造（创造模式）：/创造 按需激活；scenario_scan/scenario_create
+	//   execute → ctx.hostTool（宿主 internal/agent/scenario_tools.go）。
+	"tool-scenario": "hostTool",
 }
 
 // toolHarnessAliases 混合型插件的 JS 原生实现工具（不在内嵌内核，断言跳过）：
@@ -76,9 +79,10 @@ var toolHarnessAliases = map[string]bool{
 	"read_image": true,
 	"screenshot": true,
 	// tool-workflow（2026-09 ③.4 后为 mixed）：workflow→宿主 goja 运行器（hostTool），
-	// subagent 系列→ctx.agents 宿主服务——二者均非内嵌内核，别名声明跳过
-	"workflow": true, "subagent": true, "subagent_fork": true, "report": true,
-	"list_agents": true, "interrupt_agent": true, "send_message": true,
+	// 非内嵌内核，别名声明跳过。
+	// ★ 2026-09 子 Agent 实现删除：subagent / subagent_fork / report /
+	//   list_agents / interrupt_agent / send_message 六个工具已不存在，声明同步删除。
+	"workflow": true,
 }
 
 // toolDispatchAliases 分派型工具 → 内部路由名（工具面合并后的单工具：
@@ -102,6 +106,10 @@ func loadDiskPluginForTestFramed(t *testing.T, name string) (*PluginHost, *Regis
 	}
 	reg := NewRegistry()
 	RegisterHostFrameworkTools(reg, root)
+	// ★ 2026-09-11 对齐生产时序：场景创造工具（scenario_scan/scenario_create）在
+	//   宿主框架面预注册——tool-scenario 装载时 claimTool 存档 hostExecutors
+	//   （同 web_server initReg 路径）。
+	RegisterScenarioTools(reg, root, nil)
 	host := NewPluginHost(reg, nil, root)
 	id, err := host.DefineJSCodeFull(string(code), "", "落地验证", filepath.Join(root, ".pair", "plugins", name), "")
 	if err != nil {
@@ -243,7 +251,6 @@ func TestToolLandingSpotCheck(t *testing.T) {
 		}
 		// 磁盘插件工具默认未入工具集（disabled）——落地验证启用后执行
 		reg.SetToolEnabled(c.tool, true)
-		reg.MarkToolDiscovered(c.tool) // 按需工具（deferred）：直接执行前标记发现（对齐会话内 tool_search 语义）
 		out, err := reg.Execute(context.Background(), c.tool, c.args)
 		if err != nil {
 			t.Errorf("%s/%s 执行失败（未落地）: %v", c.plugin, c.tool, err)

@@ -485,7 +485,8 @@ func buildLastActivity(history []Message, convID string, store MessageStoreReade
 // extractRecentEdits 从历史消息中提取最近编辑的文件列表。
 // fileModifyTools 会修改/操作文件的工具名集合。
 // ★ t4 F1（2026-09 t5 修复）：补 harness 新名工具（edit/write，tool-harness
-//   承载；file_path/path 双参数名），旧名保留兼容历史消息。
+//
+//	承载；file_path/path 双参数名），旧名保留兼容历史消息。
 var fileModifyTools = map[string]bool{
 	"edit_file":    true,
 	"write_file":   true,
@@ -939,10 +940,13 @@ func scanStaleRefs(text, workspaceRoot string) []string {
 
 // buildCodeGraphStats 获取代码图谱统计信息。
 // ★ 只读缓存图（getCachedCodeGraph）：发送消息/会话上下文注入路径
-//   绝不触发变更检测与增量构建（增量构建需加载/保存数百 MB 图谱，
-//   （getCodeGraph/BeforeTool）路径在后台维护最新。
+//
+//	绝不触发变更检测与增量构建（增量构建需加载/保存数百 MB 图谱，
+//	（getCodeGraph/BeforeTool）路径在后台维护最新。
+//
 // ★ 2026-08-23 工作区隔离：按传入的 roots（会话上下文构建时的会话/工作区根）取主根，
-//   不再读全局 WorkspaceRoots[0]（运行中切换工作区导致注入上下文串台）。
+//
+//	不再读全局 WorkspaceRoots[0]（运行中切换工作区导致注入上下文串台）。
 func buildCodeGraphStats(roots []string) string {
 	root := ""
 	if len(roots) > 0 {

@@ -269,7 +269,8 @@ func (c *PluginContext) RegisterTool(t *Tool) error {
 // 宿主内置工具（Registry 已有但无插件归属）视为宿主占用。
 // 返回 (claimed, err)：claimed=false 且 err=nil = 让位跳过。
 // ★ node-bridge 占用时既不报错也不让位：repo 版接管生效面，桥侧工具转挂起
-//   （两版并存，生效方可切换——见 noteBridgeToolPreempted / SetBridgeToolPreference）。
+//
+//	（两版并存，生效方可切换——见 noteBridgeToolPreempted / SetBridgeToolPreference）。
 func (h *PluginHost) claimTool(plugin, toolName string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -313,7 +314,8 @@ func (h *PluginHost) IsPluginTool(name string) bool {
 // 内置工具——磁盘工具插件（tool-*）注册的同名工具接管 agent 可见面
 // （宿主 Go 实现已存档 hostExecutors，经 ctx.hostTool 调用）。
 // ★ 2026-08-31 按需激活：声明 on-demand 的插件（agent-teams 等）工具仅在
-//   convID 会话已激活时合并；否则对 agent 隐藏（未开会话 convID 为空 → 隐藏）。
+//
+//	convID 会话已激活时合并；否则对 agent 隐藏（未开会话 convID 为空 → 隐藏）。
 func MergePluginTools(reg *Registry, ph *PluginHost) {
 	MergePluginToolsForConv(reg, ph, "")
 }
@@ -337,8 +339,13 @@ func MergePluginToolsForConv(reg *Registry, ph *PluginHost, convID string) {
 		}
 		// 插件工具接管：覆盖会话内置实现，且默认启用（插件是「内容」，
 		// 豁免 harness 过滤；用户装载插件即期望工具可用）。
-		t.Enabled = true
-		reg.Register(t) // 同名覆盖（插件优先）
+		// ★ 2026-09-11：会话注册表存「值拷贝」——后续会话级状态收敛
+		//   （ApplyConvToolsetWhitelist 的 SetToolEnabled）只改副本，不再经共享
+		//   指针污染插件宿主全局工具对象（多会话构建互踩、前端 /api/tools 状态
+		//   被最近一次会话构建改写的根因）。
+		tc := *t
+		tc.Enabled = true
+		reg.Register(&tc) // 同名覆盖（插件优先；副本）
 	}
 }
 
@@ -1300,7 +1307,8 @@ func (h *PluginHost) List() []string {
 
 // Inspect 全部插件记录（cordis(op=inspect) 报告 / 插件面板列表）。
 // ★ 2026-08-31：宿主内插件（Go/goja）+ Node 桥插件（DSH/npm）两源合并输出，
-//   并给同名工具冲突的两侧记录附 Conflicts 标注（生效方 repo|bridge）。
+//
+//	并给同名工具冲突的两侧记录附 Conflicts 标注（生效方 repo|bridge）。
 func (h *PluginHost) Inspect() []PluginRecord {
 	recs := h.inspectLocal()
 	conflicts := bridgeToolConflicts()

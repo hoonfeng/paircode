@@ -11029,10 +11029,13 @@
   let wsOnDisconnectedFired = false;
   let wsCallbacks = null;
   let wsManuallyClosed = false;
+  let wsGlobalListenersBound = false;
   let wsPongTimer = null;
+  let wsWatchdogExtended = false;
   let wsRunningConvs = null;
   function initWebSocket(callbacks) {
     wsCallbacks = callbacks;
+    bindWsGlobalListeners();
     wsManuallyClosed = false;
     wsReconnectCount = 0;
     wsHadDisconnect = false;
@@ -11041,6 +11044,39 @@
       return;
     }
     doWsConnect();
+  }
+  function armWsWatchdog(receivedFrame = true) {
+    if (wsPongTimer) clearTimeout(wsPongTimer);
+    if (receivedFrame) wsWatchdogExtended = false;
+    const timeout = wsWatchdogExtended ? 75e3 : 45e3;
+    wsPongTimer = setTimeout(() => {
+      if (wsRunningConvs && wsRunningConvs.size > 0 && !wsWatchdogExtended) {
+        wsWatchdogExtended = true;
+        console.warn("[WS] 45s 未收到任何帧但 agent 运行中，延长一个 ping 周期（75s）后再判死");
+        armWsWatchdog(false);
+        return;
+      }
+      console.warn("[WS] 连接假死（" + timeout / 1e3 + "s 未收到任何帧），触发重连");
+      wsWatchdogExtended = false;
+      if (wsSocket) wsSocket.close();
+    }, timeout);
+  }
+  function bindWsGlobalListeners() {
+    if (wsGlobalListenersBound) return;
+    wsGlobalListenersBound = true;
+    const revive = (reason) => {
+      if (wsManuallyClosed || !wsCallbacks) return;
+      if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+        armWsWatchdog();
+        return;
+      }
+      console.warn("[WS] " + reason + "，立即重建连接");
+      reconnectWebSocket();
+    };
+    window.addEventListener("online", () => revive("网络恢复"));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") revive("页面恢复可见");
+    });
   }
   function doWsConnect() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -11061,25 +11097,11 @@
       wsHadDisconnect = false;
       if (reconnected) window.__wsReconnectedPending = true;
       window.dispatchEvent(new CustomEvent("ws-connection-change", { detail: { connected: true, reconnected } }));
-      if (wsPongTimer) clearTimeout(wsPongTimer);
-      wsPongTimer = setTimeout(() => {
-        console.warn("[WS] 45s 未收到 pong，触发重连");
-        wsSocket.close();
-      }, 45e3);
+      armWsWatchdog();
     };
     wsSocket.onmessage = (ev) => {
       var _a, _b, _c, _d;
-      if (wsPongTimer) {
-        clearTimeout(wsPongTimer);
-      }
-      wsPongTimer = setTimeout(() => {
-        if (wsRunningConvs && wsRunningConvs.size > 0) {
-          console.warn("[WS] 45s 无业务消息但 agent 运行中，保持连接（等待后端 ping）");
-          return;
-        }
-        console.warn("[WS] 45s 无消息，触发重连");
-        if (wsSocket) wsSocket.close();
-      }, 45e3);
+      armWsWatchdog();
       let data;
       try {
         data = JSON.parse(ev.data);
@@ -11480,6 +11502,11 @@
     // { [convId]: string } 各对话 nudge 提示文本
     convCtxStatsByConv: {},
     // { [convId]: reactive({...}) } 各对话上下文 token 统计
+    // ★ 各对话「本次运行」统计（耗时计时/步数/token 速度展示）——
+    //   由 agent-events 的 usage/step 事件与 status 运行集合维护，RightPanel 渲染。
+    //   运行中实时刷新（1s tick），结束后 endAt 定格保留（切会话显示各自的）。
+    runStatsByConv: {},
+    // { [convId]: { startAt, endAt, steps, toolCalls, llmCalls, promptTokens, completionTokens } }
     msgTotalByConv: {},
     // { [convId]: number } 各对话总消息数（懒加载判断是否还有更早消息）
     msgLoadedByConv: {},
@@ -12684,6 +12711,11 @@
       else pend.events.push(data);
       return;
     }
+    const runStat = beginRun(convId);
+    if (runStat) {
+      if (typeof data.step === "number" && data.step > runStat.steps) runStat.steps = data.step;
+      if (data.type === "tool_call") runStat.toolCalls++;
+    }
     if (!state.messagesByConv[convId]) state.messagesByConv[convId] = [];
     const msgs = state.messagesByConv[convId];
     let rt = runtimes[convId];
@@ -12886,6 +12918,7 @@
       const errText = (data.content || "").trim();
       const seg = pushSegment(msg.segments, "content");
       seg.content += "**[错误]** " + errText;
+      endRun(convId);
       seg.content += "\n\n> ⚠️ 本次任务未完成。可直接在下方输入继续（沿用本对话上下文），或点击对话列表中的该项恢复。";
       msg._loading = false;
       state.loadingByConv[convId] = false;
@@ -12907,6 +12940,11 @@
       return;
     } else if (data.type === "usage" && data.usage) {
       const u = data.usage;
+      if (runStat) {
+        runStat.promptTokens += u.prompt_tokens || 0;
+        runStat.completionTokens += u.completion_tokens || 0;
+        runStat.llmCalls++;
+      }
       if (isCurrent) {
         const cs = getConvCtxStats(convId);
         cs.promptTokens = u.prompt_tokens || 0;
@@ -12952,7 +12990,7 @@
         if (globalCtx.onNudge) globalCtx.onNudge(convId);
       }
     } else if (data.type === "compacted") {
-      msg.segments.push({ type: "content", content: "> 📦 上下文已压缩（中段老消息已摘要）" });
+      msg.segments.push({ type: "content", content: "> 📦 已精简早期历史对话（中段老消息已摘要）" });
     } else if (data.type === "circling") {
       msg.segments.push({ type: "content", content: "> ⚠️ 检测到重复操作，已提示 Agent 换思路" });
     } else if (data.type === "evaluation") {
@@ -13010,6 +13048,7 @@
         }
       }
     }
+    endRun(convId);
     state.loadingByConv[convId] = false;
     state.agentRunningByConv[convId] = false;
     const isCurrent = state.currentConvId === convId;
@@ -13055,6 +13094,7 @@
   }
   function processAllDisconnected() {
     for (const convId of Object.keys(state.agentRunningByConv)) {
+      endRun(convId);
       const rt = runtimes[convId];
       const msgs = state.messagesByConv[convId];
       if (msgs && rt) {
@@ -13096,6 +13136,7 @@
     for (const convId of runningSet) {
       state.agentRunningByConv[convId] = true;
       state.loadingByConv[convId] = true;
+      beginRun(convId);
       const msgsArr = state.messagesByConv[convId];
       if (historyLoadedConvs.has(convId) && msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
         const hasRealMsgs = msgsArr.some((m) => !m._loading);
@@ -13127,6 +13168,7 @@
     const resyncCandidates = [];
     for (const convId of Object.keys(state.agentRunningByConv)) {
       if (state.agentRunningByConv[convId] && !runningSet.has(convId)) {
+        endRun(convId);
         state.agentRunningByConv[convId] = false;
         state.loadingByConv[convId] = false;
         if (state.currentConvId === convId) {
@@ -13175,6 +13217,60 @@
       }
     }
   }
+  function getRunStat(convId) {
+    if (!convId) return null;
+    if (!state.runStatsByConv[convId]) {
+      state.runStatsByConv[convId] = /* @__PURE__ */ reactive({
+        startAt: 0,
+        // 本次运行开始时间（ms）；0 = 未开始
+        endAt: 0,
+        // 本次运行结束时间（ms）；0 = 仍在运行
+        steps: 0,
+        // 步数（后端 step：LLM 调用 + 工具执行）
+        toolCalls: 0,
+        // 工具调用次数（step 缺失时的兜底展示）
+        llmCalls: 0,
+        // LLM 调用次数（usage 事件数）
+        promptTokens: 0,
+        // 本次运行累计输入 token
+        completionTokens: 0
+        // 本次运行累计输出 token（token 速度用）
+      });
+    }
+    return state.runStatsByConv[convId];
+  }
+  function beginRun(convId) {
+    const rs = getRunStat(convId);
+    if (!rs) return null;
+    if (!rs.startAt || rs.endAt) {
+      rs.startAt = Date.now();
+      rs.endAt = 0;
+      rs.steps = 0;
+      rs.toolCalls = 0;
+      rs.llmCalls = 0;
+      rs.promptTokens = 0;
+      rs.completionTokens = 0;
+    }
+    return rs;
+  }
+  function endRun(convId) {
+    const rs = state.runStatsByConv[convId];
+    if (rs && rs.startAt && !rs.endAt) rs.endAt = Date.now();
+  }
+  function resetRunStat(convId) {
+    const rs = state.runStatsByConv[convId];
+    if (rs) {
+      Object.assign(rs, {
+        startAt: 0,
+        endAt: 0,
+        steps: 0,
+        toolCalls: 0,
+        llmCalls: 0,
+        promptTokens: 0,
+        completionTokens: 0
+      });
+    }
+  }
   function getConvCtxStats(convId) {
     if (!state.convCtxStatsByConv[convId]) {
       state.convCtxStatsByConv[convId] = /* @__PURE__ */ reactive({
@@ -13210,9 +13306,12 @@
   }
   const agentEvents = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
+    beginRun,
     createAssistantPlaceholder,
+    endRun,
     getConvCtxStats,
     getConvRuntime,
+    getRunStat,
     markHistoryLoaded,
     normalizeAskType,
     processAgentDisconnect,
@@ -13222,6 +13321,7 @@
     processStatus,
     resetConvCtxStats,
     resetConvRuntime,
+    resetRunStat,
     setGlobalCtx,
     startConvRuntime
   }, Symbol.toStringTag, { value: "Module" }));

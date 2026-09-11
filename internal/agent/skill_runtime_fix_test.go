@@ -1,13 +1,14 @@
 // skill_runtime_fix_test.go — skill/task/mcp 工具运行时根解析回归测试
 //
 // ★ 2026-09-12 修复回归（重大 BUG）：
-//   RegisterManagementTools / registerTaskTools 闭包捕获注册时根，经 tool-system
-//   插件接管存档进全局 hostExecutors（启动一次性存档）后永久冻结：
-//     1. 启动时未开工作区（root=""）→ skill_write 执行 WriteSkill("") →
-//        filepath.Join("", name) 相对路径 → 写到进程 CWD（安装目录根）下；
-//     2. 切换工作区后工具仍写启动工作区（多工作区串台）。
-//   修复后：执行时运行时解析（args._wsRoot 会话注入 → ctx 会话绑定根 →
-//   工作区实时快照 → 注册时 root 兜底），且新增 scope 参数支持全局层级。
+//
+//	RegisterManagementTools / registerTaskTools 闭包捕获注册时根，经 tool-system
+//	插件接管存档进全局 hostExecutors（启动一次性存档）后永久冻结：
+//	  1. 启动时未开工作区（root=""）→ skill_write 执行 WriteSkill("") →
+//	     filepath.Join("", name) 相对路径 → 写到进程 CWD（安装目录根）下；
+//	  2. 切换工作区后工具仍写启动工作区（多工作区串台）。
+//	修复后：执行时运行时解析（args._wsRoot 会话注入 → ctx 会话绑定根 →
+//	工作区实时快照 → 注册时 root 兜底），且新增 scope 参数支持全局层级。
 package agent
 
 import (
@@ -258,6 +259,44 @@ func TestLoadSkillRuntimeRoot(t *testing.T) {
 	// ③ 无会话根（复现原 BUG 场景）：工作区技能不可见（system 目录为空 → 无技能）
 	if _, err := r.Execute(context.Background(), "load_skill", `{"name":"ws-skill"}`); err == nil {
 		t.Fatal("无会话根时不应找到工作区技能（应报未找到）")
+	}
+}
+
+// TestLoadAllSkillsGlobalLayerSingleLoad 回归（2026-09-11）：agents 兼容分支
+// （.pair/.agents/skills）曾以 loadAllFrom("", agentsDir, ...) 追加，其内部固定
+// 再加载 SkillGlobalDir → 全局层技能重复（实测 system 提示技能行 21 条 =
+// system3+project6+global6+global6）。修复后全局层只加载一次。
+func TestLoadAllSkillsGlobalLayerSingleLoad(t *testing.T) {
+	withIsolatedSkillEnv(t)
+	sys, ws, glob := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := WriteSkill(sys, Skill{Name: "t-sys", Description: "d", Body: "b"}); err != nil {
+		t.Fatalf("写 system 技能失败: %v", err)
+	}
+	proj := filepath.Join(ws, ".pair", "skills")
+	if err := WriteSkill(proj, Skill{Name: "t-proj", Description: "d", Body: "b"}); err != nil {
+		t.Fatalf("写 project 技能失败: %v", err)
+	}
+	if err := WriteSkill(glob, Skill{Name: "t-glob", Description: "d", Body: "b"}); err != nil {
+		t.Fatalf("写 global 技能失败: %v", err)
+	}
+	SkillSystemDir, SkillProjectDir, SkillGlobalDir = sys, proj, glob
+
+	countAll := func(all []Skill) (int, int) {
+		g, n := 0, 0
+		for _, s := range all {
+			n++
+			if s.Name == "t-glob" {
+				g++
+			}
+		}
+		return g, n
+	}
+
+	if g, n := countAll(LoadAllSkills()); g != 1 || n != 3 {
+		t.Errorf("LoadAllSkills：期望 global 层 1 次/共 3 条，实际 global=%d 共=%d", g, n)
+	}
+	if g, n := countAll(LoadAllSkillsFromRoot(ws, sys, nil)); g != 1 || n != 3 {
+		t.Errorf("LoadAllSkillsFromRoot：期望 global 层 1 次/共 3 条，实际 global=%d 共=%d", g, n)
 	}
 }
 

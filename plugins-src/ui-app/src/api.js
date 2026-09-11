@@ -99,7 +99,13 @@ let wsCallbacks = null
 
 let wsManuallyClosed = false
 
+// ★ 全局复活监听（网络恢复/页面恢复可见）只绑定一次
+let wsGlobalListenersBound = false
+
 let wsPongTimer = null  // 检测后端 ping 超时：45s 无响应则主动重连（从 90s 缩短）
+// ★ 看门狗宽限标志：agent 运行中首次超时只延长一个 ping 周期（后端 30s 必发 ping），
+//   第二次超时无条件重连——避免「运行中永不判死」（见 armWsWatchdog）。
+let wsWatchdogExtended = false
 // ★ 运行中会话集合（onStatus 更新）：agent 运行期间连接健康由后端 30s 文本
 //   ping 保证（触发 onmessage 重置定时器）；此集合作为「无业务消息不断开」的
 //   双保险——LLM 思考/重试可能长时间无业务事件，若此时因无消息断开将丢失事件。
@@ -117,6 +123,8 @@ function initWebSocket(callbacks) {
 
   wsCallbacks = callbacks
 
+  bindWsGlobalListeners()
+
   wsManuallyClosed = false
 
   wsReconnectCount = 0  // 新开连接时重置计数
@@ -132,6 +140,86 @@ function initWebSocket(callbacks) {
   }
 
   doWsConnect()
+
+}
+
+// armWsWatchdog 重置 WS 心跳看门狗：超时内未收到**任何帧**即判定连接已死，
+// 主动 close() 触发重连。后端每 30s 必发文本 ping（onmessage 会重置本看门狗），
+// 因此 45s 静默即异常。
+//
+// ★ 2026-09-12 修复「WS 中断没有重连」：原实现在 agent 运行中（wsRunningConvs
+//   非空）直接 return 且不再重设定时器 —— 看门狗一次性失效，此后既不再检测也不
+//   重连：TCP 半开/休眠唤醒/代理静默断链时前端永久假死（事件全部丢失，用户看到
+//   「WS 已断但没有重连」）。现改为：运行中首次超时延长一个 ping 周期（75s）宽限
+//   —— LLM 思考期无业务事件也能容忍；仍无帧则无条件判死重连（后端 ping 不可能缺席）。
+// 参数 receivedFrame=false 表示这是「延长后的复检」，不再给宽限。
+function armWsWatchdog(receivedFrame = true) {
+
+  if (wsPongTimer) clearTimeout(wsPongTimer)
+
+  if (receivedFrame) wsWatchdogExtended = false
+
+  const timeout = wsWatchdogExtended ? 75000 : 45000
+
+  wsPongTimer = setTimeout(() => {
+
+    if (wsRunningConvs && wsRunningConvs.size > 0 && !wsWatchdogExtended) {
+
+      wsWatchdogExtended = true
+
+      console.warn('[WS] 45s 未收到任何帧但 agent 运行中，延长一个 ping 周期（75s）后再判死')
+
+      armWsWatchdog(false)
+
+      return
+
+    }
+
+    console.warn('[WS] 连接假死（' + (timeout / 1000) + 's 未收到任何帧），触发重连')
+
+    wsWatchdogExtended = false
+
+    if (wsSocket) wsSocket.close()
+
+  }, timeout)
+
+}
+
+// bindWsGlobalListeners 绑定「环境恢复 → 立即复活连接」监听（仅绑定一次）。
+// 浏览器休眠唤醒、切网（WiFi↔热点/代理变更）、后台标签被节流等场景下，旧 socket
+// 往往已静默失效（收不到 onclose），只依赖重连定时器最长要等 30s；这里在环境
+// 恢复的第一时间检查并重建连接。
+function bindWsGlobalListeners() {
+
+  if (wsGlobalListenersBound) return
+
+  wsGlobalListenersBound = true
+
+  const revive = (reason) => {
+
+    if (wsManuallyClosed || !wsCallbacks) return
+
+    if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+
+      armWsWatchdog()  // 已连接：重置看门狗重新计时（不做无谓重建）
+
+      return
+
+    }
+
+    console.warn('[WS] ' + reason + '，立即重建连接')
+
+    reconnectWebSocket()
+
+  }
+
+  window.addEventListener('online', () => revive('网络恢复'))
+
+  document.addEventListener('visibilitychange', () => {
+
+    if (document.visibilityState === 'visible') revive('页面恢复可见')
+
+  })
 
 }
 
@@ -173,15 +261,7 @@ function doWsConnect() {
 
     // 后端每 30s 发 ping，45s（1.5次）未收到则主动重连
 
-    if (wsPongTimer) clearTimeout(wsPongTimer)
-
-    wsPongTimer = setTimeout(() => {
-
-      console.warn('[WS] 45s 未收到 pong，触发重连')
-
-      wsSocket.close()
-
-    }, 45000)
+    armWsWatchdog()
 
   }
 
@@ -189,31 +269,7 @@ function doWsConnect() {
 
     // 收到任何消息都重置 pong 超时（后端 ping 帧也会触发 onmessage）
 
-    if (wsPongTimer) { clearTimeout(wsPongTimer) }
-
-    wsPongTimer = setTimeout(() => {
-
-      // ★ 双保险：agent 运行中（有 running 会话）不因无业务消息断开——
-
-      //   LLM 思考/重试期间可能长时间无事件，断开将导致事件丢失（无响应）。
-
-      //   连接健康由后端 30s 文本 ping 持续重置本定时器保证；只有 ping 也
-
-      //   停止（后端假死/网络断开）时才会走到这里。
-
-      if (wsRunningConvs && wsRunningConvs.size > 0) {
-
-        console.warn('[WS] 45s 无业务消息但 agent 运行中，保持连接（等待后端 ping）')
-
-        return
-
-      }
-
-      console.warn('[WS] 45s 无消息，触发重连')
-
-      if (wsSocket) wsSocket.close()
-
-    }, 45000)
+    armWsWatchdog()
 
     let data
 
