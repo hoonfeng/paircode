@@ -18,6 +18,7 @@ const http = require('http')
 const net = require('net')
 const crypto = require('crypto')
 const path = require('path')
+const fs = require('fs')
 const { spawn, execSync } = require('child_process')
 
 const PORT = Number(process.argv[2] || 9097)
@@ -278,6 +279,18 @@ async function main() {
   // 控制台错误
   const errs = logs.filter((l) => l.type === 'error')
   check('无控制台错误', errs.length === 0, errs.slice(0, 3).map((e) => e.text).join(' / '))
+
+  // 视觉证据：统计条截图（写入 screenshots/，便于人工核对渲染效果）
+  try {
+    const shot = await send('Page.captureScreenshot', { format: 'png' })
+    if (shot && shot.data) {
+      const dir = path.resolve('screenshots')
+      fs.mkdirSync(dir, { recursive: true })
+      const file = path.join(dir, 'runstats-verify-' + Date.now() + '.png')
+      fs.writeFileSync(file, Buffer.from(shot.data, 'base64'))
+      console.log('  截图已保存:', file)
+    }
+  } catch (e) { console.warn('  截图失败（忽略）', e.message) }
 
   // 清理
   try { await apiJson('/api/conversations/' + encodeURIComponent(CONV_ID), { method: 'DELETE' }) } catch (e) { /* ignore */ }
