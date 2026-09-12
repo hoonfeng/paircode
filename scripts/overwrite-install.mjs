@@ -23,12 +23,17 @@
  *                一旦覆盖 = 配置全丢，所以**永不覆盖**。
  *   --protect <rel>  追加保护（可多次；支持 .pair/plugins/xxx 这类相对路径）
  *   --keep-logs      额外保护 logs/
+ *   ★ 用户资产自动保护（默认开，无需手动 --protect）：
+ *     · .pair/plugins/<name>   源目录中不存在的插件目录（你自己装的，实测 moc3-tools）
+ *     · .pair/toolsets/*.json  源中不存在的**自建**工具集（内置预设会自动重建，不保护）
+ *     要连用户资产一起清空 → 加 --no-auto-protect
  *
  * 用法
  * ----
  *   node scripts/overwrite-install.mjs                         # DRY-RUN：只打印计划（默认）
- *   node scripts/overwrite-install.mjs --apply                 # 执行完整覆盖安装
- *   node scripts/overwrite-install.mjs --apply --restart       # 覆盖后自动重启
+ *   node scripts/overwrite-install.mjs --apply                 # 执行（默认覆盖后自动重启）
+ *   node scripts/overwrite-install.mjs --apply --no-restart    # 执行但不起进程
+ *   node scripts/overwrite-install.mjs --apply --no-auto-protect  # 连用户插件/工具集一起清掉
  *   node scripts/overwrite-install.mjs --apply --protect .pair/plugins/moc3-tools
  *   node scripts/overwrite-install.mjs --apply --src release/PairCode \
  *        --install-dir "E:/Program Files (x86)/PairCode" --port 9090
@@ -39,10 +44,12 @@
  *   --src <dir>          源目录（默认 release/PairCode，须是完整安装结构）
  *   --install-dir <dir>  安装目录（默认：运行实例反查 > 常见安装路径探测）
  *   --protect <rel>      追加保护路径（可多次；逗号分隔亦可）
+ *   --no-auto-protect    关闭「用户资产自动保护」（默认开）
  *   --keep-logs          保护 logs/ 目录
- *   --restart            覆盖完成后重新启动 pair.exe
+ *   --no-restart         覆盖后**不**自动启动（默认会自动启动，覆盖完即可用）
+ *   --restart            显式要求自动启动（等同默认行为，兼容旧用法）
  *   --port <n>           重启端口（默认沿用被替换实例的监听端口，否则 9090）
- *   --no-backup          跳过备份（默认备份到 _temp/install-backup-<ts>/）
+ *   --no-backup          跳过备份（默认备份到 _temp/install-backup-<ts>/，只保留最近 3 份）
  *   --force              跳过预检硬失败（源不完整 / 无写权限）
  *
  * 重要前提
@@ -80,7 +87,10 @@ const argAll = (n) => {
 }
 
 const APPLY = has('--apply')
-const RESTART = has('--restart')
+// 覆盖后自动启动：默认开（覆盖完即可用），--no-restart 关闭；--restart 为兼容写法
+const RESTART = has('--no-restart') ? false : true
+// 用户资产（源中不存在的插件 / 自建工具集）默认保留而非删除：--no-auto-protect 关闭
+const AUTO_PROTECT = !has('--no-auto-protect')
 const NO_BACKUP = has('--no-backup')
 const KEEP_LOGS = has('--keep-logs')
 const FORCE = has('--force')
@@ -115,6 +125,12 @@ const REQUIRED_SRC = [
   '.pair/assets/runtime/web/index.html',
   'plugins-src/ui-app/package.json',
 ]
+
+// 内置工具集预设：新实例启动时按 .preset-seeded 自动重建 → 无需保护（自建的才需保护）
+const BUILTIN_TOOLSETS = ['基础', '调试', '办公', '全功能', '全栈开发', '计划讨论']
+
+// 每次运行保留的备份份数（超出按名称=时间戳淘汰），避免 _temp 无限膨胀（单份 ~160MB）
+const BACKUP_KEEP = 3
 
 // ───────────────────────────── 工具函数 ─────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -275,6 +291,32 @@ function detectInstallDir() {
   return null
 }
 
+/**
+ * 「用户资产」探测：安装目录里存在、但**源目录中没有**的东西 ——
+ * 自装插件（.pair/plugins/<name>）与自建工具集（.pair/toolsets/*.json，非内置预设）。
+ * 删了不会自动重建（实测 moc3-tools 属此类），故默认保护；--no-auto-protect 关闭。
+ */
+function detectUserAssets() {
+  const out = []
+  const rd = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }) } catch { return [] } }
+  const names = (d) => { try { return new Set(fs.readdirSync(d)) } catch { return new Set() } }
+
+  // 插件目录：源里没有的整个插件目录 → 保护
+  const srcPluginNames = names(path.join(SRC, '.pair', 'plugins'))
+  for (const e of rd(path.join(INSTALL, '.pair', 'plugins'))) {
+    if (e.isDirectory() && !srcPluginNames.has(e.name)) out.push(`.pair/plugins/${e.name}`)
+  }
+  // 工具集：源里没有、且非内置预设（内置的启动时自动重建，无需保护）
+  const srcTsNames = names(path.join(SRC, '.pair', 'toolsets'))
+  for (const e of rd(path.join(INSTALL, '.pair', 'toolsets'))) {
+    if (!e.isFile() || !e.name.endsWith('.json')) continue
+    if (srcTsNames.has(e.name)) continue
+    if (BUILTIN_TOOLSETS.includes(path.basename(e.name, '.json'))) continue
+    out.push(`.pair/toolsets/${e.name}`)
+  }
+  return out.map(norm)
+}
+
 // ───────────────────────────── 主流程 ─────────────────────────────
 function banner(t) {
   console.log('\n' + '─'.repeat(72))
@@ -285,7 +327,6 @@ function banner(t) {
 banner('PairCode 完整覆盖安装' + (APPLY ? '【APPLY】' : '【DRY-RUN 预演】'))
 console.log('仓库根        :', REPO)
 console.log('源目录        :', SRC)
-console.log('保护项        :', PROTECT.join(', ') || '(无)')
 
 // ── 源检查 ──
 if (!exists(SRC)) {
@@ -336,6 +377,15 @@ if (!procs.length) console.log('  (无)')
 for (const p of targetProcs) console.log(`  → PID ${p.pid}  ${p.exe}   【本脚本将结束它】`)
 for (const p of otherProcs) console.log(`  · PID ${p.pid}  ${p.exe}   【保留，不在覆盖范围】`)
 
+// ── 用户资产自动保护（源中没有 → 视为你的插件/工具集，默认保留而非删除）──
+const userAssets = AUTO_PROTECT ? detectUserAssets() : []
+if (userAssets.length) {
+  PROTECT.push(...userAssets)
+  console.log('\n自动保护用户资产（源目录中不存在，默认保留；要删加 --no-auto-protect）:')
+  for (const a of userAssets) console.log(`  [保留] ${a}`)
+}
+console.log('保护项        :', PROTECT.join(', ') || '(无)')
+
 // ── 差异 ──
 const srcMap = new Map(srcFiles.filter((x) => !isProtected(x.rel)).map((x) => [x.rel, x.size]))
 const dstFiles = walk(INSTALL)
@@ -359,23 +409,21 @@ console.log(`  · 保持不变                    : ${common.length - changed.le
 // 风险项：源里没有、但看起来属于「用户资产」的文件
 const pluginsKeep = [...new Set(toDelete.filter((r) => r.startsWith('.pair/plugins/')).map((r) => r.split('/').slice(0, 3).join('/')))]
 const toolsetsExtra = toDelete.filter((r) => r.startsWith('.pair/toolsets/') && r.endsWith('.json'))
-if (pluginsKeep.length || toolsetsExtra.length) {
+// 内置预设会在新实例启动时按 .preset-seeded 自动重建；只有自建工具集会真正丢失
+const isBuiltinTs = (r) => BUILTIN_TOOLSETS.includes(path.basename(r, '.json'))
+const customTs = toolsetsExtra.filter((r) => !isBuiltinTs(r))
+const builtinTs = toolsetsExtra.filter(isBuiltinTs)
+if (pluginsKeep.length || customTs.length) {
   console.log('\n⚠ 以下项在源目录中不存在，将被删除 —— 若非程序残留，请用 --protect 保留：')
   for (const p of pluginsKeep) console.log(`    --protect ${p}`)
-  // 内置预设会在新实例启动时按 .preset-seeded 自动重建；只有自建工具集会真正丢失
-  const BUILTIN = ['基础', '调试', '办公', '全功能', '全栈开发', '计划讨论']
-  const isBuiltin = (r) => BUILTIN.includes(path.basename(r, '.json'))
-  const customTs = toolsetsExtra.filter((r) => !isBuiltin(r))
-  const builtinTs = toolsetsExtra.filter(isBuiltin)
   if (customTs.length) {
     console.log(`    --protect .pair/toolsets   （含 ${customTs.length} 个**自建**工具集，删了不会重建：`)
     for (const r of customTs) console.log(`         ${r}`)
     console.log('       ）')
   }
-  if (builtinTs.length) {
-    console.log(`    （另 ${builtinTs.length} 个内置预设会自动重建，无需保护：${builtinTs.map((r) => path.basename(r, '.json')).join('、')}）`)
-  }
-  console.log('  提示：logs/ 等运行期数据也会在新实例启动时自动重建，无需保护。')
+}
+if (builtinTs.length) {
+  console.log(`\n提示：${builtinTs.length} 个内置预设（${builtinTs.map((r) => path.basename(r, '.json')).join('、')}）与 logs/ 会在新实例启动时自动重建，无需保护。`)
 }
 
 if (toDelete.length) {
@@ -400,13 +448,27 @@ if (!writable) {
 
 if (!APPLY) {
   console.log('\n(DRY-RUN 结束，未写入任何文件)')
-  console.log('确认无误后执行:')
-  console.log(`  node scripts/overwrite-install.mjs --apply${RESTART ? ' --restart' : ''}`)
+  const extra = [
+    ...(RESTART ? [] : ['--no-restart']),
+    ...(NO_BACKUP ? ['--no-backup'] : []),
+    ...(AUTO_PROTECT ? [] : ['--no-auto-protect']),
+    ...PROTECT_EXTRA.flatMap((p) => ['--protect', p]),
+    ...(SRC_ARG ? ['--src', SRC_ARG] : []),
+    ...(DIR_ARG ? ['--install-dir', `"${INSTALL}"`] : []),
+    ...(PORT_ARG ? ['--port', String(PORT_ARG)] : []),
+  ]
+  console.log('确认无误后执行（已含本次全部默认行为，可直接复制）:')
+  console.log(`  node scripts/overwrite-install.mjs --apply${extra.length ? ' ' + extra.join(' ') : ''}`)
+  if (RESTART) console.log('  （默认会结束安装目录实例并在覆盖后重新启动；不想重启加 --no-restart）')
   process.exit(0)
 }
 
 // ───────────────────────────── 执行 ─────────────────────────────
 const t0 = Date.now()
+
+// 覆盖前记录 config 指纹（保护语义的硬断言：覆盖后必须逐字节一致）
+const cfgRel = 'config/settings.json'
+const cfgBeforeMd5 = exists(path.join(INSTALL, cfgRel)) ? md5(path.join(INSTALL, cfgRel)) : null
 
 // ① 杀进程
 banner('① 结束运行中的实例')
@@ -444,6 +506,12 @@ if (!NO_BACKUP) {
   }
   console.log(`✓ 已备份 ${n} 个文件 / ${mb(bytes)} → ${path.relative(REPO, bakDir)}`)
   console.log(`  回滚：删除安装目录内容（保留 config）后，把备份内容拷回 ${INSTALL}`)
+  // 只保留最近 BACKUP_KEEP 份（名称即 ISO 时间戳，字典序 = 时间序），避免 _temp 无限膨胀
+  try {
+    const stale = fs.readdirSync(path.join(REPO, '_temp'))
+      .filter((e) => /^install-backup-/.test(e)).sort().slice(0, -BACKUP_KEEP)
+    for (const s of stale) { rmrf(path.join(REPO, '_temp', s)); console.log(`  · 清理旧备份 ${s}`) }
+  } catch { /* _temp 不可读则忽略 */ }
 } else {
   banner('② 备份（已跳过 --no-backup）')
 }
@@ -523,10 +591,15 @@ for (const p of PROTECT) {
   const full = path.join(INSTALL, p)
   console.log(`  ${exists(full) ? '✓ 存在' : '✗ 缺失'} ${p}  (${exists(full) ? walk(full).length : 0} 个文件)`)
 }
-const cfg = path.join(INSTALL, 'config', 'settings.json')
-console.log(`  ${exists(cfg) ? '✓' : '✗'} config/settings.json${exists(cfg) ? `  ${md5(cfg).slice(0, 12)}…（未被覆盖）` : ''}`)
+const cfg = path.join(INSTALL, cfgRel)
+const cfgAfterMd5 = exists(cfg) ? md5(cfg) : null
+console.log(`  ${cfgAfterMd5 ? '✓' : '✗'} config/settings.json${cfgAfterMd5 ? `  ${cfgAfterMd5.slice(0, 12)}…` : ''} ${
+  cfgBeforeMd5 === null
+    ? (cfgAfterMd5 ? '（覆盖前不存在，现在有了）' : '（覆盖前后都不存在）')
+    : (cfgAfterMd5 === cfgBeforeMd5 ? `✓ 与覆盖前逐字节一致（${cfgBeforeMd5.slice(0, 12)}…）` : '✗ 与覆盖前不一致！配置可能被改动')
+}`)
 
-const ok = !missAfter.length && !diffAfter.length && /^✓/.test(exeMd5)
+const ok = !missAfter.length && !diffAfter.length && /^✓/.test(exeMd5) && cfgAfterMd5 === cfgBeforeMd5
 
 // ⑥ 重启
 let restarted = null
@@ -558,5 +631,5 @@ console.log(`耗时          : ${((Date.now() - t0) / 1000).toFixed(1)}s`)
 console.log(`删除 ${delTop} 项/${delFiles} 文件，覆盖 ${cpTop} 项/${cpFiles} 文件`)
 if (bakDir) console.log(`备份          : ${path.relative(REPO, bakDir)}`)
 if (restarted) console.log(`已重启        : PID ${restarted.pid} / 端口 ${restarted.port} → http://127.0.0.1:${restarted.port}`)
-else console.log('未重启        : 手动运行 ' + path.join(INSTALL, 'pair.exe'))
+else console.log(`未重启        : 手动运行 ${path.join(INSTALL, 'pair.exe')}（cwd 须为安装目录；端口用 WEB_PORT 指定，默认 9090）`)
 process.exit(ok ? 0 : 2)
