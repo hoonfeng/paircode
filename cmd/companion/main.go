@@ -49,7 +49,7 @@ func main() {
 	if err := StartWebServer(port); err != nil {
 		log.Fatalf("[main] 启动失败: %v", err)
 	}
-	log.Printf("[main] 已启动，请打开 http://localhost:%d", port)
+	log.Printf("[main] 已启动，请打开 http://0.0.0.0:%d（本机浏览器可用 http://localhost:%d，局域网设备用本机 IP）", port, port)
 	// 永久阻塞，直到用户关闭命令窗口或 kill 进程
 	select {}
 }

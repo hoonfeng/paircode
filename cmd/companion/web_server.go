@@ -447,12 +447,12 @@ func startWebUI(port int) {
 	}))
 
 	ws.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
 		Handler: corsMiddleware(agent.ExtWSMiddleware(agent.ExtSSEMiddleware(agent.ExtRouteMiddleware(mux)))),
 	}
 
 	go func() {
-		log.Printf("[WebUI] PairCode Web IDE 启动于 http://localhost:%d", port)
+		log.Printf("[WebUI] PairCode Web IDE 启动于 http://0.0.0.0:%d（局域网内其他设备可用本机 IP 访问）", port)
 		if err := ws.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("[WebUI] 服务器错误: %v", err)
 		}
