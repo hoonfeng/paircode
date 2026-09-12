@@ -114,18 +114,35 @@ func TestLLMTraceToJSShape(t *testing.T) {
 		StopReason: "stop",
 		Usage: &Usage{PromptTokens: 50, CompletionTokens: 10, TotalTokens: 60,
 			PromptCacheHitTokens: 40, PromptCacheMissTokens: 10,
-			PromptBreakdown: PromptBreakdown{SystemTokens: 30, ToolTokens: 15, HistoryTokens: 5}},
+			PromptBreakdown: PromptBreakdown{SystemTokens: 30, ToolTokens: 15, HistoryTokens: 5},
+			Raw:             map[string]any{"prompt_cache_hit_tokens": float64(40)}},
 		ToolCalls: []ToolCall{{ID: "t1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"a"}`}}}}
 	got := llmTraceToJS(vm, ev)
 	for _, k := range []string{"phase", "when", "turn", "step", "provider",
-		"content", "reasoning", "stopReason", "usage", "toolCalls"} {
+		"content", "reasoning", "stopReason", "usage", "usageEstimated", "toolCalls"} {
 		if _, ok := got[k]; !ok {
 			t.Errorf("缺少字段 %s", k)
 		}
 	}
 	usage, _ := got["usage"].(map[string]any)
-	if usage == nil || usage["promptCacheHitTokens"] != 40 || usage["systemTokens"] != 30 {
-		t.Errorf("usage 字段异常: %+v", usage)
+	if usage == nil || usage["promptCacheHitTokens"] != 40 || usage["source"] != "api" {
+		t.Errorf("usage（API 真实值）字段异常: %+v", usage)
+	}
+	// ★ 职责分离：usage 只放 API 真实值，估算构成不得混入（防止被当真实用量分析）
+	if _, bad := usage["systemTokens"]; bad {
+		t.Errorf("usage 混入了估算字段 systemTokens: %+v", usage)
+	}
+	// ★ 原始报文必须透传（llm-trace 核对真实用量的依据）
+	if raw, _ := usage["apiRaw"].(map[string]any); raw == nil || raw["prompt_cache_hit_tokens"] != float64(40) {
+		t.Errorf("usage.apiRaw 未透传: %+v", usage["apiRaw"])
+	}
+	// ★ 派生命中率
+	if rate, _ := usage["cacheHitRate"].(float64); rate != 0.8 {
+		t.Errorf("cacheHitRate 异常: %+v", usage["cacheHitRate"])
+	}
+	est, _ := got["usageEstimated"].(map[string]any)
+	if est == nil || est["systemTokens"] != 30 || est["source"] != "local-estimate" {
+		t.Errorf("usageEstimated（本地估算）字段异常: %+v", est)
 	}
 	tcs, _ := got["toolCalls"].([]any)
 	if len(tcs) != 1 {

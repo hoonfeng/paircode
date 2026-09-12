@@ -323,23 +323,38 @@ type anthropicSSEFrame struct {
 		PartialJSON string `json:"partial_json"`
 	} `json:"delta"`
 	Message struct {
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
+		// ★ 原始 usage 报文（不建模 → 不丢 provider 扩展字段，如 cache_read_input_tokens；
+		//   经 Usage.UnmarshalJSON 归一化出 PromptTokens/CompletionTokens 并保留 Raw）。
+		UsageRaw json.RawMessage `json:"usage"`
 	} `json:"message"`
 	MessageDelta struct {
 		Delta struct {
 			StopReason string `json:"stop_reason"`
 		} `json:"delta"`
-		Usage struct {
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
+		UsageRaw json.RawMessage `json:"usage"`
 	} `json:"message_delta"`
 	Error *struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// decodeUsageRaw 解析原始 usage 报文（Anthropic 协议：input_tokens / output_tokens /
+// cache_read_input_tokens / cache_creation_input_tokens…）。
+// 经 Usage.UnmarshalJSON 归一化（input_tokens→PromptTokens、output_tokens→CompletionTokens、
+// total_tokens 缺失时按和补）并**原样保留报文**到 Usage.Raw，供 llm-trace 核对真实用量。
+// 注意：Anthropic 的 input_tokens 不含缓存读取（cache_read_input_tokens 另计），
+// 故 PromptTokens 语义与 OpenAI 兼容协议的 prompt_tokens 略有差异——本函数不改既有
+// 归一化行为，原始值一律保留在 Raw 中可查。
+func decodeUsageRaw(raw json.RawMessage) *Usage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var u Usage
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil
+	}
+	return &u
 }
 
 // pendingAnthropicBlock 累积中的 content block。
@@ -399,8 +414,11 @@ func parseAnthropicSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 			if usage == nil {
 				usage = &Usage{}
 			}
-			usage.PromptTokens = frame.Message.Usage.InputTokens
-			usage.CompletionTokens = frame.Message.Usage.OutputTokens
+			if u := decodeUsageRaw(frame.Message.UsageRaw); u != nil {
+				usage.PromptTokens = u.PromptTokens
+				usage.CompletionTokens = u.CompletionTokens
+				usage.Raw = u.Raw
+			}
 		case "content_block_start":
 			blk := &pendingAnthropicBlock{
 				kind:     frame.ContentBlock.Type,
@@ -449,11 +467,23 @@ func parseAnthropicSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 			if frame.MessageDelta.Delta.StopReason != "" {
 				stopReason = mapAnthropicStopReason(frame.MessageDelta.Delta.StopReason)
 			}
-			if frame.MessageDelta.Usage.OutputTokens > 0 {
+			if u := decodeUsageRaw(frame.MessageDelta.UsageRaw); u != nil {
 				if usage == nil {
 					usage = &Usage{}
 				}
-				usage.CompletionTokens = frame.MessageDelta.Usage.OutputTokens
+				if u.CompletionTokens > 0 {
+					usage.CompletionTokens = u.CompletionTokens
+				}
+				// 合并原始报文（message_start 给 input_tokens，message_delta 给
+				// output_tokens —— 合并后 llm-trace 能看到该次调用的完整原始用量）。
+				if len(u.Raw) > 0 {
+					if usage.Raw == nil {
+						usage.Raw = map[string]any{}
+					}
+					for k, v := range u.Raw {
+						usage.Raw[k] = v
+					}
+				}
 			}
 			if usage != nil {
 				usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens

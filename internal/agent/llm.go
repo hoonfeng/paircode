@@ -28,7 +28,10 @@ type Provider interface {
 // MockProvider 脚本化提供方：按 Responses 顺序每次 Chat 返回下一条（用于无网络端到端测 TAOR 循环）。
 type MockProvider struct {
 	Responses []Message
-	calls     int
+	// Usages 可选：与 Responses 一一对应的 token 用量（nil 项=该次不发 usage）。
+	// 用于端到端验证 usage 落盘链路（真实 provider 由 SSE usage 帧提供）。
+	Usages []*Usage
+	calls  int
 }
 
 func (m *MockProvider) Name() string { return "mock" }
@@ -48,7 +51,11 @@ func (m *MockProvider) Chat(ctx context.Context, messages []Message, tools []Too
 		msg.Role = RoleAssistant
 	}
 	if onChunk != nil {
-		onChunk(Chunk{Content: msg.Content, Reasoning: msg.Reasoning, ToolCalls: msg.ToolCalls, Done: true})
+		ch := Chunk{Content: msg.Content, Reasoning: msg.Reasoning, ToolCalls: msg.ToolCalls, Done: true}
+		if i := m.calls - 1; i >= 0 && i < len(m.Usages) {
+			ch.Usage = m.Usages[i]
+		}
+		onChunk(ch)
 	}
 	return msg, nil
 }

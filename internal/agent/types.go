@@ -91,6 +91,14 @@ type Usage struct {
 	} `json:"prompt_tokens_details,omitempty"`
 	// PromptBreakdown 估算 prompt 内各类构成（归一化到 prompt_tokens），0 表示未估算。
 	PromptBreakdown `json:"prompt_breakdown,omitempty"`
+	// ★ Raw provider **原始返回**的 usage JSON（未归一化、未推导、未估算）——
+	//   与上面各字段的区别：上面是「归一化后的真实值」（可能含由 hit 反推 miss
+	//   等本地推导），Raw 则原样保留服务端报文，供 llm-trace 等分析面核对真实
+	//   用量（如 OpenAI 的 prompt_tokens_details.cached_tokens、DeepSeek 的
+	//   prompt_cache_hit_tokens、各网关的扩展字段）。
+	//   json:"-"：只走进程内（LLMTraceEvent → 插件），不污染对外序列化
+	//   （token 统计落盘 / WS usage 事件体积不变）。
+	Raw map[string]any `json:"-"`
 }
 
 // UnmarshalJSON 兼容两种缓存命中拼写（对齐 harness llm-deepseek mapUsage）：
@@ -106,6 +114,12 @@ func (u *Usage) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*u = Usage(a)
+	// ★ 原样保留服务端报文（在归一化/推导**之前**落盘到 Raw，供 llm-trace 核对真实
+	//   用量；必须在 *u = Usage(a) 之后，否则会被整体覆盖）。
+	var rawMap map[string]any
+	if err := json.Unmarshal(b, &rawMap); err == nil && len(rawMap) > 0 {
+		u.Raw = rawMap
+	}
 	// OpenAI 兼容拼写 → 归一化为 PromptCacheHitTokens
 	if u.PromptCacheHitTokens == 0 && u.PromptTokensDetails != nil {
 		u.PromptCacheHitTokens = u.PromptTokensDetails.CachedTokens

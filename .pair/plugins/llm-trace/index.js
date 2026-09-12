@@ -13,9 +13,16 @@
 //   - 敏感注意：日志含完整对话与工具定义，勿提交到公开仓库（.gitignore 建议加 <dir>）。
 //
 // 事件字段：{phase: request|response, when, turn, step, provider, msgs?, tools?,
-//            usage?, content?, reasoning?, toolCalls?, stopReason, err?}
-//   usage 含 promptCacheHitTokens/promptCacheMissTokens + prompt 构成细分
-//   （systemTokens/skillsTokens/mcpTokens/toolTokens/historyTokens/otherTokens）。
+//            usage?, usageEstimated?, content?, reasoning?, toolCalls?, stopReason, err?}
+//   ★ usage = **API 真实返回**的用量：{source:"api", promptTokens, completionTokens,
+//     totalTokens, promptCacheHitTokens, promptCacheMissTokens, cacheHitRate?, apiRaw?}
+//     · 前六项为 provider 报文归一化后的真实值（**非**本地估算）；
+//     · apiRaw = provider **原始报文**（未归一化），含各协议/网关的扩展字段：
+//       OpenAI prompt_tokens_details.cached_tokens、DeepSeek prompt_cache_hit_tokens
+//       /prompt_cache_miss_tokens、reasoning_tokens 等——核对真实用量以此为准。
+//   ★ usageEstimated = 本地**估算**的 prompt 构成：{source:"local-estimate",
+//     systemTokens, skillsTokens, mcpTokens, toolTokens, historyTokens, otherTokens}
+//     · 仅用于占比可视化参考，**不得**当作真实用量做成本/命中率分析。
 //
 // 查看/分析：node 读 JSONL 逐行 JSON.parse；或用 grep 对比相邻请求的
 //   msgs[0].content（系统提示）与 tools JSON 是否逐字节一致。

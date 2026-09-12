@@ -57,6 +57,15 @@ func TestJSLoopLLMTracePluginWritesJSONL(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"hello.txt"}`}}}},
 		{Content: "读到了 LLMTRACE_E2E"},
+	}, Usages: []*Usage{
+		// ★ 模拟 provider 报文：真实值 + 厂商扩展字段（apiRaw 必须原样落盘）
+		{PromptTokens: 1200, CompletionTokens: 30, TotalTokens: 1230,
+			PromptCacheHitTokens: 1000, PromptCacheMissTokens: 200,
+			Raw: map[string]any{"prompt_tokens": float64(1200),
+				"prompt_cache_hit_tokens": float64(1000), "vendor_ext_x": float64(7)}},
+		{PromptTokens: 1500, CompletionTokens: 12, TotalTokens: 1512,
+			PromptCacheHitTokens: 1480, PromptCacheMissTokens: 20,
+			Raw: map[string]any{"prompt_tokens": float64(1500), "reasoning_tokens": float64(4)}},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, System: "test-llm-trace",
 		OnEvent: func(e Event) {}}
@@ -106,6 +115,27 @@ func TestJSLoopLLMTracePluginWritesJSONL(t *testing.T) {
 			}
 			if ev["provider"] == nil {
 				t.Error("response 行应含 provider")
+			}
+			// ★ usage 必须是 API 真实值（source=api）+ 原始报文透传（apiRaw），
+			//   且不得混入本地估算字段（估算只允许出现在 usageEstimated）。
+			usage, _ := ev["usage"].(map[string]any)
+			if usage == nil {
+				t.Error("response 行应含 usage")
+			} else {
+				if usage["source"] != "api" {
+					t.Errorf("usage.source 应为 api，得 %v", usage["source"])
+				}
+				if _, ok := usage["apiRaw"].(map[string]any); !ok {
+					t.Errorf("usage.apiRaw 应透传 provider 原始报文，得 %v", usage["apiRaw"])
+				}
+				if _, bad := usage["systemTokens"]; bad {
+					t.Error("usage 不得混入估算字段 systemTokens（应只在 usageEstimated）")
+				}
+			}
+			if est, ok := ev["usageEstimated"].(map[string]any); ok {
+				if est["source"] != "local-estimate" {
+					t.Errorf("usageEstimated.source 应为 local-estimate，得 %v", est["source"])
+				}
 			}
 		default:
 			t.Errorf("未知 phase: %v", ev["phase"])

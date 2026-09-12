@@ -58,10 +58,17 @@ func (p *jsPluginAdapter) attachLLMTrace(ctxObj *goja.Object) {
 // llmTraceToJS 把 LLMTraceEvent 转成 JS 可读对象。
 // 结构：{phase, when(ISO8601), turn, step, provider, stopReason, err,
 //
-//	     msgs?, tools?, usage?, content?, reasoning?, toolCalls?}
-//	usage = {promptTokens, completionTokens, totalTokens, promptCacheHitTokens,
-//	         promptCacheMissTokens, systemTokens, skillsTokens, mcpTokens,
-//	         toolTokens, historyTokens, otherTokens}
+//	     msgs?, tools?, usage?, usageEstimated?, content?, reasoning?, toolCalls?}
+//
+//	usage = {source:"api", promptTokens, completionTokens, totalTokens,
+//	         promptCacheHitTokens, promptCacheMissTokens,
+//	         cacheHitRate?, apiRaw?}
+//	        —— **API 真实返回**的用量：前六项为归一化值，apiRaw 为 provider
+//	           原始报文（未归一化，含厂商/网关扩展字段）。
+//	usageEstimated = {source:"local-estimate", systemTokens, skillsTokens,
+//	         mcpTokens, toolTokens, historyTokens, otherTokens}
+//	        —— 本地估算的 prompt 构成（EstimateBreakdown），**仅**供占比可视化，
+//	           不得当作真实用量做成本/命中率分析。
 func llmTraceToJS(vm *goja.Runtime, ev LLMTraceEvent) map[string]any {
 	m := map[string]any{
 		"phase":      ev.Phase,
@@ -80,21 +87,40 @@ func llmTraceToJS(vm *goja.Runtime, ev LLMTraceEvent) map[string]any {
 	}
 	if ev.Usage != nil {
 		u := ev.Usage
+		// ★ usage = **API 真实返回**的用量（provider 报文经归一化后的值；不含任何本地估算）。
+		//   source=api 显式标注来源，供分析面区分真实值与估算值。
 		um := map[string]any{
+			"source":                "api",
 			"promptTokens":          u.PromptTokens,
 			"completionTokens":      u.CompletionTokens,
 			"totalTokens":           u.TotalTokens,
 			"promptCacheHitTokens":  u.PromptCacheHitTokens,
 			"promptCacheMissTokens": u.PromptCacheMissTokens,
 		}
-		pb := u.PromptBreakdown
-		um["systemTokens"] = pb.SystemTokens
-		um["skillsTokens"] = pb.SkillsTokens
-		um["mcpTokens"] = pb.MCPTokens
-		um["toolTokens"] = pb.ToolTokens
-		um["historyTokens"] = pb.HistoryTokens
-		um["otherTokens"] = pb.OtherTokens
+		// 命中率（派生值：hit/(hit+miss)；分母为 0 时不输出，避免伪造 0%）
+		if d := u.PromptCacheHitTokens + u.PromptCacheMissTokens; d > 0 {
+			um["cacheHitRate"] = float64(u.PromptCacheHitTokens) / float64(d)
+		}
+		// ★ apiRaw = provider **原始报文**（未归一化、未推导）——含 DeepSeek 的
+		//   prompt_cache_hit_tokens、OpenAI 的 prompt_tokens_details.cached_tokens、
+		//   以及各网关/厂商的扩展字段；核对真实用量时以此为准。
+		if len(u.Raw) > 0 {
+			um["apiRaw"] = u.Raw
+		}
 		m["usage"] = um
+		// ★ usageEstimated = 本地**估算**的 prompt 构成（非 API 返回）。
+		//   仅用于前端占比可视化参考，**不得**当作真实用量参与成本/命中率分析。
+		if pb := u.PromptBreakdown; pb != (PromptBreakdown{}) {
+			m["usageEstimated"] = map[string]any{
+				"source":        "local-estimate",
+				"systemTokens":  pb.SystemTokens,
+				"skillsTokens":  pb.SkillsTokens,
+				"mcpTokens":     pb.MCPTokens,
+				"toolTokens":    pb.ToolTokens,
+				"historyTokens": pb.HistoryTokens,
+				"otherTokens":   pb.OtherTokens,
+			}
+		}
 	}
 	if ev.Content != "" {
 		m["content"] = ev.Content
