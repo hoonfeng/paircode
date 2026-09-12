@@ -160,10 +160,11 @@ const hostMainChildren = {
   //     对应壳级子槽，并在本表联动。）
 }
 
-// ─── ★ chat 优先薄壳几何：conversation 主列 + editor 辅助/details 列 ───
-// grid 列：activitybar(48) | sidebar | conversation(minmax 0 1fr 主) | details(editor)
-// · sidebar 列宽：focusMode 或折叠 → 0；否则 sidebarWidth（280）
-// · details(editor) 列宽：focusMode 或 editorOpen=false → 0；否则 editorWidth
+// ─── ★ 薄壳几何：activitybar | sidebar | main（主视图 tab 区，无独立 editor 列）───
+// grid 列：activitybar(48) | sidebar | main(minmax(0, 1fr)) —— 三列，见下方 gridStyle
+// · sidebar 列宽：折叠（state.sidebarVisible=false）→ 0px；否则 sidebarWidth（默认 280）
+//   ★ 专注模式不进列宽公式：Ctrl+K 由 ui-state.setFocusMode 直接收起 sidebarVisible /
+//     convListVisible（退出还原用户原值），故此处只认可见性标志。
 //   ★ 编辑器折叠=列宽收缩（CSS），宿主 DOM 不卸载（CM6/终端 WS 保持挂载）。
 // ★ 主视图 tab（对话 ⇄ 编辑器 ⇄ 市场）：state.panels.mainTab 是单一事实源。
 //   三者常驻挂载（模板 v-show 切换），互不影响。

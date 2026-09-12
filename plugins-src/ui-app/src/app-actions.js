@@ -17,7 +17,7 @@
 import { reactive, nextTick } from 'vue'
 import api from './api.js'
 import {
-  state, loadPersistentState, savePersistentState,
+  state, layout, loadPersistentState, savePersistentState, setFocusMode,
   showSettings, showSystem,
 } from './ui-state.js'
 import {
@@ -165,10 +165,15 @@ export function switchActivity(id) {
   // ★ 工具集已迁至主内容区 tab：同市场，不再切换侧边栏视图
   if (id === 'toolsets') { toggleToolsetsTab(); return }
   if (state.activeActivity === id) {
-    state.sidebarVisible = !state.sidebarVisible
+    // 点当前项 = 折叠/展开左栏：非专注态下即用户偏好，落盘
+    layout.toggleSidebar()
+    if (state.focusMode === false) savePersistentState()
   } else {
+    // ★ 显式显示左栏 = 退出专注（与菜单/右键同规则），随后显式置 true 覆盖还原值
+    setFocusMode(false)
     state.activeActivity = id
     state.sidebarVisible = true
+    savePersistentState()
   }
 }
 
@@ -226,13 +231,21 @@ export const loadFileTree = async () => {
 // ─── 快捷键（原 App.vue handleKeydown；壳注册 document keydown）───
 export function handleKeydown(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-  if (e.ctrlKey && e.key === 'b') { e.preventDefault(); state.sidebarVisible = !state.sidebarVisible }
+  if (e.ctrlKey && e.key === 'b') {
+    e.preventDefault(); layout.toggleSidebar()
+    // ★ 非专注态切换左栏 = 用户偏好，落盘（专注态内为临时调整，不污染偏好）
+    if (state.focusMode === false) savePersistentState()
+  }
   if (e.ctrlKey && e.key === '`') { e.preventDefault(); state.bottomPanelVisible = !state.bottomPanelVisible }
-  if (e.ctrlKey && e.shiftKey && e.key === 'E') { e.preventDefault(); state.activeActivity = 'explorer'; state.sidebarVisible = true }
-  if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); state.activeActivity = 'search'; state.sidebarVisible = true }
+  // ★ 显式唤出侧栏 = 退出专注（先还原、再显式显示：语句顺序保证用户意图不被还原覆盖）
+  if (e.ctrlKey && e.shiftKey && e.key === 'E') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'explorer'; state.sidebarVisible = true }
+  if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true }
   if (e.ctrlKey && e.shiftKey && e.key === 'T') { e.preventDefault(); state.rightPanelVisible = true }
   if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); state.rightPanelVisible = !state.rightPanelVisible }
-  if (e.ctrlKey && e.key === 'k') { e.preventDefault(); state.focusMode = !state.focusMode }
+  // ★ 会话列表面板（Token 统计栏）显隐：与 rp-header 按钮同源（state.convListVisible 持久化）
+  if (e.ctrlKey && e.shiftKey && e.key === 'L') { e.preventDefault(); state.convListVisible = !state.convListVisible; savePersistentState() }
+  // ★ 专注模式（唯一入口 setFocusMode）：进入收起左栏/会话列表，退出还原用户原值
+  if (e.ctrlKey && e.key === 'k') { e.preventDefault(); setFocusMode(!state.focusMode) }
 }
 
 // ─── 文件树自动刷新防抖（原 App.vue）───
@@ -326,7 +339,7 @@ export function initAppGlobals() {
     'open-settings': () => { showSettings.value = true },
     'stop-agent': () => { window.dispatchEvent(new CustomEvent('agent-stop')) },
     'save-conversations': async () => { checkNotifications() },
-    'open-workspace-dialog': () => { state.activeActivity = 'explorer'; state.sidebarVisible = true },
+    'open-workspace-dialog': () => { setFocusMode(false); state.activeActivity = 'explorer'; state.sidebarVisible = true },
     'switch-workspace': async (e) => { if (e.detail?.path) await switchWorkspace(e.detail.path) },
     // ★ 2026-08-31 打开指定会话（agent-teams 团队成员子会话入口）：赋值
     //   currentConvId 触发 RightPanel watch → switchConv 加载消息。用于成员

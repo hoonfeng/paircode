@@ -285,7 +285,10 @@ export function processAgentEvent(convId, data) {
       wsPendingTimers.set(convId, setTimeout(() => {
         if (!historyLoadedConvs.has(convId)) {
           historyLoadedConvs.add(convId)
-          console.warn('[AE] 历史加载未在 %dms 内完成——兜底 flush 门控事件 conv=%s（防通讯断裂）', WS_PENDING_MAX_MS, convId)
+          // ★ 2026-09-12：本兜底在「首屏插件装载较慢、switchConv 尚未开始」时属预期触发
+          //   （历史加载还没机会开始，而非失败）——历史随后仍会由 switchConv 加载并覆盖；
+          //   文案据此澄清，避免被误读为故障。
+          console.warn('[AE] 历史加载未在 %dms 内开始（插件装载较慢时的预期兜底）——先应用实时事件，历史随后加载 conv=%s', WS_PENDING_MAX_MS, convId)
         }
         flushPendingEvents(convId, 'timeout')
       }, WS_PENDING_MAX_MS))
@@ -677,7 +680,16 @@ export function processAgentDone(convId, data) {
     globalCtx.saveConvMsg(convId, rt.finalContent, savedIdx)
   }
   const localConv = state.conversations.find(c => c.id === convId)
-  if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
+  if (localConv) {
+    localConv.msgCount = (localConv.msgCount || 0) + 1
+    // ★ 正常完成 → 复位本地「未完成」标记（修「继续任务」提示条常驻）：
+    //   三处异常分支（processAgentError / processAgentDisconnect /
+    //   processAllDisconnected）各自置 true；此处只在「非用户停止」的正常结束清除，
+    //   doneReason==='stopped' 保留 true（任务确未完成，应当可继续）。
+    //   ★ 「以工具调用收尾、未产出最终回答」的情形由 RightPanel 的启发式兜底判定
+    //     （末段为 tool_call/tool_result 即判未完成），不依赖本标记 → 复位不会漏判。
+    if (!(data && data.doneReason === 'stopped')) localConv.interrupted = false
+  }
   window.dispatchEvent(new Event('save-conversations'))
   // ★ 同步 state.messages（当前对话时），确保 Vue 响应式更新
   if (isCurrent) {

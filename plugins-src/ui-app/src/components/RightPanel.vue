@@ -6,7 +6,9 @@
       <div class="rp-header-actions">
         <button class="rp-btn" @click="newConversation" title="新对话"><SvgIcon name="plus" :size="14" /></button>
         <button class="rp-btn" @click="showDebugLog = !showDebugLog" title="Debug 日志"><SvgIcon name="bug" :size="14" /></button>
-        <button v-if="!panelMode" class="rp-btn" @click="toggleFocus" :title="state.focusMode ? '退出专注（显示编辑器/终端）' : '专注对话（隐藏编辑器，保留文件面板）'">          <SvgIcon :name="state.focusMode ? 'eye-off' : 'eye'" :size="14" />
+        <!-- 会话列表面板（Token 统计栏）显隐：状态经 ui-state.js 持久化，快捷键 Ctrl+Shift+L -->
+        <button v-if="!panelMode" class="rp-btn" :class="{ 'rp-btn-off': !state.convListVisible }" @click="toggleConvList" :title="state.convListVisible ? '隐藏会话列表（Token 统计，Ctrl+Shift+L）' : '显示会话列表（Token 统计，Ctrl+Shift+L）'"><SvgIcon name="message-square" :size="14" /></button>
+        <button v-if="!panelMode" class="rp-btn" @click="toggleFocus" :title="state.focusMode ? '退出专注（显示编辑器/终端/侧栏）' : '专注对话（隐藏编辑器与左右侧栏）'">          <SvgIcon :name="state.focusMode ? 'eye-off' : 'eye'" :size="14" />
         </button>
         <button v-if="!panelMode" class="rp-btn" @click="toggleRight" title="关闭"><SvgIcon name="close" :size="14" /></button>
       </div>
@@ -267,7 +269,8 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="convList" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <!-- v-show 而非 v-if：会话列表保持挂载，仅切可见性（会话状态/Token 统计不重挂）-->
+      <ConvSidebar v-else v-show="state.convListVisible" :conversations="convList" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
       </template>
     </div>
   </div>
@@ -275,7 +278,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { state, rightPanelWidth } from '../ui-state.js'
+import { state, layout, setFocusMode, rightPanelWidth, savePersistentState } from '../ui-state.js'
 import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
@@ -294,9 +297,23 @@ const showDebugLog = ref(false)
 const props = defineProps({ panelMode: { type: Boolean, default: false } })
 const panelMode = computed(() => !!props.panelMode)
 const toggleRight = () => { state.rightPanelVisible = false }
-// 专注对话切换：专注模式只隐藏编辑器（main-area），文件资源侧边栏保留（sidebarVisible 独立控制）
+// 专注对话切换：专注 = 纯对话视图（隐藏编辑器 + 收起左栏文件浏览器与会话列表）。
+// ★ 统一走 ui-state.setFocusMode（唯一入口）：进入收起、退出还原用户原值。
 const toggleFocus = () => {
-  state.focusMode = !state.focusMode
+  setFocusMode(!state.focusMode)
+}
+
+// ─── 会话列表面板（Token 统计栏）显隐（2026-09-12 新增）───
+//   头部按钮与 Ctrl+Shift+L 都走这里；状态读写见 ui-state.js（持久化 + layout.toggleConvList）。
+//   ★ 专注模式联动已收归 ui-state.setFocusMode（唯一入口，一并处理左栏与会话列表）：
+//     组件内不再 watch focusMode —— watch 默认 flush:'pre' 会在同块后续语句之后回写，
+//     覆盖「显式唤出侧栏」的意图（详见 ui-state.js 注释）。
+const toggleConvList = () => {
+  // 经 layout 服务切换：专注态内手动调整会同步「退出专注」还原目标
+  layout.toggleConvList()
+  // ★ 立即落盘：宿主无全局 state watch（savePersistentState 原本只在 switchWorkspace 调用），
+  //   不主动保存则刷新后无法记住本次选择。
+  savePersistentState()
 }
 const inputText = ref('')
 
@@ -2129,10 +2146,17 @@ const switchConv = async (id) => {
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
 
-  // 若本地无缓存消息，从 API 加载
-  const msgs = state.messagesByConv[id]
-  const hasRealMsgs = msgs.length > 0 && msgs.some(m => !m._loading)
-  if (!hasRealMsgs) {
+  // 若该会话尚未完成过一次历史加载，从 API 加载。
+  // ★ 2026-09-12 修复「慢启动时历史消息不出现」：原判定为 hasRealMsgs（messagesByConv
+  //   里存在非 _loading 消息即视为「已有内容」）。但 WS 门控的兜底定时器
+  //   （agent-events.js WS_PENDING_MAX_MS=3000）会在本函数开始之前就把快照/事件直接
+  //   写入 messagesByConv（写入的消息 _loading=false），于是判定为「已有内容」→
+  //   跳过本加载 → 历史永不出现（正是门控要防的「刷新后只有当前 ws 消息」）。
+  //   首屏插件装载慢（本函数开始前常已超 3000ms）时必现。
+  //   改为以「是否加载过历史」为准：msgLoadedByConv 有该键即加载过（刷新/换工作区
+  //   会清空该表 → 刷新后必然重新加载）；切换会话时行为不变（已加载过则跳过）。
+  const historyLoaded = Object.prototype.hasOwnProperty.call(state.msgLoadedByConv, id)
+  if (!historyLoaded) {
     const res = await apiLoadAndBuildConv(id)
     if (res) {
       const { mergedMsgs, total } = res
@@ -2583,6 +2607,8 @@ onUnmounted(() => {
 .rp-header-actions { display: flex; gap: 4px; }
 .rp-btn { background: none; border: 1px solid transparent; color: var(--text-secondary); padding: 2px 6px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; }
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+/* 会话列表已收起：按钮半透明提示「当前为隐藏态」*/ 
+.rp-btn-off { opacity: 0.45; }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 10px 14px; min-height: 0; position: relative; overflow-anchor: none; }

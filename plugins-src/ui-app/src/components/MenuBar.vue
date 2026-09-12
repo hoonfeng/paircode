@@ -27,7 +27,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, layout, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
+import { state, layout, setFocusMode, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
 import api from '../api.js'
 import { switchActivity } from '../app-actions.js'
 
@@ -104,16 +104,20 @@ const execItem = async (item) => {
   const a = item.action
 
   // ── 视图操作 ──
-  if (a === 'view-explorer') { state.focusMode = false; state.activeActivity = 'explorer'; state.sidebarVisible = true; return }
-  if (a === 'view-search') { state.focusMode = false; state.activeActivity = 'search'; state.sidebarVisible = true; return }
-  if (a === 'view-git') { state.focusMode = false; state.activeActivity = 'source'; state.sidebarVisible = true; return }
-  if (a === 'toggle-sidebar') { state.sidebarVisible = !state.sidebarVisible; return }
+  // ★ 显式切视图 = 退出专注并显示侧栏：setFocusMode(false) 先还原侧栏原值，
+  //   紧随的 sidebarVisible = true 再显式覆盖 —— 语句顺序保证「用户要看侧栏」不被还原覆盖。
+  if (a === 'view-explorer') { setFocusMode(false); state.activeActivity = 'explorer'; state.sidebarVisible = true; return }
+  if (a === 'view-search') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
+  if (a === 'view-git') { setFocusMode(false); state.activeActivity = 'source'; state.sidebarVisible = true; return }
+  if (a === 'toggle-sidebar') { layout.toggleSidebar(); return }
   if (a === 'toggle-terminal') { state.bottomPanelVisible = !state.bottomPanelVisible; state.bottomPanelTab = 'terminal'; return }
   if (a === 'toggle-right') { state.rightPanelVisible = !state.rightPanelVisible; return }
   if (a === 'focus-mode') {
-    state.focusMode = !state.focusMode
-    if (state.focusMode) {
-      // ★ 专注模式只隐藏编辑器（main-area）；文件资源侧边栏保留（sidebarVisible 独立控制）
+    const entering = !state.focusMode
+    // ★ 专注模式唯一入口：隐藏编辑器 + 收起左栏与会话列表（见 ui-state.js setFocusMode）
+    setFocusMode(entering)
+    if (entering) {
+      // 专注态连底部面板一并收起（纯对话视图）
       state.bottomPanelVisible = false
     }
     return
@@ -182,6 +186,7 @@ const execItem = async (item) => {
     return
   }
   if (a === 'manage-workspace') {
+    setFocusMode(false)
     state.activeActivity = 'explorer'
     state.sidebarVisible = true
     return
@@ -220,8 +225,8 @@ const execItem = async (item) => {
 
   // ── 搜索 ──
   if (a === 'find-chat') { state.rightPanelVisible = true; return }
-  if (a === 'global-search') { state.activeActivity = 'search'; state.sidebarVisible = true; return }
-  if (a === 'find-file') { state.activeActivity = 'search'; state.sidebarVisible = true; return }
+  if (a === 'global-search') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
+  if (a === 'find-file') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
 
   // ── 终端 ──
   if (a === 'new-terminal') { state.bottomPanelVisible = true; state.bottomPanelTab = 'terminal'; return }

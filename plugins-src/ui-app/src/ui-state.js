@@ -94,6 +94,9 @@ export const state = reactive({
   activeActivity: 'explorer',
   sidebarVisible: true,
   rightPanelVisible: true,
+  // ★ 会话列表面板（.conv-sidebar，250px，含 Token 统计/上下文占用）整体显隐。
+  //   默认显示；用户选择持久化；进入专注模式自动收起、退出还原（setFocusMode）。
+  convListVisible: true,
   bottomPanelVisible: true,
   bottomPanelTab: 'terminal',
   workspaceRoot: '',
@@ -233,8 +236,17 @@ loadPanelSize()
 // 编辑器「折叠=隐藏（保持挂载，不 unmount）」，复用现有 CSS 宽度切换语义 ——
 // 打开/关闭只改可见性（width:0 ↔ editorWidth），绝不触发 CM6/终端 WS 重挂。
 export const layout = {
+  // ★ 左栏（文件浏览器/搜索/Git 等侧栏区）显隐：专注态内手动切换时同步「退出专注」
+  //   还原目标，避免退出专注时被旧值覆盖用户本次选择（与 toggleConvList 同规则）。
   toggleSidebar() {
     state.sidebarVisible = !state.sidebarVisible
+    if (state.focusMode) sidebarBeforeFocus = state.sidebarVisible
+  },
+  // ★ 会话列表面板（Token 统计栏）显隐开关：与 toggleSidebar 同语义，只切可见性
+  //   （v-show 保持挂载、不 unmount，避免会话列表重挂丢状态）；壳与区域包经本服务读写。
+  toggleConvList() {
+    state.convListVisible = !state.convListVisible
+    if (state.focusMode) convListBeforeFocus = state.convListVisible
   },
   openEditor(filePath) {
     if (typeof filePath === 'string' && filePath) {
@@ -245,7 +257,7 @@ export const layout = {
     }
     // ★ 打开编辑器即退出专注（focusMode 是「纯对话」态：隐藏侧栏+编辑器；
     //   点文件树打开编辑时必须退出，否则编辑器仍被 focusMode 折叠不可见）。
-    if (state.focusMode) state.focusMode = false
+    if (state.focusMode) setFocusMode(false)
     // ★ 从关闭态打开：记录上次打开宽（折叠还原用），再置可见。
     if (!state.panels.editorOpen && state.panels.editorWidth > 0) {
       state.panels.editorLastWidth = state.panels.editorWidth
@@ -278,6 +290,37 @@ export const layout = {
     state.panels.mainTab = view
     state.panels.editorOpen = (view === 'editor')
   },
+}
+
+// ─── ★ 专注模式（focusMode）唯一权威入口：隐藏编辑器 + 临时收起左右侧栏 ───
+//   语义：专注 = 纯对话视图。进入时隐藏编辑器，并收起左栏（文件浏览器/搜索/Git）
+//   与右栏会话列表面板；退出时还原用户进入前的显隐选择（尊重既有偏好，避免
+//   「用户本就隐藏 → 退出专注被强制显示」）。
+//   ★ 为什么不用组件内 watch focusMode：watch 默认 flush:'pre'，回调在
+//     「同一同步块内后续语句」之后执行 —— 菜单「视图 → 资源管理器」是
+//     `setFocusMode(false)` 紧跟 `state.sidebarVisible = true`，若靠 watch 还原
+//     会把用户显式要求的「显示侧栏」覆盖掉。集中到本函数内显式处理，调用方的
+//     语句顺序天然生效（先还原、后显式覆盖）。
+//   ★ 两栏原值只存内存：与 focusMode 同为临时视图态，不持久化 —— 刷新后回到
+//     用户真实偏好，不会把「专注时收起」误存成偏好。
+let sidebarBeforeFocus = state.sidebarVisible
+let convListBeforeFocus = state.convListVisible
+
+export function setFocusMode(on) {
+  const next = !!on
+  if (next === !!state.focusMode) return
+  if (next) {
+    // 进入专注：记住既有选择，再临时收起两栏
+    sidebarBeforeFocus = state.sidebarVisible
+    convListBeforeFocus = state.convListVisible
+    state.sidebarVisible = false
+    state.convListVisible = false
+  } else {
+    // 退出专注：还原进入前的显隐选择
+    state.sidebarVisible = sidebarBeforeFocus
+    state.convListVisible = convListBeforeFocus
+  }
+  state.focusMode = next
 }
 
 // ★ 调试探针入口：暴露全局 store，供 wb-ui probe 直接读取状态层
@@ -357,6 +400,8 @@ export function savePersistentState() {
       activeActivity: state.activeActivity,
       sidebarVisible: state.sidebarVisible,
       rightPanelVisible: state.rightPanelVisible,
+      // 会话列表面板显隐：属面板偏好（非 focusMode 那类临时视图态）→ 持久化
+      convListVisible: state.convListVisible,
       bottomPanelVisible: state.bottomPanelVisible,
       bottomPanelTab: state.bottomPanelTab,
       theme: state.theme,
@@ -383,6 +428,8 @@ export function loadPersistentState() {
     //   每次打开是文件树）。默认每次 explorer。
     if (typeof data.sidebarVisible === 'boolean') state.sidebarVisible = data.sidebarVisible
     if (typeof data.rightPanelVisible === 'boolean') state.rightPanelVisible = data.rightPanelVisible
+    // ★ 老 localStorage 无该字段 → 保持默认 true（向后兼容，升级无感）
+    if (typeof data.convListVisible === 'boolean') state.convListVisible = data.convListVisible
     if (typeof data.bottomPanelVisible === 'boolean') state.bottomPanelVisible = data.bottomPanelVisible
     if (data.bottomPanelTab) state.bottomPanelTab = data.bottomPanelTab
 

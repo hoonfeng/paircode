@@ -84,7 +84,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { undo, redo } from '@codemirror/commands'
-import { state, layout } from '../ui-state.js'
+import { state, layout, setFocusMode } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import CodeEditor from './CodeEditor.vue'
@@ -324,10 +324,13 @@ async function onEditorContextMenu(ev) {
     case 'copy-filename': navigator.clipboard.writeText(fileName).catch(() => {}); break
     case 'copy-path': navigator.clipboard.writeText(path).catch(() => {}); break
     case 'command-palette':
+      // ★ 显式唤出侧栏 = 退出专注（先还原侧栏原值、再显式显示）
+      setFocusMode(false)
       state.activeActivity = 'search'
       state.sidebarVisible = true
       break
     case 'reveal':
+      setFocusMode(false)
       state.activeActivity = 'explorer'
       state.sidebarVisible = true
       break
