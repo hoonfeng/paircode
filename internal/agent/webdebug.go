@@ -125,6 +125,12 @@ type webDebugOpts struct {
 type webDebugResult struct {
 	title        string
 	bodyTextLen  int
+	rawTextLen   int    // innerText 原始长度（未用 textContent 兜底前的长度）
+	elCount      int    // 页面元素总数
+	visibleCount int    // 可见元素数（display/visibility/opacity 均正常）
+	visibleSkipped bool // ★ 元素过多（>5000）时探测 JS 主动跳过可见性统计——必须与
+	                    //   「真的是 0 个可见」区分，否则报告输出误导性的「可见 0 个」
+	domErr       string // DOM/白屏探测自身失败的原因；非空时不得据此判定白屏
 	consoleMsgs  []consoleMessage
 	networkFails []networkFail
 	evalResult   string
@@ -292,34 +298,56 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 	}
 
 	// ── 检查页面是否白屏 + DOM 概览 ──
+	// ★ 2026-09-12 修复「白屏」误报：原 JS 末尾写作 `}()`（箭头函数立即调用），在
+	// 「表达式」位置属语法错误（Unexpected token '('）。rod 的 Eval 会把整段包成
+	// function(){ return (JS).apply(this, arguments) }，语法错误使 Eval 直接返回 err，
+	// 本块被整体跳过 → bodyTextLen 恒为 0、domOverview 恒为空 → 凡探不到文字的页面
+	// 一律误报「❌ 页面白屏」。现改为纯函数表达式（由 rod 调用），并补 textContent
+	// 兜底、元素计数、探测失败可见化，避免「静默 0」再被当成白屏。
 	domObj, err := page.Eval(`() => {
 		const d = document;
-		if (!d || !d.body) return JSON.stringify({ textLen: 0, elCount: 0, overview: "无 body" });
-		const text = (d.body.innerText || '').trim();
+		if (!d || !d.body) return JSON.stringify({ textLen: 0, rawTextLen: 0, elCount: 0, visibleCount: 0, visibleSkipped: 0, overview: "无 body" });
+		const raw = (d.body.innerText || '').trim();
+		const text = raw || (d.body.textContent || '').trim();
 		const all = d.querySelectorAll('*');
 		const tags = {};
+		let visibleCount = 0;
+		const countVisible = all.length <= 5000;
 		all.forEach(el => {
 			const t = el.tagName.toLowerCase();
 			tags[t] = (tags[t] || 0) + 1;
+			if (countVisible) {
+				const cs = window.getComputedStyle(el);
+				if (cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0) visibleCount++;
+			}
 		});
 		// 提取主要布局标签
 		const topTags = ['div','span','p','h1','h2','h3','h4','h5','h6','a','button','input','img','ul','ol','li','table','tr','td','th','form','section','article','nav','header','footer','aside','main','canvas','svg','video','audio','select','textarea','label','iframe'];
 		const overview = topTags.filter(t => tags[t]).map(t => t + ':' + tags[t]).join(', ');
-		return JSON.stringify({ textLen: text.length, elCount: all.length, overview: overview || '(无匹配标签)' });
-	}()`)
+		return JSON.stringify({ textLen: text.length, rawTextLen: raw.length, elCount: all.length, visibleCount: visibleCount, visibleSkipped: countVisible ? 0 : 1, overview: overview || '(无匹配标签)' });
+	}`)
 	if err == nil {
 		// 手动解析 JSON 字符串
 		domStr := domObj.Value.String()
 		// 简单的文本长度提取
 		res.bodyTextLen = extractIntField(domStr, "textLen")
+		res.rawTextLen = extractIntField(domStr, "rawTextLen")
+		res.elCount = extractIntField(domStr, "elCount")
+		res.visibleCount = extractIntField(domStr, "visibleCount")
+		// ★ 元素过多时探测 JS 会跳过可见性统计（visibleCount 保持初值 0）——据
+		//   visibleSkipped 区分「未统计」与「真的是 0 个可见」，避免报告误报「可见 0 个」。
+		res.visibleSkipped = extractIntField(domStr, "visibleSkipped") == 1
 		if res.bodyTextLen == 0 {
-			// 回退到旧方式
-			btObj, e2 := page.Eval(`() => { const t = document.body ? (document.body.innerText || '').trim() : ''; return t.length; }`)
+			// 回退：直接取长度（同样必须是纯函数表达式——写成 `}()` 会语法错误）
+			btObj, e2 := page.Eval(`() => { const b = document.body; if (!b) return 0; return ((b.innerText || b.textContent || '').trim()).length; }`)
 			if e2 == nil {
 				res.bodyTextLen = int(btObj.Value.Int())
 			}
 		}
 		res.domOverview = extractStrField(domStr, "overview")
+	} else {
+		// ★ 探测失败必须可见：此前静默保持 0，被后续逻辑一律当成「白屏」
+		res.domErr = err.Error()
 	}
 
 	// ── 查询元素详细信息（可选） ──
@@ -433,6 +461,36 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 	return buildWebDebugReport(&res, root, targetURL), nil
 }
 
+// isLikelyBlank 判定页面是否疑似白屏。
+// ★ 不能只看文字长度：Vue/React 根应用、Canvas/SVG 应用、文本位于不可见节点，
+// 或探测本身失败时，body 文本长度都可能是 0，但页面并非白屏。
+// 规则：探测失败 → 不判白屏（无法判定）；有文字 → 不是白屏；
+// 无文字但存在足量 DOM 元素 → 不是白屏（仅提示文本不可提取）；
+// 无文字且几乎无元素 → 判为白屏。
+func isLikelyBlank(res *webDebugResult) bool {
+	if res.domErr != "" {
+		return false
+	}
+	if res.bodyTextLen > 0 {
+		return false
+	}
+	if res.elCount >= 20 {
+		return false
+	}
+	return true
+}
+
+// visibleStat 生成「可见元素数」的统计描述。
+// ★ 2026-09-12：元素超过 5000 时探测 JS 主动跳过可见性统计（性能保护），此时
+//   visibleCount 保持初值 0——直接输出会误导为「可见 0 个」（看起来像页面全隐藏）。
+//   此处区分「可见性未统计（元素过多）」与「真的是 0 个可见」。
+func visibleStat(res *webDebugResult) string {
+	if res.visibleSkipped {
+		return "可见性未统计（元素过多）"
+	}
+	return fmt.Sprintf("可见 %d 个", res.visibleCount)
+}
+
 // buildWebDebugReport 构建可读的网页验证报告。
 func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 	var b strings.Builder
@@ -442,17 +500,27 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 		b.WriteString(fmt.Sprintf("页面标题: %s\n", res.title))
 	}
 	b.WriteString(fmt.Sprintf("页面文字长度: %d %s\n", res.bodyTextLen, func() string {
-		if res.bodyTextLen == 0 {
-			return "⚠️ 白屏！页面无文字内容"
-		} else if res.bodyTextLen < 50 {
+		switch {
+		case res.domErr != "":
+			return fmt.Sprintf("⚠️ 探测失败（%s）——无法据此判定白屏，请用 element_query / eval 复核", res.domErr)
+		case isLikelyBlank(res):
+			return "⚠️ 白屏！页面既无文字也几乎无 DOM 元素"
+		case res.bodyTextLen == 0:
+			return fmt.Sprintf("⚠️ 未提取到可见文本（DOM 有 %d 个元素、%s）→ 文本不可提取，非白屏", res.elCount, visibleStat(res))
+		case res.bodyTextLen < 50:
 			return "⚠️ 内容过少，可能渲染异常"
 		}
 		return "✓ 正常"
 	}()))
+	if res.rawTextLen == 0 && res.bodyTextLen > 0 {
+		b.WriteString("  ↳ innerText 为空，已用 textContent 兜底（文本可能未渲染进视口）\n")
+	}
 
 	// DOM 概览
 	if res.domOverview != "" {
-		b.WriteString(fmt.Sprintf("DOM 元素: %s\n", res.domOverview))
+		b.WriteString(fmt.Sprintf("DOM 元素: 共 %d 个（%s） | %s\n", res.elCount, visibleStat(res), res.domOverview))
+	} else if res.domErr != "" {
+		b.WriteString(fmt.Sprintf("DOM 元素: 探测失败（%s）\n", res.domErr))
 	}
 
 	// 网络请求失败
@@ -535,8 +603,12 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 	}
 	if errors > 0 || hasCritical {
 		b.WriteString(fmt.Sprintf("❌ 发现 %d 个错误，需要修复\n", errors))
+	} else if isLikelyBlank(res) {
+		b.WriteString("❌ 页面白屏，可能 JS 渲染失败（无文字且几乎无 DOM 元素）\n")
+	} else if res.domErr != "" {
+		b.WriteString(fmt.Sprintf("⚠️ 白屏探测失败（%s），无法判定是否白屏——请用 element_query / eval / 截图复核\n", res.domErr))
 	} else if res.bodyTextLen == 0 {
-		b.WriteString("❌ 页面白屏，可能 JS 渲染失败\n")
+		b.WriteString(fmt.Sprintf("⚠️ 未提取到可见文本（DOM 有 %d 个元素、%s）——页面已渲染，并非白屏；需要文本请用 text_extract 或 eval\n", res.elCount, visibleStat(res)))
 	} else if len(res.networkFails) > 0 {
 		b.WriteString(fmt.Sprintf("❌ 发现 %d 个网络请求失败，需要检查\n", len(res.networkFails)))
 	} else if warnings > 0 {
@@ -549,16 +621,67 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 }
 
 // consoleArgsText 从 RuntimeConsoleAPICalled 的参数中提取文本内容。
+// ★ 2026-09-12：支持 %d/%i/%f/%s/%o/%O/%j 占位符替换（%c 丢弃样式参数），
+// 避免 console.warn("x %d y %s", 1, "a") 被拼成 "x %d y %s 1 a"。
 func consoleArgsText(args []*proto.RuntimeRemoteObject) string {
-	text := ""
+	parts := make([]string, 0, len(args))
 	for _, arg := range args {
 		if arg.Value.String() != "" {
-			text += arg.Value.String() + " "
+			parts = append(parts, arg.Value.String())
 		} else if arg.Description != "" {
-			text += arg.Description + " "
+			parts = append(parts, arg.Description)
+		} else {
+			parts = append(parts, "")
 		}
 	}
-	return strings.TrimSpace(text)
+	if len(parts) == 0 {
+		return ""
+	}
+	return formatConsoleParts(parts)
+}
+
+// formatConsoleParts 用后续参数替换首参中的格式化占位符（浏览器 console 语义的子集）。
+// 参数不足时保留原占位符；未消费完的剩余参数追加在末尾。
+func formatConsoleParts(parts []string) string {
+	format := parts[0]
+	rest := parts[1:]
+	if !strings.Contains(format, "%") || len(rest) == 0 {
+		return strings.TrimSpace(strings.Join(parts, " "))
+	}
+	var b strings.Builder
+	ai := 0
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' || i+1 >= len(format) {
+			b.WriteByte(format[i])
+			continue
+		}
+		i++
+		switch format[i] {
+		case 'c': // CSS 样式：丢弃对应参数
+			if ai < len(rest) {
+				ai++
+			}
+		case '%':
+			b.WriteByte('%')
+		case 'd', 'i', 'f', 's', 'o', 'O', 'j':
+			if ai < len(rest) {
+				b.WriteString(rest[ai])
+				ai++
+			} else {
+				b.WriteByte('%')
+				b.WriteByte(format[i])
+			}
+		default: // 未知占位符原样保留
+			b.WriteByte('%')
+			b.WriteByte(format[i])
+		}
+	}
+	for ; ai < len(rest); ai++ {
+		if rest[ai] != "" {
+			b.WriteString(" " + rest[ai])
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // typeLabel 把 RuntimeConsoleAPICalledType 转为简短的标签。
