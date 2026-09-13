@@ -5,7 +5,8 @@
 //   node scripts/github-sync/upstream-pr.mjs --message "fix(xxx): 描述"   # 提交改动 + 推送 fork + 查/建上游 PR
 //   node scripts/github-sync/upstream-pr.mjs                              # 无改动时：推送检查 + 查上游 PR 现状
 //   node scripts/github-sync/upstream-pr.mjs --dry-run                    # 只预览将做的事，不做任何写操作
-//   node scripts/github-sync/upstream-pr.mjs --no-push                    # 只提交本地，不推送不查 PR
+//   node scripts/github-sync/upstream-pr.mjs --no-push                    # 只提交本地，跳过推送（仍可查/刷 PR）
+//   node scripts/github-sync/upstream-pr.mjs --refresh-pr                 # 已有 open PR 时：重算并刷新其标题/正文（需 token）
 //   可选：--title "PR 标题" --body "PR 正文"（仅创建新 PR 时生效）
 //
 // 功能：检查/提交本地改动 → 推送 fork（origin，SSH over 443）→ 查找/创建上游 PR（hoonfeng/paircode）
@@ -47,6 +48,7 @@ const getOpt = (name, def = null) => {
 };
 const DRY = argv.includes('--dry-run');
 const NO_PUSH = argv.includes('--no-push');
+const REFRESH = argv.includes('--refresh-pr');
 const MESSAGE = getOpt('message');
 const TITLE = getOpt('title');
 const BODY = getOpt('body');
@@ -119,6 +121,52 @@ function readToken() {
   return null;
 }
 
+// ── 生成 PR 标题/正文（基于 baseSha..headRef 的精确提交列表；缺对象时自动 fetch 补齐；dry-run 不 fetch）──
+// headRef 缺省为本地 HEAD；刷新已有 PR 时应传 PR 的 head.sha（已推送点），避免把本地未推送提交算进来。
+function buildPrContent(baseSha, headRef = 'HEAD') {
+  let head = headRef || 'HEAD';
+  if (head !== 'HEAD' && !gitOk('cat-file', '-e', head).ok) {
+    if (!DRY) gitOk('fetch', 'origin', BRANCH);
+    if (!gitOk('cat-file', '-e', head).ok) { log(`  - 提示：本地缺 PR head 对象 ${head.slice(0, 8)}，改用本地 HEAD 计算`); head = 'HEAD'; }
+  }
+  let commits = [];
+  let shortstat = '';
+  if (baseSha && gitOk('cat-file', '-e', baseSha).ok) {
+    commits = git('log', '--pretty=format:%h %s', `${baseSha}..${head}`).split('\n').filter(Boolean);
+    shortstat = (gitOk('diff', '--shortstat', `${baseSha}..${head}`).out || '').trim();
+  } else if (baseSha) {
+    let fetched = false;
+    if (!DRY) {
+      log(`  - 本地缺上游基准对象 ${baseSha.slice(0, 8)}，尝试 fetch 上游（proxy 通道）补齐...`);
+      const f = gitOk('fetch', 'proxy', BRANCH);
+      fetched = f.ok && gitOk('cat-file', '-e', baseSha).ok;
+    }
+    if (fetched) {
+      commits = git('log', '--pretty=format:%h %s', `${baseSha}..${head}`).split('\n').filter(Boolean);
+      shortstat = (gitOk('diff', '--shortstat', `${baseSha}..${head}`).out || '').trim();
+      log('  - 已补齐基准对象，按精确范围生成 [ok]');
+    } else {
+      log(`  - 提示：本地缺上游基准对象 ${baseSha.slice(0, 8)}${DRY ? '（dry-run 不自动 fetch）' : '（fetch 未成功，可先手动 git fetch proxy master）'}，标题/正文将简化`);
+      commits = git('log', '--pretty=format:%h %s', '-10', 'HEAD').split('\n').filter(Boolean);
+    }
+  }
+  const stripHash = (s) => s.replace(/^\S+\s+/, '');
+  const title = (TITLE !== true && TITLE) || (commits.length === 1 ? stripHash(commits[0]) : `同步 ${commits.length || ''} 个提交：${commits[0] ? stripHash(commits[0]) : '更新'}`);
+  const body = (BODY !== true && BODY) || [
+    '## 变更概览',
+    '',
+    `从 fork 同步本地开发进展${commits.length ? `，共 ${commits.length} 个提交` : ''}${shortstat ? `（${shortstat}）` : ''}：`,
+    '',
+    '### 提交列表',
+    ...(commits.length ? commits.map((c) => '- ' + c) : ['- （见 PR commits 页）']),
+    '',
+    '---',
+    `Fork 同步：https://github.com/${FORK_REPO}`,
+    '（本 PR 由 scripts/github-sync/upstream-pr.mjs 自动创建）',
+  ].join('\n');
+  return { title, body, commits };
+}
+
 // ── 主流程 ──
 async function main() {
   log('== PairCode 上游 PR 自动化 (upstream-pr.mjs) ==');
@@ -167,11 +215,8 @@ async function main() {
   // 2) 推送 fork（仅 `git push origin master`，绝无 --force）
   log('\n[2/5] 推送 fork（origin -> ' + FORK_REPO + '）...');
   if (NO_PUSH) {
-    log('  - --no-push：跳过推送与 PR 查询');
-    log('\n== 完成（仅本地提交）==');
-    return;
-  }
-  if (!originRef.ok || unpushed.length || willCommit) {
+    log('  - --no-push：跳过推送（继续查/刷 PR；查询为只读）');
+  } else if (!originRef.ok || unpushed.length || willCommit) {
     if (DRY) log('  - [dry-run] 将执行: git push origin master');
     else {
       try { git('push', 'origin', BRANCH); log('  - 推送完成 [ok]'); }
@@ -183,7 +228,8 @@ async function main() {
 
   // 3) 核对远端
   log('\n[3/5] 核对远端 master...');
-  if (DRY) log('  - [dry-run] 跳过');
+  if (NO_PUSH) log('  - [no-push] 跳过（未推送，远端可能落后于本地）');
+  else if (DRY) log('  - [dry-run] 跳过');
   else {
     const r = gitOk('ls-remote', 'origin', `refs/heads/${BRANCH}`);
     const remoteSha = r.ok ? r.out.split(/\s+/)[0] : null;
@@ -200,6 +246,20 @@ async function main() {
   if (openPr) {
     log(`  - 已有 open PR #${openPr.number}: ${openPr.title}`);
     log(`    ${openPr.html_url}`);
+    if (REFRESH) {
+      log('  - --refresh-pr：重算并刷新 PR 标题/正文...');
+      const { title, body } = buildPrContent(openPr.base && openPr.base.sha, openPr.head && openPr.head.sha);
+      log(`  - 新标题: ${title}`);
+      log('  - 新正文预览:\n-----');
+      log(body.slice(0, 500) + (body.length > 500 ? '\n...' : ''));
+      log('-----');
+      if (DRY) { log('\n[dry-run] 将 PATCH 更新 PR 标题/正文（未执行）'); return; }
+      const token = readToken();
+      if (!token) die('未找到 API token（刷新 PR 需要 token）。详见 .pair/secrets/README.md');
+      const up = await api('PATCH', `/repos/${UPSTREAM}/pulls/${openPr.number}`, { token, body: { title, body } });
+      if (up.status === 200) { log(`\n== [ok] PR #${openPr.number} 标题/正文已刷新 ==`); return; }
+      die(`刷新 PR 失败: HTTP ${up.status}\n${up.raw.slice(0, 500)}`);
+    }
     log('\n== 完成：已有 PR（新推送的提交已自动包含其中）==');
     return;
   }
@@ -208,30 +268,8 @@ async function main() {
   log('\n[5/5] 无 open PR，准备创建...');
   const br = await api('GET', `/repos/${UPSTREAM}/branches/${BRANCH}`);
   const baseSha = br.status === 200 ? br.json.commit.sha : null;
-  let commits = [];
-  let shortstat = '';
-  if (baseSha && gitOk('cat-file', '-e', baseSha).ok) {
-    commits = git('log', '--pretty=format:%h %s', `${baseSha}..HEAD`).split('\n').filter(Boolean);
-    shortstat = (gitOk('diff', '--shortstat', `${baseSha}..HEAD`).out || '').trim();
-  } else if (baseSha) {
-    log(`  - 提示：本地缺上游基准对象 ${baseSha.slice(0, 8)}，标题/正文将简化`);
-    commits = git('log', '--pretty=format:%h %s', '-10', 'HEAD').split('\n').filter(Boolean);
-  }
-  const stripHash = (s) => s.replace(/^\S+\s+/, '');
+  const { title, body, commits } = buildPrContent(baseSha);
   if (DRY && willCommit && !commits.length) log('  - [dry-run] 提示：实际运行时提交已发生，将列出新提交并据其生成标题/正文');
-  const title = (TITLE !== true && TITLE) || (commits.length === 1 ? stripHash(commits[0]) : `同步 ${commits.length || ''} 个提交：${commits[0] ? stripHash(commits[0]) : '更新'}`);
-  const body = (BODY !== true && BODY) || [
-    '## 变更概览',
-    '',
-    `从 fork 同步本地开发进展${commits.length ? `，共 ${commits.length} 个提交` : ''}${shortstat ? `（${shortstat}）` : ''}：`,
-    '',
-    '### 提交列表',
-    ...(commits.length ? commits.map((c) => '- ' + c) : ['- （见 PR commits 页）']),
-    '',
-    '---',
-    `Fork 同步：https://github.com/${FORK_REPO}`,
-    '（本 PR 由 scripts/github-sync/upstream-pr.mjs 自动创建）',
-  ].join('\n');
 
   log(`  - 标题: ${title}`);
   log(`  - 正文预览:\n-----`);
