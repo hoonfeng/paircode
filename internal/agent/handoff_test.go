@@ -142,7 +142,7 @@ func TestHandoff_ComposeView(t *testing.T) {
 		{Role: RoleAssistant, Content: "a1"},
 		{Role: RoleUser, Content: "u2"},
 	}
-	text := backgroundCtxMarker + handoffTitle + "\n交接正文"
+	text := handoffTitle + "\n交接正文"
 
 	// rec 锚 = u1 → 增量 = 非 system 中 u1 起的 [u1, a1, u2]（含锚）
 	rec := &HandoffRecord{Text: text, Anchor: handoffFingerprint(Message{Role: RoleUser, Content: "u1"})}
@@ -179,12 +179,12 @@ func TestHandoff_ComposeView(t *testing.T) {
 	}
 }
 
-// TestHandoff_Fallback 规则式回退：无 Provider 时输出含标题/前缀的兜底交接。
+// TestHandoff_Fallback 规则式回退：无 Provider 时输出含标题标记的兜底交接。
 func TestHandoff_Fallback(t *testing.T) {
 	hist := handoffHist(6, "f")
 	text := BuildHandoffText(context.Background(), nil, nil, hist, "继续任务")
-	if !strings.HasPrefix(text, backgroundCtxMarker) {
-		t.Fatal("交接文本应以背景上下文标记开头（落盘锚点/轮次统计自动跳过）")
+	if !strings.HasPrefix(text, handoffTitle) {
+		t.Fatal("交接文本应以标题标记开头（落盘锚点/轮次统计按系统注入消息跳过）")
 	}
 	if !isHandoffText(text) {
 		t.Fatal("交接文本应含标题标记")
@@ -389,7 +389,7 @@ func TestHandoff_LoopHistoryReuse(t *testing.T) {
 	t.Setenv("PAIR_HANDOFF_REFRESH_TOKENS", "100000")
 
 	hist := handoffHist(40, "ru")
-	rec := &HandoffRecord{Text: backgroundCtxMarker + handoffTitle + "\n复用", Anchor: handoffAnchor(hist), KeptTokens: 1}
+	rec := &HandoffRecord{Text: handoffTitle + "\n复用", Anchor: handoffAnchor(hist), KeptTokens: 1}
 	v1 := ComposeHandoffView(hist, rec, rec.Text)
 
 	// 模拟 Run：History = [system] + 视图 + 段内新增（续跑消息、交互）
@@ -452,7 +452,7 @@ func TestHandoff_KeepDepthByRel(t *testing.T) {
 		{"", handoffKeepRelHigh}, // 空=未知 → 保守按高
 	} {
 		rec := &HandoffRecord{
-			Text:      backgroundCtxMarker + handoffTitle + "\n" + tc.rel,
+			Text:      handoffTitle + "\n" + tc.rel,
 			Anchor:    handoffAnchorAt(hist, tc.keep),
 			Relevance: tc.rel,
 		}

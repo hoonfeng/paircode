@@ -44,20 +44,6 @@
           <div class="msg-list-wrap">
             <!-- ★ 遍历 messageCombos，每个 user / assistant 分别渲染为独立气泡 -->
             <template v-for="(combo, ci) in messageCombos" :key="'c' + ci">
-              <!-- ── 背景上下文快照（循环同步的消息流背景信息，折叠系统信息条） ── -->
-              <div v-if="combo._snapshots && combo._snapshots.length > 0" class="snapshot-strip">
-                <div v-for="(snap, si) in combo._snapshots" :key="'snap'+si" class="snapshot-item" :class="{ open: snap._open }">
-                  <div class="snapshot-head" @click="snap._open = !snap._open">
-                    <svg class="folded-chevron" :class="{ rotated: snap._open }" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
-                    <SvgIcon name="file-text" :size="11" />
-                    <span>背景上下文</span>
-                    <span class="snapshot-hint">（非当前任务）</span>
-                  </div>
-                  <div v-if="snap._open" class="snapshot-body">
-                    <MarkdownRenderer :text="cleanMsgContent(snap)" :theme="state.theme" />
-                  </div>
-                </div>
-              </div>
               <!-- ── 用户消息独立气泡（右对齐） ── -->
               <div v-if="combo.user" class="msg-item msg-user" :data-idx="combo.user._idx">
                 <div class="msg-avatar"><SvgIcon name="user" :size="16" /></div>
@@ -1186,9 +1172,11 @@ const hasMoreTop = computed(() => {
   const msgs = state.messagesByConv[id]
   if (!msgs || msgs.length === 0) return false
   if (msgs[0]._noMoreAbove) return false
-  // 依据最早已加载消息的 _idx 判断是否还有更早消息（比 msgTotal/Loaded 更可靠）
+  // 依据最早已加载消息的 _idx 判断是否还有更早消息（比 msgTotal/Loaded 更可靠）。
+  // ★ Idx 负数 = 归档区（真实早期历史，后端 displayMessages 把归档原文编号为负）：
+  //   归档区同样可继续向上翻，翻到归档最首时下一次请求返回空 → 由 _noMoreAbove 收敛。
   const oldestIdx = msgs[0]._idx
-  return oldestIdx !== undefined && oldestIdx !== null && oldestIdx > 0
+  return oldestIdx !== undefined && oldestIdx !== null
 })
 
 // ★ messageCombos：将平铺的 user/assistant 消息按用户消息分组。
@@ -1204,19 +1192,6 @@ const messageCombos = computed(() => {
   let pendingFeedback = null
   for (const msg of msgs) {
     if (msg.role === 'user') {
-      // ★ 背景上下文快照：合并进当前组合的 _snapshots（折叠系统信息条），
-      //   不创建独立用户气泡（快照是循环同步的消息流背景信息，语义同 dsh
-      //   runtime context snapshot）。
-      if (isContextSnapshot(msg)) {
-        if (current) {
-          if (!current._snapshots) current._snapshots = []
-          current._snapshots.push(msg)
-        } else {
-          current = { user: null, assistant: null, _snapshots: [msg] }
-          combos.push(current)
-        }
-        continue
-      }
       // ★ 用户反馈消息：合并到前一个 assistant，不创建独立气泡
       if (isFeedback(msg)) {
         pendingFeedback = msg
@@ -1293,7 +1268,9 @@ const loadMoreMessages = async () => {
   if (!msgs || msgs.length === 0) return
   if (msgs[0]._noMoreAbove) return
   const oldestIdx = msgs[0]._idx
-  if (oldestIdx === undefined || oldestIdx === null || oldestIdx <= 0) return
+  // ★ 允许负 Idx（归档区）：此前 `oldestIdx <= 0` 会截断向上分页，
+  //   前端永远看不到归档前的真实历史（只看到主文件首行的压缩摘要）。
+  if (oldestIdx === undefined || oldestIdx === null) return
   loadingMoreTop.value = true
   // 记录 prepend 前的 scrollHeight + scrollTop，用于补偿滚动位置
   const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
@@ -1535,19 +1512,10 @@ function isFeedback(msg) {
   return msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('【用户反馈】')
 }
 
-// isContextSnapshot 判断用户消息是否为「背景上下文快照」（语义同 dsh 的
-// runtime context snapshot）：由循环同步进消息流，展示为折叠的系统信息条，
-// 不创建独立用户气泡（合并进前一 assistant 组合的 _snapshots 数组）。
-function isContextSnapshot(msg) {
-  return msg.role === 'user' && typeof msg.content === 'string'
-    && (msg.content.startsWith('【背景上下文·非当前任务】') || msg.content.startsWith('【历史归档】'))
-}
-
 // cleanMsgContent 去除消息中的标记前缀和附件尾注，只展示纯内容。
 function cleanMsgContent(msg) {
   if (!msg.content) return ''
   return msg.content
-    .replace(/^【背景上下文·非当前任务】\n*/, '')
     .replace(/^【任务委派 → \w+】\n*/, '')
     .replace(/^【用户反馈】/, '')
     .replace(/\n*📎 附件: .+/s, '')
@@ -2928,15 +2896,6 @@ onUnmounted(() => {
 .fb-merged-item { margin-bottom: 4px; }
 .fb-merged-item:last-child { margin-bottom: 0; }
 
-/* ── 背景上下文快照（折叠系统信息条）── */
-.snapshot-strip { margin: 6px 0 4px; }
-.snapshot-item { border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--bg-secondary); font-size: 12px; margin-bottom: 4px; overflow: hidden; }
-.snapshot-head { display: flex; align-items: center; gap: 5px; padding: 4px 10px; cursor: pointer; color: var(--fg-muted); user-select: none; }
-.snapshot-head:hover { background: var(--bg-hover); }
-.snapshot-head .folded-chevron { transition: transform 0.15s; }
-.snapshot-head .folded-chevron.rotated { transform: rotate(90deg); }
-.snapshot-hint { color: var(--fg-faint); font-size: 11px; }
-.snapshot-body { padding: 6px 10px 8px; border-top: 1px solid var(--border-color); background: var(--bg-primary); max-height: 320px; overflow-y: auto; }
 .fb-merge-label {
   font-size: 11px;
   font-weight: 600;

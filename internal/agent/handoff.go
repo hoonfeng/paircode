@@ -37,7 +37,8 @@ package agent
 //
 // 边界与安全性：
 //   - 原文不删除：交接只替换「喂 LLM 的历史视图」；落盘/展示仍为完整时间线
-//     （视图文本以 backgroundCtxMarker 开头，落盘锚点/真实任务轮次统计自动跳过）；
+//     （视图文本以 handoffTitle 开头，落盘锚点/真实任务轮次统计自动跳过，
+//     见 isInjectedUserMessage / IsHandoffText）；
 //   - 关闭：环境变量 PAIR_HANDOFF=0；阈值覆盖：PAIR_HANDOFF_TRIGGER_TOKENS /
 //     PAIR_HANDOFF_REFRESH_TOKENS（便于测试与按需调节）；
 //   - 增量基点：经「消息内容指纹序列」锚定（HandoffRecord.Anchor，连续
@@ -59,7 +60,7 @@ import (
 )
 
 const (
-	// handoffTitle 交接注入文本的标题（识别标记；与 backgroundCtxMarker 组合）。
+	// handoffTitle 交接注入文本的标题（兼作识别标记：文本以它开头，见 injected_msg.go）。
 	handoffTitle = "【会话交接·提交消息】"
 	// handoffTriggerRatio 触发整理的 token 占窗口比例阈值（与地板取大）。
 	handoffTriggerRatio = 0.30
@@ -564,8 +565,8 @@ func handoffSample(history []Message, prev *HandoffRecord, task string) string {
 }
 
 // BuildHandoffText 调用一次 LLM 把历史整理成「会话交接·提交消息」；
-// 失败（无 Provider / 报错 / 输出异常）回退规则式交接。返回文本已带
-// backgroundCtxMarker + 标题前缀（注入即用）。
+// 失败（无 Provider / 报错 / 输出异常）回退规则式交接。
+// 返回文本以 handoffTitle 开头（注入即用 + 系统注入消息识别标记）。
 func BuildHandoffText(ctx context.Context, prov Provider, prev *HandoffRecord, history []Message, task string) string {
 	body := ""
 	if prov != nil {
@@ -586,7 +587,7 @@ func BuildHandoffText(ctx context.Context, prov Provider, prev *HandoffRecord, h
 	if body == "" {
 		body = ruleHandoffFallback(history)
 	}
-	return backgroundCtxMarker + handoffTitle + "\n" + body
+	return handoffTitle + "\n" + body
 }
 
 // sanitizeHandoffBody 清洗 LLM 输出：去首尾空白、剥代码围栏、去重复标题行。

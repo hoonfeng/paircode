@@ -2,7 +2,11 @@
 package handler
 
 // RegisterAll 注册所有 API 路由到 Router。
-// 被 cmd/companion/web_server.go 和 cmd/desktop/main.go 共用。
+//
+// ★ 2026-09-13 现状：**无调用者**——内置 /api/* 接口已全部进内核路由表
+// （internal/agent/kernel_api.go），由 core-api 磁盘插件经 ctx.kernel.install
+// 挂载（cmd/companion/web_server.go registerKernelAPIs）。本文件与本包 handler
+// 仅保留给测试与参考；新增接口请走内核路由表，勿在此追加。
 func RegisterAll(r *Router) {
 	// 系统
 	r.Handle("GET", "/api/health", HandleHealth)

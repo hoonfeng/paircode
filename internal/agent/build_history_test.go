@@ -60,13 +60,14 @@ func TestLoopRun_多轮历史原样注入(t *testing.T) {
 	}
 
 	// 历史 user 消息必须内容原样（无前缀/无附加）；
-	// ★ 背景上下文快照（带 backgroundCtxMarker）为独立新增消息，不构成对任务的污染。
+	// ★ 系统注入消息（历史压缩摘要/交接视图等，见 injected_msg.go）为独立消息，
+	//   不构成对任务的污染（此处一并跳过）。
 	for _, m := range msgs {
 		if m.Role != RoleUser {
 			continue
 		}
-		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
-			continue // 背景快照（记忆/摘要/状态）：独立消息，任务内容不受影响
+		if hasPrefixInjected(m.Content) {
+			continue // 系统注入物：独立消息，任务内容不受影响
 		}
 		switch m.Content {
 		case "第一轮任务", "第二轮任务":

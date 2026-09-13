@@ -1923,18 +1923,22 @@ func truncateStr(s string, maxRunes int) string {
 	return string(r[:maxRunes]) + "…"
 }
 
-// buildWebSystemDynamicCache 缓存 buildWebSystemDynamic 的输出（30s TTL）。
-// skills 列表/知识库/项目环境等低频变化，缓存避免每次 Loop 重建重复扫描文件系统，
+// buildWebSystemDynamicCache 缓存 buildWebSystemDynamicBase 的输出（30s TTL）。
+// skills 列表/项目约定等低频变化，缓存避免每次 Loop 重建重复扫描文件系统，
 // 从而让 system 动态后缀在同一配置下保持稳定（减少 KV 缓存前缀断裂点漂移）。
+// ★ 项目环境段不在其中——它走「会话级冻结」projectEnvSectionCached（见其注释）。
 var buildWebSystemDynamicCache struct {
 	mu  sync.Mutex
 	ts  time.Time
 	val string
 }
 
-// buildWebSystemDynamic 构建 system prompt 动态后缀（CACHE_BOUNDARY 之后）。
-// 包括 skills、项目知识库、项目环境等会话特定内容。
-func buildWebSystemDynamic() string {
+// buildWebSystemDynamicBase 构建 system prompt 动态后缀的**基础段**（CACHE_BOUNDARY 之后）：
+// skills 列表 + 项目约定（ProjectRules）。★ 2026-09-13 拆分：项目环境段曾在此，
+// 因 agent 会按系统提示主动改写 .pair/project.md，内容一变即令 boundary 之后
+// （含**整个历史**）在 provider 前缀缓存中全部 miss → 已改为会话级冻结独立承载
+// （projectEnvSectionCached）。
+func buildWebSystemDynamicBase() string {
 	buildWebSystemDynamicCache.mu.Lock()
 	defer buildWebSystemDynamicCache.mu.Unlock()
 	if buildWebSystemDynamicCache.val != "" && time.Since(buildWebSystemDynamicCache.ts) < 30*time.Second {
@@ -1945,38 +1949,18 @@ func buildWebSystemDynamic() string {
 	root := core.Root()
 	skillsSec := skills.Prompt()
 	rulesSec := agent.ProjectRules(root)
-	// ★ 2026-08-27 缓存优化：记忆/知识库从 system 动态后缀移入「背景上下文快照」
-	//   （Loop.syncContextSnapshot / agentloop 插件的 snapshot.sync）——
-	//   记忆/知识库高频变化曾导致 system 整体前缀断裂（全部 miss）；
-	//   移到消息流快照后，变化只断快照之后的尾部，system 前缀稳定。
+	// ★ 2026-08-27 缓存优化 / 2026-09-13 治理：「记忆/知识库」曾从 system 动态后缀
+	//   移入「背景上下文快照」（高频变化会断 system 前缀）——该快照链已整体移除
+	//   （2026-09-04 停用 → 2026-09-13 删除，见 loop.go）。二者当前**无注入点**；
+	//   如需恢复，走本函数（system 动态后缀，建议配会话级冻结，见 projectEnvSectionCached），
+	//   勿恢复消息流快照注入链。
 	b.WriteString(skillsSec)
 	b.WriteString(rulesSec)
 
-	// ★ 项目环境：遍历所有工作区根目录，分别读取各自的 .pair/project.md
-	if len(core.Folders) > 0 {
-		b.WriteString("\n\n# 项目环境")
-		for i, f := range core.Folders {
-			projName := filepath.Base(f)
-			if i == 0 {
-				b.WriteString(fmt.Sprintf("\n\n### %s（主项目）\n", projName))
-			} else {
-				b.WriteString(fmt.Sprintf("\n\n### %s\n", projName))
-			}
-			b.WriteString(fmt.Sprintf("> 路径: %s\n", f))
-			projEnv := agent.ReadProjectEnv(f)
-			if projEnv != "" {
-				// 去除 project.md 自带的 # 项目环境档案 顶栏标题，避免与 ### 嵌套层级混乱
-				lines := strings.SplitN(projEnv, "\n", 2)
-				if len(lines) > 1 && strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
-					b.WriteString(strings.TrimSpace(lines[1]) + "\n")
-				} else {
-					b.WriteString(projEnv + "\n")
-				}
-			} else {
-				b.WriteString("（无环境配置）\n")
-			}
-		}
-	}
+	// ★ 2026-09-13（S1 缓存前缀治理）：项目环境段已移出本函数 →
+	//   buildProjectEnvSection() 现读 + projectEnvSectionCached(convID) 会话级冻结。
+	//   原因：agent 会按系统提示主动更新 .pair/project.md（见 loop.go 的环境问题说明），
+	//   该项目环境段位于 boundary 之后，内容一变即让整个历史一起 miss。
 	// 时间戳已移至用户消息内（Loop.Run 中注入），保持系统提示词缓存前缀稳定。
 	val := b.String()
 	buildWebSystemDynamicCache.ts = time.Now()
@@ -1988,18 +1972,10 @@ func buildWebSystemDynamic() string {
 			sum := sha256.Sum256([]byte(s))
 			return fmt.Sprintf("%x", sum[:4])
 		}
-		var envSec strings.Builder
-		if len(core.Folders) > 0 {
-			for _, f := range core.Folders {
-				projEnv := agent.ReadProjectEnv(f)
-				envSec.WriteString(projEnv)
-			}
-		}
-		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) rules=%s(%d) env=%s total=%s len=%d",
+		log.Printf("[cache-diag] dynamic 基础段 hash skills=%s(%d) rules=%s(%d) total=%s len=%d",
 			secHash(skillsSec), len(skillsSec),
-			secHash(rulesSec), len(rulesSec),
-			secHash(envSec.String()), secHash(val), len(val))
-		log.Printf("[cache-diag] 记忆/知识库已移入背景快照（buildWebSystemDynamic 不再承载；快照变化见 [cache-diag] snapshot 行）")
+			secHash(rulesSec), len(rulesSec), secHash(val), len(val))
+		log.Printf("[cache-diag] 记忆/知识库已移入背景快照；项目环境见 [cache-diag] 项目环境行（会话级冻结）")
 		// 技能行级：定位列表变化的具体技能（行格式 "- 名字：描述"）
 		for _, skillLine := range strings.Split(skillsSec, "\n") {
 			if strings.HasPrefix(skillLine, "- ") {
@@ -2014,18 +1990,109 @@ func buildWebSystemDynamic() string {
 	return val
 }
 
+// buildProjectEnvSection 现读各工作区根的 .pair/project.md，拼成「# 项目环境」段。
+// ★ 调用方应优先用 projectEnvSectionCached（会话级冻结），仅在需要真实最新内容时直调本函数。
+func buildProjectEnvSection() string {
+	if len(core.Folders) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	// ★ 项目环境：遍历所有工作区根目录，分别读取各自的 .pair/project.md
+	b.WriteString("\n\n# 项目环境")
+	for i, f := range core.Folders {
+		projName := filepath.Base(f)
+		if i == 0 {
+			b.WriteString(fmt.Sprintf("\n\n### %s（主项目）\n", projName))
+		} else {
+			b.WriteString(fmt.Sprintf("\n\n### %s\n", projName))
+		}
+		b.WriteString(fmt.Sprintf("> 路径: %s\n", f))
+		projEnv := agent.ReadProjectEnv(f)
+		if projEnv != "" {
+			// 去除 project.md 自带的 # 项目环境档案 顶栏标题，避免与 ### 嵌套层级混乱
+			lines := strings.SplitN(projEnv, "\n", 2)
+			if len(lines) > 1 && strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
+				b.WriteString(strings.TrimSpace(lines[1]) + "\n")
+			} else {
+				b.WriteString(projEnv + "\n")
+			}
+		} else {
+			b.WriteString("（无环境配置）\n")
+		}
+	}
+	return b.String()
+}
+
+// projectEnvSessionCache 项目环境段的**会话级冻结**缓存（convID → 段文本）。
+// ★ 2026-09-13（S1 缓存前缀治理）：项目环境位于 system 动态后缀（boundary 之后），
+// 而 agent 会按系统提示主动更新 .pair/project.md（「若问题未记录，在解决后更新」）——
+// 内容一变，provider 前缀缓存从该点起失效：boundary 之后含**整个历史**全部 miss。
+// 改为「会话内冻结」：本会话首次构建时读一次，此后逐字节不变（新内容下个会话生效）。
+// 代价可忽略：agent 需要最新环境配置时可直接 read .pair/project.md（系统提示已如此引导）。
+var projectEnvSessionCache = struct {
+	mu   sync.Mutex
+	m    map[string]string
+	keys []string // FIFO：超上限逐出最旧会话
+}{m: map[string]string{}}
+
+// projectEnvCacheMaxSessions 会话级冻结条数上限（防长跑进程内存累积）。
+const projectEnvCacheMaxSessions = 256
+
+// projectEnvSectionCached 取项目环境段（会话级冻结）。convID 为空（预热/无会话）时用固定键，
+// 同样冻结，保证同源请求逐字节一致。
+func projectEnvSectionCached(convID string) string {
+	key := convID
+	if key == "" {
+		key = "\x00no-session"
+	}
+	projectEnvSessionCache.mu.Lock()
+	if s, ok := projectEnvSessionCache.m[key]; ok {
+		projectEnvSessionCache.mu.Unlock()
+		return s
+	}
+	projectEnvSessionCache.mu.Unlock()
+	s := buildProjectEnvSection() // 读盘在锁外（避免慢 IO 持锁）
+	projectEnvSessionCache.mu.Lock()
+	defer projectEnvSessionCache.mu.Unlock()
+	if old, ok := projectEnvSessionCache.m[key]; ok { // 并发首建：以先写入者为准
+		return old
+	}
+	projectEnvSessionCache.m[key] = s
+	projectEnvSessionCache.keys = append(projectEnvSessionCache.keys, key)
+	if len(projectEnvSessionCache.keys) > projectEnvCacheMaxSessions {
+		oldest := projectEnvSessionCache.keys[0]
+		projectEnvSessionCache.keys = projectEnvSessionCache.keys[1:]
+		delete(projectEnvSessionCache.m, oldest)
+	}
+	if os.Getenv("WB_CACHE_DIAG") == "1" {
+		sum := sha256.Sum256([]byte(s))
+		log.Printf("[cache-diag] 项目环境段 会话冻结 conv=%s hash=%x len=%d（本会话内不再变化）",
+			convID, sum[:4], len(s))
+	}
+	return s
+}
+
 // buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
 // 使用唯一的 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
 // ★ 通过 ComposeSystemPrompt 统一添加 boundary，避免双边界/漏边界。
+// ★ boundary 的真实语义（2026-09-13 校正）：它只是**本地的静态/动态分界标记**
+//
+//	（用于复用静态前缀拼接 + 诊断定位变化源），**provider 不认** —— 动态后缀一变，
+//	boundary 之后的内容（含**整个历史**）在 provider 前缀缓存中全部 miss，仅静态前缀仍命中。
+//	（dsh 的 `systemPromptUpdate: 'in-history'` 才是「变化内容不伤历史」的正解，见知识库
+//	关键点-dsh缓存前缀语义对照与注入点审计（2026-09-13）。）
+//
 // ★ 插件贡献的系统提示段/变量（对齐 system-prompt 注册中心）并入动态侧：
 //
-//	插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
+//	插件段随加载/卸载变化，放 boundary 后至少保住静态前缀。
 //
 // ★ 2026-08-31 按需激活：convID 指定时，on-demand 插件（agent-teams 等）段
 //
 //	仅在本会话已激活时注入；convID 为空（如桌面端）时按需段一律隐藏。
 func buildWebSystemPrompt(convID string) string {
-	dynamic := buildWebSystemDynamic()
+	// ★ 2026-09-13（S1）：项目环境段走会话级冻结（convID 维度），不与 30s TTL 基础段共用缓存。
+	envSec := projectEnvSectionCached(convID)
+	dynamic := buildWebSystemDynamicBase() + envSec
 	if ph := handler.GetPluginHost(); ph != nil {
 		if secs, err := agent.PluginPromptSections(ph, convID); err == nil && secs != "" {
 			// ★ 缓存诊断：插件段哈希/长度（dynamic 变化源定位）
@@ -2036,7 +2103,16 @@ func buildWebSystemPrompt(convID string) string {
 			dynamic += "\n\n# 插件系统提示（由插件贡献，遵循各自段内规则）\n" + secs
 		}
 	}
-	return agent.ComposeSystemPrompt(buildSystemStaticPrefix(), dynamic)
+	sys := agent.ComposeSystemPrompt(buildSystemStaticPrefix(), dynamic)
+	// ★ 缓存诊断（WB_CACHE_DIAG=1）：**每次请求**输出完整 system 哈希 + 项目环境段哈希。
+	//   用途：端到端比对同一会话相邻请求的 system 是否逐字节一致（含 project.md 被改写后）。
+	//   开诊断时每请求一行（与 llm-trace 同量级），默认关闭零开销。
+	if os.Getenv("WB_CACHE_DIAG") == "1" {
+		sum := sha256.Sum256([]byte(sys))
+		envSum := sha256.Sum256([]byte(envSec))
+		log.Printf("[cache-diag] system hash=%x len=%d env=%x conv=%s", sum[:4], len(sys), envSum[:4], convID)
+	}
+	return sys
 }
 
 // buildWebProvider 构建 LLM Provider（桌面和 web 端共享）。
@@ -2198,18 +2274,13 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	originalHistory := make([]agent.Message, len(history))
 	copy(originalHistory, history)
 
-	// ★★★ 会话连贯性上下文：ResumeContext 构建已停用（2026-09-04）★★★
-	// 历史：任务进度/对话摘要/记忆/项目归属经 BuildResumeContext → 背景上下文快照
-	// 注入（2026-08-23 工作区隔离 / 2026-09-03 KV 修复迁快照尾）。
-	// 停用原因：快照正文含 resume 每轮必变 → 每轮追加新快照，历史累积 100+ 条
-	// （实测 104 条/133 万字符/占历史 20%+），上下文膨胀、命中率稀释，且构建本身
-	// 有每轮记忆召回/Git/代码图谱统计开销。恢复：取消下行注释（syncContextSnapshot 亦需恢复）。
-	resumeCtx := ""
-	// resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root})
-	if resumeCtx != "" && os.Getenv("WB_CACHE_DIAG") == "1" {
-		sum := sha256.Sum256([]byte(resumeCtx))
-		log.Printf("[cache-diag] resumeCtx hash=%x len=%d（已迁入背景快照，不再影响 system 前缀）", sum[:4], len(resumeCtx))
-	}
+	// ★★★ 会话连贯性上下文：ResumeContext / 背景上下文快照均已移除（2026-09-13）★★★
+	// 历史：任务进度/对话摘要/记忆/项目归属经 BuildResumeContext → 背景上下文快照注入
+	// （2026-08-23 工作区隔离 / 2026-09-03 KV 修复迁快照尾）。
+	// 2026-09-04 停用（快照正文每轮必变 → 每轮追加新快照，实测累积 104 条 / 133 万字符 /
+	// 占历史 20%+，上下文膨胀且稀释前缀缓存命中率），2026-09-13 实现整体删除。
+	// 现状：会话连贯性上下文由**提交消息（handoff 交接视图）**承载（尾部追加语义，
+	// 见 handoff.go）；任务进度由任务清单工具维护。★ 勿恢复快照注入链。
 
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
 	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
@@ -2266,7 +2337,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		HistoryOriginal:     originalHistory, // 原始版：供持久化使用，防止压缩版写回历史记录
 		CompressedSummaries: summaries,
 		Autonomous:          autonomous,
-		ResumeContext:       resumeCtx, // ★ 2026-09-03 会话连贯性上下文注入背景快照（不拼 system）
 		ConvID:              convID,    // 仅诊断用：缓存前缀诊断区分会话
 	}
 }

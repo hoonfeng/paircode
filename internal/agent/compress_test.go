@@ -458,109 +458,41 @@ func TestBuildCallContextTrimTool(t *testing.T) {
 	}
 }
 
-// TestBuildCallContextBackgroundBeforeTask 已被新语义取代：背景类 ephemeral 消息
-// （历史摘要/执行日志/过期检查）不再插入「当前任务之前」的固定背景位——
-// 背景快照已持久化到消息流（syncContextSnapshot，位置=当前任务之后，
-// 对齐 dsh RuntimeContextProjection）。本测试删除，语义见
-// TestBuildCallContextEphemeralMarkerAppended 与 TestSyncContextSnapshotIdempotent。
+// TestBuildCallContextBackgroundBeforeTask 已被新语义取代：ephemeral 消息
+// （用户反馈/执行日志/时间预算/过期检查）不再插入「当前任务之前」的固定背景位，
+// 一律按顺序追加末尾——历史段在序列中的位置逐字节稳定（前缀缓存命中的前提）。
 
-// TestBuildCallContextEphemeralMarkerAppended 验证：带背景标记的 ephemeral 消息
-// 不再被收集进固定背景位（快照已持久化到消息流），全部按顺序追加末尾。
-// 快照持久化后位置固定，ephemeral marker 消息仅兼容外部注入（追加末尾不影响前缀）。
-func TestBuildCallContextEphemeralMarkerAppended(t *testing.T) {
+// TestBuildCallContextEphemeralAppended 验证：ephemeral 消息按顺序追加在历史末尾，
+// 不重排已发送的历史段（前缀稳定）。
+func TestBuildCallContextEphemeralAppended(t *testing.T) {
 	l := &Loop{}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
 		{Role: RoleAssistant, Content: "只有助手回复"},
 	}
 	l.ephemeralMsgs = []Message{
-		{Role: RoleUser, Content: backgroundCtxMarker + "# 会话背景（外部注入测试）"},
+		{Role: RoleUser, Content: "【系统注入·测试】执行日志（外部注入）"},
 	}
 	out := l.buildCallContext(msgs)
 	if len(out) != 3 {
 		t.Fatalf("输出应含 3 条：%d", len(out))
 	}
-	if !strings.Contains(out[2].Content, "会话背景（外部注入测试）") {
-		t.Errorf("marker ephemeral 应追加末尾（位置 2），实际 out[2]=%q", out[2].Content)
+	if !strings.Contains(out[2].Content, "执行日志（外部注入）") {
+		t.Errorf("ephemeral 应追加末尾（位置 2），实际 out[2]=%q", out[2].Content)
 	}
 }
 
-// syncContextSnapshot 注入快照后 build 的前缀稳定验证见 TestBuildCallContextStableAcrossCalls
-// （快照持久化语义：位置固定当前任务之后，零动态注入）。
+// ★ 2026-09-13：「背景上下文快照」实现已整体移除（原 TestBuildSnapshotContent /
+// TestSyncContextSnapshotIdempotent / TestResumeContextGoesToSnapshotNotSystem 随之删除）。
+//   被删实现：Loop.buildSnapshotContent / syncContextSnapshot / findLastSnapshotContent、
+//   Loop.staleMsg / Loop.ResumeContext、jsloop 的 context.snapshot 数据面。
+//   禁令：不得恢复快照注入链（上下文改由交接视图 + 任务清单承载）。
 
-// TestBuildSnapshotContent 验证 buildSnapshotContent：状态/记忆/知识库组装、
-// 无内容时返回空（marker 与框架由 syncContextSnapshot 统一包裹）。
-// ★ 2026-09：历史摘要段（原「# 上下文已压缩——历史摘要」）已删除——上下文
-//   不再注入任何「压缩提示/摘要提示」文本，CompressedSummaries 只作运维数据保留。
-func TestBuildSnapshotContent(t *testing.T) {
-	l := &Loop{
-		staleMsg:            "⚠️ 检测到 3 条可能过期的记忆/知识库条目",
-		CompressedSummaries: []string{"[历史对话摘要] 轮次1 完成"},
-		WorkspaceRoot:       "",
-	}
-	out := l.buildSnapshotContent()
-	if !strings.Contains(out, "过期") {
-		t.Error("应包含记忆/知识库过期检查")
-	}
-	// 摘要不再注入上下文（提示已删除）
-	if strings.Contains(out, "历史摘要") || strings.Contains(out, "上下文已压缩") {
-		t.Errorf("历史摘要提示段已删除，不应出现在快照正文中：%q", out)
-	}
-	if strings.Contains(out, "[历史对话摘要]") {
-		t.Error("摘要正文不应注入快照（提示注入已删除）")
-	}
-	// 无摘要且非自主、无状态 → 不含摘要/自主/状态段（记忆/知识库为全局数据，
-	// 存在于否不归 Loop 控制——只断言策略段不出现）
-	empty := (&Loop{}).buildSnapshotContent()
-	if strings.Contains(empty, "上下文已压缩") || strings.Contains(empty, "自主模式") || strings.Contains(empty, "过期") {
-		t.Errorf("无摘要/非自主/无状态时不应含策略段，实际=%q", empty)
-	}
-}
-
-// TestSyncContextSnapshotIdempotent 验证快照同步幂等语义（对齐 dsh
-// RuntimeContextProjection）：内容相同 → 零注入；不同 → 追加新快照到
-// 当前任务之后（随 tail 落盘），旧快照保留（append-only，位置固定）。
-// ★ 2026-09：历史摘要不再进快照正文（提示注入已删除），故「内容变化」改用
-// 状态提示（staleMsg）触发——摘要变化不再改变快照。
-func TestSyncContextSnapshotIdempotent(t *testing.T) {
-	l := &Loop{
-		CompressedSummaries: []string{"[历史对话摘要] A"},
-		staleMsg:            "⚠️ 检测到 1 条可能过期的记忆条目",
-	}
-	msgs := []Message{{Role: RoleUser, Content: "任务1"}}
-	// 首次同步：注入快照（任务之后）
-	msgs = l.syncContextSnapshot(msgs)
-	if len(msgs) != 2 || msgs[1].Role != RoleUser || !strings.HasPrefix(msgs[1].Content, backgroundCtxMarker) {
-		t.Fatalf("首次同步应注入快照到任务之后，实际 msgs=%+v", msgs)
-	}
-	// 内容相同 → 零注入
-	again := l.syncContextSnapshot(append([]Message{}, msgs...))
-	if len(again) != len(msgs) {
-		t.Fatalf("内容相同应零注入，实际 len=%d -> %d", len(msgs), len(again))
-	}
-	// 摘要变化 → 不进快照正文 → 仍零注入（提示注入已删除）
-	l.CompressedSummaries = append(l.CompressedSummaries, "[历史对话摘要] B")
-	sameWithSummaries := l.syncContextSnapshot(append([]Message{}, msgs...))
-	if len(sameWithSummaries) != len(msgs) {
-		t.Fatalf("摘要不再进快照正文，摘要变化应零注入，实际 len=%d -> %d", len(msgs), len(sameWithSummaries))
-	}
-	// 内容变化（状态提示改变）→ 追加新快照（旧快照保留）
-	l.staleMsg = "⚠️ 检测到 2 条可能过期的记忆条目"
-	changed := l.syncContextSnapshot(append([]Message{}, msgs...))
-	if len(changed) != 3 {
-		t.Fatalf("内容变化应追加新快照（旧快照保留），实际 len=%d", len(changed))
-	}
-	if !strings.Contains(changed[2].Content, "2 条可能过期") {
-		t.Error("新快照应含新的状态提示内容")
-	}
-}
-
-// TestBuildCallContextStableAcrossCalls 验证：快照（过期检查/摘要）同步进消息流后，
-// build 输出前缀稳定——快照位置固定（当前任务之后），跨迭代仅末尾单调增长，
-// 这是 KV Cache 前缀命中的前提（快照不再每次迭代动态注入，位置不漂移）。
+// TestBuildCallContextStableAcrossCalls 验证：同一消息序列上跨迭代构建调用上下文的
+// 前缀稳定——历史段逐字节不变、只在末尾单调增长，这是 KV Cache 前缀命中的前提
+// （动态内容只在末尾追加，绝不重排/改写已发送部分）。
 func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 	l := &Loop{
-		staleMsg:            "⚠️ 检测到 3 条可能过期的记忆/知识库条目",
 		CompressedSummaries: []string{"[历史对话摘要 — LLM] 轮次1 完成"},
 	}
 	msgs := []Message{
@@ -569,8 +501,6 @@ func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 		{Role: RoleAssistant, Content: "旧回复"},
 		{Role: RoleUser, Content: "当前任务"},
 	}
-	// ★ Run 开始：快照同步进消息流（任务之后）
-	msgs = l.syncContextSnapshot(msgs)
 	call1 := l.buildCallContext(msgs)
 	// 模拟 iter1 后追加 assistant tool_call + tool 结果
 	msgs = append(msgs,
@@ -588,18 +518,10 @@ func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 				j, call1[j].Role, truncStr(call1[j].Content, 40), call2[j].Role, truncStr(call2[j].Content, 40))
 		}
 	}
-	// 快照（过期检查+摘要）应位于当前任务之后且在 iter1/iter2 相同位置；
-	// 快照自带「非当前任务」声明（对齐 dsh runtime context snapshot：在任务
-	// 之后，用声明让模型区分任务与背景，避免误把快照当最新输入）
-	if !strings.Contains(call1[4].Content, "过期") {
-		t.Errorf("快照应含过期检查且位于任务之后（位置 4），实际 call1[4]=%q", call1[4].Content)
-	}
-	if !strings.Contains(call2[4].Content, "过期") {
-		t.Errorf("iter2 快照仍应含过期检查（位置固定），实际 call2[4]=%q", call2[4].Content)
-	}
-	// 快照必须是最后一条 user 且带非当前任务声明（快照在任务之后）
-	last := call1[len(call1)-1]
-	if last.Role != RoleUser || !strings.Contains(last.Content, "背景上下文") {
-		t.Errorf("快照位于任务之后且带背景标记，实际 last=%+v", last)
+	// ★ 精简摘要仅作数据留存：不得注入调用上下文（无「已压缩/历史摘要」提示块）
+	for _, m := range call1 {
+		if strings.Contains(m.Content, "[历史对话摘要") || strings.Contains(m.Content, "上下文已压缩") {
+			t.Errorf("精简摘要不应进入调用上下文（仅数据留存），实际=%q", truncStr(m.Content, 60))
+		}
 	}
 }

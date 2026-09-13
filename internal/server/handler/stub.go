@@ -297,7 +297,9 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 			if beforeStr != "" {
 				var before int
 				fmt.Sscanf(beforeStr, "%d", &before)
-				msgs, err := store.LoadBefore(id, before, limit)
+				// ★ 2026-09-13：展示线统一用 ForDisplay 变体（读真实全量落盘历史：
+				//   归档原文 + 主文件，过滤系统注入摘要；归档区 Idx 为负数）。
+				msgs, err := store.LoadBeforeForDisplay(id, before, limit)
 				if err != nil {
 					jsonErr(w, err.Error())
 					return
@@ -305,12 +307,11 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 				if msgs == nil {
 					msgs = []agent.StoredMessage{}
 				}
-				msgs = agent.MergeConsecutiveAssistants(msgs)
 				total, _ := store.Count(id)
 				jsonResp(w, map[string]any{"messages": msgs, "total": total})
 				return
 			}
-			msgs, total, err := store.LoadLatest(id, limit)
+			msgs, total, err := store.LoadLatestForDisplay(id, limit)
 			if err != nil {
 				jsonErr(w, err.Error())
 				return
@@ -318,7 +319,6 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 			if msgs == nil {
 				msgs = []agent.StoredMessage{}
 			}
-			msgs = agent.MergeConsecutiveAssistants(msgs)
 			jsonResp(w, map[string]any{"messages": msgs, "total": total})
 		case "token-stats":
 			meta, err := store.GetConversation(id)

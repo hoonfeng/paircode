@@ -54,7 +54,14 @@ const (
 // CacheBoundary 分隔系统提示词静态前缀与动态后缀。
 // 静态前缀（CacheBoundary 之前）在每次请求中保持不变，LLM API 通过公共前缀检测
 // 实现 KV Cache 复用，大幅减少首 token 延迟和计算成本。
-// 动态后缀（CacheBoundary 之后）可容纳每轮变化的会话特定内容，不影响前缀缓存。
+// ★ 动态后缀（CacheBoundary 之后）的**真实语义（2026-09-13 校正）**：boundary 只是
+//
+//	**本地的静态/动态分界标记**（用于复用静态前缀拼接 + 诊断定位变化源），**provider 不认**。
+//	provider 按「公共前缀」逐 token 匹配 → 动态后缀一变，**boundary 之后的内容
+//	（含整个历史）在 provider 前缀缓存中全部 miss**，只有静态前缀仍命中。
+//	（dsh 的 `systemPromptUpdate: 'in-history'`（变化追加在缓存历史之后）才是「变化内容不伤历史」
+//	的正解；见知识库 关键点-dsh缓存前缀语义对照与注入点审计（2026-09-13）。）
+//
 // 参考：Claude Code 的 SYSTEM_PROMPT_DYNAMIC_BOUNDARY、DeepSeek 上下文缓存。
 const CacheBoundary = "\n\n<!--- CACHE_BOUNDARY --->\n\n"
 
@@ -67,19 +74,16 @@ var (
 	cacheDiagSession sessionCache // 进程级累计命中/未命中（诊断输出用）
 )
 
-// backgroundCtxMarker 背景上下文消息标记前缀。
-// 注入到 ephemeral 消息的背景信息（执行日志/记忆知识库过期检查等）以此开头，
-// buildCallContext 据此将其插入到「当前任务（最后一条 user 消息）」之前：
-// 若背景信息追加在任务之后，LLM 会把最新一条 user 消息（如背景快照）误认为当前输入，
-// 导致只核对历史而不执行任务（2026-08-08 排查结论）。
-const backgroundCtxMarker = "【背景上下文·非当前任务】\n"
+// ★ 2026-09-13：原 backgroundCtxMarker（【背景上下文·非当前任务】）已随「背景上下文」
+//   实现整体移除——快照注入链 2026-09-04 停用后，该标记只剩识别旧数据的用途，
+//   识别已统一到 injected_msg.go（isInjectedUserMessage / hasPrefixInjected）。
 
-// systemReminderFrame 把背景内容包进系统提醒框架（对齐
-// agent-instructions 的 <system-reminder> 注入格式）。背景信息注入为 user-role
-// ephemeral 消息（不持久化），框架让模型明确区分「背景信息」与「当前任务」，
-// 避免把执行日志等背景信息误当作待执行输入。
+// systemReminderFrame 把系统注入内容包进提醒框架（对齐
+// agent-instructions 的 <system-reminder> 注入格式）。注入物作为 user-role
+// ephemeral 消息（不持久化）或历史压缩摘要正文出现，框架让模型明确区分
+// 「系统注入信息」与「当前任务」，避免把执行日志等注入物误当作待执行输入。
 func systemReminderFrame(kind, body string) string {
-	return "<system-reminder>\n以下为" + kind + "（背景信息，非当前任务，仅作参考，请勿当作待执行任务）：\n\n" +
+	return "<system-reminder>\n以下为" + kind + "（系统注入信息，非当前任务，仅作参考，请勿当作待执行任务）：\n\n" +
 		body + "\n</system-reminder>"
 }
 
@@ -187,20 +191,9 @@ type Loop struct {
 
 	// CompressedSummaries 累积的上下文精简摘要列表。
 	// 每次 maybeCompact 精简中段老消息后追加一条摘要。
-	// ★ 仅作数据留存：不注入 system、不构建进「背景上下文快照」、不进消息流——
-	// 上下文里不再出现任何「已精简/历史摘要」提示块（字段保留供数据面读取）。
+	// ★ 仅作数据留存（持久化到 {conv}.summaries.json，供运行诊断）：不注入 system、
+	// 不进消息流——上下文里不再出现任何「已精简/历史摘要」提示块。
 	CompressedSummaries []string
-
-	// staleMsg Run 启动时记忆/知识库过期检查结果（固定内容）。
-	// 存字段而非每次调用扫描：VerifyAll 检查文件系统有成本，且内容须跨迭代稳定
-	// 以保持 KV Cache 前缀一致（经背景快照 syncContextSnapshot 进入消息流）。
-	staleMsg string
-
-	// ResumeContext 会话连贯性上下文（由 web 层 buildWebLoopOpts 构建传入）。
-	// ★ 2026-09-03 KV 缓存修复：内容每轮变化（任务进度/对话摘要/Git 状态等），
-	//   绝不能拼入 System（system 是 messages 第一条，尾部变化切断 provider 前缀缓存）；
-	//   经 buildSnapshotContent 注入背景快照（消息流尾部 append-only，见 syncContextSnapshot）。
-	ResumeContext string
 
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动精简阈值，比纯估算可信）
 
@@ -723,9 +716,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, Message{Role: RoleUser, Content: task})
 	}
 
-	// ★ 启动时检查记忆/知识库过期引用（固定内容存字段，由 buildCallContext 每次迭代注入到任务之前）
-	l.staleMsg = AutoVerifyStale()
-
 	// ★ 自主模式：记录启动时间（用于时间预算检查）
 	if l.Autonomous && l.autonomousStartTime.IsZero() {
 		l.autonomousStartTime = time.Now()
@@ -754,11 +744,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	//   是 LLM 后续轮次引用的关键上下文，run 内精简会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
-	// ★ 背景上下文快照同步已停用（2026-09-04）：快照正文含 ResumeContext（任务进度/
-	//   Git 状态/代码图谱统计/记忆召回）每轮必变 → 每轮追加新快照，历史累积 100+ 条
-	//   （实测会话 104 条 / 133 万字符 / 占历史 20%+，重会话达 60%），上下文膨胀且
-	//   每轮新增不可缓存尾部（前缀命中率稀释）。如需恢复：取消下行注释（实现保留）。
-	// msgs = l.syncContextSnapshot(msgs)
+	// ★ 2026-09-13：「背景上下文快照」实现已整体移除（2026-09-04 停用 → 本次删除）。
+	//   历史原因：快照正文含会话连贯性上下文（任务进度/Git 状态/代码图谱统计/记忆
+	//   召回）每轮必变 → 每轮追加新快照，历史累积 100+ 条（实测 104 条 / 133 万字符 /
+	//   占历史 20%+），上下文膨胀且每轮新增不可缓存尾部（前缀命中率稀释）。
+	//   会话连贯性上下文改由提交消息（handoff）与任务清单承载；禁止恢复快照注入链。
 
 	// ★ 历史轮次用户消息标注已移除（2026-08-15 对齐 harness）：
 	//   harness 不往消息正文注入前缀文本——历史轮次与当前任务同为 RoleUser，
@@ -1321,12 +1311,9 @@ func systemPromptFromMsgs(msgs []Message) string {
 //
 //	不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
-	// ★ 背景快照已持久化到消息流（syncContextSnapshot 在 Run 开始注入、幂等）：
-	//   不再每次迭代动态注入背景块——快照在历史中位置固定（当前任务之后），
-	//   跨 Run 前缀单调延展，KV 缓存不再因背景块位置漂移而断裂
-	//   （对齐 dsh RuntimeContextProjection：内容变化时才追加新快照，旧快照保留）。
-	// ★ 动态内容（执行日志 buildLogBlock）与即时消息（用户反馈/时间预算/绕圈提示）追加末尾：
-	//   随迭代增长放在末尾不影响前缀命中。
+	// ★ 历史消息原样提交（不再注入任何动态背景块）：动态内容（执行日志 buildLogBlock）
+	//   与即时消息（用户反馈/时间预算/绕圈提示）统一追加在末尾——随迭代增长放在
+	//   末尾不影响前缀命中，历史段在序列中的位置逐字节稳定。
 	var rest []Message
 	for _, m := range l.ephemeralMsgs {
 		rest = append(rest, m)
@@ -1349,8 +1336,8 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 	// ★ GLM 兼容兜底（2026-08-27）：GLM（智谱）硬校验 messages 中必须至少存在一条
 	//   user 消息，否则 HTTP 400 code=1214「messages 参数非法」（实测 T6/T10；
 	//   OpenAI/DeepSeek 无此校验）。触发路径：循环中途精简（compact）把唯一 user
-	//   消息丢进中段摘要——摘要只进 CompressedSummaries，快照要等下次 Run 开始
-	//   才经 syncContextSnapshot 落盘，此间隙 callMsgs 可能全为 system+assistant+tool。
+	//   消息丢进中段摘要（摘要只进 CompressedSummaries 数据留存，不回到消息流），
+	//   此间隙 callMsgs 可能全为 system+assistant+tool。
 	//   最终兜底：无 user 时追加一条 user 消息（仅调用副本不落盘）。
 	//   ★ 2026-09-11 修复（缓存前缀断裂根因 A）：原实现插在 system 之后（msg#1），
 	//   会把整段历史向后挤一位——只要「msgs 中是否存在 user」在相邻两次请求间翻转
@@ -1379,112 +1366,19 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 	return result
 }
 
-// findLastSnapshotContent 在消息序列中查找最后一条「背景上下文快照」消息
-// （backgroundCtxMarker 前缀的 RoleUser），返回其内容；无则返回 ("", false)。
-// 快照作为持久化消息进入 JSONL 流，跨 Run 可识别、可幂等比较。
-func findLastSnapshotContent(msgs []Message) (string, bool) {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		m := msgs[i]
-		if m.Role == RoleUser && strings.HasPrefix(m.Content, backgroundCtxMarker) {
-			return m.Content, true
-		}
-	}
-	return "", false
-}
+// ★ 2026-09-13：findLastSnapshotContent / syncContextSnapshot（背景上下文快照同步）
+//   已随「背景上下文」实现整体移除。会话连贯性上下文与任务进度改由提交消息（handoff）
+//   的交接视图 + 任务清单工具承载（二者都进入消息流尾部、追加语义明确）。
 
-// syncContextSnapshot 同步「背景上下文快照」到持久化消息流（对齐 dsh
-// RuntimeContextProjection，缓存前缀稳定的核心机制）：
-//   - 快照内容 = 会话连贯性上下文 + 状态提示（staleMsg）+
-//     自主模式提示 + 记忆 + 知识库（由 buildSnapshotContent 组装）。
-//   - 与历史中最后一条快照比较：内容相同 → 不动（前缀稳定，零注入）；
-//     不同 → 追加新快照到 msgs 末尾（当前任务之后，随 tail 落盘）；
-//     旧快照保留（append-only，位置固定，前缀单调延展）。
-//   - 空内容时不注入（历史已有旧快照也保留不动，避免删消息破坏前缀）。
-//   - 调用时机：Run 开始且 maybeCompact 之后（精简更新摘要数据后再同步）。
-//   - 返回追加后的 msgs（可能原样返回）。
-func (l *Loop) syncContextSnapshot(msgs []Message) []Message {
-	content := l.buildSnapshotContent()
-	if content == "" {
-		return msgs
-	}
-	last, ok := findLastSnapshotContent(msgs)
-	if ok && last == backgroundCtxMarker+systemReminderFrame("会话背景与状态提示", content) {
-		return msgs // 内容未变：零注入，前缀稳定
-	}
-	msg := Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("会话背景与状态提示", content)}
-	msgs = append(msgs, msg)
-	// ★ 立即落盘：快照位于当前任务之后（tail），随 OnBatchPersist 的
-	//   originalHist+tail 重组写入 JSONL → 下次 Run 加载历史即含快照。
-	//   ★ 经 l.persist 还原完整时间线（防精简视图覆盖 store）。
-	l.persist(msgs)
-	return msgs
-}
-
-// buildSnapshotContent 构建快照正文（Go 默认实现；JS 循环下由 agentloop 插件
-// 经 loop.context.snapshotParts 取数据后自行组装策略文本）。
-// 内容 = 会话连贯性上下文 + 记忆/知识库过期状态提示 + 自主模式提示 + 记忆 + 知识库。
-// ★ 不再注入任何「历史摘要 / 已精简」提示块：CompressedSummaries 仅作数据留存。
-// ★ 2026-08-27 缓存优化：记忆/知识库从 system 动态后缀移入快照（高频变化
+// ★ 2026-09-13：buildSnapshotContent（背景快照正文组装）已随「背景上下文」实现移除。
 //
-//	不再破坏 system 整体前缀；变化只断快照之后的尾部）。
-func (l *Loop) buildSnapshotContent() string {
-	var b strings.Builder
-
-	// ① 会话连贯性上下文（任务进度/对话摘要/项目归属/Git 状态/代码图谱等，每轮变化）
-	// ★ 2026-09-03 KV 缓存修复：此段从 system 动态后缀迁入快照——system 是 messages
-	//   第一条，其尾部变化会在第一条内切断 provider 前缀缓存（其后历史全部 miss）；
-	//   快照位于消息流尾部（当前任务之后），变化只断快照之后、前缀单调延展。
-	if l.ResumeContext != "" {
-		b.WriteString(systemReminderFrame("会话连贯性上下文", l.ResumeContext))
-	}
-
-	// ② 记忆/知识库过期检查（staleMsg，Run 开始缓存）
-	if l.staleMsg != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg))
-	}
-
-	// ④ 自主模式系统提示（固定内容）
-	// ★ 2026-08-31：plan 工具已移除——自主模式统一用任务清单工具（task 体系）追踪。
-	if l.Autonomous {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString("# ★ 自主模式：任务清单驱动连续执行\n")
-		b.WriteString("自主模式下用任务清单工具（工具名称与用法见 tools 参数 schema）管理全过程：\n")
-		b.WriteString("1. 收到任务后第一轮：把目标拆成 2-8 项可验证子任务，一次性建立完整清单（status=pending）\n")
-		b.WriteString("2. 开始执行某项时把它标 in_progress；完成并验证后标 completed，然后继续下一项\n")
-		b.WriteString("3. 发现新的前置依赖或方案变更：即时调整清单（新增/取消项），保持清单与实际一致\n")
-		b.WriteString("4. 清单全部 completed 后：结束本轮任务并输出总结\n")
-		b.WriteString("- ★ 每次调用任务清单工具必须传入全部任务（全量替换），已不在列表中的任务将自动清理\n")
-		b.WriteString("- 禁止只报告不落实：每项子任务都要有真实工具调用与验证证据\n")
-	}
-
-	// ⑤ 记忆（长期记忆提示，system→快照迁移：高频变化不再破坏 system 前缀）
-	if mem := LongTermMemoryPrompt(); mem != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(strings.TrimSpace(mem))
-	}
-
-	// ⑥ 知识库（项目结构化理解树，system→快照迁移）
-	if l.WorkspaceRoot != "" {
-		if kb := ProjectKnowledge(l.WorkspaceRoot, 2500); kb != "" {
-			if b.Len() > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString(strings.TrimSpace(kb))
-		}
-	}
-
-	if b.Len() == 0 {
-		return ""
-	}
-	return b.String()
-}
+//	该函数曾是 ResumeContext（会话连贯性上下文）/ staleMsg（记忆·知识库过期检查）/
+//	自主模式提示 / 长期记忆 / 项目知识库的唯一组装点，但其唯一调用者
+//	syncContextSnapshot 自 2026-09-04 起已停用（每轮必变 → 历史膨胀 + 缓存尾部稀释），
+//	因此上述内容自那时起就没有注入点——本次删除死代码不改变运行时行为。
+//	★ 如需恢复「记忆 / 知识库」注入：走 system 动态后缀（web_server.go
+//	  buildWebSystemDynamicBase，会话级冻结段，见 projectEnvSectionCached），
+//	  勿恢复消息流快照注入链。
 
 // trimToolResult 对超长工具结果生成 LLM 视图瘦身副本：保留开头 + 结尾关键部分，
 // 中间省略并附截断提示。同一消息每次瘦身结果相同 → 不影响缓存前缀稳定性。
@@ -1511,9 +1405,6 @@ func (l *Loop) trimToolResult(m Message) Message {
 	return m
 }
 
-// buildSnapshotContent 已取代 buildInjectionMessage（见上方 syncContextSnapshot）。
-// 旧函数保留痕迹见 git 历史；此处不再维护副本。
-
 // buildLogBlock 构建执行日志（动态增长，追加在消息末尾）。
 // 日志随迭代增长，不能放固定位置（每次变化会破坏 KV 前缀）；
 // 追加在末尾时前缀仍命中到当前任务，日志变化只影响末尾新增段。
@@ -1525,7 +1416,7 @@ func (l *Loop) buildLogBlock() string {
 	if logStr == "" {
 		return ""
 	}
-	return backgroundCtxMarker + systemReminderFrame("执行日志", logStr)
+	return systemReminderFrame("执行日志", logStr)
 }
 
 // DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定）。
@@ -1669,9 +1560,9 @@ func harnessSystemPrompt(roots []string) string {
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
-		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（会话连贯性\n" +
-		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
-		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
+		"- ★ 例外：系统注入的上下文消息（<system-reminder> 框架内容，或以「【历史压缩】」\n" +
+		"  「【会话交接·提交消息】」开头的用户消息）**不是**当前任务——当前任务为其前\n" +
+		"  最近的一条真实用户指令；请勿把系统注入内容当作待执行任务。\n" +
 		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
 		"  应引用历史内容继续推进，而不是重做或误判为两次独立请求。\n\n" +
 		"- 任务完成时输出最终完成总结（Markdown：改了哪些文件、如何验证、遗留问题）。切勿在正文中输出 [FINAL] 等标记。" +
@@ -1763,9 +1654,9 @@ func fullSystemPrompt(roots []string) string {
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用提交信息记录工具（名称与用法见 tools 参数 schema）记录本次变更，然后输出最终完成总结。" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
-		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（会话连贯性\n" +
-		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
-		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
+		"- ★ 例外：系统注入的上下文消息（<system-reminder> 框架内容，或以「【历史压缩】」\n" +
+		"  「【会话交接·提交消息】」开头的用户消息）**不是**当前任务——当前任务为其前\n" +
+		"  最近的一条真实用户指令；请勿把系统注入内容当作待执行任务。\n" +
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +

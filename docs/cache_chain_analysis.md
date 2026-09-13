@@ -106,7 +106,7 @@ gou-ide 的 prompt 发送链路围绕 **LLM 服务端 KV Cache（上下文缓存
 ```
 PrefixShape {
   SystemHash   = sha256(静态前缀)[:8]   // CacheBoundary 之前 → 影响 provider 缓存
-  DynamicHash  = sha256(动态后缀)[:8]   // CacheBoundary 之后 → 变化不影响前缀缓存
+  DynamicHash  = sha256(动态后缀)[:8]   // CacheBoundary 之后（★ 变化会令其后含整个历史全部 miss）
   ToolsHash    = sha256(归一化 tools JSON)[:8]  // 按 name+desc 排序后哈希（顺序无关）
   ToolsRawHash = sha256(原始 tools JSON)[:8]   // 原始顺序（诊断顺序稳定性）
   PrefixHash   = sha256(system+dynamic+tools)[:8]  // 整体指纹
@@ -161,8 +161,11 @@ PrefixShape {
 - **唯一 boundary**：`ComposeSystemPrompt(static, dynamic)`（loop.go:1447）统一拼接
   `static + CacheBoundary + dynamic`，杜绝双边界/漏边界。
 - **时间戳不在 system 内**：已移至用户消息（web_server.go:2327 注释），避免 system 每轮变化。
-- **resumeCtx 不进静态前缀**：在 `buildWebLoopOpts` 里 `sys += "\n\n" + resumeCtx`
-  （web_server.go:2531），追加在 CacheBoundary 之后 → 变化不影响前缀缓存。
+- **resumeCtx 已停用**（2026-09-04）：`buildWebLoopOpts` 不再构建 resumeCtx（背景快照注入链整块
+  停用，见 web_server.go 的 resumeCtx 注释与 loop.go:757）。历史形态：曾
+  `sys += "\n\n" + resumeCtx`（web_server.go:2531，现已注释）。
+  ★ **2026-09-13 校正**：即便在当时，追加在 CacheBoundary 之后也**不能**说"变化不影响前缀缓存"
+  ——boundary 只是本地标记，provider 按公共前缀匹配，动态后缀变化会令其后（含整个历史）全部 miss。
 
 **tools**：
 - `tools := l.Registry.Definitions()`（loop.go:438）——只取 `Enabled=true` 的工具；

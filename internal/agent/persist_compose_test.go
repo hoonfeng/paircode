@@ -2,7 +2,8 @@ package agent
 
 // persist_compose_test.go — 持久化组合（composePersistMessages）单测：
 //   - 基准 + 最后一条真实 user 之后的新增；
-//   - 背景快照（backgroundCtxMarker）/ 交接视图（handoffTitle）不作为锚点、不入盘；
+//   - 系统注入消息（历史遗留背景快照/历史压缩摘要/交接视图，见 injected_msg.go）
+//     不作为锚点；
 //   - 多段累积（「可变底账」核心修复：第二段不丢第一段新增）。
 
 import (
@@ -22,13 +23,15 @@ func TestComposePersist_Basic(t *testing.T) {
 	}
 }
 
-// TestComposePersist_BackgroundNotAnchor 背景快照（backgroundCtxMarker）不作为锚点。
-func TestComposePersist_BackgroundNotAnchor(t *testing.T) {
+// TestComposePersist_InjectedNotAnchor 系统注入消息（历史遗留背景快照）不作为锚点
+// ★ 用历史遗留前缀（legacyBackgroundSnapshotPrefix）验证：旧会话落盘中仍存在这类
+// 消息，识别必须持续有效（数据兼容），否则它们会被当成用户任务锚点。
+func TestComposePersist_InjectedNotAnchor(t *testing.T) {
 	base := []Message{{Role: RoleUser, Content: "u1"}}
 	msgs := []Message{
 		{Role: RoleUser, Content: "u1"},
 		{Role: RoleAssistant, Content: "a1"},
-		{Role: RoleUser, Content: backgroundCtxMarker + "快照内容"},
+		{Role: RoleUser, Content: legacyBackgroundSnapshotPrefix + "\n快照内容"},
 		{Role: RoleAssistant, Content: "a2"},
 	}
 	combined := composePersistMessages(base, msgs)
@@ -36,7 +39,7 @@ func TestComposePersist_BackgroundNotAnchor(t *testing.T) {
 	if len(combined) != 4 {
 		t.Fatalf("锚应跳过背景快照，实际 %d 条: %+v", len(combined), combined)
 	}
-	if combined[2].Content != backgroundCtxMarker+"快照内容" {
+	if combined[2].Content != legacyBackgroundSnapshotPrefix+"\n快照内容" {
 		t.Fatalf("背景快照应随 tail 入盘: %+v", combined)
 	}
 }
@@ -45,7 +48,7 @@ func TestComposePersist_BackgroundNotAnchor(t *testing.T) {
 // 不重复入盘，当前任务之后的新增正常追加。
 func TestComposePersist_HandoffView(t *testing.T) {
 	base := []Message{{Role: RoleUser, Content: "任务A"}, {Role: RoleAssistant, Content: "a1"}}
-	handoffText := backgroundCtxMarker + handoffTitle + "\n交接正文"
+	handoffText := handoffTitle + "\n交接正文"
 	msgs := []Message{
 		{Role: RoleUser, Content: handoffText}, // 交接视图（以背景前缀开头，非真实任务）
 		{Role: RoleAssistant, Content: "旧a1"},  // 保留段（历史消息，已在 base 内）

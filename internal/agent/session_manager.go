@@ -85,11 +85,9 @@ type LoopOpts struct {
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（任务分解），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
-	// ResumeContext 会话连贯性上下文（任务进度/对话摘要/项目归属/Git 状态/代码图谱等）。
-	// ★ 2026-09-03 KV 缓存修复：此内容每轮变化，若拼入 system（messages 第一条）会在
-	//   system 尾部切断 provider 前缀缓存（其后历史全部 miss）。改为注入「背景上下文快照」
-	//   （消息流尾部，append-only）——变化只断快照之后，前缀单调延展、命中率稳定。
-	ResumeContext string
+	// ★ 2026-09-13：原 ResumeContext（会话连贯性上下文 → 背景上下文快照）已随该实现删除。
+	//   会话连贯性上下文改由提交消息（handoff.go 交接视图）与任务清单工具承载；
+	//   历史进度/摘要等不再每轮注入（每轮必变会稀释前缀缓存命中率）。
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -469,10 +467,10 @@ var ErrSessionNotRunning = errors.New("会话未在运行")
 
 // composePersistMessages 组合持久化消息：已落盘基准 + 锚点之后的新增。
 //
-// 锚点 = msgs 中最后一条「真实任务」RoleUser（非 backgroundCtxMarker 前缀）——
-// 背景快照（【背景上下文·非当前任务】）也是 RoleUser，但它是循环同步进消息流的
-// 背景信息（位于任务之后），不能作为锚点（否则 tail 为空、快照与后续消息全部
-// 丢失——快照落盘即失效）。tail = 锚点之后的所有消息（含快照 + 本轮新增）。
+// 锚点 = msgs 中最后一条「真实任务」RoleUser（非系统注入消息，识别见
+// injected_msg.go / isInjectedUserMessage）——注入物（历史压缩摘要/交接视图）
+// 也是 RoleUser，但它们是系统产物（且可能位于任务之后），不能作为锚点
+// （否则 tail 为空、其后的真实消息全部丢失）。tail = 锚点之后的所有消息。
 //
 // ★ 2026-09-11 配套「可变底账」（refreshPersistBase）：分段续跑时基准会推进为
 // store 当前内容，「基准 + tail」在每段上继续追加——修复此前固定 originalHist
@@ -481,7 +479,7 @@ var ErrSessionNotRunning = errors.New("会话未在运行")
 func composePersistMessages(base []Message, msgs []Message) []Message {
 	lastUserIdx := -1
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleUser && !strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
+		if msgs[i].Role == RoleUser && !hasPrefixInjected(msgs[i].Content) {
 			lastUserIdx = i
 			break
 		}
@@ -613,15 +611,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	//   ★ 一次会话 = 一次运行：段预算自动续跑的多段在同一 Loop 上累加，不重复计数。
 	loop.SetRunStats(BeginRunStatsFor(opts.WorkspaceRoot, convID))
 
-	// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入背景快照
-	//   （运行中 goal(op=create) 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
-	// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages 第一条）
-	//   会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（经背景快照注入，append-only）。
-	if g := goalManager.Get(opts.WorkspaceRoot, convID); g != nil && g.Active() {
-		if !strings.Contains(loop.ResumeContext, goalSystemMarker) {
-			loop.ResumeContext += "\n\n" + goalSystemSection(g)
-		}
-	}
+	// ★ 2026-09-13（S3 死代码清理 + 背景上下文实现移除）：此处曾把「重启后首轮」的 goal 段
+	//   追加到 loop.ResumeContext，指望经背景上下文快照注入（Round3 ③.1）。快照同步链
+	//   2026-09-04 已整体停用、2026-09-13 实现与 Loop.ResumeContext 字段一并删除 → 该写入
+	//   早已不会进入任何请求；且不该硬往 system（messages 第一条）拼：goal 段含每轮递增的
+	//   Rounds，会在 system 尾部切断系统提示 + 整个历史的前缀缓存。
+	//   现状：goal 上下文由**续轮消息**承载（Goal.ContinueMessage 已含目标/阶段/轮次，
+	//   在下方的续轮循环里作为新 user 消息注入 = 历史尾部追加，不破前缀）；
+	//   重启后首轮若需要目标上下文，agent 可用 get_goal 工具主动查询。
+	//   ★ 将来如需恢复注入：请走「历史尾部追加独立消息」，勿回到 ResumeContext / system 拼接。
 
 	// ★ 2026-08-21 LLM 重试通知：Provider 支持 RetryNotifier 时绑定重试回调，
 	//   重试期间以 notice 事件推送到前端——用户不再「干等无响应」。
@@ -734,12 +732,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   正确做法：已落盘完整时间线 + 新增尾部 = 持久化版本。
 		loop.OnBatchPersist = func(msgs []Message) {
 			// ★ 重组：已落盘基准（未压缩）+ 本轮新增消息 = 持久化版本。
-			// msgs 结构：[system(可能), ...历史, 当前用户消息, 背景上下文快照?, ...本轮新增(assistant/tool)]
-			// 锚点：最后一条「真实任务」RoleUser = 当前任务（Run 保证存在）——
-			//   ★ 2026-08-27 背景快照（backgroundCtxMarker 前缀）也是 RoleUser，
-			//   但它是循环同步进消息流的背景信息（位于任务之后），不能作为锚点
-			//   （否则 tail 为空、快照与后续消息全部丢失——快照落盘即失效）。
-			//   tail = 锚点之后的所有消息（含快照 + 本轮新增）。
+			// msgs 结构：[system(可能), ...历史, 当前用户消息, ...本轮新增(assistant/tool)]
+			// 锚点：最后一条「真实任务」RoleUser = 当前任务（Run 保证存在）。
+			//   ★ 系统注入消息（历史压缩摘要/交接视图/历史遗留快照，见 injected_msg.go）
+			//   也是 RoleUser 但不是用户任务，不能作为锚点（否则 tail 为空、其后
+			//   真实消息全部丢失）。tail = 锚点之后的所有消息。
 			// ⚠️ 不能再用「condensedLen 固定偏移」定位 tail：
 			//   Run 开头的跨段精简/历史 condense 会改写 msgs（段内只追加，但跨段会精简）、
 			//   删除中段历史 → len(msgs) 可能 < condensedLen → 旧逻辑误走兜底把压缩版
@@ -1052,12 +1049,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if g == nil || g.ContinueMessage() == "" {
 				break
 			}
-			// 目标上下文注入背景快照（幂等：marker 已存在不重复追加）
-			// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages
-			//   第一条）会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（背景快照注入）。
-			if !strings.Contains(loop.ResumeContext, goalSystemMarker) {
-				loop.ResumeContext += "\n\n" + goalSystemSection(g)
-			}
+			// ★ 2026-09-13（S3）：原先此处把 goal 段挂在 loop.ResumeContext 上（指望背景快照注入），
+			//   快照链停用后该路径无消费者 → 已移除（详见本文件 CreateLoop 处的说明）。
+			//   goal 上下文由下面的续轮消息承载：ContinueMessage 已含目标/阶段/轮次，
+			//   作为新 user 消息追加 = 历史尾部追加，不破坏前缀缓存。
 			lmsg := g.ContinueMessage()
 			log.Printf("[session] goal 自动续轮 conv=%s round=%d/%d objective=%q",
 				convID, g.Rounds, g.RoundLimit, truncStr(g.Objective, 60))

@@ -399,54 +399,12 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		return vm.ToValue(msgsToJS(vm, callMsgs))
 	})
 
-	// ── context.snapshot（2026-08-27 背景快照同步，对齐 dsh RuntimeContextProjection）──
-	//   · snapshotParts() → 数据面：{stale, summaries, memory, knowledge, autonomous}
-	//     （文本格式组装策略在 JS 插件；Go 只提供原始数据，能力/策略分离）
-	//   · snapshot.sync(msgs, text) → msgs：与历史最后快照比较；不同则追加到
-	//     msgs 末尾（当前任务之后，随 tail 落盘）并立即持久化；相同零注入。
-	//   ★ 快照持久化到消息流后位置固定，跨 Run 前缀单调延展——KV 缓存不再因
-	//     背景块位置漂移而断裂（对应 Go 回退路径 syncContextSnapshot）。
-	snapObj := vm.NewObject()
-	snapObj.Set("parts", func(call goja.FunctionCall) goja.Value {
-		summaries := make([]string, 0, len(l.CompressedSummaries))
-		summaries = append(summaries, l.CompressedSummaries...)
-		knowledge := ""
-		if l.WorkspaceRoot != "" {
-			knowledge = ProjectKnowledge(l.WorkspaceRoot, 2500)
-		}
-		return vm.ToValue(map[string]any{
-			"stale":      l.staleMsg,
-			"summaries":  summaries,
-			"memory":     LongTermMemoryPrompt(),
-			"knowledge":  knowledge,
-			"autonomous": l.Autonomous,
-			"resume":     l.ResumeContext,
-		})
-	})
-	snapObj.Set("sync", func(call goja.FunctionCall) goja.Value {
-		msgsArg := call.Argument(0)
-		jmsgs, jerr := jsToMsgs(vm, msgsArg)
-		if jerr != nil {
-			panic(vm.NewGoError(jerr))
-		}
-		text := ""
-		if v := call.Argument(1); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			text = v.String()
-		}
-		log.Printf("[snapshot-sync] 收到 JS 快照请求 len=%d textLen=%d msgs=%d", len(msgsArg.String()), len(text), len(jmsgs))
-		if text == "" {
-			return msgsArg // 无内容：不注入（历史已有旧快照保留，避免删消息破坏前缀）
-		}
-		full := backgroundCtxMarker + systemReminderFrame("会话背景与状态提示", text)
-		if last, ok := findLastSnapshotContent(jmsgs); ok && last == full {
-			return msgsArg // 内容未变：零注入，前缀稳定
-		}
-		jmsgs = append(jmsgs, Message{Role: RoleUser, Content: full})
-		log.Printf("[snapshot-sync] 注入新快照 textLen=%d msgs=%d -> %d", len(text), len(jmsgs)-1, len(jmsgs))
-		l.persist(jmsgs) // 还原完整时间线落盘（防压缩视图覆盖 store）
-		return vm.ToValue(msgsToJS(vm, jmsgs))
-	})
-	ctxObj.Set("snapshot", snapObj)
+	// ★ 2026-09-13：context.snapshot（背景上下文快照的数据面 parts() 与同步 sync()）
+	//   已随该实现整体移除。parts() 曾提供 {stale, summaries, memory, knowledge,
+	//   autonomous, resume}，sync() 负责把快照消息追加进消息流并落盘；插件侧
+	//   （agentloop）2026-09-04 已停用调用（快照正文每轮必变 → 历史膨胀、缓存尾部稀释），
+	//   本次删除全部残留（Loop.staleMsg / Loop.ResumeContext 字段同步移除）。
+	//   ★ 禁令：勿恢复快照注入链（改走交接视图/任务清单承载上下文）。
 	proxy.Set("context", ctxObj)
 
 	// ── compact.estimate(msgs) / compact.apply(msgs, mode) ──
