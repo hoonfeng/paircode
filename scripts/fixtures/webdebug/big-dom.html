@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>PairCode web_debug 元素数阈值测试</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; }
+  .item { display: inline-block; padding: 2px 4px; margin: 1px; background: #eef; }
+  #info { font-weight: 600; color: #036; }
+</style>
+</head>
+<body>
+<h1 id="title">大 DOM 测试页（web_debug 元素数阈值）</h1>
+<p id="info">生成中…</p>
+<div id="root"></div>
+<script>
+  var n = parseInt(new URLSearchParams(location.search).get('n') || '6000', 10);
+  var root = document.getElementById('root');
+  var h = '';
+  for (var i = 0; i < n; i++) h += '<span class="item">item' + i + '</span>';
+  root.innerHTML = h;
+  document.getElementById('info').textContent =
+    'span 数: ' + n + ' | 元素总数: ' + document.querySelectorAll('*').length +
+    ' | （阈值 5000：超出则跳过可见性统计）';
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>无可见文本的大 DOM（验证「未提取到可见文本」分支）</title></head>
+<body>
+<div id="root"></div>
+<script>
+  // 5006 个元素，且 innerText/textContent 均为空 → 触发「未提取到可见文本」分支
+  var h = '';
+  for (var i = 0; i < 5000; i++) h += '<span></span>';
+  document.getElementById('root').innerHTML = h;
+</script>
+</body>
+</html>
