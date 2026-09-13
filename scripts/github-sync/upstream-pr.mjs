@@ -121,7 +121,7 @@ function readToken() {
   return null;
 }
 
-// ── 生成 PR 标题/正文（基于 baseSha..headRef 的精确提交列表；缺对象时自动 fetch 补齐；dry-run 不 fetch）──
+// ── 生成 PR 标题/正文（提交列表用 A..B、变更统计用 A...B（merge-base 口径，对齐 GitHub 显示）；缺对象时自动 fetch 补齐；dry-run 不 fetch）──
 // headRef 缺省为本地 HEAD；刷新已有 PR 时应传 PR 的 head.sha（已推送点），避免把本地未推送提交算进来。
 function buildPrContent(baseSha, headRef = 'HEAD') {
   let head = headRef || 'HEAD';
@@ -133,7 +133,7 @@ function buildPrContent(baseSha, headRef = 'HEAD') {
   let shortstat = '';
   if (baseSha && gitOk('cat-file', '-e', baseSha).ok) {
     commits = git('log', '--pretty=format:%h %s', `${baseSha}..${head}`).split('\n').filter(Boolean);
-    shortstat = (gitOk('diff', '--shortstat', `${baseSha}..${head}`).out || '').trim();
+    shortstat = (gitOk('diff', '--shortstat', `${baseSha}...${head}`).out || '').trim(); // 三点：merge-base 口径（对齐 GitHub）
   } else if (baseSha) {
     let fetched = false;
     if (!DRY) {
@@ -143,7 +143,7 @@ function buildPrContent(baseSha, headRef = 'HEAD') {
     }
     if (fetched) {
       commits = git('log', '--pretty=format:%h %s', `${baseSha}..${head}`).split('\n').filter(Boolean);
-      shortstat = (gitOk('diff', '--shortstat', `${baseSha}..${head}`).out || '').trim();
+      shortstat = (gitOk('diff', '--shortstat', `${baseSha}...${head}`).out || '').trim(); // 三点：merge-base 口径（对齐 GitHub）
       log('  - 已补齐基准对象，按精确范围生成 [ok]');
     } else {
       log(`  - 提示：本地缺上游基准对象 ${baseSha.slice(0, 8)}${DRY ? '（dry-run 不自动 fetch）' : '（fetch 未成功，可先手动 git fetch proxy master）'}，标题/正文将简化`);
