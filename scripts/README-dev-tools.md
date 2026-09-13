@@ -29,7 +29,7 @@ CGO_ENABLED=1 go build -o pair.exe ./cmd/companion
 | `scripts/env/onnxtest/` | ONNX Runtime 端到端实证：加载 onnxruntime.dll + bge-small-zh-v1.5 模型并跑一次真实推理。在仓库根执行 `go run ./scripts/env/onnxtest`（复用项目 go.mod 的 onnxruntime_go 依赖） |
 | `scripts/env/check-deploy-pair-exe.ps1` | `scripts/deploy-pair-exe.ps1` 的语法 + 正则自检 |
 | `scripts/patches/` | 宿主/UI 锚点补丁（Python，可一键重放）：agentloop 写通道审核、面板显隐、专注模式侧栏联动、「继续任务」提示条锚点 |
-| `scripts/github-sync/` | ① 工作区 ↔ GitHub master 差异分析、安全备份、对齐与验证（5 阶段，`SYNC_WT` 指定工作区；删除类操作有白名单 + 沙箱 + dry-run 保护）；② **`upstream-pr.mjs`（改动标准出口）**：提交 → 推送 fork（origin，SSH 443）→ 自动查/建上游 PR（幂等；`--dry-run` 预演；创建 PR 需 classic token，配置见 `.pair/secrets/README.md`） |
+| `scripts/github-sync/` | ① 工作区 ↔ GitHub master 差异分析、安全备份、对齐与验证（5 阶段，`SYNC_WT` 指定工作区；删除类操作有白名单 + 沙箱 + dry-run 保护）；② **`upstream-pr.mjs`（改动标准出口，仅当用户说「更新到网上仓库」时执行推送/PR；平时只本地提交）**：提交 → 推送 fork（origin，SSH 443）→ 自动查/建上游 PR（幂等；`--dry-run` 预演；`--no-push` 仅跳过推送（仍可查/刷 PR）；`--refresh-pr` 重算并刷新已有 PR 标题/正文；缺上游基准/PR head 对象时自动 fetch 补齐）；创建 PR 需 classic token，配置见 `.pair/secrets/README.md`） |
 | `scripts/d-sync/` | `E:\paircode-master` ↔ `D:\PairCode` 逐文件差异清单（`build-diff.mjs`）与 D 侧备份（`backup-d.mjs`） |
 | `scripts/pair-switch/` | 替换运行中 `pair.exe` 的**旧流程**：`switch-pair.ps1`（停服→备份→替换→SHA 校验→重启）+ `launch-switch.cmd`（脱离 agent 会话异步执行，避免替换过程被会话中断打断）。**新流程见 `scripts/deploy-pair-exe.ps1`** |
 | `scripts/deploy-pair-exe.ps1` | 部署**只换 exe**：停服 → 替换 → SHA 校验 → 重启 → 健康检查 |
