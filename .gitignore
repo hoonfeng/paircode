@@ -107,3 +107,29 @@ _desktop-archive/
 
 # headless chrome 测试数据（cdp 验证临时）
 .chrome-test/
+
+# ─────────────────────────────────────────────────────────────
+# ★ 构建产物（不入库；由构建脚本本地生成后使用）—— 2026-09-13 仓库重建
+#   壳产物：cd plugins-src/ui-app && npm run build   → .pair/assets/runtime/web/
+#   区域包：node scripts/build-ui.mjs [--region <id>]（各插件 package.json dsh.ui.build 声明输出）
+#   cordis：见 .pair/assets/runtime/README.md「重建 cordis.bundle.js」章节
+#   （favicon.svg 亦为构建拷贝产物：源 plugins-src/ui-app/public/favicon.svg）
+# ─────────────────────────────────────────────────────────────
+.pair/assets/runtime/web/
+.pair/assets/runtime/cordis.bundle.js
+.pair/plugins/*/assets/favicon.svg
+.pair/plugins/git-api/assets/git-panel.js
+.pair/plugins/git-api/assets/git-panel.css
+.pair/plugins/marketplace/assets/marketplace-panel.js
+.pair/plugins/marketplace/assets/marketplace-panel.css
+.pair/plugins/ui-*/assets/ui-*.js
+.pair/plugins/ui-*/assets/ui-*.css
+
+# ── 历史误入库杂物防再犯（2026-09-13 重建清理项：# 调试二进制/测试产物/探针转储）──
+__debug_bin*
+desktop_test*
+*_9090.json
+**/dev/null
+ws_trace.jsonl
+nm*.txt
+_probe_*
