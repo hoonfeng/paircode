@@ -1512,13 +1512,17 @@ func (s *webServer) handleMCPSave(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "name 和 command 必填")
 			return
 		}
+		// ★ 2026-09-15：新增默认未启用（添加 ≠ 启用——显式启用才连接并注册工具，
+		//   避免批量添加后每次会话启动逐台连接卡顿与子进程堆积）。
+		disabled := false
 		if err := mcppanel.Upsert(lv, mcppanel.Entry{
-			Name: req.Name, Command: req.Command, Args: req.Args,
+			Name: req.Name, Command: req.Command, Args: req.Args, Enabled: &disabled,
 		}); err != nil {
 			jsonErr(w, err.Error())
 			return
 		}
-		jsonResp(w, map[string]any{"ok": true, "action": "saved", "name": req.Name})
+		jsonResp(w, map[string]any{"ok": true, "action": "saved", "name": req.Name, "enabled": false,
+			"note": "新增的 MCP 服务器默认未启用——请在列表中启用后才连接"})
 	}
 }
 

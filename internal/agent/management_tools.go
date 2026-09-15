@@ -6,6 +6,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -137,14 +138,26 @@ func RegisterManagementTools(r *Registry, root string) {
 	})
 	r.Register(&Tool{
 		Name:             "mcp_add",
-		Description:      "新增一个 MCP 服务器。scope 可选 user 或 project。",
+		Description:      "新增一个 MCP 服务器（默认未启用——需 mcp_enable 显式启用后才连接并注册工具）。scope 可选 user 或 project。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("服务器名"), "command": mStrProp("启动命令"),
-			"args":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"scope": mStrProp("user/project"),
+			"args":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"scope":   mStrProp("user/project"),
+			"enabled": map[string]any{"type": "boolean", "description": "可选：true 则添加后立即启用（默认 false=未启用）"},
 		}, "name", "command"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) { return mcpAddTool(args) },
+	})
+	r.Register(&Tool{
+		Name:             "mcp_enable",
+		Description:      "启用/禁用一个 MCP 服务器（省略 enabled=true 启用；false 禁用）。新增服务器默认未启用，显式启用后才连接并注册工具（下次会话生效）。",
+		RequiresApproval: true,
+		Parameters: mObjSchema(map[string]any{
+			"name":    mStrProp("服务器名"),
+			"scope":   mStrProp("层级：user（默认，全局）或 project（工作区级）"),
+			"enabled": map[string]any{"type": "boolean", "description": "省略=true 启用；false=禁用"},
+		}, "name"),
+		Handler: func(_ context.Context, args map[string]any) (string, error) { return mcpSetEnabledTool(args) },
 	})
 	r.Register(&Tool{
 		Name:             "mcp_remove",
@@ -312,6 +325,9 @@ func listMCPText() string {
 			on := "禁用"
 			if MCPEnabled(lv.ID, e.Name) {
 				on = "启用"
+			} else if e.Enabled == nil {
+				// ★ 2026-09-15：缺省 enabled 的新语义为禁用——标注来源，便于迁移排查
+				on = "禁用（未显式启用）"
 			}
 			fmt.Fprintf(&b, "- [%s] %s（%s）：%s %s\n", lv.Name, e.Name, on, e.Command, strings.Join(e.Args, " "))
 		}
@@ -342,10 +358,48 @@ func mcpAddTool(args map[string]any) (string, error) {
 		level = MCPLevelUser
 		levelLabel = "用户级（全局）"
 	}
+	// ★ 2026-09-15：新增默认未启用（添加 ≠ 连接——显式启用才拉起进程/注册工具，
+	//   避免批量添加后每次会话启动逐台连接卡顿与子进程堆积）。
+	enabled := false
+	if v, ok := args["enabled"].(bool); ok {
+		enabled = v
+	}
+	e.Enabled = &enabled
 	if err := MCPUpsert(level, e); err != nil {
 		return "", err
 	}
-	return "已添加 MCP 服务器 " + e.Name + "（" + levelLabel + "）", nil
+	if enabled {
+		return "已添加 MCP 服务器 " + e.Name + "（" + levelLabel + "，已启用）", nil
+	}
+	return "已添加 MCP 服务器 " + e.Name + "（" + levelLabel + "，默认未启用——用 mcp_enable 启用后生效）", nil
+}
+
+// mcpSetEnabledTool 启用/禁用 MCP 服务器（mcp_enable 工具实现）。
+// 启用变更在下次会话构建时生效（连接在会话启动时按启用名单建立）。
+func mcpSetEnabledTool(args map[string]any) (string, error) {
+	name := mArgStr(args, "name")
+	if name == "" {
+		return "", fmt.Errorf("name 必填")
+	}
+	enabled := true
+	if v, ok := args["enabled"].(bool); ok {
+		enabled = v
+	}
+	scope := mArgStr(args, "scope")
+	lv, levelLabel := MCPLevelUser, "用户级（全局）"
+	if scope == "project" {
+		lv, levelLabel = MCPLevelProject, "工作区级"
+	}
+	if err := MCPSetEnabled(lv, name, enabled); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("未找到 MCP 服务器 %q（%s）；请检查层级或用 mcp_list 查看", name, levelLabel)
+		}
+		return "", err
+	}
+	if enabled {
+		return "MCP 服务器 " + name + "（" + levelLabel + "）已启用——下次会话生效", nil
+	}
+	return "MCP 服务器 " + name + "（" + levelLabel + "）已禁用", nil
 }
 
 // ─── 已完成对话历史工具实现 ──

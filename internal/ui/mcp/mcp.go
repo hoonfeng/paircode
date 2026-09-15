@@ -63,7 +63,8 @@ func Delete(lv Level, name string) error {
 	return agent.MCPDelete(lv, name)
 }
 
-// Enabled 检查某层级的 MCP 服务器是否启用（默认启用）。
+// Enabled 检查某层级的 MCP 服务器是否启用
+// （★ 2026-09-15 语义变更：enabled 缺省=默认禁用，显式 true 才启用——「添加 ≠ 启用」）。
 func Enabled(lv Level, name string) bool {
 	return agent.MCPEnabled(lv, name)
 }

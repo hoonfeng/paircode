@@ -2866,10 +2866,19 @@ func (p *jsPluginAdapter) buildMCPService() goja.Value {
 			}
 		}
 		lv := levelOf(fmt.Sprint(obj["level"]))
-		if err := MCPUpsert(lv, MCPEntry{Name: name, Command: cmd, Args: args}); err != nil {
+		// ★ 2026-09-15：新增默认未启用；显式传 enabled:true 才启用（添加 ≠ 连接，
+		//   避免市场安装/批量导入后每次会话启动逐台连接卡顿与子进程堆积）。
+		enabled := false
+		if v, ok := obj["enabled"].(bool); ok {
+			enabled = v
+		}
+		if err := MCPUpsert(lv, MCPEntry{Name: name, Command: cmd, Args: args, Enabled: &enabled}); err != nil {
 			panic(vm.NewGoError(err))
 		}
-		return vm.ToValue("已保存 MCP 服务器 " + name)
+		if enabled {
+			return vm.ToValue("已保存 MCP 服务器 " + name + "（已启用）")
+		}
+		return vm.ToValue("已保存 MCP 服务器 " + name + "（默认未启用，启用后生效）")
 	})
 	m.Set("remove", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()
@@ -2881,6 +2890,27 @@ func (p *jsPluginAdapter) buildMCPService() goja.Value {
 			panic(vm.NewGoError(err))
 		}
 		return vm.ToValue("已删除 MCP 服务器 " + name)
+	})
+	// ★ 2026-09-15：setEnabled —— 启用/禁用 MCP 服务器（配合「新增默认未启用」的显式启用路径）。
+	// 用法：ctx.mcp.setEnabled(name, enabled?, level?)；缺省 enabled=true。
+	m.Set("setEnabled", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		enabled := true
+		if v := call.Argument(1); !goja.IsUndefined(v) && !goja.IsNull(v) {
+			enabled = v.ToBoolean()
+		}
+		lv := levelOf(call.Argument(2).String())
+		if err := MCPSetEnabled(lv, name, enabled); err != nil {
+			if os.IsNotExist(err) {
+				return vm.ToValue("未找到 MCP 服务器 " + name)
+			}
+			panic(vm.NewGoError(err))
+		}
+		state := "已启用"
+		if !enabled {
+			state = "已禁用"
+		}
+		return vm.ToValue("MCP 服务器 " + name + " " + state)
 	})
 	return vm.ToValue(m)
 }

@@ -7,7 +7,11 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
+
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
@@ -50,6 +54,20 @@ func main() {
 		log.Fatalf("[main] 启动失败: %v", err)
 	}
 	log.Printf("[main] 已启动，请打开 http://0.0.0.0:%d（本机浏览器可用 http://localhost:%d，局域网设备用本机 IP）", port, port)
+
+	// ★ 2026-09-15：退出信号钩子——Ctrl+C / SIGTERM 时清理 MCP 连接池中的子进程，
+	//   避免 MCP 服务器进程孤儿化残留。
+	//   注意：Windows 强杀（任务管理器终止进程）不触发任何清理（OS 限制），
+	//   由空闲回收兜底（PAIR_MCP_IDLE_TTL_SEC，默认 10 分钟）。
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Printf("[main] 收到退出信号，清理 MCP 连接…")
+		agent.CloseAllMCPConnections()
+		os.Exit(0)
+	}()
+
 	// 永久阻塞，直到用户关闭命令窗口或 kill 进程
 	select {}
 }
