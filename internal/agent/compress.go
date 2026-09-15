@@ -116,7 +116,9 @@ func stableTrailingSummary(archive []Message) string {
 		}
 		switch m.Role {
 		case RoleUser:
-			if goal == "" && !strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			// 跳过系统注入消息（早期历史压缩摘要/交接视图/历史遗留快照）：
+			// 它们也是 user 角色但不是原始指令（识别见 injected_msg.go）。
+			if goal == "" && !hasPrefixInjected(m.Content) {
 				goal = truncRunesAgent(m.Content, 200)
 			}
 		case RoleAssistant:

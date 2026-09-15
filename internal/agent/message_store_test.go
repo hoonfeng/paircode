@@ -824,7 +824,7 @@ func TestMessageStore_MigrateFromLegacy_NoHistoryCache(t *testing.T) {
 }
 
 // TestMessageStore_CheckAndArchive 验证自动归档：超过阈值后最早消息移入 .archived.jsonl，
-// 主文件第一条为 role=user 的【历史归档】摘要（而非孤立 assistant——避免 LLM 上下文污染）。
+// 主文件第一条为 role=user 的【历史压缩】真摘要（而非孤立 assistant——避免 LLM 上下文污染）。
 func TestMessageStore_CheckAndArchive(t *testing.T) {
 	root := t.TempDir()
 	store := NewMessageStore(root)
@@ -863,8 +863,8 @@ func TestMessageStore_CheckAndArchive(t *testing.T) {
 		if first.Message.Role != RoleUser {
 			t.Errorf("摘要 Role 应为 RoleUser（避免孤立 assistant）, got %q", first.Message.Role)
 		}
-		if !strings.Contains(first.Message.Content, "【历史归档】") {
-			t.Errorf("摘要内容应含【历史归档】, got %q", first.Message.Content)
+		if !strings.Contains(first.Message.Content, injectedHistoryDigestPrefix) {
+			t.Errorf("摘要内容应含 %q, got %q", injectedHistoryDigestPrefix, first.Message.Content)
 		}
 		if first.Idx != 0 {
 			t.Errorf("摘要 Idx 应为 0, got %d", first.Idx)
@@ -993,5 +993,157 @@ func TestParseAskArgs_Variants(t *testing.T) {
 	q4, at4, _ := parseAskArgs(`裸问题`)
 	if q4 != `裸问题` || at4 != "text" {
 		t.Errorf("got q=%q at=%q", q4, at4)
+	}
+}
+
+// TestMessageStore_DisplayIncludesArchivedHistory 验证前端展示线读取**真实全量落盘历史**
+// （归档原文 + 主文件消息），且系统注入的压缩摘要不出现在展示结果中。
+//
+// ★ 2026-09-13（用户需求）：修复「前端只看到一行【历史归档】统计块、看不到归档前的真实
+// 历史」。归档区消息以负 Idx 返回（前端可继续向上分页回翻）；主文件消息保持主文件行号
+// （回滚/截断等主文件语义不变）。
+func TestMessageStore_DisplayIncludesArchivedHistory(t *testing.T) {
+	store := NewMessageStore(t.TempDir())
+	if err := store.CreateConversation("conv_disp", "展示测试", "/ws"); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	// 追加到阈值（第 ArchiveThreshold 条触发归档）
+	for i := 0; i < ArchiveThreshold; i++ {
+		content := fmt.Sprintf("消息 %d", i)
+		role := RoleUser
+		if i%2 == 1 {
+			role = RoleAssistant
+		}
+		if err := store.AppendMessage("conv_disp", Message{Role: role, Content: content},
+			[]Segment{{Type: "content", Content: content}}); err != nil {
+			t.Fatalf("AppendMessage[%d]: %v", i, err)
+		}
+	}
+
+	expectKeep := ArchiveThreshold / ArchiveRatio          // 125（主文件保留）
+	expectArchived := ArchiveThreshold - expectKeep        // 375（归档原文）
+
+	msgs, total, err := store.LoadLatestForDisplay("conv_disp", 0)
+	if err != nil {
+		t.Fatalf("LoadLatestForDisplay: %v", err)
+	}
+	if total != ArchiveThreshold || len(msgs) != ArchiveThreshold {
+		t.Fatalf("展示历史应为 %d 条真实消息（压缩摘要不计），total=%d len=%d",
+			ArchiveThreshold, total, len(msgs))
+	}
+
+	t.Run("归档原文可见且 Idx 为负数", func(t *testing.T) {
+		first := msgs[0]
+		if !strings.Contains(first.Message.Content, "消息 0") {
+			t.Errorf("首条应为归档的最早期真实消息，实际 %q", first.Message.Content)
+		}
+		if first.Idx != -expectArchived {
+			t.Errorf("归档区首条 Idx 应为 %d（负数编号），实际 %d", -expectArchived, first.Idx)
+		}
+	})
+
+	t.Run("主文件消息保持主文件行号", func(t *testing.T) {
+		last := msgs[len(msgs)-1]
+		if !strings.Contains(last.Message.Content, fmt.Sprintf("消息 %d", ArchiveThreshold-1)) {
+			t.Errorf("末条应为最新消息，实际 %q", last.Message.Content)
+		}
+		if last.Idx != expectKeep {
+			t.Errorf("主文件末条 Idx 应保持主文件行号 %d，实际 %d", expectKeep, last.Idx)
+		}
+	})
+
+	t.Run("系统注入摘要不出现在展示历史", func(t *testing.T) {
+		for _, m := range msgs {
+			if hasPrefixInjected(m.Message.Content) || strings.Contains(m.Message.Content, "历史压缩") {
+				t.Errorf("系统注入消息不应出现在前端展示历史：%q", m.Message.Content)
+			}
+		}
+	})
+
+	t.Run("向上分页可回翻到归档区", func(t *testing.T) {
+		older, err := store.LoadBeforeForDisplay("conv_disp", 1, 50)
+		if err != nil {
+			t.Fatalf("LoadBeforeForDisplay: %v", err)
+		}
+		if len(older) == 0 {
+			t.Fatal("before=1（主文件最早期）应能取到归档区真实消息——此前前端到此为止")
+		}
+		for _, m := range older {
+			if m.Idx >= 0 {
+				t.Errorf("归档区消息 Idx 应为负数，实际 %d", m.Idx)
+			}
+		}
+		if !strings.Contains(older[0].Message.Content, fmt.Sprintf("消息 %d", expectArchived-50)) {
+			t.Errorf("归档区最后 50 条应始于 消息 %d，实际首条 %q", expectArchived-50, older[0].Message.Content)
+		}
+	})
+
+	t.Run("Count 为真实历史条数", func(t *testing.T) {
+		n, err := store.Count("conv_disp")
+		if err != nil || n != ArchiveThreshold {
+			t.Errorf("Count 应为 %d（归档原文 + 主文件 - 注入物），实际 %d err=%v",
+				ArchiveThreshold, n, err)
+		}
+	})
+}
+
+// TestMessageStore_ArchiveDigestIsReal 验证归档摘要为「真压缩」内容：逐轮提炼
+// 用户任务与结论（而非只有条数统计），并说明原文保留位置。
+//
+// ★ 2026-09-13：原实现只写「共 N 条消息：用户 x/助手 y/工具 z」——没压缩就丢弃，
+// 早期历史上下文对 LLM 成黑盒。
+func TestMessageStore_ArchiveDigestIsReal(t *testing.T) {
+	store := NewMessageStore(t.TempDir())
+	if err := store.CreateConversation("conv_digest", "摘要测试", "/ws"); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	rounds := []struct{ task, concl string }{
+		{"实现登录接口", "登录接口已实现并通过测试"},
+		{"修复超时 bug", "超时问题已定位并修复"},
+		{"补充文档", "文档已补充完毕"},
+	}
+	seg := func(s string) []Segment { return []Segment{{Type: "content", Content: s}} }
+	for _, r := range rounds {
+		if err := store.AppendMessage("conv_digest", Message{Role: RoleUser, Content: r.task}, seg(r.task)); err != nil {
+			t.Fatalf("AppendMessage(user): %v", err)
+		}
+		if err := store.AppendMessage("conv_digest", Message{Role: RoleAssistant, Content: r.concl}, seg(r.concl)); err != nil {
+			t.Fatalf("AppendMessage(assistant): %v", err)
+		}
+	}
+	for i := 6; i < ArchiveThreshold+10; i++ {
+		role := RoleUser
+		if i%2 == 1 {
+			role = RoleAssistant
+		}
+		content := fmt.Sprintf("填充 %d", i)
+		if err := store.AppendMessage("conv_digest", Message{Role: role, Content: content}, seg(content)); err != nil {
+			t.Fatalf("AppendMessage(fill[%d]): %v", i, err)
+		}
+	}
+
+	all, err := store.ReadAll("conv_digest")
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if len(all) == 0 {
+		t.Fatal("归档后主文件不应为空")
+	}
+	digest := all[0].Message.Content
+
+	if !strings.HasPrefix(digest, injectedHistoryDigestPrefix) {
+		t.Errorf("摘要应以 %q 开头（系统注入消息标记），实际 %q", injectedHistoryDigestPrefix, digest)
+	}
+	for _, r := range rounds {
+		if !strings.Contains(digest, r.task) {
+			t.Errorf("真压缩摘要应含早期任务 %q，实际：\n%s", r.task, digest)
+		}
+	}
+	for _, want := range []string{"结论", "归档说明", "原文逐字保留"} {
+		if !strings.Contains(digest, want) {
+			t.Errorf("摘要应含 %q 段，实际：\n%s", want, digest)
+		}
 	}
 }

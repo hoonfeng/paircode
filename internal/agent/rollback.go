@@ -170,6 +170,13 @@ const RollbackDir = ".pair" + string(filepath.Separator) + "rollback"
 // root 为工作区根，convId 为对话 ID，msgIdx 为用户消息索引（0 基），
 // store 为对话存储接口（用于截断对话历史）。
 func RollbackToMsg(root, convId string, msgIdx int, store ConversationStore) error {
+	// ★ 2026-09-13 归档区消息不可回滚：前端展示历史中 Idx < 0 的消息来自归档原文
+	//   （{conv}.jsonl.archived.jsonl，见 message_store.displayMessages）——它们已不在
+	//   主文件中，按 Idx 截断主文件会得到错误保留条数（keepCount = msgIdx+1 ≤ 0 →
+	//   整个会话历史被清空）。此处显式拒绝，避免静默数据损坏。
+	if msgIdx < 0 {
+		return fmt.Errorf("该消息位于已压缩的早期历史（归档区），无法回滚：请选择较新的消息")
+	}
 	// 读取快照映射
 	tracker := &SnapshotTracker{root: root}
 	snapshots := tracker.GetSnapshots(convId, msgIdx)

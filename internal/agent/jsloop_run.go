@@ -240,7 +240,6 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	} else {
 		msgs = append(msgs, Message{Role: RoleUser, Content: task})
 	}
-	l.staleMsg = AutoVerifyStale()
 	if l.Autonomous && l.autonomousStartTime.IsZero() {
 		l.autonomousStartTime = time.Now()
 	}

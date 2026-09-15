@@ -15,9 +15,13 @@ import (
 // PrefixShape hashes the portions of the request prefix that influence
 // provider-side prompt-cache reuse. Comparing snapshots across turns
 // lets us explain *why* a cache miss happened.
+//
+// ★ 2026-09-13 校正：CacheBoundary 只是**本地**的静态/动态分界标记，**provider 不认** ——
+// 动态后缀（CacheBoundary 之后）一变，其后的内容（含**整个历史**）在前缀缓存中全部 miss，
+// 并非「变化不影响前缀缓存」。（dsh 的 `systemPromptUpdate: 'in-history'` 才是正解。）
 type PrefixShape struct {
 	SystemHash   string // 静态前缀（CacheBoundary 之前）——影响 provider 缓存
-	DynamicHash  string // 动态后缀（CacheBoundary 之后）——变化不影响前缀缓存
+	DynamicHash  string // 动态后缀（CacheBoundary 之后）——★ 变化会令其后含整个历史全部 miss
 	ToolsHash    string // 归一化（排序后）工具定义哈希
 	ToolsRawHash string // 原始顺序工具定义哈希（诊断工具顺序稳定性）
 	PrefixHash   string

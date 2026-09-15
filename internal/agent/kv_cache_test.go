@@ -96,39 +96,8 @@ func TestSystemPromptVariance(t *testing.T) {
 	}
 }
 
-// TestBuildSnapshotContentGrows 验证 buildSnapshotContent 与历史摘要解耦：
-// ★ 2026-09：历史摘要提示段已删除——CompressedSummaries 不再注入上下文，
-//   因此「只有摘要」时快照正文为空；正文随真实状态提示（staleMsg）变化增长，
-//   且始终不触及 system prompt（纯消息流快照正文，marker/框架由 syncContextSnapshot 包裹）。
-func TestBuildSnapshotContentGrows(t *testing.T) {
-	loop := &Loop{
-		CompressedSummaries: []string{"[压缩摘要] 用户要求读取文件 a.go，已读取完毕"},
-	}
-
-	// 摘要不注入正文：有无摘要的快照正文应完全一致
-	base := (&Loop{}).buildSnapshotContent()
-	if base != loop.buildSnapshotContent() {
-		t.Errorf("摘要不应影响快照正文（提示注入已删除）：base=%d withSummaries=%d", len(base), len(loop.buildSnapshotContent()))
-	}
-
-	// 状态提示是真实正文来源：加入后正文应变化
-	loop.staleMsg = "⚠️ 检测到 1 条可能过期的记忆条目"
-	result1 := loop.buildSnapshotContent()
-	if !strings.Contains(result1, "过期") {
-		t.Error("正文应包含状态提示内容")
-	}
-	if strings.Contains(result1, "上下文已压缩") {
-		t.Error("历史摘要提示段已删除，正文不应包含该标记")
-	}
-
-	// 新增一条摘要：提示注入已删除 → 正文长度不变
-	loop.CompressedSummaries = append(loop.CompressedSummaries, "[压缩摘要] 用户要求修改 b.go，已修改完毕")
-	result2 := loop.buildSnapshotContent()
-	if result2 != result1 {
-		t.Errorf("摘要不注入正文，新增摘要不应改变正文：%d -> %d", len(result1), len(result2))
-	}
-	t.Logf("buildSnapshotContent ✓ (result1=%d, result2=%d)", len(result1), len(result2))
-}
+// ★ 2026-09-13：TestBuildSnapshotContentGrows 随 buildSnapshotContent 实现移除而删除
+//   （背景上下文快照链整体移除）。不变量由 TestRunNoBackgroundSnapshotInjection 覆盖。
 
 // TestSerializedMessagesPrefix 验证序列化后的 messages 数组是否保持前缀稳定。
 func TestSerializedMessagesPrefix(t *testing.T) {
@@ -241,90 +210,25 @@ func min(a, b int) int {
 	return b
 }
 
-// TestResumeContextGoesToSnapshotNotSystem 验证会话连贯性上下文（resumeCtx）迁移：
-// ★ 2026-09-03 KV 缓存修复——resumeCtx 每轮变化，若拼入 System（messages 第一条）
-//   会在 system 尾部切断 provider 前缀缓存（其后历史全部 miss → 命中率低）。
-//   断言：① System 消息不含 resume 内容；② 快照消息（backgroundCtxMarker 前缀）
-//   包含 resume 内容。
-func TestResumeContextGoesToSnapshotNotSystem(t *testing.T) {
-	stableSystem := DefaultSystemPrompt([]string{"/test/proj"})
-	resume := "# 任务进度\n- 已完成：读取 a.go\n- 进行中：修改 b.go\n\n# 对话摘要\n用户要求修改缓存逻辑。\n\n# Git 状态\n M internal/agent/loop.go"
-
+// TestRunNoBackgroundSnapshotInjection 验证真实 Run 路径不注入「背景上下文快照」
+// 及任何系统注入类消息（2026-09-04 停用 → 2026-09-13 实现整体移除）：历史零膨胀。
+func TestRunNoBackgroundSnapshotInjection(t *testing.T) {
 	loop := &Loop{
-		System:        stableSystem,
-		ResumeContext: resume,
-		Registry:      NewRegistry(),
-		Provider:      &MockProvider{},
+		System:   DefaultSystemPrompt([]string{"/test/proj"}),
+		Registry: NewRegistry(),
+		Provider: &MockProvider{},
 	}
-
-	// ① system prompt 纯净：不含 resume 内容
-	if strings.Contains(loop.System, "任务进度") || strings.Contains(loop.System, "对话摘要") {
-		t.Errorf("System 不应包含 resumeCtx 内容（拼入 System=第一条消息变化=前缀断裂）")
-	}
-
-	// ② 快照正文包含 resume 内容
-	content := loop.buildSnapshotContent()
-	if !strings.Contains(content, resume) {
-		t.Errorf("buildSnapshotContent 应包含 ResumeContext 内容")
-	}
-
-	// ③ 真实 Run 路径：背景快照同步已停用（2026-09-04）→ 不再注入快照消息
-	//   （syncContextSnapshot 实现保留，Run 不调用；恢复注入时再还原本断言）
 	msgs, err := loop.Run(context.Background(), "读取两个文件", nil)
 	if err != nil {
 		t.Fatalf("Run 失败: %v", err)
 	}
-	// system 第一条不含 resume
 	if len(msgs) == 0 || msgs[0].Role != RoleSystem {
 		t.Fatal("msgs[0] 应为 system")
 	}
-	if strings.Contains(msgs[0].Content, "任务进度") {
-		t.Errorf("system 消息包含 resumeCtx 内容——前缀断裂源回归！")
-	}
-	// 无快照注入（历史零膨胀）
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleUser && strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
-			t.Errorf("Run 不应再注入背景快照消息（已停用；快照消息数=%d）", len(msgs)-i)
+	for _, m := range msgs {
+		if m.Role == RoleUser && hasPrefixInjected(m.Content) {
+			t.Errorf("Run 不应注入系统注入类消息（背景快照/压缩摘要/交接视图），实际: %q",
+				truncStr(m.Content, 40))
 		}
 	}
-	t.Log("✓ resumeCtx 快照注入已停用：Run 不产生快照消息，历史零膨胀")
-}
-
-// TestResumeContextChangeAppendsSnapshot 验证 resume 变化时快照追加语义：
-// 相同 → 零注入（前缀稳定）；变化 → 追加新快照（append-only，旧快照保留）。
-func TestResumeContextChangeAppendsSnapshot(t *testing.T) {
-	loop := &Loop{
-		System:        DefaultSystemPrompt([]string{"/test/proj"}),
-		ResumeContext: "第一版：任务进度\n- 读取 a.go 完成",
-		Registry:      NewRegistry(),
-		Provider:      &MockProvider{},
-	}
-
-	// 首次同步：注入快照
-	msgs := []Message{{Role: RoleUser, Content: "当前任务"}}
-	msgs = loop.syncContextSnapshot(msgs)
-	if len(msgs) != 2 {
-		t.Fatalf("首次同步应追加 1 条快照，实际 %d 条", len(msgs))
-	}
-	first := msgs[1].Content
-
-	// resume 未变（模拟同一轮多次迭代）→ 零注入
-	again := loop.syncContextSnapshot(append([]Message{}, msgs...))
-	if len(again) != 2 {
-		t.Errorf("resume 未变时应零注入（前缀稳定），实际 %d 条", len(again))
-	}
-
-	// resume 变化（模拟下一轮对话：任务进度推进）→ 追加新快照，旧快照保留
-	loop.ResumeContext = "第二版：任务进度\n- 读取 a.go 完成\n- 修改 b.go 进行中"
-	changed := loop.syncContextSnapshot(append([]Message{}, msgs...))
-	if len(changed) != 3 {
-		t.Fatalf("resume 变化应追加新快照（3 条），实际 %d 条", len(changed))
-	}
-	if changed[1].Content != first {
-		t.Errorf("旧快照应原样保留（append-only，位置固定），实际被改写")
-	}
-	if !strings.Contains(changed[2].Content, "第二版") {
-		t.Errorf("新快照应包含新 resume 内容（「第二版」）")
-	}
-	t.Log("✓ 快照 append-only：resume 变化只断快照之后，前缀单调延展")
 }

@@ -220,7 +220,9 @@ function hBuildText(U, args, prev, history, task, T, log) {
     log('会话交接：无可用 Provider，使用规则式交接');
   }
   if (!body) body = U.ruleFallback(history);
-  return U.marker + U.title + '\n' + body;
+  // ★ 2026-09-13：不再拼接「背景上下文」前缀（该实现已整体移除）——
+  //   交接文本以标题行开头（与 Go 侧 BuildHandoffText 逐字节一致）。
+  return U.title + '\n' + body;
 }
 
 // hJudge 轻量相关性判官（独立实例，只输出一个词；失败 → ''，保持现状零副作用）。

@@ -82,10 +82,10 @@ func TestLoopPersistTurnStepConsistency(t *testing.T) {
 	annotateStoredEvents(stored)
 
 	// 消息序列形态：system | user | assistant(tool_call) | tool | assistant(tool_call) | tool | assistant(content)
-	// ★ 背景上下文快照（记忆存在时）为额外 user 消息（任务之后，带 backgroundCtxMarker），
-	//   不计入「7 条主序列」；turnStepFor 已跳过快照（不递增 turn）。
+	// ★ 系统注入消息（历史压缩摘要/交接视图/历史遗留快照）为额外 user 消息，
+	//   不计入「7 条主序列」；turnStepFor 已跳过注入物（不递增 turn）。
 	mainLen := 7
-	if strings.HasPrefix(stored[len(msgs)-1].Message.Content, backgroundCtxMarker) {
+	if hasPrefixInjected(stored[len(msgs)-1].Message.Content) {
 		mainLen = len(stored) - 1
 	}
 	if len(stored) != 7 && len(stored) != mainLen && len(stored) != 8 {

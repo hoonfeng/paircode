@@ -140,8 +140,12 @@ func readMemoryBody(name string) string {
 
 // ── 自动验证集成 ──────────────────────────────────────
 
-// AutoVerifyStale 由外部（如 loop 或编排循环）调用，自动检查并报告过期条目。
-// 返回一个字符串摘要（无过期→空字符串），供 Loop 注入到上下文或日志。
+// AutoVerifyStale 自动检查并报告过期条目，返回字符串摘要（无过期→空字符串）。
+//
+// ★ 2026-09-13 现状：**无调用者**——原先由 Loop 在 Run 开始时调用并把结果注入
+// 「背景上下文快照」（staleMsg），该注入链 2026-09-04 停用、2026-09-13 实现整体移除，
+// 故本函数当前不产生任何上下文注入（保留备用：如需恢复「记忆/知识库过期提醒」，
+// 应走 system 动态后缀（会话级冻结段）或历史尾部追加独立消息，勿恢复快照注入链）。
 func AutoVerifyStale() string {
 	roots := workspaceRootsSnapshot()
 	if len(roots) == 0 {

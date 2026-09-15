@@ -91,10 +91,14 @@ func (g *Goal) ContinueMessage() string {
 		g.Rounds, limitTxt, g.Objective, g.Phase)
 }
 
-// goalSystemMarker 系统提示注入标记（幂等：已注入不重复追加）。
+// goalSystemMarker 目标段标记（曾用于 ResumeContext 幂等判断；当前无注入点，保留备用）。
 const goalSystemMarker = "【当前目标】"
 
-// goalSystemSection 目标上下文段（注入系统提示，对齐 DSH「同会话完成目标」语义）。
+// goalSystemSection 目标上下文段（对齐 DSH「同会话完成目标」语义）。
+// ★ 2026-09-13：**当前无注入点** —— 背景上下文快照链已整体移除（Loop.ResumeContext
+// 字段一并删除），目标上下文改由续轮消息承载（Goal.ContinueMessage 已含目标/阶段/轮次，
+// 尾部追加不破前缀）。
+// 本函数保留备用：将来若需注入（历史尾部追加独立消息），直接复用其文案。
 func goalSystemSection(g *Goal) string {
 	limitTxt := fmt.Sprintf("%d", g.RoundLimit)
 	if g.RoundLimit <= 0 {

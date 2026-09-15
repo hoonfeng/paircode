@@ -430,7 +430,11 @@ func handoffStoreHandle(vm *goja.Runtime, store ConversationStore, convID string
 // 导致锚点指纹/阈值判定不一致（缓存前缀稳定的前提）。
 func handoffUtilsObject(vm *goja.Runtime) *goja.Object {
 	obj := vm.NewObject()
-	obj.Set("marker", backgroundCtxMarker)
+	// ★ 2026-09-13：原 marker（「背景上下文·非当前任务」前缀）随该实现移除。
+	//   交接文本以 title（handoffTitle）开头，JS 侧只拼 title（与 Go 逐字节一致）。
+	//   marker 键保留但恒为空串：仅向后兼容尚未同步的插件副本
+	//   （旧代码 `marker + title` 的结果与只拼 title 等价，不会重复标题）。
+	obj.Set("marker", "")
 	obj.Set("title", handoffTitle)
 	obj.Set("enabled", HandoffEnabled())
 	obj.Set("thresholds", func(call goja.FunctionCall) goja.Value {

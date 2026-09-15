@@ -112,11 +112,11 @@ func turnStepFor(msgs []Message) [][2]int {
 	for i, m := range msgs {
 		switch m.Role {
 		case RoleUser:
-			// ★ 背景上下文快照（【背景上下文·非当前任务】前缀）不是用户任务轮次：
-			//   它是循环同步进消息流的背景信息（历史摘要/状态/记忆/知识库），
-			//   不递增 turn/step——避免 turnStepFor 把它推为新一轮任务（EventType
-			//   仍是 user/message，模型可见；仅 turn/step 语义标注忽略）。
-			if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			// ★ 系统注入消息（早期历史压缩摘要 / 会话交接视图 / 历史遗留的背景快照）
+			//   不是用户任务轮次：不递增 turn/step——避免 turnStepFor 把它推为
+			//   新一轮任务（EventType 仍是 user/message，模型可见；仅 turn/step
+			//   语义标注忽略）。识别见 injected_msg.go。
+			if hasPrefixInjected(m.Content) {
 				break
 			}
 			turn++
@@ -639,11 +639,29 @@ func (s *MessageStore) saveIndex(metas []ConversationMeta) error {
 	return os.WriteFile(s.indexPath(), data, 0o644)
 }
 
-// readJSONL 读取 JSONL 文件全部行并解码为 StoredMessage 切片。
+// readJSONL 读取主消息文件（{conv}.jsonl）全部行并解码为 StoredMessage 切片。
+func (s *MessageStore) readJSONL(convID string) ([]StoredMessage, error) {
+	return readJSONLPath(s.convFilePath(convID))
+}
+
+// readArchivedJSONL 读取归档文件（{conv}.jsonl.archived.jsonl）全部消息。
+// ★ 归档文件是 append-only：每次归档把当时最早的若干条真实消息追加进来——
+// 即「被压缩出主文件」的完整原文，前端展示线据此回翻真实早期历史。
+// 文件不存在返回 nil, nil。
+func (s *MessageStore) readArchivedJSONL(convID string) ([]StoredMessage, error) {
+	return readJSONLPath(s.convFilePath(convID) + ArchivedFileSuffix)
+}
+
+// readJSONLBak 尝试从 .bak 备份文件读取 JSONL 数据（崩溃恢复用）。
+func (s *MessageStore) readJSONLBak(convID string) ([]StoredMessage, error) {
+	return readJSONLPath(s.convFilePath(convID) + ".bak")
+}
+
+// readJSONLPath 读取任意 JSONL 文件全部行并解码为 StoredMessage 切片。
 // 解码失败的行跳过（容错）。文件不存在返回 nil, nil。
 // 使用 10MB buffer（工具结果可能很长）。
-func (s *MessageStore) readJSONL(convID string) ([]StoredMessage, error) {
-	f, err := os.Open(s.convFilePath(convID))
+func readJSONLPath(path string) ([]StoredMessage, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -663,35 +681,6 @@ func (s *MessageStore) readJSONL(convID string) ([]StoredMessage, error) {
 		var sm StoredMessage
 		if err := json.Unmarshal(line, &sm); err != nil {
 			continue // 容错：跳过解码失败的行
-		}
-		msgs = append(msgs, sm)
-	}
-	return msgs, scanner.Err()
-}
-
-// readJSONLBak 尝试从 .bak 备份文件读取 JSONL 数据（崩溃恢复用）。
-func (s *MessageStore) readJSONLBak(convID string) ([]StoredMessage, error) {
-	bakPath := s.convFilePath(convID) + ".bak"
-	f, err := os.Open(bakPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
-	var msgs []StoredMessage
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var sm StoredMessage
-		if err := json.Unmarshal(line, &sm); err != nil {
-			continue
 		}
 		msgs = append(msgs, sm)
 	}
@@ -1069,7 +1058,7 @@ func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]St
 //	每轮只前进 1 条（每条 100~400KB），长对话首屏/滚动加载极慢。返回合并后的
 //	limit 条（≥1）、total 保持原始行数。
 func (s *MessageStore) LoadLatestForDisplay(convID string, limit int) ([]StoredMessage, int, error) {
-	msgs, err := s.readJSONL(convID)
+	msgs, err := s.displayMessages(convID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1085,13 +1074,58 @@ func (s *MessageStore) LoadLatestForDisplay(convID string, limit int) ([]StoredM
 	return merged[len(merged)-limit:], total, nil
 }
 
+// displayMessages 构建「前端展示历史」= 归档原文（真实早期消息）+ 主文件消息，
+// 排除系统注入消息（早期历史压缩摘要 / 会话交接视图 / 历史遗留背景快照，见 injected_msg.go）。
+//
+// ★ 2026-09-13（用户需求）：前端展示的就是真实落盘历史——归档时被压缩出主文件的
+// 原文逐字保存在 {conv}.jsonl.archived.jsonl，此前前端**完全看不到**
+// （主文件首行只剩一行统计摘要），表现为长会话里出现「历史归档 共 N 条消息」的
+// 黑盒块。现在两者合并展示，前端可一路向上回翻到对话最早的真实消息。
+//
+// Idx 约定（前端排序 / 向上分页 / 回滚各自依赖的语义）：
+//   - 归档区消息：负数（最早 = -N，最新 = -1），与主文件（0 起）自然衔接；
+//     负 Idx 表示「不在主文件中」→ 回滚/截断类主文件写操作拒绝执行（见 rollback 保护）；
+//   - 主文件消息：保持主文件行号不变（落盘语义、回滚锚点均按此执行）。
+func (s *MessageStore) displayMessages(convID string) ([]StoredMessage, error) {
+	archived, err := s.readArchivedJSONL(convID)
+	if err != nil {
+		return nil, err
+	}
+	mainMsgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, err
+	}
+
+	kept := make([]StoredMessage, 0, len(archived))
+	for _, m := range archived {
+		if isInjectedUserMessage(m.Message.Role, m.Message.Content) {
+			continue // 注入物不是真实历史（旧归档里可能残留早期摘要/交接视图/快照）
+		}
+		kept = append(kept, m)
+	}
+	// 归档区重编号为负数（保持时间序：最早最负）
+	n := len(kept)
+	for i := range kept {
+		kept[i].Idx = -(n - i)
+	}
+
+	out := kept
+	for _, m := range mainMsgs {
+		if isInjectedUserMessage(m.Message.Role, m.Message.Content) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 // LoadBeforeForDisplay 供前端向上分页：全量合并后过滤 Idx < beforeIdx 的条目，
 // 取末尾 limit 条（idx 升序）。语义对应 LoadLatestForDisplay。
 func (s *MessageStore) LoadBeforeForDisplay(convID string, beforeIdx int, limit int) ([]StoredMessage, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	msgs, err := s.readJSONL(convID)
+	msgs, err := s.displayMessages(convID)
 	if err != nil {
 		return nil, err
 	}
@@ -1370,8 +1404,57 @@ func (s *MessageStore) LoadAll(convID string) ([]Message, error) {
 }
 
 // Count 返回对话 JSONL 行数。文件不存在返回 0。
+// ★ 2026-09-13：语义改为「真实历史消息数」= 归档原文 + 主文件消息 - 系统注入消息
+//   （前端展示线口径：归档原文属于真实历史，早期压缩摘要/交接视图等注入物不是）。
+//   轻量实现：逐行扫描 + 行内子串匹配，不解析 JSON（归档文件可达数十 MB）。
 func (s *MessageStore) Count(convID string) (int, error) {
-	return s.countJSONLLines(convID)
+	mainTotal, mainInjected, err := countJSONLLinesWithInjected(s.convFilePath(convID))
+	if err != nil {
+		return 0, err
+	}
+	archTotal, archInjected, err := countJSONLLinesWithInjected(s.convFilePath(convID) + ArchivedFileSuffix)
+	if err != nil {
+		return 0, err
+	}
+	return mainTotal - mainInjected + archTotal - archInjected, nil
+}
+
+// countJSONLLinesWithInjected 统计 JSONL 文件的非空行数，以及其中「系统注入消息」行数。
+// 轻量：只做行内子串匹配（注入前缀是固定中文字面量，序列化后原样出现在 content 字段）。
+func countJSONLLinesWithInjected(path string) (total, injected int, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		total++
+		if isInjectedJSONLine(line) {
+			injected++
+		}
+	}
+	return total, injected, scanner.Err()
+}
+
+// isInjectedJSONLine 判断一行落盘 JSON 是否为「系统注入」用户消息行。
+func isInjectedJSONLine(line []byte) bool {
+	if !bytes.Contains(line, []byte(`"role":"user"`)) {
+		return false
+	}
+	return bytes.Contains(line, []byte(injectedHistoryDigestPrefix)) ||
+		bytes.Contains(line, []byte(legacyHistoryArchivePrefix)) ||
+		bytes.Contains(line, []byte(handoffTitle)) ||
+		bytes.Contains(line, []byte(legacyBackgroundSnapshotPrefix))
 }
 
 // TruncateTo 截断对话消息文件，只保留前 count 条消息。
@@ -1784,8 +1867,8 @@ const ArchiveThreshold = 500
 // ArchiveRatio 归档后保留的消息比例（保留最新的 1/ArchiveRatio）。
 const ArchiveRatio = 4
 
-// SummaryLength 归档摘要的最大字符数。
-const SummaryLength = 200
+// ArchiveDigestMaxLen 归档压缩摘要的最大字符数（真摘要需容纳任务脉络，200 太短）。
+const ArchiveDigestMaxLen = 4000
 
 // ArchivedFileSuffix 归档后截断部分的文件后缀。
 const ArchivedFileSuffix = ".archived.jsonl"
@@ -1819,8 +1902,8 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	archived := messages[:archiveCount]
 	keep := messages[archiveCount:]
 
-	// 生成归档摘要
-	summary := s.generateArchiveSummary(convID, archived)
+	// 生成归档压缩摘要（★ 真压缩：按轮次提炼任务脉络，不再只写统计条数）
+	summary := s.buildArchiveDigest(convID, archived)
 
 	// 将归档消息写入 .archived.jsonl
 	archivedPath := s.convFilePath(convID) + ArchivedFileSuffix
@@ -1845,13 +1928,15 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	}
 	mainEncoder := json.NewEncoder(tf)
 
-	// 写入归档摘要消息作为第一条（使前端能看到归档记录）。
+	// 写入归档压缩摘要消息作为第一条（供 LLM 感知早期历史已被压缩）。
 	// ★ Role 必须用 RoleUser 而非 RoleAssistant：摘要是系统生成的说明，不是 agent 的回复，
 	//   以孤立 assistant 消息排在对话开头会让 LLM 上下文出现无 user 配对的 assistant
 	//   （部分 API 拒绝以 assistant 开头，且 LLM 会误认为「自己说过的话」）。
-	//   用 RoleUser + 【历史归档】标注与背景块（backgroundCtxMarker 同款 user 注入模式）一致，
-	//   LLM 可将其理解为「早期历史被归档的说明」；系统提示多轮规则会把它当历史轮次处理
-	//   （最后一条 user 消息才是当前任务），不会污染当前任务识别。
+	//   用 RoleUser + 【历史压缩】标注（系统注入消息，见 injected_msg.go）：
+	//   LLM 可将其理解为「早期历史被压缩的说明」；turn/step 统计与任务锚点计算按
+	//   isInjectedUserMessage 跳过它，不会污染当前任务识别；
+	//   ★ 前端展示线按 isInjectedUserMessage 过滤它——前端展示真实历史
+	//   （归档原文可回翻），这条压缩摘要只服务 LLM 上下文。
 	summaryMsg := StoredMessage{
 		Idx:       0,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -1904,55 +1989,102 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	return nil
 }
 
-// generateArchiveSummary 从归档消息生成摘要文本。
-func (s *MessageStore) generateArchiveSummary(convID string, msgs []StoredMessage) string {
+// buildArchiveDigest 为「被压缩归档」的早期消息生成真压缩摘要（规则式，零模型调用）。
+//
+// ★ 2026-09-13 修复「没压缩就丢弃」：原实现（generateArchiveSummary）只写一行统计
+//   （共 N 条消息：用户 x / 助手 y / 工具 z），不含任何内容信息——早期历史对
+//   LLM 与用户都成了黑盒。改为按轮次提炼任务脉络（用户任务 + 该轮最终结论 +
+//   工具调用量），压缩后的上下文仍然可用；原文逐字保留在
+//   {conv}.jsonl.archived.jsonl（前端展示线读该文件 = 真实历史，可继续回翻）。
+//
+// 输出以 injectedHistoryDigestPrefix 开头 = 系统注入消息（见 injected_msg.go）：
+// 不构成用户任务轮次，也不作为真实历史返回前端。
+func (s *MessageStore) buildArchiveDigest(convID string, msgs []StoredMessage) string {
 	if len(msgs) == 0 {
-		return "（历史消息已归档，无内容）"
+		return injectedHistoryDigestPrefix + "早期历史为空（无可压缩内容）"
 	}
 
-	// 统计各类消息数
-	userMsgs := 0
-	assistantMsgs := 0
-	toolCalls := 0
-	toolResults := 0
-
+	// 按「用户消息」切分任务轮次（跳过注入物：早期压缩摘要/交接视图不构成轮次）
+	type digestRound struct {
+		user  string // 该轮用户任务（首行摘要）
+		concl string // 该轮结论（轮内最后一条有正文的助手消息首行）
+		tools int    // 该轮工具调用次数
+	}
+	rounds := make([]digestRound, 0, 8)
+	cur := -1
+	userTotal, assistantTotal, toolTotal := 0, 0, 0
 	for _, m := range msgs {
 		switch m.Message.Role {
 		case RoleUser:
-			userMsgs++
+			if hasPrefixInjected(m.Message.Content) {
+				continue
+			}
+			userTotal++
+			rounds = append(rounds, digestRound{user: digestLine(m.Message.Content, 160)})
+			cur = len(rounds) - 1
 		case RoleAssistant:
-			assistantMsgs++
-			if len(m.Message.ToolCalls) > 0 {
-				toolCalls++
+			assistantTotal++
+			if cur >= 0 {
+				if c := digestLine(m.Message.Content, 160); c != "" {
+					rounds[cur].concl = c
+				}
 			}
 		case RoleTool:
-			toolResults++
-		}
-	}
-
-	// 提取第一条用户消息作为上下文
-	firstUserMsg := ""
-	for _, m := range msgs {
-		if m.Message.Role == RoleUser && m.Message.Content != "" {
-			firstUserMsg = m.Message.Content
-			if len(firstUserMsg) > 100 {
-				firstUserMsg = firstUserMsg[:100] + "…"
+			toolTotal++
+			if cur >= 0 {
+				rounds[cur].tools++
 			}
-			break
 		}
 	}
 
-	summary := fmt.Sprintf("【历史归档】**历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
-		len(msgs), userMsgs, assistantMsgs, toolCalls+toolResults)
-	if firstUserMsg != "" {
-		summary += fmt.Sprintf("\n最早对话主题：%s", firstUserMsg)
+	var b strings.Builder
+	b.WriteString(injectedHistoryDigestPrefix)
+	fmt.Fprintf(&b, "早期历史已压缩归档：%d 条消息 / %d 轮用户任务\n", len(msgs), userTotal)
+	if len(rounds) > 0 {
+		b.WriteString("\n## 任务脉络（逐轮摘要）\n")
+		const digestMaxRounds = 10
+		for i, r := range rounds {
+			if i >= digestMaxRounds {
+				fmt.Fprintf(&b, "- …（其余 %d 轮已省略）\n", len(rounds)-digestMaxRounds)
+				break
+			}
+			fmt.Fprintf(&b, "- [第%d轮] 用户：%s\n", i+1, r.user)
+			if r.concl != "" {
+				fmt.Fprintf(&b, "  结论：%s\n", r.concl)
+			}
+			if r.tools > 0 {
+				fmt.Fprintf(&b, "  工具调用：%d 次\n", r.tools)
+			}
+		}
 	}
-	summary += fmt.Sprintf("\n_已归档至 %s.archived.jsonl，需要时可查看_", convID)
+	b.WriteString("\n## 归档说明\n")
+	fmt.Fprintf(&b, "- 压缩范围：本对话最早的 %d 条消息（用户 %d / 助手 %d / 工具结果 %d）\n",
+		len(msgs), userTotal, assistantTotal, toolTotal)
+	fmt.Fprintf(&b, "- 原文逐字保留于 %s%s（未删除，前端历史可继续回翻查看）\n", convID, ArchivedFileSuffix)
+	b.WriteString("- 以上为早期历史的压缩摘要，细节以归档原文与当前任务上下文为准\n")
 
-	if len(summary) > SummaryLength {
-		summary = summary[:SummaryLength] + "…"
+	return digestTruncate(b.String(), ArchiveDigestMaxLen)
+}
+
+// digestLine 取消息正文的首个非空行并按 rune 截断（摘要用：避免超长正文占满上下文）。
+func digestLine(s string, maxRunes int) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		return digestTruncate(line, maxRunes)
 	}
-	return summary
+	return ""
+}
+
+// digestTruncate 按 rune 截断（UTF-8 安全：不切断多字节字符）。
+func digestTruncate(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes]) + "…"
 }
 
 // GetPersistedCount 获取已持久化的非 System 消息数。
