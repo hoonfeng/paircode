@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -352,17 +353,274 @@ func PollQrStatusCtx(ctx context.Context, baseURL, qrcode, verifyCode string, ti
 type Client struct {
 	BaseURL string
 	Token   string
+
+	// Logf 可选日志（桥注入；nil 静默）。
+	Logf func(format string, args ...any)
+
+	// ── 发送节流与限流退避（2026-09-16 新增，防打爆服务端发送频率限制）──
+	// 背景：连续发送大量消息（如流式多片连发）触发服务端频率限制：
+	// sendmessage 返回 ret=-2 prepare failed。2026-09-16 两轮真机实测：
+	//   第一轮：约 11 分钟内累计 ~15 条触发；静默 15m25s 后恢复；
+	//   第二轮：恢复后 2 分钟内累计 10 条再次触发；静默 15m50s、31m 仍失败
+	//   （期间重试尝试会续期限流窗口——静默等待不重试才是正解）。
+	// 对策：
+	//   1) 发送端节流：最小间隔 + 短窗口（默认 2m/8 条）+ 长窗口（默认 15m/12 条）；
+	//   2) -2 冷静期：触发后暂停发送，冷静期（首次 20m、翻倍至上限 60m）
+	//      结束后重试；重试成功后阶梯重置。
+	sendMu         sync.Mutex
+	sendLast       time.Time     // 上次 sendmessage 发出时刻（最小间隔）
+	sendWindow     []time.Time   // 滑动窗口内发送时刻（配额）
+	sendLongWindow []time.Time   // 长窗口内发送时刻（配额；防 15 分钟级累计限流）
+	limitUntil     time.Time     // -2 冷静期截止（期内所有发送等待）
+	limitBackoff   time.Duration // 当前冷静期长度（成功发送后重置 0）
+	stopCh         chan struct{} // Close() 关闭：中断等待中的节流/退避睡眠
+	stopOnce       sync.Once
+
+	// 节流参数（零值 = 默认；测试可注入小值）
+	minSendInterval   time.Duration // 默认 3s
+	sendWindowMax     int           // 默认 8
+	sendWindowDur     time.Duration // 默认 120s
+	sendLongWindowMax int           // 默认 12（长窗口条数上限）
+	sendLongWindowDur time.Duration // 默认 15m（长窗口时长）
+	limitBaseBackoff  time.Duration // 默认 20m
+	limitMaxBackoff   time.Duration // 默认 60m
+	limitMaxRetries   int           // 默认 2
 }
 
 // NewClient 创建协议客户端。
 func NewClient(baseURL, token string) *Client {
-	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), Token: token}
+	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), Token: token, stopCh: make(chan struct{})}
 }
 
 type postOpt struct {
 	timeout         time.Duration
 	retries         int
 	tolerateTimeout bool
+}
+
+// ─────────────────────────── 发送节流与限流退避 ───────────────────────────
+//
+// 背景（2026-09-16 真机实测）：连续发送大量消息（如流式 48 片连发，
+// 桥内 500ms 间隔）触发服务端发送频率限制，sendmessage 返回 ret=-2
+// prepare failed 且约 15 分钟内持续失败；期间每次重试都会续期限流窗口，
+// 低频（≤数条/分钟）发送全量正常。因此发送端必须自限流并长退避。
+//
+// 设计：
+//   - 节流：sendmessage 统一经 acquireSendSlot（最小间隔 + 滑动窗口配额）；
+//   - 退避：-2 后暂停发送（noteSendLimited），冷静期结束自动重试（sendmsg）；
+//   - 可取消：等待以 select + stopCh 实现（Client.Close 中断，桥停止不阻塞退出）；
+//   - 并发安全：共享状态（sendLast/sendWindow/limitUntil/limitBackoff）一律在
+//     sendMu 保护下读写；
+//   - 兼容：SendText/SendItem 签名不变；节流参数零值 = 安全默认值（见
+//     SendThrottleOptions 注释），不配置时行为为「自限流 + 长退避」。
+
+// SendThrottleOptions 发送节流参数（零值字段 = 默认值；桥从 config 注入）。
+type SendThrottleOptions struct {
+	MinInterval     time.Duration // sendmessage 最小间隔（默认 3s）
+	WindowMax       int           // 短窗口内最大条数（默认 8）
+	WindowDur       time.Duration // 短窗口时长（默认 120s）
+	LongWindowMax   int           // 长窗口内最大条数（默认 12）
+	LongWindowDur   time.Duration // 长窗口时长（默认 15m）
+	LimitBase       time.Duration // ret=-2 首次冷静期（默认 20m）
+	LimitMax        time.Duration // 冷静期上限（默认 60m）
+	LimitMaxRetries int           // -2 最大重试次数（默认 2）
+}
+
+// SetSendThrottle 配置发送节流（bridge 构建客户端时注入；零值字段保持默认）。
+func (c *Client) SetSendThrottle(opt SendThrottleOptions) {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if opt.MinInterval > 0 {
+		c.minSendInterval = opt.MinInterval
+	}
+	if opt.WindowMax > 0 {
+		c.sendWindowMax = opt.WindowMax
+	}
+	if opt.WindowDur > 0 {
+		c.sendWindowDur = opt.WindowDur
+	}
+	if opt.LongWindowMax > 0 {
+		c.sendLongWindowMax = opt.LongWindowMax
+	}
+	if opt.LongWindowDur > 0 {
+		c.sendLongWindowDur = opt.LongWindowDur
+	}
+	if opt.LimitBase > 0 {
+		c.limitBaseBackoff = opt.LimitBase
+	}
+	if opt.LimitMax > 0 {
+		c.limitMaxBackoff = opt.LimitMax
+	}
+	if opt.LimitMaxRetries > 0 {
+		c.limitMaxRetries = opt.LimitMaxRetries
+	}
+}
+
+// Close 关闭客户端：中断所有等待中的节流/退避睡眠（桥停止时调用；幂等）。
+func (c *Client) Close() {
+	c.stopOnce.Do(func() {
+		if c.stopCh != nil {
+			close(c.stopCh)
+		}
+	})
+}
+
+func (c *Client) logf(format string, args ...any) {
+	if c.Logf != nil {
+		c.Logf(format, args...)
+	}
+}
+
+// sendmsg 发送 sendmessage 请求（SendText/SendItem 共用）：节流 → 发送 →
+// ret=-2 冷静期等待 + 重试。重试耗尽仍 -2 时返回原响应（上层日志/降级）。
+func (c *Client) sendmsg(body map[string]any) (*SendTextResp, error) {
+	maxRetries := c.limitMaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 2
+	}
+	for attempt := 0; ; attempt++ {
+		if err := c.acquireSendSlot(); err != nil {
+			return nil, err
+		}
+		resp, err := post[SendTextResp](c, "ilink/bot/sendmessage", body, postOpt{retries: 2})
+		if err != nil {
+			return nil, err
+		}
+		if resp != nil && (resp.Ret == -2 || resp.Errcode == -2) {
+			wait := c.noteSendLimited()
+			c.logf("sendmessage 触发服务端限流（ret=-2 prepare failed），冷静 %s 后重试（第 %d/%d 次）",
+				wait.Round(time.Second), attempt+1, maxRetries)
+			if attempt+1 > maxRetries {
+				return resp, nil // 重试耗尽：保留 -2 响应交由上层处理
+			}
+			continue
+		}
+		c.noteSendOK()
+		return resp, nil
+	}
+}
+
+// acquireSendSlot 发送节流闸门：冷静期 → 最小间隔 → 滑动窗口配额；
+// 需要等待时以 select+stopCh 可取消睡眠实现，醒后循环重查（其他请求
+// 可能在此期间更新冷静期/占用配额）。
+func (c *Client) acquireSendSlot() error {
+	interval := c.minSendInterval
+	if interval <= 0 {
+		interval = 3 * time.Second
+	}
+	winMax := c.sendWindowMax
+	if winMax <= 0 {
+		winMax = 8
+	}
+	winDur := c.sendWindowDur
+	if winDur <= 0 {
+		winDur = 120 * time.Second
+	}
+	longMax := c.sendLongWindowMax
+	if longMax <= 0 {
+		longMax = 12
+	}
+	longDur := c.sendLongWindowDur
+	if longDur <= 0 {
+		longDur = 15 * time.Minute
+	}
+	for {
+		c.sendMu.Lock()
+		now := time.Now()
+		var wait time.Duration
+		reason := ""
+		switch {
+		case now.Before(c.limitUntil):
+			wait = time.Until(c.limitUntil)
+			reason = "限流冷静期"
+		default:
+			if !c.sendLast.IsZero() {
+				if d := interval - now.Sub(c.sendLast); d > wait {
+					wait = d
+					reason = "最小间隔"
+				}
+			}
+			// 滑出窗口
+			cut := 0
+			for cut < len(c.sendWindow) && now.Sub(c.sendWindow[cut]) >= winDur {
+				cut++
+			}
+			if cut > 0 {
+				c.sendWindow = append(c.sendWindow[:0], c.sendWindow[cut:]...)
+			}
+			if len(c.sendWindow) >= winMax {
+				if d := c.sendWindow[0].Add(winDur).Sub(now); d > wait {
+					wait = d
+					reason = "发送窗口配额"
+				}
+			}
+			// 长窗口（防 15 分钟级累计限流）
+			lcut := 0
+			for lcut < len(c.sendLongWindow) && now.Sub(c.sendLongWindow[lcut]) >= longDur {
+				lcut++
+			}
+			if lcut > 0 {
+				c.sendLongWindow = append(c.sendLongWindow[:0], c.sendLongWindow[lcut:]...)
+			}
+			if len(c.sendLongWindow) >= longMax {
+				if d := c.sendLongWindow[0].Add(longDur).Sub(now); d > wait {
+					wait = d
+					reason = "长窗口配额"
+				}
+			}
+		}
+		if wait <= 0 {
+			c.sendLast = now
+			c.sendWindow = append(c.sendWindow, now)
+			c.sendLongWindow = append(c.sendLongWindow, now)
+			c.sendMu.Unlock()
+			return nil
+		}
+		ch := c.stopCh
+		c.sendMu.Unlock()
+		if wait > 3*time.Second {
+			c.logf("发送节流：等待 %s（%s）", wait.Round(time.Second), reason)
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-timer.C:
+		case <-ch: // ch 为 nil（零值 Client）时永久阻塞：等价不可取消
+			timer.Stop()
+			return fmt.Errorf("客户端已停止：发送等待被取消")
+		}
+	}
+}
+
+// noteSendLimited 记录一次 ret=-2：进入/延长冷静期（首次 15m，此后翻倍至
+// 上限 30m）。返回本次冷静期长度。
+func (c *Client) noteSendLimited() time.Duration {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	base := c.limitBaseBackoff
+	if base <= 0 {
+		base = 20 * time.Minute
+	}
+	maxB := c.limitMaxBackoff
+	if maxB <= 0 {
+		maxB = 60 * time.Minute
+	}
+	if c.limitBackoff <= 0 {
+		c.limitBackoff = base
+	} else {
+		c.limitBackoff *= 2
+		if c.limitBackoff > maxB {
+			c.limitBackoff = maxB
+		}
+	}
+	c.limitUntil = time.Now().Add(c.limitBackoff)
+	return c.limitBackoff
+}
+
+// noteSendOK 发送成功：重置冷静期阶梯。
+func (c *Client) noteSendOK() {
+	c.sendMu.Lock()
+	c.limitBackoff = 0
+	c.sendMu.Unlock()
 }
 
 // post 带 base_info 包装、超时与退避重试的 POST。
@@ -405,8 +663,9 @@ func (c *Client) GetUpdates(buf string, longPollSec int) (*GetUpdatesResp, error
 
 // SendText 发送文本（回复必须带对应用户消息的 context_token）。
 // msg.client_id 为随机 16 hex；message_type=2(BOT)/message_state=2(FINISH)。
+// 统一经 sendmsg：发送节流 + ret=-2 冷静期退避（2026-09-16 新增）。
 func (c *Client) SendText(toUserID, text, contextToken string) (*SendTextResp, error) {
-	return post[SendTextResp](c, "ilink/bot/sendmessage", map[string]any{
+	return c.sendmsg(map[string]any{
 		"msg": map[string]any{
 			"from_user_id":  "",
 			"to_user_id":    toUserID,
@@ -416,13 +675,14 @@ func (c *Client) SendText(toUserID, text, contextToken string) (*SendTextResp, e
 			"item_list":     []map[string]any{{"type": 1, "text_item": map[string]any{"text": text}}},
 			"context_token": contextToken,
 		},
-	}, postOpt{retries: 2})
+	})
 }
 
 // SendItem 发送单条结构化消息条目（媒体等；item = item_list 的单个元素）。
 // 与 SendText 同构：message_type=2(BOT)/message_state=2(FINISH)，必须带对应用户的 context_token。
+// 统一经 sendmsg：发送节流 + ret=-2 冷静期退避（2026-09-16 新增）。
 func (c *Client) SendItem(toUserID string, item map[string]any, contextToken string) (*SendTextResp, error) {
-	return post[SendTextResp](c, "ilink/bot/sendmessage", map[string]any{
+	return c.sendmsg(map[string]any{
 		"msg": map[string]any{
 			"from_user_id":  "",
 			"to_user_id":    toUserID,
@@ -432,7 +692,7 @@ func (c *Client) SendItem(toUserID string, item map[string]any, contextToken str
 			"item_list":     []map[string]any{item},
 			"context_token": contextToken,
 		},
-	}, postOpt{retries: 2})
+	})
 }
 
 // GetUploadUrl 获取 CDN 上传预签名（发媒体；请求字段见 media 包 Upload）。

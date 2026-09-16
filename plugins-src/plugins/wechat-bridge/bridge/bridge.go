@@ -88,11 +88,26 @@ type Bridge struct {
 
 // New 创建桥（dir = 账号数据目录；不自动启动）。
 func New(cfg config.Config, info account.Info, dir string, creds *login.Credentials, es *EventStream, log logf, onStale func(id string)) *Bridge {
+	// 发送节流与限流退避（2026-09-16 新增）：sendmessage 走「最小间隔 +
+	// 滑动窗口配额」，ret=-2 触发冷静期（15m 起、上限 30m）后自动重试，
+	// 防连发打爆服务端频率限制（详见 ilink.SendThrottleOptions）。
+	api := ilink.NewClient(creds.BaseURL, creds.Token)
+	api.Logf = log
+	api.SetSendThrottle(ilink.SendThrottleOptions{
+		MinInterval:     time.Duration(cfg.SendMinIntervalMs) * time.Millisecond,
+		WindowMax:       cfg.SendWindowMax,
+		WindowDur:       time.Duration(cfg.SendWindowSec) * time.Second,
+		LongWindowMax:   cfg.SendLongWindowMax,
+		LongWindowDur:   time.Duration(cfg.SendLongWindowSec) * time.Second,
+		LimitBase:       time.Duration(cfg.SendLimitBackoffSec) * time.Second,
+		LimitMax:        time.Duration(cfg.SendLimitMaxBackoffSec) * time.Second,
+		LimitMaxRetries: cfg.SendLimitMaxRetries,
+	})
 	b := &Bridge{
 		cfg:           cfg,
 		info:          info,
 		dir:           dir,
-		api:           ilink.NewClient(creds.BaseURL, creds.Token),
+		api:           api,
 		es:            es,
 		log:           log,
 		onStale:       onStale,
@@ -140,6 +155,8 @@ func (b *Bridge) Start() {
 func (b *Bridge) Stop() {
 	b.stopOnce.Do(func() {
 		close(b.stopCh)
+		// 中断等待中的发送节流/冷静期睡眠（不阻塞桥退出）
+		b.api.Close()
 		if b.unwatch != nil {
 			b.unwatch()
 		}
@@ -511,13 +528,31 @@ func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Ses
 		}()
 	}
 
+	waitStart := time.Now()
 	var w waitResult
-	select {
-	case w = <-ch:
-	case <-time.After(timeout):
-		w = waitResult{src: "timeout"}
-	case <-b.stopCh:
-		w = waitResult{src: "stopped"}
+	zeroRetry := 0 // 「0 片完成」转等 JSONL 的计数上限（防异常路径循环；实测至多 1 次）
+	for {
+		select {
+		case w = <-ch:
+			// 0 片完成 = 未发出任何内容（如误报 error 终结的现场：2026-09-16 忙错误
+			// 导致 WS=0 而 JSONL 已有 1413 字符全文）——不能宣称「已全部发出」，
+			// 转等 JSONL 兜底路；达上限按超时语义收口（提示用户到界面查看）。
+			// Summary.Flushes 由 flushLocked/finalizeLocked 累加、Aborted 仅在
+			// Abort 路径为 true（stream 包契约），此处判定字段可靠。
+			if w.src == "stream" && w.s.Flushes == 0 && runeLen(w.s.Text) == 0 && !w.s.Aborted {
+				if zeroRetry < 2 {
+					zeroRetry++
+					b.log("[stream] 流式 0 片完成（未发出内容），转等 JSONL 兜底（第 %d 次）", zeroRetry)
+					continue
+				}
+				w = waitResult{src: "timeout"}
+			}
+		case <-time.After(timeout - time.Since(waitStart)):
+			w = waitResult{src: "timeout"}
+		case <-b.stopCh:
+			w = waitResult{src: "stopped"}
+		}
+		break
 	}
 
 	switch w.src {
@@ -720,6 +755,11 @@ func (b *Bridge) sendToWeixin(toUserID, text string) bool {
 			delete(b.ctxTokens, toUserID)
 			b.mu.Unlock()
 			b.queueSave()
+			return false
+		}
+		if resp.Ret == -2 || resp.Errcode == -2 {
+			// -2 已在 ilink 层做过冷静期重试（仍失败）：判定本片未送达
+			b.log("发送失败（分片 %d/%d）：服务端限流重试未恢复（ret=-2），该片未送达", i+1, len(chunks))
 			return false
 		}
 		if resp.Ret != 0 || resp.Errcode != 0 {

@@ -47,6 +47,18 @@ type Config struct {
 	LongPollTimeoutSec int    // getupdates 长轮询秒数（超时视为空批）
 	TextChunkLimit     int    // 长文本分片上限（sendmessage 单条文本）
 
+	// ── 发送节流与限流退避（2026-09-16 新增：防打爆服务端发送频率限制）──
+	// 背景（两轮真机实测）：约「2 分钟累计 10 条」「15 分钟累计 15 条」触发
+	// 服务端限流 ret=-2；静默 15 分钟后仍可能失败（重试尝试会续期窗口）。
+	SendMinIntervalMs      int // sendmessage 最小间隔毫秒（0=默认 3000）
+	SendWindowMax          int // 短窗口内最大发送条数（0=默认 8）
+	SendWindowSec          int // 短窗口秒数（0=默认 120）
+	SendLongWindowMax      int // 长窗口内最大发送条数（0=默认 12）
+	SendLongWindowSec      int // 长窗口秒数（0=默认 900=15 分钟）
+	SendLimitBackoffSec    int // ret=-2 首次冷静期秒数（0=默认 1200=20 分钟）
+	SendLimitMaxBackoffSec int // 冷静期上限秒数（0=默认 3600=60 分钟）
+	SendLimitMaxRetries    int // ret=-2 最大重试次数（0=默认 2）
+
 	// ── 媒体 CDN ──
 	// CDNBaseURL 微信 CDN 基础地址（媒体上传/下载 URL 拼接 fallback；
 	// 服务端返回 full_url / upload_full_url 时优先用之）。
@@ -85,6 +97,15 @@ func Default() Config {
 		BaseURL:            "https://ilinkai.weixin.qq.com",
 		LongPollTimeoutSec: 35,
 		TextChunkLimit:     4000,
+
+		SendMinIntervalMs:      3000,
+		SendWindowMax:          8,
+		SendWindowSec:          120,
+		SendLongWindowMax:      12,
+		SendLongWindowSec:      900,
+		SendLimitBackoffSec:    1200,
+		SendLimitMaxBackoffSec: 3600,
+		SendLimitMaxRetries:    2,
 
 		CDNBaseURL: "https://novac2c.cdn.weixin.qq.com/c2c",
 

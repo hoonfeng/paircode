@@ -31,6 +31,12 @@ import (
 // sentenceEnd 句末字符集（对齐 stream.mjs SENTENCE_END）。
 const sentenceEnd = "。！？!?；;\n"
 
+// busyErrorMarker 宿主「会话忙」错误文案（agent.ErrSessionRunning，经
+// cmd/companion launchConvRun → PushStartError 推送；宿主文案变化时同步更新）。
+// 桥侧遇此错误不终结会话：宿主对 ErrSessionRunning 排队，等当前任务结束
+// 自动重试启动本消息，届时 content/done 流事件继续到来（超时由 awaitReply 兜底）。
+const busyErrorMarker = "该会话已有运行中的任务"
+
 func isSentenceEnd(r rune) bool {
 	return strings.ContainsRune(sentenceEnd, r)
 }
@@ -200,6 +206,11 @@ func (s *Session) Feed(ev Event) {
 			s.opts.OnToolCall(ev.Tool, ev.Args)
 		}
 	case "error":
+		if strings.Contains(ev.Content, busyErrorMarker) {
+			// 会话忙（宿主侧另一任务运行中）：等待宿主排队续跑，不终结会话。
+			s.logf("[stream] 会话忙（已有运行中的任务），等待宿主排队续跑（不终结会话）")
+			return
+		}
 		c := ev.Content
 		if len(c) > 200 {
 			c = c[:200]

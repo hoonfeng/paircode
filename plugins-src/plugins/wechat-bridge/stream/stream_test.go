@@ -227,3 +227,30 @@ func TestSoftLimitHardCut(t *testing.T) {
 		t.Fatalf("拼接不等于原文（len %d vs %d）", len([]rune(got)), len([]rune(long)))
 	}
 }
+
+// 7) 会话忙错误不终结：等待宿主排队续跑，后续 content/done 正常流转。
+func TestBusyErrorDoesNotFinalize(t *testing.T) {
+	var c collector
+	s := newTestSession(&c)
+	s.Feed(Event{Type: "error", Content: "该会话已有运行中的任务"})
+	// 不应终结（Done 无信号）
+	select {
+	case sum := <-s.Done():
+		t.Fatalf("忙错误不应终结会话（收到 %+v）", sum)
+	case <-time.After(150 * time.Millisecond):
+	}
+	// 宿主排队续跑后的事件流照常
+	s.Feed(Event{Type: "content", Content: "排队后的回复。"})
+	s.Feed(Event{Type: "done", Content: "排队后的回复。"})
+	sum := waitDone(t, s)
+	if sum.Reason != "done" {
+		t.Fatalf("reason 不符: %s", sum.Reason)
+	}
+	fls, full, _ := c.snapshot()
+	if joined := strings.Join(fls, ""); joined != "排队后的回复。" {
+		t.Fatalf("分片拼接不符: %q", joined)
+	}
+	if full != "排队后的回复。" {
+		t.Fatalf("OnDone full 不符: %q", full)
+	}
+}
