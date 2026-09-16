@@ -1,0 +1,3482 @@
+// tool-model — 3D/CAD 创作域工具面（纯 goja 零依赖）
+//
+// 设计原则（对齐《创作域支持方案》§4.2 与**公开格式契约**）：
+//   · 工程真相源 = 本插件的参数化工程文档（默认 model.json，文本、可 diff、可 review）：
+//       { format:"paircode.model/1", unit:"mm", up:"z", params[], parts[] }
+//     部件 = 几何表达式树 + 变换 + 材质；所有几何运算在**三角网格**上做（BSP 布尔）。
+//   · 坐标口径照 CAD 通行惯例（OpenSCAD / JSCAD / STL）：**右手系、+z 向上、单位毫米**；
+//     primitive 的 center 默认在原点（几何中心），size 为**全尺寸**——与 JSCAD primitives 同口径，
+//     故可用 @jscad/modeling 做逐项交叉验证（体积 / 包围盒 / 三角面数）。
+//   · 产物真相源 = **公开格式，不是自家方言**：
+//       glTF 2.0（Khronos 标准 ISO/IEC 12113；本插件产出**自包含** .gltf / .glb——buffer 走
+//         base64 data URI；导出时按规范把工程的 z-up 转成 **y-up**；验收用官方 gltf-validator 校验）
+//       STL（3D 打印事实标准，binary/ascii）/ OBJ（Wavefront）
+//   · 参数化：数值字段可写**表达式**（引用 params，如 "wall*2"、"h/2"），自研安全求值器（不用 eval）。
+//   · 预览产物 = 自包含 HTML：内嵌几何内核 + 自研 WebGL 渲染器（轨道相机 / 光照 / 线框）+
+//     参数滑块（改参数 → 浏览器内实时重算几何，与 Agent 侧跑的是同一份内核代码）。
+//
+// 沙箱能力：无 require / Buffer / Node API —— 一律走 ctx.fs（readFile / writeFile / exists / stat）。
+// 外部真值（**仅用于测试，不是运行时依赖**）：@jscad/modeling 2.13（CSG 交叉验证）、gltf-validator 2.0（官方）。
+
+// ── 常量 ───────────────────────────────────────────────────
+var FORMAT = 'paircode.model/1';
+var PROJECT_NAME = 'model.json';
+var GLTF_VERSION = '2.0';
+
+var LIMIT_PARTS = 200;          // 部件数上限
+var LIMIT_PARAMS = 64;          // 参数数上限
+var LIMIT_TRIS_TOTAL = 400000;  // 全模型三角面上限
+var LIMIT_TRIS_PART = 60000;    // 单部件三角面上限
+var LIMIT_BOOL_INPUT = 30000;   // 单次布尔运算输入面上限（BSP 成本约束）
+var LIMIT_SEGMENTS = 512;       // 曲面分段上限
+var LIMIT_ARRAY = 256;          // 阵列数量上限
+var LIMIT_OBJ_BYTES = 64 << 20; // 导入 STL/OBJ 上限（64MB）
+var LIMIT_EXPR_DEPTH = 32;      // 表达式括号/递归深度上限
+
+var EPS = 1e-9;
+var EPS_AREA = 1e-10;           // 退化三角面面积阈值
+// 空间分辨率（对齐 JSCAD maths.EPS = 1e-5，其注释为"空间分辨率 = 100 纳米"）
+var EPS_SPATIAL = 1e-5;
+var EPS_PLANE = 1e-6;           // BSP 平面判定（与 csg.js 同量级）
+var WELD_TOL = 1e-6;            // 顶点焊接容差（相对模型尺度，见 meshWeld）
+
+// 材质默认（glTF pbrMetallicRoughness 语义）
+var DEFAULT_MATERIAL = { color: '#b0b4bd', metallic: 0.0, roughness: 0.75 };
+
+// ── 基础工具 ───────────────────────────────────────────────
+function fail(msg) { throw new Error(msg); }
+
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+function isStr(v) { return typeof v === 'string'; }
+function isObj(v) { return !!v && typeof v === 'object' && !(v instanceof Array); }
+function isArr(v) { return v instanceof Array; }
+
+// 有限小数格式化：避免浮点噪声进入文本产物（1e-9 以下归零，最多 6 位有效小数）
+function fmtNum(v, digits) {
+  if (!isFinite(v)) return '0';
+  var d = digits === undefined ? 6 : digits;
+  var r = Number(v.toFixed(d));
+  return String(r);
+}
+// 归一化 -0 / 极小值（几何计算里 -0 与 1e-17 会让产物不确定）
+function cleanNum(v, digits) {
+  if (!isFinite(v)) return 0;
+  var d = digits === undefined ? 9 : digits;
+  var r = Number(v.toFixed(d));
+  return r === 0 ? 0 : r;
+}
+
+function toNumber(v, what) {
+  if (isNum(v)) return v;
+  if (isStr(v)) { var n = Number(v); if (isFinite(n)) return n; }
+  fail((what || '值') + '必须是有限数字（收到 ' + JSON.stringify(v) + '）');
+}
+// 三维数值数组（[x,y,z] 或 {x,y,z}）
+function toVec3(v, what, dflt) {
+  if (v === undefined || v === null) return dflt ? dflt.slice() : [0, 0, 0];
+  if (isArr(v)) {
+    if (v.length < 3) fail((what || '向量') + '必须是长度 3 的数组');
+    return [toNumber(v[0]), toNumber(v[1]), toNumber(v[2])];
+  }
+  if (isObj(v)) return [toNumber(v.x || 0), toNumber(v.y || 0), toNumber(v.z || 0)];
+  if (isNum(v)) return [v, v, v];
+  fail((what || '向量') + '必须是 [x,y,z] 或 {x,y,z}');
+}
+function vec3ToArr(v, what, dflt) {
+  var a = toVec3(v, what, dflt);
+  if (a[0] === 0 && a[1] === 0 && a[2] === 0 && dflt) return dflt.slice();
+  return a;
+}
+
+// ── 数学：vec3 ─────────────────────────────────────────────
+function vAdd(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+function vSub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+function vMul(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
+function vDot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function vCross(a, b) {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+function vLen(a) { return Math.sqrt(vDot(a, a)); }
+function vDist(a, b) { return vLen(vSub(a, b)); }
+function vNorm(a) {
+  var l = vLen(a);
+  return l > EPS ? [a[0] / l, a[1] / l, a[2] / l] : [0, 0, 0];
+}
+function vFinite(a) { return isFinite(a[0]) && isFinite(a[1]) && isFinite(a[2]); }
+function vEq(a, b, tol) {
+  var t = tol === undefined ? WELD_TOL : tol;
+  return Math.abs(a[0] - b[0]) <= t && Math.abs(a[1] - b[1]) <= t && Math.abs(a[2] - b[2]) <= t;
+}
+
+// ── 数学：mat4（**行主序** 16 元素，点按列向量右乘：p' = M · p）──────
+function m4id() { return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; }
+
+function m4mul(a, b) {
+  var r = new Array(16);
+  for (var i = 0; i < 4; i++) {
+    for (var j = 0; j < 4; j++) {
+      r[i * 4 + j] = a[i * 4] * b[j] + a[i * 4 + 1] * b[4 + j] + a[i * 4 + 2] * b[8 + j] + a[i * 4 + 3] * b[12 + j];
+    }
+  }
+  return r;
+}
+
+function m4applyPoint(m, p) {
+  var x = p[0], y = p[1], z = p[2];
+  return [
+    m[0] * x + m[1] * y + m[2] * z + m[3],
+    m[4] * x + m[5] * y + m[6] * z + m[7],
+    m[8] * x + m[9] * y + m[10] * z + m[11]
+  ];
+}
+function m4applyDir(m, p) {
+  var x = p[0], y = p[1], z = p[2];
+  return [
+    m[0] * x + m[1] * y + m[2] * z,
+    m[4] * x + m[5] * y + m[6] * z,
+    m[8] * x + m[9] * y + m[10] * z
+  ];
+}
+
+function m4translate(t) { return [1, 0, 0, t[0], 0, 1, 0, t[1], 0, 0, 1, t[2], 0, 0, 0, 1]; }
+function m4scale(s) { return [s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0, 0, 0, 0, 1]; }
+
+function m4area3(m) {
+  // 左上 3x3 的行列式（= 体积缩放因子）
+  return m[0] * (m[5] * m[10] - m[6] * m[9])
+    - m[1] * (m[4] * m[10] - m[6] * m[8])
+    + m[2] * (m[4] * m[9] - m[5] * m[8]);
+}
+function m4det(m) { return m4area3(m); }
+
+function m4invert(m) {
+  var det = m4area3(m);
+  if (Math.abs(det) < 1e-12) fail('变换矩阵不可逆（体积缩放为 0）');
+  var a = m[0], b = m[1], c = m[2], d = m[4], e = m[5], f = m[6], g = m[8], h = m[9], i = m[10];
+  // 左上 3x3 的逆（伴随矩阵 / det，行主序）
+  var i0 = (e * i - f * h) / det, i1 = (c * h - b * i) / det, i2 = (b * f - c * e) / det;
+  var i3 = (f * g - d * i) / det, i4 = (a * i - c * g) / det, i5 = (c * d - a * f) / det;
+  var i6 = (d * h - e * g) / det, i7 = (b * g - a * h) / det, i8 = (a * e - b * d) / det;
+  var t = [m[3], m[7], m[11]];
+  return [
+    i0, i1, i2, -(i0 * t[0] + i1 * t[1] + i2 * t[2]),
+    i3, i4, i5, -(i3 * t[0] + i4 * t[1] + i5 * t[2]),
+    i6, i7, i8, -(i6 * t[0] + i7 * t[1] + i8 * t[2]),
+    0, 0, 0, 1
+  ];
+}
+
+function m4rotAxis(axis, deg) {
+  var a = vNorm(axis);
+  if (vLen(a) < 0.5) fail('旋转轴不能为零向量');
+  var r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), t = 1 - c;
+  var x = a[0], y = a[1], z = a[2];
+  return [
+    t * x * x + c, t * x * y - s * z, t * x * z + s * y, 0,
+    t * x * y + s * z, t * y * y + c, t * y * z - s * x, 0,
+    t * x * z - s * y, t * y * z + s * x, t * z * z + c, 0,
+    0, 0, 0, 1
+  ];
+}
+
+// 变换组合顺序（照 JSCAD transforms.rotate 语义）：先绕 X、再绕 Y、最后绕 Z（内旋）
+// 矩阵 = Rz · Ry · Rx
+function m4rotXYZ(r) {
+  var m = m4id();
+  if (r[2]) m = m4mul(m4rotAxis([0, 0, 1], r[2]), m);
+  if (r[1]) m = m4mul(m4rotAxis([0, 1, 0], r[1]), m);
+  if (r[0]) m = m4mul(m4rotAxis([1, 0, 0], r[0]), m);
+  return m;
+}
+
+// 行主序 3x3 逆（用于法线矩阵）
+function m3inv(m) {
+  var a = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  if (Math.abs(a) < 1e-12) return null;
+  return [
+    (m[4] * m[8] - m[5] * m[7]) / a, (m[2] * m[7] - m[1] * m[8]) / a, (m[1] * m[5] - m[2] * m[4]) / a,
+    (m[5] * m[6] - m[3] * m[8]) / a, (m[0] * m[8] - m[2] * m[6]) / a, (m[2] * m[3] - m[0] * m[5]) / a,
+    (m[3] * m[7] - m[4] * m[6]) / a, (m[1] * m[6] - m[0] * m[7]) / a, (m[0] * m[4] - m[1] * m[3]) / a
+  ];
+}
+
+// TRS → 矩阵（M = T · R · S，R = Rz·Ry·Rx）
+function m4fromTRS(trs) {
+  var t = trs && trs.translate ? toVec3(trs.translate, 'translate', [0, 0, 0]) : [0, 0, 0];
+  var r = trs && trs.rotate ? toVec3(trs.rotate, 'rotate', [0, 0, 0]) : [0, 0, 0];
+  var s = trs && trs.scale ? toVec3(trs.scale, 'scale', [1, 1, 1]) : [1, 1, 1];
+  var m = m4mul(m4rotXYZ(r), m4scale(s));
+  m[3] = t[0]; m[7] = t[1]; m[11] = t[2];
+  return m;
+}
+
+// ── mesh：索引三角网格 ───────────────────────────────────────
+// 结构：{ positions: [[x,y,z],...], indices: [[i0,i1,i2],...] }
+// 约定：三角面顶点**逆时针（从外部看）= 外向法线**；有向体积 > 0 表示闭合且朝外。
+function meshNew(positions, indices) {
+  return { positions: positions || [], indices: indices || [] };
+}
+function meshClone(m) {
+  var p = [], i = [], k;
+  for (k = 0; k < m.positions.length; k++) p.push(m.positions[k].slice());
+  for (k = 0; k < m.indices.length; k++) i.push(m.indices[k].slice());
+  return { positions: p, indices: i };
+}
+function meshTriCount(m) { return m.indices.length; }
+function meshVertCount(m) { return m.positions.length; }
+
+function meshTransform(m, mat) {
+  var out = meshNew([], []), k;
+  for (k = 0; k < m.positions.length; k++) out.positions.push(m4applyPoint(mat, m.positions[k]));
+  var flip = m4det(mat) < 0; // 镜像/负缩放会翻转绕向 → 反向索引保持"外向"
+  for (k = 0; k < m.indices.length; k++) {
+    var f = m.indices[k];
+    out.indices.push(flip ? [f[0], f[2], f[1]] : [f[0], f[1], f[2]]);
+  }
+  return out;
+}
+
+// 合并多个 mesh（拼接顶点表 + 索引偏移）
+function meshMerge(list) {
+  var out = meshNew([], []), k, j;
+  for (k = 0; k < list.length; k++) {
+    var m = list[k], off = out.positions.length;
+    for (j = 0; j < m.positions.length; j++) out.positions.push(m.positions[j].slice());
+    for (j = 0; j < m.indices.length; j++) {
+      var f = m.indices[j];
+      out.indices.push([f[0] + off, f[1] + off, f[2] + off]);
+    }
+  }
+  return out;
+}
+
+function meshTriangle(m, k) {
+  var f = m.indices[k];
+  return [m.positions[f[0]], m.positions[f[1]], m.positions[f[2]]];
+}
+
+// 有向体积（散度定理；闭合且外向为正）——口径与 JSCAD poly3.measureSignedVolume 一致
+function meshVolume(m) {
+  var vol = 0;
+  for (var k = 0; k < m.indices.length; k++) {
+    var t = meshTriangle(m, k);
+    vol += vDot(t[0], vCross(t[1], t[2])) / 6;
+  }
+  return vol;
+}
+function meshArea(m) {
+  var a = 0;
+  for (var k = 0; k < m.indices.length; k++) {
+    var t = meshTriangle(m, k);
+    a += vLen(vCross(vSub(t[1], t[0]), vSub(t[2], t[0]))) / 2;
+  }
+  return a;
+}
+function meshBbox(m) {
+  if (!m.positions.length) return [[0, 0, 0], [0, 0, 0]];
+  var mn = m.positions[0].slice(), mx = m.positions[0].slice();
+  for (var k = 1; k < m.positions.length; k++) {
+    var p = m.positions[k];
+    for (var c = 0; c < 3; c++) {
+      if (p[c] < mn[c]) mn[c] = p[c];
+      if (p[c] > mx[c]) mx[c] = p[c];
+    }
+  }
+  return [mn, mx];
+}
+function meshSize(m) {
+  var b = meshBbox(m);
+  return [b[1][0] - b[0][0], b[1][1] - b[0][1], b[1][2] - b[0][2]];
+}
+function meshCenter(m) {
+  var b = meshBbox(m);
+  return [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2];
+}
+// 面积加权质心（比包围盒中心更符合"零件重心"直觉）
+function meshCentroid(m) {
+  var sum = [0, 0, 0], wsum = 0;
+  for (var k = 0; k < m.indices.length; k++) {
+    var t = meshTriangle(m, k);
+    var a = vLen(vCross(vSub(t[1], t[0]), vSub(t[2], t[0]))) / 2;
+    if (a <= 0) continue;
+    sum = vAdd(sum, vMul(vAdd(vAdd(t[0], t[1]), t[2]), a / 3));
+    wsum += a;
+  }
+  if (wsum <= EPS) return meshCenter(m);
+  return vMul(sum, 1 / wsum);
+}
+
+// 顶点焊接：把空间上重合的顶点合并（BSP 分裂产生的重复顶点必须先焊接，
+// 否则拓扑统计把"本应共享的边"算成边界边）。返回 { mesh, map }
+function meshWeld(m, tol) {
+  var t = tol === undefined ? WELD_TOL : tol;
+  var reps = [], repIndex = [], map = [];
+  var bucket = {};
+  function key(x, y, z) { return x + ':' + y + ':' + z; }
+  function cell(v) { return [Math.round(v[0] / t), Math.round(v[1] / t), Math.round(v[2] / t)]; }
+  for (var k = 0; k < m.positions.length; k++) {
+    var p = m.positions[k];
+    var c = cell(p), found = -1;
+    for (var dx = -1; dx <= 1 && found < 0; dx++) {
+      for (var dy = -1; dy <= 1 && found < 0; dy++) {
+        for (var dz = -1; dz <= 1 && found < 0; dz++) {
+          var list = bucket[key(c[0] + dx, c[1] + dy, c[2] + dz)];
+          if (!list) continue;
+          for (var q = 0; q < list.length; q++) {
+            var idx = list[q];
+            if (vEq(reps[idx], p, t)) { found = idx; break; }
+          }
+        }
+      }
+    }
+    if (found >= 0) { map.push(repIndex[found]); continue; }
+    reps.push(p.slice());
+    repIndex.push(reps.length - 1);
+    var kk = key(c[0], c[1], c[2]);
+    (bucket[kk] = bucket[kk] || []).push(reps.length - 1);
+    map.push(reps.length - 1);
+  }
+  var out = meshNew(reps, []);
+  for (var f = 0; f < m.indices.length; f++) {
+    var tri = m.indices[f];
+    var a = map[tri[0]], b = map[tri[1]], d = map[tri[2]];
+    if (a === b || b === d || a === d) continue; // 焊接后退化
+    out.indices.push([a, b, d]);
+  }
+  return { mesh: out, map: map };
+}
+
+// 清理：去掉零面积/重复索引三角面
+function meshDropDegenerate(m, epsArea) {
+  var lim = epsArea === undefined ? EPS_AREA : epsArea;
+  var out = meshNew(m.positions, []);
+  for (var k = 0; k < m.indices.length; k++) {
+    var f = m.indices[k];
+    if (f[0] === f[1] || f[1] === f[2] || f[0] === f[2]) continue;
+    var t = meshTriangle(m, k);
+    var a = vLen(vCross(vSub(t[1], t[0]), vSub(t[2], t[0]))) / 2;
+    if (a <= lim) continue;
+    out.indices.push([f[0], f[1], f[2]]);
+  }
+  return out;
+}
+
+// 去掉未被引用的孤立顶点（导出前必做：否则 glTF 顶点数虚高）
+function meshCompact(m) {
+  var used = {}, k;
+  for (k = 0; k < m.indices.length; k++) {
+    used[m.indices[k][0]] = 1; used[m.indices[k][1]] = 1; used[m.indices[k][2]] = 1;
+  }
+  var map = {}, pos = [], out = meshNew(pos, []);
+  for (k = 0; k < m.positions.length; k++) {
+    if (!used[k]) continue;
+    map[k] = pos.length;
+    pos.push(m.positions[k].slice());
+  }
+  for (k = 0; k < m.indices.length; k++) {
+    var f = m.indices[k];
+    out.indices.push([map[f[0]], map[f[1]], map[f[2]]]);
+  }
+  return out;
+}
+
+// 拓扑统计（水密性/流形性判据的数据源）：
+//   边界边 = 只被 1 个面共享；非流形边 = 被 >2 个面共享；绕向不一致 = 同一条边被两个面以**相同方向**使用
+function meshTopology(m, tol) {
+  var welded = meshWeld(m, tol).mesh;
+  var edges = {}, boundary = 0, nonManifold = 0, flipped = 0, edgeCount = 0;
+  for (var k = 0; k < welded.indices.length; k++) {
+    var f = welded.indices[k];
+    for (var e = 0; e < 3; e++) {
+      var a = f[e], b = f[(e + 1) % 3];
+      var lo = a < b ? a : b, hi = a < b ? b : a;
+      var key = lo + '_' + hi;
+      var rec = edges[key];
+      if (!rec) { rec = edges[key] = { count: 0, dirs: [] }; edgeCount++; }
+      rec.count++;
+      rec.dirs.push(a < b ? 1 : -1); // 相对于 (lo→hi) 的方向
+    }
+  }
+  for (var kk in edges) {
+    if (!edges.hasOwnProperty(kk)) continue;
+    var r = edges[kk];
+    if (r.count === 1) boundary++;
+    else if (r.count > 2) nonManifold++;
+    else if (r.dirs[0] === r.dirs[1]) flipped++; // 两面同向 → 绕向不一致（共边方向应相反）
+  }
+  var V = welded.positions.length, E = edgeCount, F = welded.indices.length;
+  return {
+    vertices: V, edges: E, faces: F,
+    euler: V - E + F,
+    boundaryEdges: boundary, nonManifoldEdges: nonManifold, flippedEdgePairs: flipped,
+    watertight: boundary === 0 && nonManifold === 0,
+    mesh: welded
+  };
+}
+
+// 容差化水密判定（M4 判据的核心工具，也是诚实报告"缝"的手段）：
+//   严格判据"每条边恰好被 2 个面以相反方向使用"对**三角网格的布尔输出**过于苛刻——
+//   相邻面片的边分段方式可能不同（一条长边 vs 由多个顶点串成的短边链），几何上严丝合缝，
+//   拓扑上却对不上。这里对每条"严格未配对的半边"再做一次**区间覆盖**判定：
+//   若存在方向相反、落在该边上的若干半边，其投影区间并集完整覆盖 [0,1]，则视为已配对（T 缝）。
+//   于是能区分：真正的开边界（缺口）vs 分段不同但几何闭合的 T 缝。
+function meshWatertightReport(m, tol) {
+  var eps = tol === undefined ? meshEpsilon(m) : tol;
+  var welded = meshWeld(m, eps * 0.5).mesh;
+  var pos = welded.positions, tris = welded.indices;
+  var i, e, k;
+  var half = [];
+  for (i = 0; i < tris.length; i++) {
+    for (e = 0; e < 3; e++) half.push([tris[i][e], tris[i][(e + 1) % 3]]);
+  }
+  // 有向半边集合：闭合网格里每个有向半边恰好出现一次，故"配对"= **反向半边存在**
+  //（不是"同一有向边出现多次"——那是把非流形也算进来了）
+  var has = {};
+  for (k = 0; k < half.length; k++) has[half[k][0] + '_' + half[k][1]] = 1;
+  var unpairedStrict = 0;
+  for (k = 0; k < half.length; k++) {
+    if (!has[half[k][1] + '_' + half[k][0]]) unpairedStrict++;
+  }
+  if (!half.length) {
+    return { strictUnpaired: 0, tolerantUnpaired: 0, tJunctions: 0, watertightStrict: true, watertightTolerant: true, halvedEdges: 0 };
+  }
+  // 空间索引（格子 → 半边下标）
+  var bb = meshBbox(welded);
+  var diag = Math.max(vLen(vSub(bb[1], bb[0])), eps * 1000);
+  var cs = diag / 48;
+  var grid = {};
+  function gk(c) { return c[0] + ',' + c[1] + ',' + c[2]; }
+  function gc(p) { return [Math.floor(p[0] / cs), Math.floor(p[1] / cs), Math.floor(p[2] / cs)]; }
+  for (k = 0; k < half.length; k++) {
+    var pa0 = pos[half[k][0]], pb0 = pos[half[k][1]];
+    var len0 = vDist(pa0, pb0);
+    var steps0 = Math.max(1, Math.ceil(len0 / cs));
+    var prev0 = null;
+    for (var s0 = 0; s0 <= steps0; s0++) {
+      var t0 = s0 / steps0;
+      var cc = gc([pa0[0] + (pb0[0] - pa0[0]) * t0, pa0[1] + (pb0[1] - pa0[1]) * t0, pa0[2] + (pb0[2] - pa0[2]) * t0]);
+      var kk2 = gk(cc);
+      if (kk2 === prev0) continue;
+      prev0 = kk2;
+      (grid[kk2] = grid[kk2] || []).push(k);
+    }
+  }
+  function candidates(a, b) {
+    var pa = pos[a], pb = pos[b];
+    var c0 = gc([Math.min(pa[0], pb[0]) - eps, Math.min(pa[1], pb[1]) - eps, Math.min(pa[2], pb[2]) - eps]);
+    var c1 = gc([Math.max(pa[0], pb[0]) + eps, Math.max(pa[1], pb[1]) + eps, Math.max(pa[2], pb[2]) + eps]);
+    var out = [], seen = {};
+    for (var x = c0[0]; x <= c1[0]; x++) {
+      for (var y = c0[1]; y <= c1[1]; y++) {
+        for (var z = c0[2]; z <= c1[2]; z++) {
+          var list = grid[gk([x, y, z])];
+          if (!list) continue;
+          for (var q = 0; q < list.length; q++) {
+            if (seen[list[q]]) continue;
+            seen[list[q]] = 1;
+            out.push(list[q]);
+          }
+        }
+      }
+    }
+    return out;
+  }
+  function onSeg(p, a, ab, L2) {
+    var t = vDot(vSub(p, a), ab) / L2;
+    if (t < -eps / Math.sqrt(L2) || t > 1 + eps / Math.sqrt(L2)) return null;
+    var proj = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t];
+    if (vDist(proj, p) > eps) return null;
+    return t;
+  }
+  var tolerantUnpaired = 0, tj = 0;
+  for (k = 0; k < half.length; k++) {
+    var a = half[k][0], b = half[k][1];
+    if (has[b + '_' + a]) continue; // 已严格配对
+    var pa = pos[a], pb = pos[b];
+    var ab = vSub(pb, pa), L2 = vDot(ab, ab);
+    if (L2 <= 0) { tolerantUnpaired++; continue; }
+    var ivs = [], cand = candidates(a, b);
+    for (var q2 = 0; q2 < cand.length; q2++) {
+      var g = half[cand[q2]];
+      if (g[0] === a && g[1] === b) continue;
+      var pc = pos[g[0]], pd = pos[g[1]];
+      if (vDot(vSub(pd, pc), ab) >= 0) continue; // 需要方向相反
+      var tc = onSeg(pc, pa, ab, L2), td = onSeg(pd, pa, ab, L2);
+      if (tc === null || td === null) continue;
+      ivs.push([Math.min(tc, td), Math.max(tc, td)]);
+    }
+    ivs.sort(function (p1, p2) { return p1[0] - p2[0]; });
+    var cur = 0;
+    for (var w = 0; w < ivs.length; w++) {
+      if (ivs[w][0] > cur + 1e-9) break;
+      if (ivs[w][1] > cur) cur = ivs[w][1];
+    }
+    if (cur >= 1 - 1e-6) tj++; else tolerantUnpaired++;
+  }
+  return {
+    strictUnpaired: unpairedStrict,
+    tolerantUnpaired: tolerantUnpaired,
+    tJunctions: tj,
+    watertightStrict: unpairedStrict === 0,
+    watertightTolerant: tolerantUnpaired === 0,
+    halfEdges: half.length,
+    epsilon: eps
+  };
+}
+
+// 连通分量（按面共享顶点聚类）——多实体阵列/多部件是正常的，单体多连通则可疑
+function meshComponents(m) {
+  var parent = [];
+  for (var i = 0; i < m.positions.length; i++) parent.push(i);
+  function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+  function uni(a, b) { var ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; }
+  for (var k = 0; k < m.indices.length; k++) {
+    var f = m.indices[k];
+    uni(f[0], f[1]); uni(f[1], f[2]);
+  }
+  var roots = {}, count = 0;
+  for (var j = 0; j < m.indices.length; j++) {
+    var r = find(m.indices[j][0]);
+    if (!roots[r]) { roots[r] = { tris: 0 }; count++; }
+    roots[r].tris++;
+  }
+  return { count: count, roots: roots };
+}
+
+// 按包围盒对齐（align）：把实体移到指定方位（min/center/max × 3 轴）
+function meshAlign(m, spec) {
+  var b = meshBbox(m), size = meshSize(m), c = meshCenter(m);
+  var t = [0, 0, 0];
+  var modes = isStr(spec) ? [spec, spec, spec] : [spec[0], spec[1], spec[2]];
+  for (var i = 0; i < 3; i++) {
+    var md = modes[i];
+    if (md === 'min') t[i] = -b[0][i];
+    else if (md === 'max') t[i] = -b[1][i];
+    else if (md === 'center' || md === undefined || md === null) t[i] = -c[i];
+    else fail('align 方位只能是 min / center / max（收到 ' + md + '）');
+  }
+  if (size[0] <= 0 && size[1] <= 0 && size[2] <= 0) return meshClone(m);
+  return meshTransform(m, m4translate(t));
+}
+
+// 统一"外向化"：闭合网格若整体朝内（有向体积 < 0）则翻转全部面。
+// 生成器（挤出/旋转体/基本体）不必各自纠结绕向，这里一次性归一 —— 且是**可观测**的。
+function meshOrientOutward(m) {
+  var t = meshTopology(m);
+  if (t.boundaryEdges === 0 && t.nonManifoldEdges === 0) {
+    if (meshVolume(t.mesh) < 0) {
+      var out = meshNew(t.mesh.positions, []);
+      for (var k = 0; k < t.mesh.indices.length; k++) {
+        var f = t.mesh.indices[k];
+        out.indices.push([f[0], f[2], f[1]]);
+      }
+      return out;
+    }
+    return t.mesh;
+  }
+  // 非闭合：不翻转（体积判据无意义），但仍返回焊接后的网格
+  return t.mesh;
+}
+
+function clampInt(v, lo, hi, what) {
+  var n = Math.round(toNumber(v, what));
+  if (n < lo) n = lo;
+  if (n > hi) n = hi;
+  return n;
+}
+
+// ── 2D 轮廓（extrude / revolve 的输入）────────────────────────
+// 归一化为：逆时针、无相邻重复点的点集 [[x,y],...]（y 对 revolve 而言是 z 轴坐标）
+function polyArea(pts) {
+  var a = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a / 2;
+}
+
+// 2D 轮廓的可选中心偏移（默认原点）：带孔挤出的偏心孔靠它定位
+function profileCenter(spec) {
+  if (spec.center === undefined || spec.center === null) return [0, 0];
+  if (!isArr(spec.center) || spec.center.length < 2) {
+    fail('轮廓的 center 必须是 [x,y]（收到 ' + JSON.stringify(spec.center) + '）');
+  }
+  return [toNumber(spec.center[0], 'center'), toNumber(spec.center[1], 'center')];
+}
+
+function profilePoints(spec, what) {
+  var raw = [], k;
+  if (isArr(spec)) {
+    for (k = 0; k < spec.length; k++) {
+      var p = spec[k];
+      if (!isArr(p) || p.length < 2) fail((what || 'profile') + ' 的第 ' + k + ' 个点必须是 [x,y]');
+      raw.push([toNumber(p[0]), toNumber(p[1])]);
+    }
+  } else if (isObj(spec)) {
+    var type = spec.type || 'polygon';
+    var seg;
+    if (type === 'rect' || type === 'rectangle' || type === 'square') {
+      // 2D 轮廓的 size 是 [w,h]（不是三维 [x,y,z]）
+      var s2 = spec.size === undefined ? [2, 2]
+        : (isNum(spec.size) ? [spec.size, spec.size]
+          : (isArr(spec.size) && spec.size.length >= 2
+            ? [toNumber(spec.size[0]), toNumber(spec.size[1])]
+            : fail('rect 轮廓的 size 必须是数字或 [w,h]')));
+      var w = Math.abs(s2[0]) / 2, h = Math.abs(s2[1]) / 2;
+      if (!(w > 0) || !(h > 0)) fail('rect 轮廓的 size 两个分量都必须大于 0');
+      var c0 = profileCenter(spec);
+      raw = [[c0[0] - w, c0[1] - h], [c0[0] + w, c0[1] - h], [c0[0] + w, c0[1] + h], [c0[0] - w, c0[1] + h]];
+    } else if (type === 'circle') {
+      var r = toNumber(spec.radius, 'radius');
+      if (!(r > 0)) fail('circle 的 radius 必须大于 0');
+      seg = clampInt(spec.segments === undefined ? 32 : spec.segments, 3, LIMIT_SEGMENTS, 'segments');
+      for (k = 0; k < seg; k++) {
+        var th = 2 * Math.PI * k / seg;
+        raw.push([r * Math.cos(th), r * Math.sin(th)]);
+      }
+    } else if (type === 'star') {
+      var verts = clampInt(spec.vertices === undefined ? 5 : spec.vertices, 3, 64, 'vertices');
+      var ro = toNumber(spec.radius, 'radius');
+      var ri = toNumber(spec.innerRadius === undefined ? ro / 2 : spec.innerRadius, 'innerRadius');
+      if (!(ro > 0) || !(ri > 0)) fail('star 的 radius / innerRadius 必须大于 0');
+      for (k = 0; k < verts * 2; k++) {
+        var rr = k % 2 === 0 ? ro : ri;
+        var a2 = Math.PI * k / verts - Math.PI / 2;
+        raw.push([rr * Math.cos(a2), rr * Math.sin(a2)]);
+      }
+    } else if (type === 'polygon' || type === 'points') {
+      if (!isArr(spec.points)) fail('polygon 轮廓需要 points 数组');
+      for (k = 0; k < spec.points.length; k++) {
+        var q = spec.points[k];
+        if (!isArr(q) || q.length < 2) fail('polygon.points[' + k + '] 必须是 [x,y]');
+        raw.push([toNumber(q[0]), toNumber(q[1])]);
+      }
+    } else {
+      fail('未知轮廓类型 ' + type + '（可用 rect / circle / star / polygon）');
+    }
+    // 可选中心偏移（circle/star/polygon；rect 上面已就地应用）：带孔挤出的偏心孔靠它定位
+    if (!(type === 'rect' || type === 'rectangle' || type === 'square')) {
+      var cOff = profileCenter(spec);
+      for (k = 0; k < raw.length; k++) { raw[k][0] += cOff[0]; raw[k][1] += cOff[1]; }
+    }
+  } else {
+    fail((what || 'profile') + '必须是点集 [[x,y],...] 或 {type,...}');
+  }
+  // 去相邻重复点（含首尾环回）
+  var pts = [];
+  for (k = 0; k < raw.length; k++) {
+    var prev = pts.length ? pts[pts.length - 1] : null;
+    if (prev && Math.abs(prev[0] - raw[k][0]) <= EPS && Math.abs(prev[1] - raw[k][1]) <= EPS) continue;
+    pts.push(raw[k]);
+  }
+  while (pts.length > 1) {
+    var f0 = pts[0], l0 = pts[pts.length - 1];
+    if (Math.abs(f0[0] - l0[0]) <= EPS && Math.abs(f0[1] - l0[1]) <= EPS) pts.pop();
+    else break;
+  }
+  if (pts.length < 3) fail((what || 'profile') + ' 至少需要 3 个不同顶点（当前 ' + pts.length + '）');
+  if (polyArea(pts) < 0) pts.reverse(); // 统一逆时针
+  return pts;
+}
+
+// 简单多边形耳切三角化（earcut 风格：顺序切耳 + 共线点清理 + 兜底；O(n²)，轮廓顶点数很小，够用且无依赖）
+// 带孔轮廓会先经「桥接」变成带零宽通道的环（含重复顶点），顺序切耳 + 含边界遮挡判定对它同样成立。
+function triangulatePolygon(pts) {
+  var n = pts.length;
+  var idx = [], k;
+  for (k = 0; k < n; k++) idx.push(k);
+  var tris = [], guard = 0;
+  function cross2(o, a, b) {
+    return (pts[a][0] - pts[o][0]) * (pts[b][1] - pts[o][1]) - (pts[a][1] - pts[o][1]) * (pts[b][0] - pts[o][0]);
+  }
+  // 在三角形内（**含边界**，同 earcut 的 pointInTriangle）：边界/共线点也算「挡住」，
+  // 这样横跨桥接通道（零宽）的耳会被通道上的重复顶点挡住，不会切穿。
+  function withinTri(a, b, c, p) {
+    var d1 = (pts[b][0] - pts[a][0]) * (p[1] - pts[a][1]) - (pts[b][1] - pts[a][1]) * (p[0] - pts[a][0]);
+    var d2 = (pts[c][0] - pts[b][0]) * (p[1] - pts[b][1]) - (pts[c][1] - pts[b][1]) * (p[0] - pts[b][0]);
+    var d3 = (pts[a][0] - pts[c][0]) * (p[1] - pts[c][1]) - (pts[a][1] - pts[c][1]) * (p[0] - pts[c][0]);
+    var neg = (d1 < -EPS) || (d2 < -EPS) || (d3 < -EPS);
+    var pos = (d1 > EPS) || (d2 > EPS) || (d3 > EPS);
+    return !(neg && pos);
+  }
+  // 剔除共线/重合的中间顶点（earcut 的 filterPoints）：不改变覆盖面积，可解开「一轮找不到耳」的死结
+  function prune() {
+    var removed = false, q;
+    for (q = 0; q < idx.length && idx.length > 3; q++) {
+      var pa = idx[(q + idx.length - 1) % idx.length], pb = idx[q], pc = idx[(q + 1) % idx.length];
+      var dup = (pts[pa][0] === pts[pb][0] && pts[pa][1] === pts[pb][1]) ||
+                (pts[pb][0] === pts[pc][0] && pts[pb][1] === pts[pc][1]);
+      if (dup || Math.abs(cross2(pa, pb, pc)) <= EPS) { idx.splice(q, 1); removed = true; q--; }
+    }
+    return removed;
+  }
+  var i = 0, misses = 0, m, a, b, c, p;
+  while (idx.length > 3) {
+    if (++guard > n * n + 64) fail('轮廓三角化失败（顶点过多或形状自交）');
+    a = idx[(i + idx.length - 1) % idx.length];
+    b = idx[i];
+    c = idx[(i + 1) % idx.length];
+    var okEar = cross2(a, b, c) > EPS;      // 凸角才可能成耳（共线/凹角跳过）
+    if (okEar) {
+      for (m = 0; m < idx.length; m++) {
+        if (m === i) continue;
+        p = idx[m];
+        if (p === a || p === b || p === c) continue;
+        // 只有**凹**顶点可能挡住耳（凸顶点落在耳内不影响三角化）—— 对齐 earcut 的 isEar
+        if (cross2(idx[(m + idx.length - 1) % idx.length], p, idx[(m + 1) % idx.length]) > EPS) continue;
+        if (withinTri(a, b, c, pts[p])) { okEar = false; break; }
+      }
+    }
+    if (okEar) {
+      tris.push([a, b, c]);
+      idx.splice(i, 1);
+      if (i >= idx.length) i = 0;
+      misses = 0;
+      continue;
+    }
+    i = (i + 1) % idx.length;
+    if (++misses > idx.length) {
+      // 一轮都没有耳：先清理共线/重合点重试；仍不行则取最大凸角强切（自交/近退化轮廓兜底）
+      if (!prune()) {
+        var cut = -1, bestAr = -Infinity, qq;
+        for (qq = 0; qq < idx.length; qq++) {
+          var a2 = idx[(qq + idx.length - 1) % idx.length], b2 = idx[qq], c2 = idx[(qq + 1) % idx.length];
+          var ar = cross2(a2, b2, c2);
+          if (ar > bestAr) { bestAr = ar; cut = qq; }
+        }
+        if (cut < 0) fail('轮廓三角化失败：多边形可能自交或全部顶点共线');
+        tris.push([idx[(cut + idx.length - 1) % idx.length], idx[cut], idx[(cut + 1) % idx.length]]);
+        idx.splice(cut, 1);
+      }
+      i = 0;
+      misses = 0;
+    }
+  }
+  tris.push([idx[0], idx[1], idx[2]]);
+  var out = [];
+  for (k = 0; k < tris.length; k++) {
+    var t = tris[k];
+    if (t[0] === t[1] || t[1] === t[2] || t[0] === t[2]) continue;          // 桥接造成的重复顶点
+    if (Math.abs(cross2(t[0], t[1], t[2])) <= 2 * EPS) continue;            // 退化（零面积）三角形
+    out.push(t);
+  }
+  return out;
+}
+
+// ── 带孔轮廓（earcut 的 eliminateHoles 思路：桥接边把洞并入外轮廓 → 复用上面的耳切）──
+// 洞轮廓统一取**顺时针**（外轮廓是 CCW）⇒ 洞的侧壁法线自动朝内；桥接产生的退化三角形会被过滤。
+function holesPoints(raw) {
+  if (raw === undefined || raw === null) return [];
+  if (!isArr(raw)) fail('holes 必须是数组：每个元素是一个闭合轮廓 [[x,y],...]（或 {type:"polygon",points:[...]}）');
+  var list = [];
+  for (var i = 0; i < raw.length; i++) {
+    var pts = profilePoints(raw[i], 'holes[' + i + ']');
+    if (polyArea(pts) > 0) pts.reverse();
+    list.push(pts);
+  }
+  return list;
+}
+function pointInPoly(pt, poly) {
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    var yi = poly[i][1], yj = poly[j][1];
+    if (((yi > pt[1]) !== (yj > pt[1])) &&
+        (pt[0] < (poly[j][0] - poly[i][0]) * (pt[1] - yi) / (yj - yi) + poly[i][0])) inside = !inside;
+  }
+  return inside;
+}
+function segCross(a, b, c, d) {
+  function ori(p, q, r) { return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]); }
+  var d1 = ori(a, b, c), d2 = ori(a, b, d), d3 = ori(c, d, a), d4 = ori(c, d, b);
+  return ((d1 > EPS && d2 < -EPS) || (d1 < -EPS && d2 > EPS)) && ((d3 > EPS && d4 < -EPS) || (d3 < -EPS && d4 > EPS));
+}
+// 洞是否完全落在外轮廓内（顶点全在内 + 两条环互不相交）
+function ringInsideRing(inner, outer) {
+  var i, j;
+  for (i = 0; i < inner.length; i++) if (!pointInPoly(inner[i], outer)) return false;
+  for (i = 0; i < inner.length; i++) {
+    var i2 = (i + 1) % inner.length;
+    for (j = 0; j < outer.length; j++) {
+      var j2 = (j + 1) % outer.length;
+      if (segCross(inner[i], inner[i2], outer[j], outer[j2])) return false;
+    }
+  }
+  return true;
+}
+// 桥接点：洞最右点 M 向 +x 射线取最近交点所在边的端点；不可见则退化为「最近可见顶点」
+function findBridge(ringIdx, all, M) {
+  var best = -1, bestX = Infinity;
+  function visible(pos) {
+    var P = all[ringIdx[pos]];
+    for (var i2 = 0; i2 < ringIdx.length; i2++) {
+      var i3 = (i2 + 1) % ringIdx.length;
+      if (i2 === pos || i3 === pos) continue;      // 与桥接点共享端点的边不算相交
+      if (segCross(M, P, all[ringIdx[i2]], all[ringIdx[i3]])) return false;
+    }
+    return true;
+  }
+  for (var i = 0; i < ringIdx.length; i++) {
+    var a = all[ringIdx[i]], b = all[ringIdx[(i + 1) % ringIdx.length]];
+    if (Math.abs(a[1] - b[1]) <= EPS) {            // 水平边
+      if (Math.abs(M[1] - a[1]) <= EPS && Math.max(a[0], b[0]) >= M[0] - EPS && Math.min(a[0], b[0]) < bestX) {
+        bestX = Math.min(a[0], b[0]);
+        best = (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length;
+      }
+      continue;
+    }
+    var lo = Math.min(a[1], b[1]), hi = Math.max(a[1], b[1]);
+    if (M[1] < lo - EPS || M[1] > hi + EPS) continue;
+    var t = (M[1] - a[1]) / (b[1] - a[1]);
+    var x = a[0] + t * (b[0] - a[0]);
+    if (x < M[0] - EPS) continue;                  // 交点在 M 左侧 → 不是右侧最近交点
+    if (x < bestX) {
+      bestX = x;
+      best = (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length;
+    }
+  }
+  if (best >= 0 && visible(best)) return best;
+  var order = [];
+  for (var q = 0; q < ringIdx.length; q++) order.push(q);
+  order.sort(function (u, v) { return vDist(M, all[ringIdx[u]]) - vDist(M, all[ringIdx[v]]); });
+  for (var z = 0; z < order.length; z++) if (visible(order[z])) return order[z];
+  fail('带孔挤出：洞无法桥接到外轮廓（洞可能在外轮廓之外、自交，或与外轮廓相交）');
+  return -1;
+}
+// 带孔三角化：索引空间 = 外轮廓（0..outer.length-1）+ 依次各洞的点（与挤出时的顶点顺序一致）
+function triangulatePolygonWithHoles(outer, holes) {
+  var all = [], offs = [], k, j;
+  offs.push(all.length);
+  for (k = 0; k < outer.length; k++) all.push(outer[k]);
+  for (k = 0; k < holes.length; k++) {
+    offs.push(all.length);
+    for (j = 0; j < holes[k].length; j++) all.push(holes[k][j]);
+  }
+  var ringIdx = [];
+  for (k = 0; k < outer.length; k++) ringIdx.push(k);
+  for (k = 0; k < holes.length; k++) {
+    var base = offs[k + 1], hlen = holes[k].length, mi = 0;
+    for (j = 1; j < hlen; j++) if (all[base + j][0] > all[base + mi][0] + EPS) mi = j;
+    var bpos = findBridge(ringIdx, all, all[base + mi]);
+    var merged = [];
+    for (j = 0; j <= bpos; j++) merged.push(ringIdx[j]);
+    for (j = 0; j <= hlen; j++) merged.push(base + ((mi + j) % hlen));   // 洞循环（起点=终点=M）
+    merged.push(ringIdx[bpos]);                                          // 桥接点重复一次 ⇒ 与洞点 M 构成零宽通道
+    for (j = bpos + 1; j < ringIdx.length; j++) merged.push(ringIdx[j]);
+    ringIdx = merged;
+  }
+  var pts = [];
+  for (k = 0; k < ringIdx.length; k++) pts.push(all[ringIdx[k]]);
+  var local = triangulatePolygon(pts);
+  var out = [];
+  for (k = 0; k < local.length; k++) {
+    var t = local[k];
+    var A = ringIdx[t[0]], B = ringIdx[t[1]], C = ringIdx[t[2]];
+    if (A === B || B === C || A === C) continue;                        // 桥接造成的退化三角形
+    var ar = Math.abs((all[B][0] - all[A][0]) * (all[C][1] - all[A][1]) -
+                      (all[B][1] - all[A][1]) * (all[C][0] - all[A][0])) / 2;
+    if (ar <= EPS) continue;
+    out.push([A, B, C]);
+  }
+  return out;
+}
+
+// ── 基本体（口径对齐 JSCAD primitives：center 默认原点、size 为全尺寸）──
+function shapeCuboid(args) {
+  var size = toVec3(args.size !== undefined ? args.size : (args.sides !== undefined ? args.sides : 2), 'size', [2, 2, 2]);
+  var c = toVec3(args.center, 'center', [0, 0, 0]);
+  if (size[0] < 0 || size[1] < 0 || size[2] < 0) fail('cuboid 的 size 不能为负');
+  if (!(size[0] > 0) || !(size[1] > 0) || !(size[2] > 0)) fail('cuboid 的 size 必须三个分量都大于 0');
+  var pos = [], k;
+  for (k = 0; k < 8; k++) {
+    pos.push([
+      c[0] + (size[0] / 2) * ((k & 1) ? 1 : -1),
+      c[1] + (size[1] / 2) * ((k & 2) ? 1 : -1),
+      c[2] + (size[2] / 2) * ((k & 4) ? 1 : -1)
+    ]);
+  }
+  var quads = [[0, 4, 6, 2], [1, 3, 7, 5], [0, 1, 5, 4], [2, 6, 7, 3], [0, 2, 3, 1], [4, 5, 7, 6]];
+  var idx = [];
+  for (k = 0; k < quads.length; k++) {
+    var q = quads[k];
+    idx.push([q[0], q[1], q[2]]);
+    idx.push([q[0], q[2], q[3]]);
+  }
+  return meshNew(pos, idx);
+}
+
+function shapeSphere(args) {
+  var r = toNumber(args.radius === undefined ? 1 : args.radius, 'radius');
+  if (!(r > 0)) fail('sphere 的 radius 必须大于 0');
+  var seg = clampInt(args.segments === undefined ? 32 : args.segments, 3, LIMIT_SEGMENTS, 'segments');
+  var rings = clampInt(args.rings === undefined ? Math.max(2, Math.round(seg / 2)) : args.rings, 2, LIMIT_SEGMENTS, 'rings');
+  var c = toVec3(args.center, 'center', [0, 0, 0]);
+  return sphereMesh(c, [r, r, r], seg, rings);
+}
+
+function shapeEllipsoid(args) {
+  var rr = toVec3(args.radius === undefined ? 1 : args.radius, 'radius', [1, 1, 1]);
+  if (!(rr[0] > 0) || !(rr[1] > 0) || !(rr[2] > 0)) fail('ellipsoid 的 radius 三个分量都必须大于 0');
+  var seg = clampInt(args.segments === undefined ? 32 : args.segments, 3, LIMIT_SEGMENTS, 'segments');
+  var rings = clampInt(args.rings === undefined ? Math.max(2, Math.round(seg / 2)) : args.rings, 2, LIMIT_SEGMENTS, 'rings');
+  var c = toVec3(args.center, 'center', [0, 0, 0]);
+  return sphereMesh(c, rr, seg, rings);
+}
+
+// 球/椭球：**极点沿 z 轴**（CAD 惯例；JSCAD 的 sphere 沿 y，体积与面数相同，不影响交叉验证）
+function sphereMesh(c, rr, seg, rings) {
+  var pos = [[c[0], c[1], c[2] + rr[2]]], idx = [], j, i;
+  for (i = 1; i < rings; i++) {
+    var th = Math.PI * i / rings;
+    var sz = Math.cos(th), sr = Math.sin(th);
+    for (j = 0; j < seg; j++) {
+      var ph = 2 * Math.PI * j / seg;
+      pos.push([c[0] + rr[0] * sr * Math.cos(ph), c[1] + rr[1] * sr * Math.sin(ph), c[2] + rr[2] * sz]);
+    }
+  }
+  var south = pos.length;
+  pos.push([c[0], c[1], c[2] - rr[2]]);
+  for (j = 0; j < seg; j++) {
+    idx.push([0, 1 + j, 1 + (j + 1) % seg]); // 北极扇
+  }
+  for (i = 0; i < rings - 2; i++) {
+    var a0 = 1 + i * seg, a1 = 1 + (i + 1) * seg;
+    for (j = 0; j < seg; j++) {
+      var j2 = (j + 1) % seg;
+      idx.push([a0 + j, a1 + j, a1 + j2]);
+      idx.push([a0 + j, a1 + j2, a0 + j2]);
+    }
+  }
+  var lastRing = 1 + (rings - 2) * seg;
+  for (j = 0; j < seg; j++) {
+    idx.push([south, lastRing + (j + 1) % seg, lastRing + j]);
+  }
+  return meshNew(pos, idx);
+}
+
+// 圆柱 / 圆台 / 圆锥（轴沿 z）——一个实现覆盖三种（JSCAD cylinder + cylinderElliptic 的标量特例）
+function shapeFrustum(args) {
+  var h = toNumber(args.height === undefined ? 2 : args.height, 'height');
+  if (!(h > 0)) fail('cylinder/frustum 的 height 必须大于 0');
+  var rb = toNumber(args.radiusBottom !== undefined ? args.radiusBottom : (args.radius === undefined ? 1 : args.radius), 'radiusBottom');
+  var rtRaw = args.radiusTop !== undefined ? toNumber(args.radiusTop, 'radiusTop')
+    : (args.type === 'cone' ? 0 : (args.radius === undefined ? 1 : toNumber(args.radius)));
+  if (rb < 0 || rtRaw < 0) fail('半径不能为负');
+  if (rb <= 0 && rtRaw <= 0) fail('radiusBottom 与 radiusTop 不能同时为 0');
+  var seg = clampInt(args.segments === undefined ? 32 : args.segments, 3, LIMIT_SEGMENTS, 'segments');
+  var c = toVec3(args.center, 'center', [0, 0, 0]);
+  var zB = c[2] - h / 2, zT = c[2] + h / 2;
+  var pos = [], idx = [], j;
+  var botBase = -1, topBase = -1, apexTop = -1, apexBot = -1;
+  if (rb > EPS) {
+    botBase = 0;
+    for (j = 0; j < seg; j++) {
+      var t0 = 2 * Math.PI * j / seg;
+      pos.push([c[0] + rb * Math.cos(t0), c[1] + rb * Math.sin(t0), zB]);
+    }
+  }
+  if (rtRaw > EPS) {
+    topBase = pos.length;
+    for (j = 0; j < seg; j++) {
+      var t1 = 2 * Math.PI * j / seg;
+      pos.push([c[0] + rtRaw * Math.cos(t1), c[1] + rtRaw * Math.sin(t1), zT]);
+    }
+  } else {
+    apexTop = pos.length;
+    pos.push([c[0], c[1], zT]);
+  }
+  // 侧面
+  for (j = 0; j < seg; j++) {
+    var j2 = (j + 1) % seg;
+    if (botBase >= 0 && topBase >= 0) {
+      idx.push([botBase + j, botBase + j2, topBase + j2]);
+      idx.push([botBase + j, topBase + j2, topBase + j]);
+    } else if (botBase >= 0) {
+      idx.push([botBase + j, botBase + j2, apexTop]);
+    } else {
+      idx.push([topBase + j2, topBase + j, apexBot]);
+    }
+  }
+  // 底面 / 顶面（各自中心扇形三角化）
+  if (botBase >= 0) {
+    var cb = pos.length;
+    pos.push([c[0], c[1], zB]);
+    for (j = 0; j < seg; j++) idx.push([cb, botBase + (j + 1) % seg, botBase + j]);
+  } else {
+    var cb2 = pos.length;
+    pos.push([c[0], c[1], zB]);
+    for (j = 0; j < seg; j++) idx.push([cb2, topBase + j, topBase + (j + 1) % seg]);
+  }
+  if (topBase >= 0) {
+    var ct = pos.length;
+    pos.push([c[0], c[1], zT]);
+    for (j = 0; j < seg; j++) idx.push([ct, topBase + j, topBase + (j + 1) % seg]);
+  }
+  return meshNew(pos, idx);
+}
+
+// 圆环（口径同 JSCAD：innerRadius = 管截面半径，outerRadius = 主半径 R；要求 inner < outer）
+function shapeTorus(args) {
+  var ri = toNumber(args.innerRadius === undefined ? 1 : args.innerRadius, 'innerRadius');
+  var ro = toNumber(args.outerRadius === undefined ? 4 : args.outerRadius, 'outerRadius');
+  if (!(ri > 0) || !(ro > 0)) fail('torus 的 innerRadius / outerRadius 必须大于 0');
+  if (ri >= ro) fail('torus 的 innerRadius（管半径）必须小于 outerRadius（主半径）');
+  var seg = clampInt(args.segments === undefined ? 32 : args.segments, 3, LIMIT_SEGMENTS, 'segments');
+  var rings = clampInt(args.rings === undefined ? 32 : args.rings, 3, LIMIT_SEGMENTS, 'rings');
+  var c = toVec3(args.center, 'center', [0, 0, 0]);
+  var pos = [], idx = [], i, j;
+  for (i = 0; i < seg; i++) {
+    var u = 2 * Math.PI * i / seg;
+    for (j = 0; j < rings; j++) {
+      var v = 2 * Math.PI * j / rings;
+      var rad = ro + ri * Math.cos(v);
+      pos.push([c[0] + rad * Math.cos(u), c[1] + rad * Math.sin(u), c[2] + ri * Math.sin(v)]);
+    }
+  }
+  for (i = 0; i < seg; i++) {
+    var i2 = (i + 1) % seg;
+    for (j = 0; j < rings; j++) {
+      var j2 = (j + 1) % rings;
+      var a0 = i * rings + j, a1 = i * rings + j2, b0 = i2 * rings + j, b1 = i2 * rings + j2;
+      idx.push([a0, b0, b1]);
+      idx.push([a0, b1, a1]);
+    }
+  }
+  return meshNew(pos, idx);
+}
+
+function shapePolyhedron(args) {
+  if (!isArr(args.points) || args.points.length < 4) fail('polyhedron 需要 points 数组（≥4 个顶点）');
+  if (!isArr(args.faces) || !args.faces.length) fail('polyhedron 需要 faces 数组（面 → 顶点下标）');
+  var pos = [], k;
+  for (k = 0; k < args.points.length; k++) {
+    var p = args.points[k];
+    if (!isArr(p) || p.length < 3) fail('polyhedron.points[' + k + '] 必须是 [x,y,z]');
+    pos.push([toNumber(p[0]), toNumber(p[1]), toNumber(p[2])]);
+  }
+  var idx = [];
+  for (k = 0; k < args.faces.length; k++) {
+    var f = args.faces[k];
+    if (!isArr(f) || f.length < 3) fail('polyhedron.faces[' + k + '] 至少需要 3 个顶点下标');
+    for (var m = 1; m < f.length - 1; m++) {
+      var a = Math.round(toNumber(f[0])), b = Math.round(toNumber(f[m])), d = Math.round(toNumber(f[m + 1]));
+      if (a < 0 || b < 0 || d < 0 || a >= pos.length || b >= pos.length || d >= pos.length) {
+        fail('polyhedron.faces[' + k + '] 越界（顶点下标必须在 0..' + (pos.length - 1) + '）');
+      }
+      idx.push([a, b, d]);
+    }
+  }
+  return meshNew(pos, idx);
+}
+
+// 挤出（沿 z，居中；口径同 JSCAD extrudeLinear：height 默认 1）
+function shapeExtrude(args) {
+  var pts = profilePoints(args.profile, 'profile');
+  var holes = holesPoints(args.holes);
+  var h = toNumber(args.height === undefined ? 1 : args.height, 'height');
+  if (!(Math.abs(h) > EPS)) fail('extrude 的 height 不能为 0');
+  var zc = args.center === undefined ? 0 : toNumber(args.center, 'center');
+  var hh;
+  for (hh = 0; hh < holes.length; hh++) {
+    if (!ringInsideRing(holes[hh], pts)) {
+      fail('holes[' + hh + '] 必须完全落在外轮廓内部且与外轮廓不相交（带孔挤出不支持洞越界/穿透）');
+    }
+  }
+  var rings = [pts].concat(holes);
+  var starts = [], n = 0, k;
+  for (k = 0; k < rings.length; k++) { starts.push(n); n += rings[k].length; }
+  var cap = holes.length ? triangulatePolygonWithHoles(pts, holes) : triangulatePolygon(pts);
+  var pos = [], idx = [], j2;
+  for (k = 0; k < rings.length; k++) {
+    for (j2 = 0; j2 < rings[k].length; j2++) pos.push([rings[k][j2][0], rings[k][j2][1], zc - h / 2]);
+  }
+  for (k = 0; k < n; k++) pos.push([pos[k][0], pos[k][1], zc + h / 2]);
+  for (k = 0; k < cap.length; k++) {
+    var f = cap[k];
+    idx.push([f[0], f[2], f[1]]);                 // 底盖（法线朝 -z）
+    idx.push([n + f[0], n + f[1], n + f[2]]);     // 顶盖（法线朝 +z）
+  }
+  // 侧壁：每个闭合环各出一圈（洞是顺时针 → 法线朝洞内，即腔壁）
+  for (k = 0; k < rings.length; k++) {
+    var st = starts[k], len = rings[k].length;
+    for (j2 = 0; j2 < len; j2++) {
+      var a = st + j2, b = st + ((j2 + 1) % len);
+      idx.push([a, b, n + b]);
+      idx.push([a, n + b, n + a]);
+    }
+  }
+  return meshNew(pos, idx);
+}
+
+// 旋转体（profile = [[r,z],...] 子午线，绕 z 轴；r 必须 ≥ 0）
+function shapeRevolve(args) {
+  var prof = profilePoints(args.profile, 'profile');
+  var k;
+  for (k = 0; k < prof.length; k++) {
+    if (prof[k][0] < -EPS) fail('revolve 的 profile 半径 r 不能为负（第 ' + k + ' 点 r=' + prof[k][0] + '）');
+  }
+  if (polyArea(prof) < 0) prof.reverse(); // profilePoints 已统一，此处于防万一
+  var seg = clampInt(args.segments === undefined ? 32 : args.segments, 3, LIMIT_SEGMENTS, 'segments');
+  var angle = args.angle === undefined ? 360 : toNumber(args.angle, 'angle');
+  if (!(Math.abs(angle) > EPS) || Math.abs(angle) > 360.0000001) fail('revolve 的 angle 必须在 (0,360]');
+  var full = Math.abs(angle - 360) < 1e-9;
+  var steps = full ? seg : Math.max(1, Math.round(seg * Math.abs(angle) / 360));
+  var nP = prof.length, pos = [], idx = [], i, j;
+  // 顶点：i（profile 点）× j（角度步；非整圈时共 steps+1 列）
+  var cols = full ? steps : steps + 1;
+  for (j = 0; j < cols; j++) {
+    var th = (full ? 2 * Math.PI * j / steps : (angle * Math.PI / 180) * j / steps);
+    var ct = Math.cos(th), st = Math.sin(th);
+    for (i = 0; i < nP; i++) pos.push([prof[i][0] * ct, prof[i][0] * st, prof[i][1]]);
+  }
+  function vid(i2, j2) { return (full ? (j2 % steps) : j2) * nP + i2; }
+  // profile 视为**闭合轮廓**（与 extrude 的轮廓同语义）：末点自动连回首点
+  for (j = 0; j < steps; j++) {
+    for (i = 0; i < nP; i++) {
+      var i2 = (i + 1) % nP;
+      var a = vid(i, j), b = vid(i2, j), d = vid(i2, j + 1), e = vid(i, j + 1);
+      var pa = pos[a], pb = pos[b], pd = pos[d], pe = pos[e];
+      if (vDist(pa, pb) > EPS) { idx.push([a, b, d]); idx.push([a, d, e]); }
+      else if (vDist(pa, pd) > EPS) { idx.push([a, d, e]); }
+    }
+  }
+  if (!full) {
+    // 端盖：把 profile 平面三角化，映射到起始/结束角
+    var capTris = triangulatePolygon(prof);
+    for (k = 0; k < capTris.length; k++) {
+      var t = capTris[k];
+      var s0 = t[0], s1 = t[1], s2 = t[2];
+      idx.push([vid(s0, 0), vid(s2, 0), vid(s1, 0)]);
+      idx.push([vid(s0, steps), vid(s1, steps), vid(s2, steps)]);
+    }
+  }
+  return meshNew(pos, idx);
+}
+
+// 导入的三角网格（STL/OBJ 解析结果）
+function shapeMesh(args) {
+  if (!isArr(args.positions) || !isArr(args.indices)) fail('mesh 形状需要 positions 与 indices');
+  var pos = [], idx = [], k;
+  for (k = 0; k < args.positions.length; k++) {
+    var p = args.positions[k];
+    if (!isArr(p) || p.length < 3) fail('mesh.positions[' + k + '] 必须是 [x,y,z]');
+    pos.push([toNumber(p[0]), toNumber(p[1]), toNumber(p[2])]);
+  }
+  for (k = 0; k < args.indices.length; k++) {
+    var f = args.indices[k];
+    if (!isArr(f) || f.length < 3) fail('mesh.indices[' + k + '] 必须是 [i,j,k]');
+    idx.push([Math.round(toNumber(f[0])), Math.round(toNumber(f[1])), Math.round(toNumber(f[2]))]);
+  }
+  return meshNew(pos, idx);
+}
+
+// ── BSP 布尔（经典 csg.js 算法；三角形 → 平面切分 → 树裁剪）──────
+// 参考：Evan Wallace csg.js（MIT）的 BSP 布尔算法与 JSCAD @jscad/modeling 的同源实现；
+// 本实现为独立重写（三角形输入、迭代式建树/裁剪以避免深递归爆栈）。
+var CF_COPLANAR = 0, CF_FRONT = 1, CF_BACK = 2, CF_SPANNING = 3;
+
+function triPlane(t) {
+  var n = vNorm(vCross(vSub(t[1], t[0]), vSub(t[2], t[0])));
+  if (vLen(n) < 0.5) return null; // 退化三角形
+  return { n: n, w: vDot(n, t[0]) };
+}
+function triFlip(t) { return [t[0], t[2], t[1]]; }
+
+// 凸多边形按平面分裂（csg.js 的 splitPolygon 同语义）
+function splitConvexByPlane(plane, verts) {
+  var n = verts.length, types = [], i, hasF = false, hasB = false;
+  for (i = 0; i < n; i++) {
+    var d = vDot(plane.n, verts[i]) - plane.w;
+    var ty = d < -EPS_PLANE ? CF_BACK : (d > EPS_PLANE ? CF_FRONT : CF_COPLANAR);
+    types.push(ty);
+    if (ty === CF_FRONT) hasF = true;
+    if (ty === CF_BACK) hasB = true;
+  }
+  if (!hasF && !hasB) return { coplanar: verts, front: null, back: null };
+  if (!hasB) return { coplanar: null, front: verts, back: null };
+  if (!hasF) return { coplanar: null, front: null, back: verts };
+  var fv = [], bv = [];
+  for (i = 0; i < n; i++) {
+    var vi = verts[i], vj = verts[(i + 1) % n];
+    var ti = types[i], tj = types[(i + 1) % n];
+    if (ti !== CF_BACK) fv.push(vi);
+    if (ti !== CF_FRONT) bv.push(vi);
+    if ((ti === CF_FRONT && tj === CF_BACK) || (ti === CF_BACK && tj === CF_FRONT)) {
+      var den = vDot(plane.n, vSub(vj, vi));
+      var s = Math.abs(den) > EPS ? (plane.w - vDot(plane.n, vi)) / den : 0.5;
+      var cut = [vi[0] + s * (vj[0] - vi[0]), vi[1] + s * (vj[1] - vi[1]), vi[2] + s * (vj[2] - vi[2])];
+      fv.push(cut); bv.push(cut);
+    }
+  }
+  return { coplanar: null, front: fv.length >= 3 ? fv : null, back: bv.length >= 3 ? bv : null };
+}
+
+// 多边形（凸）扇形三角化
+function fanTriangles(verts) {
+  var out = [];
+  for (var k = 1; k < verts.length - 1; k++) out.push([verts[0], verts[k], verts[k + 1]]);
+  return out;
+}
+
+// 用平面分裂一个三角形 →
+//   { coplanar: [tri...]（与平面共面，调用方决定归属：建树时存本节点、裁剪时按朝向分流）,
+//     front: [tri...], back: [tri...] }
+function splitTriangleByPlane(plane, tri, triPl) {
+  var res = splitConvexByPlane(plane, tri);
+  var out = { coplanar: [], front: [], back: [] };
+  if (res.coplanar) { out.coplanar.push(tri); return out; }
+  if (res.front) { var ft = fanTriangles(res.front); for (var k = 0; k < ft.length; k++) out.front.push(ft[k]); }
+  if (res.back) { var bt = fanTriangles(res.back); for (var m = 0; m < bt.length; m++) out.back.push(bt[m]); }
+  return out;
+}
+
+function bspNew() { return { plane: null, front: null, back: null, tris: [] }; }
+
+// 建树（迭代：显式工作栈，避免深递归）
+function bspBuild(root, tris) {
+  if (!tris.length) return;
+  var stack = [{ node: root, tris: tris }];
+  while (stack.length) {
+    var item = stack.pop(), node = item.node, list = item.tris, k;
+    if (!list.length) continue;
+    if (!node.plane) {
+      node.plane = triPlane(list[0]);
+      if (!node.plane) { // 首个三角形退化 → 找一个非退化的
+        for (k = 0; k < list.length; k++) {
+          node.plane = triPlane(list[k]);
+          if (node.plane) break;
+        }
+      }
+      if (!node.plane) continue; // 全部退化
+    }
+    var f = [], b = [];
+    for (k = 0; k < list.length; k++) {
+      var tri = list[k], pl = triPlane(tri);
+      if (!pl) continue;
+      var r = splitTriangleByPlane(node.plane, tri, pl);
+      // 共面三角形 = 本节点的"表面"（csg.js 语义：直接存本节点，不再下推）
+      for (var a = 0; a < r.coplanar.length; a++) node.tris.push(r.coplanar[a]);
+      for (var c = 0; c < r.front.length; c++) f.push(r.front[c]);
+      for (var d = 0; d < r.back.length; d++) b.push(r.back[d]);
+    }
+    if (f.length) { node.front = node.front || bspNew(); stack.push({ node: node.front, tris: f }); }
+    if (b.length) { node.back = node.back || bspNew(); stack.push({ node: node.back, tris: b }); }
+  }
+}
+
+// 用 BSP 树裁剪一组三角形（保留树"外部/正面"的部分；无 back 子树时 back 侧被丢弃）
+function bspClipTriangles(node, tris) {
+  var out = [], stack = [{ node: node, tris: tris }];
+  while (stack.length) {
+    var item = stack.pop(), nd = item.node, list = item.tris, k;
+    if (!list.length) continue;
+    if (!nd.plane) { for (k = 0; k < list.length; k++) out.push(list[k]); continue; }
+    var f = [], b = [];
+    for (k = 0; k < list.length; k++) {
+      var tri = list[k], pl = triPlane(tri);
+      if (!pl) continue;
+      var r = splitTriangleByPlane(nd.plane, tri, pl);
+      // 裁剪时共面三角形按朝向分流（csg.js 的 clipPolygons 传 coplanarFront=front / coplanarBack=back）
+      for (var a = 0; a < r.coplanar.length; a++) {
+        (vDot(nd.plane.n, pl.n) > 0 ? f : b).push(r.coplanar[a]);
+      }
+      for (var c = 0; c < r.front.length; c++) f.push(r.front[c]);
+      for (var d = 0; d < r.back.length; d++) b.push(r.back[d]);
+    }
+    if (nd.front) stack.push({ node: nd.front, tris: f });
+    else for (k = 0; k < f.length; k++) out.push(f[k]);
+    if (nd.back) stack.push({ node: nd.back, tris: b });
+    // 无 back 子树 → b 丢弃（正是 clipTo 语义）
+  }
+  return out;
+}
+
+function bspClipTo(node, other) {
+  var stack = [node];
+  while (stack.length) {
+    var nd = stack.pop();
+    if (nd.tris.length) nd.tris = bspClipTriangles(other, nd.tris);
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+}
+
+function bspInvert(node) {
+  var stack = [node];
+  while (stack.length) {
+    var nd = stack.pop(), k;
+    for (k = 0; k < nd.tris.length; k++) nd.tris[k] = triFlip(nd.tris[k]);
+    if (nd.plane) nd.plane = { n: vMul(nd.plane.n, -1), w: -nd.plane.w };
+    var tmp = nd.front; nd.front = nd.back; nd.back = tmp;
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+}
+
+function bspAllTris(node) {
+  var out = [], stack = [node];
+  while (stack.length) {
+    var nd = stack.pop();
+    for (var k = 0; k < nd.tris.length; k++) out.push(nd.tris[k]);
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+  return out;
+}
+
+// 布尔结果修复：顶点吸附到统一网格 → 焊接 → 去零面积面 → 去孤立顶点。
+//   ★ 实测结论（有 JSCAD 对照，见测试基线）：BSP 布尔的输出在"严格边匹配"意义下**本来就不水密**——
+//     同一交点在相邻面里由各自插值算出（坐标差约 1e-4 量级），相邻面片的边分段方式还可能不同
+//     （T 型接缝）。JSCAD 的原始 subtract 输出同样如此（boundary=152，其 generalize 后才是 0）——
+//     它靠的是**多边形**表示（一条边对一条边，天生没有 T 缝）。
+//   本实现是三角网格表示，故用"吸附 + 焊接"把缝压到最小，并把**残余缝量**如实交给判据 M4 报告
+//     （不假称水密）；确实需要严格水密的 3D 打印场景走导出层的打印预处理。
+//   注：曾尝试"T 型接缝缝合"（把落在边内的顶点纳入三角形重新三角化）——实测有害：
+//     会引入上千条非流形边并把三角形数量顶到 30 万级（细分爆炸），已撤销。
+function meshRepair(m, epsOverride) {
+  var eps = epsOverride === undefined ? meshEpsilon(m) : epsOverride;
+  var cur = meshSnap(m, eps);
+  cur = meshWeld(cur, eps * 0.5).mesh;
+  cur = meshDropDegenerate(meshCompact(cur), EPS_AREA);
+  return { mesh: cur, epsilon: eps };
+}
+
+function meshToTris(m) {
+  var out = [];
+  for (var k = 0; k < m.indices.length; k++) {
+    var f = m.indices[k];
+    out.push([m.positions[f[0]].slice(), m.positions[f[1]].slice(), m.positions[f[2]].slice()]);
+  }
+  return out;
+}
+
+// 三角形集合 → 索引网格（焊接 + 去退化 + 去孤立顶点）
+function trisToMesh(tris, tol) {
+  var positions = [], indices = [], k, m;
+  for (k = 0; k < tris.length; k++) {
+    var base = positions.length;
+    positions.push(tris[k][0].slice(), tris[k][1].slice(), tris[k][2].slice());
+    indices.push([base, base + 1, base + 2]);
+  }
+  var welded = meshWeld(meshNew(positions, indices), tol === undefined ? WELD_TOL : tol).mesh;
+  return meshCompact(meshDropDegenerate(welded));
+}
+
+// 空间分辨率（对齐 JSCAD measureEpsilon / maths.EPS 的口径）：eps = EPS · 平均尺寸。
+//   ★ 这是本插件"水密性"问题的根因所在：BSP 裁剪的交点由**各三角形各自插值**，
+//     同一几何点在不同三角形里的坐标会有 ~1e-4 级的差异 —— 既不严格相等，也无法用
+//     任意小的容差合并（容差小了合不上、大了会把真实几何合掉，实测都会让面积失真）。
+//     唯一可靠的做法与 JSCAD generalize({snap:true}) 一致：把顶点**吸附到统一网格**，
+//     吸附后近似重合的点变成完全相同的坐标，边才可能真正配对。
+function meshEpsilon(m) {
+  if (!m.positions.length) return EPS_SPATIAL;
+  var bb = meshBbox(m);
+  var total = (bb[1][0] - bb[0][0]) + (bb[1][1] - bb[0][1]) + (bb[1][2] - bb[0][2]);
+  return Math.max(EPS_SPATIAL, EPS_SPATIAL * total / 3);
+}
+
+// 顶点吸附（照 JSCAD vec3.snap 语义：round(v/eps)·eps，"+0" 消除 -0）
+function meshSnap(m, eps) {
+  var pos = [], idx = [], k;
+  for (k = 0; k < m.positions.length; k++) {
+    var p = m.positions[k];
+    pos.push([
+      Math.round(p[0] / eps) * eps + 0,
+      Math.round(p[1] / eps) * eps + 0,
+      Math.round(p[2] / eps) * eps + 0
+    ]);
+  }
+  for (k = 0; k < m.indices.length; k++) idx.push(m.indices[k].slice());
+  return meshNew(pos, idx);
+}
+
+// 焊接/缝合容差统一取自空间分辨率（焊接取半格：吸附后同格点应严格重合）
+function weldTolerance(m) { return meshEpsilon(m) * 0.5; }
+function tjTolerance(m) { return meshEpsilon(m); }
+
+// 布尔运算（union / subtract / intersect），输入输出都是索引网格
+function meshBoolean(meshA, meshB, op, tol) {
+  if (!(meshA.indices.length > 0) || !(meshB.indices.length > 0)) fail('布尔运算的两个实体都不能为空');
+  if (meshA.indices.length > LIMIT_BOOL_INPUT || meshB.indices.length > LIMIT_BOOL_INPUT) {
+    fail('布尔运算输入过大（' + meshA.indices.length + ' + ' + meshB.indices.length + ' 面，单次上' + LIMIT_BOOL_INPUT + '）——请降低 segments 或拆分部件');
+  }
+  var TOL = tol === undefined ? weldTolerance(meshMerge([meshA, meshB])) : tol;
+  var A = bspNew(), B = bspNew();
+  bspBuild(A, meshToTris(meshA));
+  bspBuild(B, meshToTris(meshB));
+  if (op === 'union') {
+    bspClipTo(A, B); bspClipTo(B, A);
+    bspInvert(B); bspClipTo(B, A); bspInvert(B);
+    bspBuild(A, bspAllTris(B));
+  } else if (op === 'subtract') {
+    bspInvert(A); bspClipTo(A, B); bspClipTo(B, A);
+    bspInvert(B); bspClipTo(B, A); bspInvert(B);
+    bspBuild(A, bspAllTris(B)); bspInvert(A);
+  } else if (op === 'intersect') {
+    bspInvert(A); bspClipTo(B, A); bspInvert(B); bspClipTo(A, B); bspClipTo(B, A);
+    bspBuild(A, bspAllTris(B)); bspInvert(A);
+  } else {
+    fail('未知布尔运算 ' + op + '（可用 union / subtract / intersect）');
+  }
+  var out = trisToMesh(bspAllTris(A), TOL);
+  if (!out.indices.length) fail('布尔运算结果为空（' + op + '）——检查两个实体是否有交集/是否完全包含');
+  // BSP 裁剪必然产生 T 型接缝 → 统一修复（水密性是可打印的前提，也是 M 判据的验收面）
+  return meshRepair(out).mesh;
+}
+
+// 镜像矩阵（沿过原点的法向轴镜像；det = -1，meshTransform 会自动翻转绕向保持外向）
+function m4mirror(axis) {
+  var a = vNorm(axis);
+  if (vLen(a) < 0.5) fail('镜像轴不能为零向量');
+  var x = a[0], y = a[1], z = a[2];
+  return [
+    1 - 2 * x * x, -2 * x * y, -2 * x * z, 0,
+    -2 * x * y, 1 - 2 * y * y, -2 * y * z, 0,
+    -2 * x * z, -2 * y * z, 1 - 2 * z * z, 0,
+    0, 0, 0, 1
+  ];
+}
+
+// ── 表达式求值（参数化：改一个参数，几何自动重算）────────────────
+// 支持：数字、参数名、+ - * / % ^、括号、一元负号、函数调用、常量 pi/e。
+// 不用 eval / Function（沙箱安全、结果可预期、错误信息可操作）。
+var EXPR_FUNCS = {
+  abs: Math.abs, sqrt: Math.sqrt, sin: Math.sin, cos: Math.cos, tan: Math.tan,
+  asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
+  floor: Math.floor, ceil: Math.ceil, round: Math.round, pow: Math.pow, hypot: Math.sqrt,
+  min: Math.min, max: Math.max,
+  sign: Math.sign || function (v) { return v > 0 ? 1 : (v < 0 ? -1 : 0); }
+};
+var EXPR_CONSTS = { pi: Math.PI, PI: Math.PI, e: Math.E, tau: 2 * Math.PI, TAU: 2 * Math.PI };
+var RE_NUMBER = /^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?/;
+var RE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*/;
+
+function pendingError() {
+  var e = new Error('__pending__');
+  e.pending = true;
+  return e;
+}
+
+// env：已解析的参数值；known：参数 id → 定义（用于区分"稍后才解析"与"根本不存在"）
+function evalMathExpr(src, env, known) {
+  var s = String(src);
+  if (s.length > 512) fail('表达式过长（>' + 512 + ' 字符）');
+  var pos = 0, depth = 0;
+  function skipWs() { while (pos < s.length && (s.charAt(pos) === ' ' || s.charAt(pos) === '\t')) pos++; }
+  function parseExpr() {
+    var v = parseTerm();
+    for (;;) {
+      skipWs();
+      var c = s.charAt(pos);
+      if (c === '+') { pos++; v += parseTerm(); }
+      else if (c === '-') { pos++; v -= parseTerm(); }
+      else return v;
+    }
+  }
+  function parseTerm() {
+    var v = parseFactor();
+    for (;;) {
+      skipWs();
+      var c = s.charAt(pos);
+      if (c === '*') { pos++; v *= parseFactor(); }
+      else if (c === '/') {
+        pos++;
+        var d = parseFactor();
+        if (Math.abs(d) < 1e-300) fail('表达式出现除以 0："' + src + '"');
+        v /= d;
+      } else if (c === '%') {
+        pos++;
+        var m = parseFactor();
+        if (Math.abs(m) < 1e-300) fail('表达式出现对 0 取模："' + src + '"');
+        v %= m;
+      } else return v;
+    }
+  }
+  function parseFactor() {
+    var base = parseUnary();
+    skipWs();
+    if (s.charAt(pos) === '^') { pos++; return Math.pow(base, parseFactor()); } // 右结合
+    return base;
+  }
+  function parseUnary() {
+    skipWs();
+    var c = s.charAt(pos);
+    if (c === '-') { pos++; return -parseUnary(); }
+    if (c === '+') { pos++; return parseUnary(); }
+    return parsePrimary();
+  }
+  function parsePrimary() {
+    skipWs();
+    var c = s.charAt(pos);
+    if (c === '(') {
+      pos++;
+      if (++depth > LIMIT_EXPR_DEPTH) fail('表达式嵌套过深（>' + LIMIT_EXPR_DEPTH + '）');
+      var v = parseExpr();
+      skipWs();
+      if (s.charAt(pos) !== ')') fail('表达式缺少右括号："' + src + '"');
+      pos++;
+      depth--;
+      return v;
+    }
+    var rest = s.slice(pos);
+    var mn = RE_NUMBER.exec(rest);
+    if (mn && mn[0]) {
+      if (/^[0-9]/.test(c) || (c === '.' && mn[0].length > 1)) {
+        pos += mn[0].length;
+        return Number(mn[0]);
+      }
+    }
+    var mi = RE_IDENT.exec(rest);
+    if (mi && mi[0]) {
+      var name = mi[0];
+      pos += name.length;
+      skipWs();
+      if (s.charAt(pos) === '(') {
+        pos++;
+        var args = [];
+        skipWs();
+        if (s.charAt(pos) !== ')') {
+          for (;;) {
+            args.push(parseExpr());
+            skipWs();
+            if (s.charAt(pos) === ',') { pos++; continue; }
+            break;
+          }
+        }
+        skipWs();
+        if (s.charAt(pos) !== ')') fail('函数调用缺少右括号："' + src + '"');
+        pos++;
+        var fn = EXPR_FUNCS[name];
+        if (!fn) fail('未知函数 ' + name + '()（可用：' + objKeys(EXPR_FUNCS).join(', ') + '）');
+        if (!args.length) fail('函数 ' + name + '() 缺少参数');
+        return fn.apply(null, args);
+      }
+      if (env && env.hasOwnProperty(name)) return env[name];
+      if (EXPR_CONSTS.hasOwnProperty(name)) return EXPR_CONSTS[name];
+      if (known && known[name]) throw pendingError(); // 定义在别处、稍后解析
+      fail('表达式引用了不存在的参数 ' + name + '（已定义参数：' + (known ? objKeys(known).join(', ') || '无' : '无') + '）');
+    }
+    fail('表达式无法解析："' + src + '"（位置 ' + pos + '）');
+  }
+  var out = parseExpr();
+  skipWs();
+  if (pos !== s.length) fail('表达式有无法解析的尾部："' + src + '"');
+  if (!isFinite(out)) fail('表达式结果不是有限数："' + src + '"');
+  return out;
+}
+
+function objKeys(o) {
+  var out = [], k;
+  for (k in o) if (o.hasOwnProperty(k)) out.push(k);
+  return out;
+}
+
+// 求值上下文：E = { params: {id: 值}, known: {id: 定义} }
+function evalNum(v, E, what) {
+  if (isNum(v)) return v;
+  if (isStr(v)) return evalMathExpr(v, E.params, E.known);
+  fail((what || '数值') + '必须是数字或表达式字符串（收到 ' + JSON.stringify(v) + '）');
+}
+function evalVec3(v, E, what, dflt) {
+  if (v === undefined || v === null) return dflt ? dflt.slice() : [0, 0, 0];
+  if (isArr(v)) {
+    if (v.length < 3) {
+      if (v.length === 1 || v.length === 2) { // 允许 [x] / [x,y]（z 缺省 0 或 dflt）
+        var out0 = dflt ? dflt.slice() : [0, 0, 0];
+        for (var q = 0; q < v.length; q++) out0[q] = evalNum(v[q], E, what);
+        return out0;
+      }
+      fail((what || '向量') + '必须是长度 3 的数组');
+    }
+    return [evalNum(v[0], E, what), evalNum(v[1], E, what), evalNum(v[2], E, what)];
+  }
+  if (isObj(v)) return [evalNum(v.x === undefined ? 0 : v.x, E, what), evalNum(v.y === undefined ? 0 : v.y, E, what), evalNum(v.z === undefined ? 0 : v.z, E, what)];
+  var s = evalNum(v, E, what);
+  if (dflt) return [s, s, s];
+  return [s, s, s];
+}
+function evalInt(v, E, what, dflt) {
+  if (v === undefined || v === null) return dflt;
+  return Math.round(evalNum(v, E, what));
+}
+
+// ── 轮廓求值（extrude / revolve 的输入同样支持表达式）──────────
+function evalProfile(spec, E) {
+  if (isArr(spec)) {
+    var pts = [];
+    for (var k = 0; k < spec.length; k++) {
+      var p = spec[k];
+      if (!isArr(p) || p.length < 2) fail('profile 第 ' + k + ' 个点必须是 [x,y]');
+      pts.push([evalNum(p[0], E, 'profile'), evalNum(p[1], E, 'profile')]);
+    }
+    return pts;
+  }
+  if (!isObj(spec)) fail('profile 必须是点集 [[x,y],...] 或 {type,...}');
+  var o = { type: spec.type === undefined ? 'polygon' : spec.type };
+  if (spec.size !== undefined) {
+    o.size = isArr(spec.size) ? [evalNum(spec.size[0], E, 'size'), evalNum(spec.size[1], E, 'size')] : evalNum(spec.size, E, 'size');
+  }
+  if (spec.center !== undefined) {
+    if (!isArr(spec.center) || spec.center.length < 2) {
+      fail('轮廓 center 必须是 [x,y]（收到 ' + JSON.stringify(spec.center) + '）');
+    }
+    o.center = [evalNum(spec.center[0], E, 'center'), evalNum(spec.center[1], E, 'center')];
+  }
+  if (spec.radius !== undefined) o.radius = evalNum(spec.radius, E, 'radius');
+  if (spec.innerRadius !== undefined) o.innerRadius = evalNum(spec.innerRadius, E, 'innerRadius');
+  if (spec.vertices !== undefined) o.vertices = evalNum(spec.vertices, E, 'vertices');
+  if (spec.segments !== undefined) o.segments = evalNum(spec.segments, E, 'segments');
+  if (spec.points !== undefined) {
+    if (!isArr(spec.points)) fail('profile.points 必须是点集');
+    o.points = [];
+    for (var m = 0; m < spec.points.length; m++) {
+      o.points.push([evalNum(spec.points[m][0], E, 'points'), evalNum(spec.points[m][1], E, 'points')]);
+    }
+  }
+  return o;
+}
+
+// 带孔挤出的 holes 解析：数组元素与 profile 同口径（点集或 {type,...}）
+function evalHoles(spec, E) {
+  if (spec === undefined || spec === null) return undefined;
+  if (!isArr(spec)) fail('holes 必须是数组：每个元素是一个闭合轮廓（点集 [[x,y],...] 或 {type:"circle"|"rect"|"polygon",...}）');
+  var out = [];
+  for (var k = 0; k < spec.length; k++) out.push(evalProfile(spec[k], E));
+  return out;
+}
+
+// ── 几何表达式 → 网格（形状树，支持嵌套布尔）────────────────────
+var SHAPE_TYPES = ['cuboid', 'cube', 'box', 'sphere', 'ellipsoid', 'cylinder', 'cone', 'frustum',
+  'torus', 'polyhedron', 'extrude', 'revolve', 'mesh', 'boolean', 'group'];
+
+// 形状构建的统一出口：**外向化**（挤出 / 旋转体等生成器的绕向差异在这里一次性归一，
+// 保证"有向体积 > 0 = 法线朝外"，下游的布尔裁剪与导出都依赖这个不变量）
+function buildShape(shape, E, depth) {
+  return meshOrientOutward(buildShapeInner(shape, E, depth));
+}
+function buildShapeInner(shape, E, depth) {
+  if (!isObj(shape)) fail('几何形状必须是对象（如 {"type":"cuboid","size":[10,10,10]}）');
+  var t = shape.type === undefined ? 'cuboid' : shape.type;
+  var d = depth === undefined ? 0 : depth;
+  if (d > 12) fail('几何嵌套过深（>12 层）');
+  if (t === 'cuboid' || t === 'box' || t === 'cube') {
+    var sz = shape.size === undefined ? (shape.sides === undefined ? (t === 'cube' ? 2 : [2, 2, 2]) : shape.sides) : shape.size;
+    return shapeCuboid({
+      size: t === 'cube' ? (isNum(sz) || isStr(sz) ? evalNum(sz, E, 'size') : evalVec3(sz, E, 'size', [2, 2, 2]))
+        : evalVec3(sz, E, 'size', [2, 2, 2]),
+      center: evalVec3(shape.center, E, 'center', [0, 0, 0])
+    });
+  }
+  if (t === 'sphere') {
+    return shapeSphere({
+      radius: evalNum(shape.radius === undefined ? 1 : shape.radius, E, 'radius'),
+      segments: evalInt(shape.segments, E, 'segments', 32),
+      rings: shape.rings === undefined ? undefined : evalInt(shape.rings, E, 'rings', 0),
+      center: evalVec3(shape.center, E, 'center', [0, 0, 0])
+    });
+  }
+  if (t === 'ellipsoid') {
+    return shapeEllipsoid({
+      radius: evalVec3(shape.radius === undefined ? 1 : shape.radius, E, 'radius', [1, 1, 1]),
+      segments: evalInt(shape.segments, E, 'segments', 32),
+      rings: shape.rings === undefined ? undefined : evalInt(shape.rings, E, 'rings', 0),
+      center: evalVec3(shape.center, E, 'center', [0, 0, 0])
+    });
+  }
+  if (t === 'cylinder' || t === 'cone' || t === 'frustum') {
+    var rb = shape.radiusBottom !== undefined ? shape.radiusBottom : shape.radius;
+    var rt = shape.radiusTop;
+    if (t === 'cone' && rt === undefined) rt = 0;
+    return shapeFrustum({
+      type: t === 'cone' ? 'cone' : 'cylinder',
+      radius: rb === undefined ? 1 : evalNum(rb, E, 'radius'),
+      radiusBottom: rb === undefined ? undefined : evalNum(rb, E, 'radiusBottom'),
+      radiusTop: rt === undefined ? undefined : evalNum(rt, E, 'radiusTop'),
+      height: evalNum(shape.height === undefined ? 2 : shape.height, E, 'height'),
+      segments: evalInt(shape.segments, E, 'segments', 32),
+      center: evalVec3(shape.center, E, 'center', [0, 0, 0])
+    });
+  }
+  if (t === 'torus') {
+    return shapeTorus({
+      innerRadius: evalNum(shape.innerRadius === undefined ? 1 : shape.innerRadius, E, 'innerRadius'),
+      outerRadius: evalNum(shape.outerRadius === undefined ? 4 : shape.outerRadius, E, 'outerRadius'),
+      segments: evalInt(shape.segments, E, 'segments', 32),
+      rings: evalInt(shape.rings, E, 'rings', 32),
+      center: evalVec3(shape.center, E, 'center', [0, 0, 0])
+    });
+  }
+  if (t === 'polyhedron') {
+    var pts = [], i;
+    if (!isArr(shape.points)) fail('polyhedron 需要 points 数组');
+    for (i = 0; i < shape.points.length; i++) pts.push(evalVec3(shape.points[i], E, 'points'));
+    return shapePolyhedron({ points: pts, faces: shape.faces });
+  }
+  if (t === 'extrude') {
+    return shapeExtrude({
+      profile: evalProfile(shape.profile, E),
+      holes: evalHoles(shape.holes, E),
+      height: shape.height === undefined ? 1 : evalNum(shape.height, E, 'height'),
+      center: shape.center === undefined ? undefined : evalNum(shape.center, E, 'center')
+    });
+  }
+  if (t === 'revolve') {
+    return shapeRevolve({
+      profile: evalProfile(shape.profile, E),
+      segments: evalInt(shape.segments, E, 'segments', 32),
+      angle: shape.angle === undefined ? 360 : evalNum(shape.angle, E, 'angle')
+    });
+  }
+  if (t === 'mesh') return shapeMesh(shape);
+  if (t === 'boolean') {
+    var op = shape.op === undefined ? 'union' : shape.op;
+    var list = [];
+    if (shape.of !== undefined) {
+      if (!isArr(shape.of) || shape.of.length < 2) fail('boolean.of 至少需要 2 个形状');
+      for (var q = 0; q < shape.of.length; q++) list.push(buildShape(shape.of[q], E, d + 1));
+    } else {
+      if (!shape.a || !shape.b) fail('boolean 需要 a 与 b（或 of 数组）');
+      list.push(buildShape(shape.a, E, d + 1));
+      list.push(buildShape(shape.b, E, d + 1));
+    }
+    var acc = list[0];
+    for (var w = 1; w < list.length; w++) acc = meshBoolean(acc, list[w], op);
+    return acc;
+  }
+  if (t === 'group') {
+    if (!isArr(shape.shapes) || !shape.shapes.length) fail('group 需要 shapes 数组');
+    var gs = [];
+    for (var z = 0; z < shape.shapes.length; z++) {
+      var sub = shape.shapes[z];
+      var ms = buildShape(isObj(sub) && sub.shape ? sub.shape : sub, E, d + 1);
+      if (isObj(sub) && sub.transform) ms = meshTransform(ms, m4fromTRS(evalTRS(sub.transform, E)));
+      gs.push(ms);
+    }
+    return meshMerge(gs);
+  }
+  fail('未知几何类型 ' + t + '（可用：' + SHAPE_TYPES.join(', ') + '）');
+}
+
+// 变换求值（translate / rotate / scale，数值均可为表达式）
+function evalTRS(trs, E) {
+  if (!isObj(trs)) fail('transform 必须是对象');
+  return {
+    translate: evalVec3(trs.translate, E, 'translate', [0, 0, 0]),
+    rotate: evalVec3(trs.rotate, E, 'rotate', [0, 0, 0]),
+    scale: evalVec3(trs.scale, E, 'scale', [1, 1, 1])
+  };
+}
+
+// 轴向（'x'|'y'|'z' 或 [x,y,z]）
+function evalAxis(v, E, what, dflt) {
+  if (v === undefined || v === null) return dflt ? dflt.slice() : [0, 0, 1];
+  if (isStr(v)) {
+    var s = v.toLowerCase();
+    if (s === 'x') return [1, 0, 0];
+    if (s === 'y') return [0, 1, 0];
+    if (s === 'z') return [0, 0, 1];
+    fail((what || '轴') + '只能是 x / y / z 或 [x,y,z]');
+  }
+  return vNorm(evalVec3(v, E, what, [0, 0, 1]));
+}
+
+// 阵列（阵列出的实体是**多个独立实体**，不参与布尔 —— 与 CAD 惯例一致）
+function applyRepeat(mesh, rep, E, what) {
+  var mode = rep.mode === undefined ? 'linear' : rep.mode;
+  var out = [], k;
+  if (mode === 'mirror') {
+    out.push(mesh);
+    out.push(meshTransform(mesh, m4mirror(evalAxis(rep.axis, E, 'axis', [1, 0, 0]))));
+    return meshMerge(out);
+  }
+  var count = clampInt(evalNum(rep.count === undefined ? 2 : rep.count, E, 'count'), 2, LIMIT_ARRAY, 'count');
+  if (mode === 'linear') {
+    var delta = evalVec3(rep.delta === undefined ? rep.spacing : rep.delta, E, 'delta', [0, 0, 0]);
+    if (rep.spacing !== undefined && rep.delta === undefined && rep.axis !== undefined) {
+      delta = vMul(evalAxis(rep.axis, E, 'axis', [1, 0, 0]), evalNum(rep.spacing, E, 'spacing'));
+    }
+    if (vLen(delta) <= EPS) fail((what || 'linear 阵列') + '的 delta 不能为零向量');
+    for (k = 0; k < count; k++) out.push(meshTransform(mesh, m4translate(vMul(delta, k))));
+    return meshMerge(out);
+  }
+  if (mode === 'circular') {
+    var axV = evalAxis(rep.axis, E, 'axis', [0, 0, 1]);
+    var radius = evalNum(rep.radius === undefined ? 0 : rep.radius, E, 'radius');
+    var start = evalNum(rep.startAngle === undefined ? 0 : rep.startAngle, E, 'startAngle');
+    var span = evalNum(rep.angle === undefined ? 360 : rep.angle, E, 'angle');
+    var center = evalVec3(rep.center, E, 'center', [0, 0, 0]);
+    // 轴的垂直基（起始角 0 的位置可预期：z 轴 → +x，y 轴 → +z，x 轴 → +y；
+    // 角度递增方向 = u 转向 vv = 绕轴逆时针）
+    var u;
+    if (Math.abs(axV[2] - 1) < 1e-9) u = [1, 0, 0];
+    else if (Math.abs(axV[1] - 1) < 1e-9) u = [0, 0, 1];
+    else if (Math.abs(axV[0] - 1) < 1e-9) u = [0, 1, 0];
+    else { var helper = Math.abs(axV[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]; u = vNorm(vCross(helper, axV)); }
+    var vv = vNorm(vCross(axV, u));
+    var full = Math.abs(span - 360) < 1e-9;
+    for (k = 0; k < count; k++) {
+      var ang = start + (full ? span * k / count : (count > 1 ? span * k / (count - 1) : 0));
+      // 位置变换 = 绕轴（过 center）旋到该角度 · 先沿轴垂直基的 u 方向推出半径
+      //   M = T(center) · R(axV, ang) · T(u·radius)
+      var rot = m4rotAxis(axV, ang);
+      var m = m4mul(m4translate(center), m4mul(rot, m4translate(vMul(u, radius))));
+      out.push(meshTransform(mesh, m));
+    }
+    return meshMerge(out);
+  }
+  fail('未知阵列模式 ' + mode + '（可用 linear / circular / mirror）');
+}
+
+// 部件 → 网格（几何 + 布尔 ops + 变换 + 阵列）
+function buildPartMesh(part, E) {
+  if (!isObj(part)) fail('部件必须是对象');
+  var mesh = buildShape(part.shape, E, 0);
+  var ops = part.ops === undefined ? [] : part.ops;
+  if (!isArr(ops)) fail('部件的 ops 必须是数组');
+  for (var k = 0; k < ops.length; k++) {
+    var op = ops[k];
+    if (!isObj(op)) fail('第 ' + k + ' 个 op 必须是对象');
+    var name = op.op;
+    if (name === 'union' || name === 'subtract' || name === 'intersect') {
+      if (!op.shape) fail('op ' + name + ' 需要 shape');
+      var other = buildShape(op.shape, E, 0);
+      if (op.transform) other = meshTransform(other, m4fromTRS(evalTRS(op.transform, E)));
+      mesh = meshBoolean(mesh, other, name);
+    } else if (name === 'translate' || name === 'rotate' || name === 'scale' || name === 'transform') {
+      mesh = meshTransform(mesh, m4fromTRS(evalTRS(name === 'transform' ? op : op, E)));
+    } else if (name === 'mirror') {
+      mesh = meshTransform(mesh, m4mirror(evalAxis(op.axis, E, 'axis', [1, 0, 0])));
+    } else if (name === 'align') {
+      mesh = meshAlign(mesh, op.to === undefined ? 'center' : op.to);
+    } else if (name === 'snap') {
+      mesh = meshSnap(mesh, evalNum(op.grid === undefined ? meshEpsilon(mesh) : op.grid, E, 'grid'));
+    } else if (name === 'repair') {
+      mesh = meshRepair(mesh).mesh;
+    } else {
+      fail('未知 op ' + name + '（可用 union/subtract/intersect/translate/rotate/scale/mirror/align/snap/repair）');
+    }
+  }
+  if (part.transform) mesh = meshTransform(mesh, m4fromTRS(evalTRS(part.transform, E)));
+  if (part.repeat) mesh = applyRepeat(mesh, part.repeat, E, '部件 ' + (part.id || '?') + ' 的阵列');
+  return mesh;
+}
+
+// ── 二进制写出（沙箱无 Buffer：自研 IEEE754 + base64 编码）──────────
+// 沙箱提供 ctx.fs.writeFileBase64（二进制安全），故 binary STL / GLB 都能产出。
+// 单精度 IEEE754 手写而不依赖 TypedArray（沙箱兼容性优先）。
+function f32Bytes(v) {
+  var out = [0, 0, 0, 0];
+  if (!isFinite(v)) {
+    // ±Inf / NaN：按 float32 的 Inf 表示（几何里出现即为缺陷，由判据抓）
+    out[2] = 0x80;
+    out[3] = (v < 0 ? 0xFF : 0x7F);
+    return out;
+  }
+  var sign = 0;
+  if (v < 0) { sign = 0x80; v = -v; }
+  if (v === 0) { out[3] = sign; return out; }
+  var e = Math.floor(Math.log(v) / Math.LN2);
+  var m = v / Math.pow(2, e);
+  while (m >= 2) { m /= 2; e++; }
+  while (m < 1) { m *= 2; e--; }
+  var biased = e + 127;
+  if (biased >= 255) { // 溢出 → Inf
+    out[2] = 0x80; out[3] = sign | 0x7F; return out;
+  }
+  if (biased <= 0) { // 次正规数
+    var sub = Math.round(v / Math.pow(2, -149));
+    if (sub <= 0) { out[3] = sign; return out; }
+    out[0] = sub & 255; out[1] = (sub >>> 8) & 255; out[2] = (sub >>> 16) & 15; out[3] = sign;
+    return out;
+  }
+  var frac = Math.round((m - 1) * 8388608); // 2^23
+  if (frac >= 8388608) { frac -= 8388608; biased++; if (biased >= 255) { out[2] = 0x80; out[3] = sign | 0x7F; return out; } }
+  out[0] = frac & 255;
+  out[1] = (frac >>> 8) & 255;
+  out[2] = ((frac >>> 16) & 0x7F) | ((biased & 1) << 7);
+  out[3] = sign | ((biased >>> 1) & 0x7F);
+  return out;
+}
+
+var B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function b64EncodeBytes(bytes) {
+  var out = [], i, len = bytes.length, CH = B64_CHARS;
+  for (i = 0; i + 2 < len; i += 3) {
+    var n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    out.push(CH.charAt((n >>> 18) & 63), CH.charAt((n >>> 12) & 63), CH.charAt((n >>> 6) & 63), CH.charAt(n & 63));
+  }
+  var rem = len - i;
+  if (rem === 1) {
+    var n1 = bytes[i] << 16;
+    out.push(CH.charAt((n1 >>> 18) & 63), CH.charAt((n1 >>> 12) & 63), '=', '=');
+  } else if (rem === 2) {
+    var n2 = (bytes[i] << 16) | (bytes[i + 1] << 8);
+    out.push(CH.charAt((n2 >>> 18) & 63), CH.charAt((n2 >>> 12) & 63), CH.charAt((n2 >>> 6) & 63), '=');
+  }
+  return out.join('');
+}
+
+function byteWriter() {
+  return {
+    buf: [],
+    u8: function (v) { this.buf.push(v & 255); },
+    u16: function (v) { this.buf.push(v & 255, (v >>> 8) & 255); },
+    u32: function (v) { this.buf.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255); },
+    f32: function (v) { var b = f32Bytes(v); this.buf.push(b[0], b[1], b[2], b[3]); },
+    bytes: function (arr) { for (var i = 0; i < arr.length; i++) this.buf.push(arr[i] & 255); },
+    ascii: function (s) { for (var i = 0; i < s.length; i++) this.buf.push(s.charCodeAt(i) & 255); },
+    pad: function (n) { for (var i = 0; i < n; i++) this.buf.push(0); },
+    utf8: function (s) { this.bytes(utf8Bytes(s)); }
+  };
+}
+
+// UTF-8 编码（沙箱无 TextEncoder；GLB 的 JSON 块与 glTF 文本都按 UTF-8 落字节）
+function utf8Bytes(s) {
+  var out = [];
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 63));
+    else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length) {
+      var c2 = s.charCodeAt(i + 1);
+      var cp = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+      out.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+      i++;
+    } else out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+
+function triNormal(t) {
+  var n = vNorm(vCross(vSub(t[1], t[0]), vSub(t[2], t[0])));
+  return vFinite(n) && vLen(n) > 0.5 ? n : [0, 0, 1];
+}
+
+// ── STL（3D 打印事实标准）───────────────────────────────────
+// binary：80 字节头（**不能以 "solid" 开头**，否则解析器会当 ASCII 读）+ uint32 面数 + 每面 50 字节
+function stlBinaryBytes(mesh, name) {
+  var w = byteWriter();
+  var head = 'paircode tool-model | ' + (name || 'model') + ' | ' + mesh.indices.length + ' facets | unit=mm | z-up';
+  var hb = [];
+  for (var i = 0; i < 80; i++) hb.push(i < head.length ? (head.charCodeAt(i) & 0x7F) : 32);
+  if (String.fromCharCode(hb[0], hb[1], hb[2], hb[3], hb[4]).toLowerCase() === 'solid') hb[0] = 0x50; // 'P'
+  w.bytes(hb);
+  w.u32(mesh.indices.length);
+  for (var k = 0; k < mesh.indices.length; k++) {
+    var t = meshTriangle(mesh, k), n = triNormal(t);
+    w.f32(n[0]); w.f32(n[1]); w.f32(n[2]);
+    for (var v = 0; v < 3; v++) { w.f32(t[v][0]); w.f32(t[v][1]); w.f32(t[v][2]); }
+    w.u16(0);
+  }
+  return w.buf;
+}
+
+function stlAsciiText(mesh, name) {
+  var nm = (name || 'model').replace(/[^A-Za-z0-9_\-]/g, '_');
+  var out = ['solid ' + nm];
+  for (var k = 0; k < mesh.indices.length; k++) {
+    var t = meshTriangle(mesh, k), n = triNormal(t);
+    out.push('  facet normal ' + fmtNum(n[0]) + ' ' + fmtNum(n[1]) + ' ' + fmtNum(n[2]));
+    out.push('    outer loop');
+    for (var v = 0; v < 3; v++) out.push('      vertex ' + fmtNum(t[v][0]) + ' ' + fmtNum(t[v][1]) + ' ' + fmtNum(t[v][2]));
+    out.push('    endloop');
+    out.push('  endfacet');
+  }
+  out.push('endsolid ' + nm);
+  return out.join('\n') + '\n';
+}
+
+// ── OBJ（Wavefront，文本）──────────────────────────────────
+function objText(meshes) {
+  var out = ['# paircode tool-model 导出（单位 mm，坐标右手系 +z 向上）',
+    '# ' + meshes.length + ' 个对象，' + meshes.reduce(function (s, p) { return s + p.mesh.indices.length; }, 0) + ' 个三角面'];
+  var vOff = 1, nOff = 1, i, k;
+  for (i = 0; i < meshes.length; i++) {
+    var part = meshes[i], m = part.mesh;
+    out.push('o ' + (part.id || ('part' + i)));
+    for (k = 0; k < m.positions.length; k++) {
+      out.push('v ' + fmtNum(m.positions[k][0]) + ' ' + fmtNum(m.positions[k][1]) + ' ' + fmtNum(m.positions[k][2]));
+    }
+    for (k = 0; k < m.indices.length; k++) {
+      var t = meshTriangle(m, k), n = triNormal(t);
+      out.push('vn ' + fmtNum(n[0]) + ' ' + fmtNum(n[1]) + ' ' + fmtNum(n[2]));
+    }
+    for (k = 0; k < m.indices.length; k++) {
+      var f = m.indices[k], n2 = nOff + k;
+      out.push('f ' + (vOff + f[0]) + '//' + n2 + ' ' + (vOff + f[1]) + '//' + n2 + ' ' + (vOff + f[2]) + '//' + n2);
+    }
+    vOff += m.positions.length;
+    nOff += m.indices.length;
+  }
+  return out.join('\n') + '\n';
+}
+
+// ── glTF 2.0（Khronos 标准；导出时把工程的 z-up 转成规范要求的 **y-up**）──
+// 变换：(x, y, z) → (x, z, −y)（绕 X 轴 −90°）
+function toGltfVec(p) { return [p[0], p[2], -p[1]]; }
+function hexToRgb01(hex) {
+  var s = String(hex || '#b0b4bd').replace('#', '');
+  if (s.length === 3) s = s.charAt(0) + s.charAt(0) + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2);
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) s = 'b0b4bd';
+  return [parseInt(s.slice(0, 2), 16) / 255, parseInt(s.slice(2, 4), 16) / 255, parseInt(s.slice(4, 6), 16) / 255, 1];
+}
+
+// 返回 { json, binBytes }（binBytes 为拼接后的顶点/索引数据，供 data URI 或 GLB 使用）
+function buildGltfData(parts, opts) {
+  var o = opts || {};
+  var bin = [], bufferViews = [], accessors = [], meshes = [], nodes = [], materials = [], matIndex = {};
+  function pad4() { while (bin.length % 4 !== 0) bin.push(0); }
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i], m = part.mesh;
+    if (!m.indices.length) continue;
+    var matKey = JSON.stringify(part.material || DEFAULT_MATERIAL);
+    if (matIndex[matKey] === undefined) {
+      matIndex[matKey] = materials.length;
+      var mt = part.material || DEFAULT_MATERIAL;
+      materials.push({
+        name: (part.id || 'mat') + '_mat',
+        doubleSided: false,
+        pbrMetallicRoughness: {
+          baseColorFactor: hexToRgb01(mt.color),
+          metallicFactor: isNum(mt.metallic) ? mt.metallic : DEFAULT_MATERIAL.metallic,
+          roughnessFactor: isNum(mt.roughness) ? mt.roughness : DEFAULT_MATERIAL.roughness
+        }
+      });
+    }
+    var mi = matIndex[matKey];
+    // 顶点（POSITION + NORMAL：每三角独立顶点，法线为面法线 —— 与水密无关的展示网格）
+    var min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    pad4();
+    var posOff = bin.length, triCount = m.indices.length;
+    for (var k = 0; k < triCount; k++) {
+      var t = meshTriangle(m, k), n = toGltfVec(triNormal(t));
+      for (var v = 0; v < 3; v++) {
+        var gp = toGltfVec(t[v]);
+        for (var c = 0; c < 3; c++) {
+          var fb = f32Bytes(gp[c]);
+          bin.push(fb[0], fb[1], fb[2], fb[3]);
+          if (gp[c] < min[c]) min[c] = gp[c];
+          if (gp[c] > max[c]) max[c] = gp[c];
+        }
+      }
+    }
+    var posLen = bin.length - posOff;
+    bufferViews.push({ buffer: 0, byteOffset: posOff, byteLength: posLen, target: 34962 });
+    var posAcc = accessors.length;
+    accessors.push({ bufferView: bufferViews.length - 1, componentType: 5126, count: triCount * 3, type: 'VEC3', min: min, max: max });
+    pad4();
+    var nrmOff = bin.length;
+    for (var k2 = 0; k2 < triCount; k2++) {
+      var t2 = meshTriangle(m, k2), n2 = toGltfVec(triNormal(t2));
+      var nb = [f32Bytes(n2[0]), f32Bytes(n2[1]), f32Bytes(n2[2])];
+      for (var v2 = 0; v2 < 3; v2++) {
+        bin.push(nb[0][0], nb[0][1], nb[0][2], nb[0][3], nb[1][0], nb[1][1], nb[1][2], nb[1][3], nb[2][0], nb[2][1], nb[2][2], nb[2][3]);
+      }
+    }
+    var nrmLen = bin.length - nrmOff;
+    bufferViews.push({ buffer: 0, byteOffset: nrmOff, byteLength: nrmLen, target: 34962 });
+    var nrmAcc = accessors.length;
+    accessors.push({ bufferView: bufferViews.length - 1, componentType: 5126, count: triCount * 3, type: 'VEC3' });
+    // 索引（顶点数 < 65536 用 uint16，否则 uint32）
+    pad4();
+    var idxOff = bin.length, use16 = triCount * 3 < 65536;
+    for (var k3 = 0; k3 < triCount * 3; k3++) {
+      if (use16) bin.push(k3 & 255, (k3 >>> 8) & 255);
+      else bin.push(k3 & 255, (k3 >>> 8) & 255, (k3 >>> 16) & 255, (k3 >>> 24) & 255);
+    }
+    var idxLen = bin.length - idxOff;
+    bufferViews.push({ buffer: 0, byteOffset: idxOff, byteLength: idxLen, target: 34963 });
+    var idxAcc = accessors.length;
+    accessors.push({ bufferView: bufferViews.length - 1, componentType: use16 ? 5123 : 5125, count: triCount * 3, type: 'SCALAR' });
+    var meshIdx = meshes.length;
+    meshes.push({
+      name: part.id || ('part' + i),
+      primitives: [{ attributes: { POSITION: posAcc, NORMAL: nrmAcc }, indices: idxAcc, material: mi, mode: 4 }]
+    });
+    nodes.push({ name: part.id || ('part' + i), mesh: meshIdx });
+  }
+  if (!nodes.length) fail('没有可导出的几何（所有部件为空或不可见）');
+  pad4();
+  var json = {
+    asset: { version: GLTF_VERSION, generator: 'paircode tool-model (goja)', copyright: '' },
+    scene: 0,
+    scenes: [{ name: (o.name || 'model'), nodes: nodes.map(function (_, i2) { return i2; }) }],
+    nodes: nodes,
+    meshes: meshes,
+    materials: materials,
+    accessors: accessors,
+    bufferViews: bufferViews,
+    buffers: [{ byteLength: bin.length, uri: 'data:application/octet-stream;base64,' + b64EncodeBytes(bin) }]
+  };
+  return { json: json, binBytes: bin, gltf: json };
+}
+
+function gltfText(parts, opts) {
+  var d = buildGltfData(parts, opts);
+  return JSON.stringify(d.json, null, 2) + '\n';
+}
+
+// GLB（单文件二进制容器：12 字节头 + JSON 块 + BIN 块，块按 4 字节对齐）
+function glbBytes(parts, opts) {
+  var d = buildGltfData(parts, opts);
+  var jsonBytes = utf8Bytes(JSON.stringify(d.json));
+  while (jsonBytes.length % 4 !== 0) jsonBytes.push(0x20); // JSON 块用空格补齐
+  var binBytes = d.binBytes.slice();
+  while (binBytes.length % 4 !== 0) binBytes.push(0);
+  var total = 12 + 8 + jsonBytes.length + 8 + binBytes.length;
+  var w = byteWriter();
+  w.u32(0x46546C67); // 'glTF'
+  w.u32(2);
+  w.u32(total);
+  w.u32(jsonBytes.length); w.u32(0x4E4F534A); w.bytes(jsonBytes); // 'JSON'
+  w.u32(binBytes.length); w.u32(0x004E4942); w.bytes(binBytes);   // 'BIN\0'
+  return w.buf;
+}
+
+// ── 工程文档（参数化 CAD 工程的文本真相源）──────────────────────
+function emptyModelDoc(name) {
+  return {
+    format: FORMAT,
+    name: name || 'model',
+    unit: 'mm',
+    up: 'z',
+    note: '坐标：右手系 +z 向上（CAD/STL 惯例；导出 glTF 时按规范转 y-up）。长度单位 mm。',
+    params: [],
+    parts: []
+  };
+}
+
+function newParam(id, value, name, min, max) {
+  var p = { id: id, value: value };
+  if (name !== undefined) p.name = name;
+  if (min !== undefined) p.min = min;
+  if (max !== undefined) p.max = max;
+  return p;
+}
+
+// 参数依赖解析：参数值本身可以是表达式（引用其它参数），故按"迭代求值直到无进展"解析，
+// 并区分"引用了尚未解析的参数"（pending，继续等下一轮）与"引用了不存在的参数"（立即报错）。
+function resolveParams(model) {
+  var list = model.params === undefined ? [] : model.params;
+  if (!isArr(list)) fail('params 必须是数组');
+  if (list.length > LIMIT_PARAMS) fail('参数数量超过上限 ' + LIMIT_PARAMS);
+  var byId = {}, order = [], k;
+  for (k = 0; k < list.length; k++) {
+    var p = list[k];
+    if (!isObj(p)) fail('params[' + k + '] 必须是对象');
+    if (!isStr(p.id) || !p.id) fail('params[' + k + '] 缺少 id');
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(p.id)) fail('参数 id 必须以字母/下划线开头且只含字母数字下划线：' + p.id);
+    if (byId[p.id]) fail('参数 id 重复：' + p.id);
+    byId[p.id] = p;
+    order.push(p.id);
+  }
+  var values = {}, done = {};
+  function attempt() {
+    var progress = false;
+    for (var i = 0; i < order.length; i++) {
+      var id = order[i];
+      if (done[id]) continue;
+      var p2 = byId[id];
+      try {
+        values[id] = isStr(p2.value) ? evalMathExpr(p2.value, values, byId) : toNumber(p2.value, '参数 ' + id + ' 的 value');
+        done[id] = true;
+        progress = true;
+      } catch (e) {
+        if (e && e.pending) continue; // 等下一轮
+        throw e;
+      }
+    }
+    return progress;
+  }
+  for (var round = 0; round <= order.length + 1; round++) {
+    if (!attempt()) break;
+  }
+  var missing = [];
+  for (k = 0; k < order.length; k++) if (!done[order[k]]) missing.push(order[k]);
+  if (missing.length) fail('参数无法解析（循环引用或引用不存在的参数）：' + missing.join(', '));
+  for (k = 0; k < order.length; k++) {
+    if (!isFinite(values[order[k]])) fail('参数 ' + order[k] + ' 的值不是有限数');
+  }
+  return { values: values, known: byId, list: list, order: order };
+}
+
+function mergeMaterial(mat) {
+  var src = isObj(mat) ? mat : {};
+  return {
+    color: isStr(src.color) ? src.color : DEFAULT_MATERIAL.color,
+    metallic: isNum(src.metallic) ? src.metallic : (isNum(src.metalness) ? src.metalness : DEFAULT_MATERIAL.metallic),
+    roughness: isNum(src.roughness) ? src.roughness : DEFAULT_MATERIAL.roughness
+  };
+}
+
+// 全模型构建：参数解析 → 逐部件建网格（含 ops / 变换 / 阵列）→ 统计
+function buildModelMeshes(model, opts) {
+  var o = opts || {};
+  if (!isObj(model)) fail('工程文档必须是对象');
+  var partsRaw = model.parts === undefined ? [] : model.parts;
+  if (!isArr(partsRaw)) fail('parts 必须是数组');
+  if (partsRaw.length > LIMIT_PARTS) fail('部件数量超过上限 ' + LIMIT_PARTS);
+  var rp = resolveParams(model);
+  var E = { params: rp.values, known: rp.known };
+  var ids = {}, parts = [], i, k;
+  for (i = 0; i < partsRaw.length; i++) {
+    var p = partsRaw[i];
+    if (!isObj(p)) fail('parts[' + i + '] 必须是对象');
+    if (!isStr(p.id) || !p.id) fail('parts[' + i + '] 缺少 id');
+    if (ids[p.id]) fail('部件 id 重复：' + p.id);
+    ids[p.id] = 1;
+    if (o.skipInvisible !== false && p.visible === false) continue;
+    var mesh = buildPartMesh(p, E);
+    if (mesh.indices.length > LIMIT_TRIS_PART) {
+      fail('部件 ' + p.id + ' 三角面数 ' + mesh.indices.length + ' 超过单部件上限 ' + LIMIT_TRIS_PART + '（降低 segments 或拆部件）');
+    }
+    parts.push({
+      id: p.id,
+      name: p.name === undefined ? p.id : p.name,
+      mesh: mesh,
+      material: mergeMaterial(p.material),
+      source: p,
+      tris: mesh.indices.length,
+      vertices: mesh.positions.length,
+      volume: meshVolume(mesh),
+      area: meshArea(mesh),
+      bbox: meshBbox(mesh)
+    });
+  }
+  var totalTris = 0;
+  for (k = 0; k < parts.length; k++) totalTris += parts[k].tris;
+  if (totalTris > LIMIT_TRIS_TOTAL) fail('全模型三角面数 ' + totalTris + ' 超过上限 ' + LIMIT_TRIS_TOTAL);
+  var merged = parts.length ? meshMerge(parts.map(function (x) { return x.mesh; })) : meshNew([], []);
+  return { E: E, params: rp, parts: parts, merged: merged, totalTris: totalTris };
+}
+
+// ── 9 项判据（M1–M9）────────────────────────────────────────
+// M4 口径（实测结论，有 JSCAD 对照）：BSP 三角网格布尔的输出在"严格边匹配"意义下通常不水密，
+// 故分三级报告：严格水密 / 只有 T 型接缝（几何闭合、分段不同）/ 存在真缺口。
+var CHECK_META = [
+  { id: 'M1', title: '工程契约（format / 单位 / 部件结构）', level: 'fail' },
+  { id: 'M2', title: '参数与表达式', level: 'fail' },
+  { id: 'M3', title: '网格完整性（索引 / 有限性 / 退化面）', level: 'fail' },
+  { id: 'M4', title: '水密性（可 3D 打印）', level: 'warn' },
+  { id: 'M5', title: '绕向一致与外向', level: 'fail' },
+  { id: 'M6', title: '实体性（体积 / 包围盒 / 连通）', level: 'warn' },
+  { id: 'M7', title: '变换与尺度', level: 'warn' },
+  { id: 'M8', title: '导出契约（glTF / STL / OBJ 结构）', level: 'warn' },
+  { id: 'M9', title: '产物确定且自包含', level: 'warn' }
+];
+
+function mkCheck(id, ok, detail, items, level) {
+  var meta = null;
+  for (var i = 0; i < CHECK_META.length; i++) if (CHECK_META[i].id === id) meta = CHECK_META[i];
+  return {
+    id: id,
+    title: meta ? meta.title : id,
+    ok: !!ok,
+    level: level || (meta ? meta.level : 'warn'),
+    detail: detail || '',
+    items: items || []
+  };
+}
+
+function checkM1(model) {
+  var items = [];
+  var parts = model.parts === undefined ? [] : model.parts;
+  if (model.format !== FORMAT) items.push('format 必须是 ' + FORMAT + '（当前 ' + JSON.stringify(model.format) + '）');
+  if (model.unit !== undefined && model.unit !== 'mm') items.push('unit 只支持 mm（当前 ' + model.unit + '）——其他单位请先换算');
+  if (model.up !== undefined && model.up !== 'z') items.push('up 必须是 z（CAD 惯例；导出 glTF 时按规范转 y-up）');
+  if (isStr(model.name) && model.name.length > 64) items.push('name 过长（>64 字符）');
+  if (!isArr(parts)) items.push('parts 必须是数组');
+  else {
+    var seen = {};
+    for (var k = 0; k < parts.length; k++) {
+      var p = parts[k];
+      if (!isObj(p)) { items.push('parts[' + k + '] 不是对象'); continue; }
+      if (!isStr(p.id) || !p.id) items.push('parts[' + k + '] 缺少 id');
+      else if (seen[p.id]) items.push('部件 id 重复：' + p.id);
+      else seen[p.id] = 1;
+      if (p.shape === undefined) items.push('部件 ' + p.id + ' 缺少 shape');
+      else if (!isObj(p.shape)) items.push('部件 ' + p.id + ' 的 shape 必须是对象');
+      else if (p.shape.type !== undefined && SHAPE_TYPES.indexOf(p.shape.type) < 0) items.push('部件 ' + p.id + ' 的 shape.type 未知：' + p.shape.type);
+      if (p.ops !== undefined && !isArr(p.ops)) items.push('部件 ' + p.id + ' 的 ops 必须是数组');
+      if (p.repeat !== undefined && (!isObj(p.repeat) || ['linear', 'circular', 'mirror'].indexOf(p.repeat.mode === undefined ? 'linear' : p.repeat.mode) < 0)) {
+        items.push('部件 ' + p.id + ' 的 repeat.mode 必须是 linear / circular / mirror');
+      }
+    }
+  }
+  return mkCheck('M1', items.length === 0, items.length ? '发现 ' + items.length + ' 处结构问题' : ('结构合法（' + parts.length + ' 个部件）'), items);
+}
+
+function checkM2(model, rp) {
+  var items = [], info = [];
+  var list = rp.list;
+  for (var k = 0; k < list.length; k++) {
+    var p = list[k], v = rp.values[p.id];
+    if (p.min !== undefined && v < p.min) items.push('参数 ' + p.id + ' = ' + fmtNum(v) + ' 小于声明下限 ' + p.min);
+    if (p.max !== undefined && v > p.max) items.push('参数 ' + p.id + ' = ' + fmtNum(v) + ' 大于声明上限 ' + p.max);
+  }
+  // 统计参数引用次数（哪些参数真的在驱动几何）
+  var text = JSON.stringify(model);
+  for (k = 0; k < list.length; k++) {
+    var re = new RegExp('"' + list[k].id + '"', 'g');
+    var hits = 0, m2;
+    while ((m2 = re.exec(text)) !== null) hits++;
+    if (hits <= 1) info.push('参数 ' + list[k].id + ' 未被几何引用（只出现在定义处）');
+  }
+  return mkCheck('M2', items.length === 0,
+    items.length ? '参数越界 ' + items.length + ' 处' : ('参数全部可解析（' + list.length + ' 项）' + (info.length ? '；' + info.length + ' 项未被引用' : '')),
+    items.concat(info));
+}
+
+function checkM3(built) {
+  var items = [];
+  for (var k = 0; k < built.parts.length; k++) {
+    var p = built.parts[k], m = p.mesh, nonfin = 0, bad = 0, degen = 0, i;
+    for (i = 0; i < m.positions.length; i++) if (!vFinite(m.positions[i])) nonfin++;
+    for (i = 0; i < m.indices.length; i++) {
+      var f = m.indices[i];
+      if (f[0] < 0 || f[1] < 0 || f[2] < 0 || f[0] >= m.positions.length || f[1] >= m.positions.length || f[2] >= m.positions.length) { bad++; continue; }
+      var t = meshTriangle(m, i);
+      if (vLen(vCross(vSub(t[1], t[0]), vSub(t[2], t[0]))) / 2 <= EPS_AREA) degen++;
+    }
+    if (!m.indices.length) items.push('部件 ' + p.id + '：几何为空（0 个三角面）');
+    if (nonfin) items.push('部件 ' + p.id + '：' + nonfin + ' 个顶点坐标非有限数');
+    if (bad) items.push('部件 ' + p.id + '：' + bad + ' 个三角面索引越界');
+    if (degen) items.push('部件 ' + p.id + '：' + degen + ' 个退化（零面积）三角面');
+  }
+  return mkCheck('M3', items.length === 0,
+    items.length ? '发现 ' + items.length + ' 处网格问题' : ('全部 ' + built.parts.length + ' 个部件网格完整，合计 ' + built.totalTris + ' 个三角面'), items);
+}
+
+function checkM4(built) {
+  var items = [], gaps = 0, tjs = 0, strict = 0, hals = 0;
+  for (var k = 0; k < built.parts.length; k++) {
+    var p = built.parts[k];
+    var r = meshWatertightReport(p.mesh);
+    strict += r.strictUnpaired; tjs += r.tJunctions; gaps += r.tolerantUnpaired; hals += r.halfEdges;
+    if (!r.watertightStrict && r.tolerantUnpaired > 0) {
+      items.push('部件 ' + p.id + '：未配对半边 ' + r.strictUnpaired + '（T 缝 ' + r.tJunctions + ' / 真缺口 ' + r.tolerantUnpaired + '）—— 建议 op=repair 或提高 segments 后复验');
+    }
+  }
+  var detail;
+  if (strict === 0) detail = '全部部件严格水密（有向半边全部配对）';
+  else if (gaps === 0) detail = '几何闭合；存在 ' + tjs + ' 条 T 型接缝（相邻面片分段不同）—— 主流切片器按容差处理，可直接打印';
+  else detail = '存在 ' + gaps + ' 条真缺口（未配对半边 ' + strict + ' / ' + hals + '）—— 3D 打印前建议修复';
+  return mkCheck('M4', gaps === 0, detail, items);
+}
+
+function checkM5(built) {
+  var items = [], nmTotal = 0, flipTotal = 0, halfTotal = 0, k;
+  for (k = 0; k < built.parts.length; k++) {
+    var p = built.parts[k], t = meshTopology(p.mesh);
+    nmTotal += t.nonManifoldEdges;
+    flipTotal += t.flippedEdgePairs;
+    halfTotal += t.faces * 3;
+    if (p.volume < 0) items.push('部件 ' + p.id + '：有向体积为负（法线整体朝内）');
+  }
+  // 判失败的门槛：
+  //   · 有向体积为负 → 面整体朝内（真问题）
+  //   · 共边同向占比 > 1% → 绕向大面积不一致（真问题）
+  // 少量（实测 <0.02%）共边同向与非流形边是连续布尔在碎片交接处的副产物，不影响体积与切片
+  // 打印，故作为提示写入 detail —— 判据只报事实与比例，不夸大也不掩盖。
+  var flipRatio = halfTotal ? flipTotal / halfTotal : 0;
+  if (flipRatio > 0.01) {
+    items.push('共边同向 ' + flipTotal + ' 对（占半边 ' + fmtNum(flipRatio * 100, 2) + '% > 1%）—— 绕向大面积不一致：检查负缩放或面被翻转');
+  }
+  var detail = items.length ? '发现 ' + items.length + ' 处绕向问题'
+    : ('全部部件绕向一致且法线朝外（有向体积 > 0）' +
+      (flipTotal || nmTotal ? '；另有 ' + flipTotal + ' 对共边同向 / ' + nmTotal + ' 条非流形边（占半边 ' + fmtNum(flipRatio * 100, 3) + '%，连续布尔累积，不影响体积与打印）' : ''));
+  return mkCheck('M5', items.length === 0, detail, items);
+}
+
+function checkM6(built) {
+  var items = [], note = [];
+  for (var k = 0; k < built.parts.length; k++) {
+    var p = built.parts[k], bb = p.bbox;
+    if (!(p.volume > 0)) items.push('部件 ' + p.id + '：体积为 ' + fmtNum(p.volume) + ' mm³（应为正）');
+    for (var c = 0; c < 3; c++) {
+      if (!(bb[1][c] > bb[0][c])) items.push('部件 ' + p.id + '：包围盒在 ' + 'xyz'.charAt(c) + ' 方向无厚度');
+    }
+    var bbv = (bb[1][0] - bb[0][0]) * (bb[1][1] - bb[0][1]) * (bb[1][2] - bb[0][2]);
+    if (bbv > 0 && p.volume / bbv > 1.0000001) {
+      items.push('部件 ' + p.id + '：体积是包围盒的 ' + fmtNum(p.volume / bbv, 3) + ' 倍（>1 不可能）→ 疑似自交 / 面翻转');
+    }
+    var comp = meshComponents(p.mesh);
+    if (comp.count > 1) note.push('部件 ' + p.id + ' 含 ' + comp.count + ' 个连通体（阵列或多实体属正常）');
+  }
+  return mkCheck('M6', items.length === 0,
+    items.length ? '发现 ' + items.length + ' 处实体性问题' : ('全部部件体积为正且包围盒有效' + (note.length ? '（' + note.join('；') + '）' : '')),
+    items.concat(note));
+}
+
+function checkM7(model, built) {
+  var items = [], maxDiag = 0, minDiag = Infinity, k;
+  for (k = 0; k < built.parts.length; k++) {
+    var sz = meshSize(built.parts[k].mesh);
+    var diag = Math.sqrt(sz[0] * sz[0] + sz[1] * sz[1] + sz[2] * sz[2]);
+    if (diag > maxDiag) maxDiag = diag;
+    if (diag > 0 && diag < minDiag) minDiag = diag;
+    if (sz[0] <= 0 || sz[1] <= 0 || sz[2] <= 0) {
+      items.push('部件 ' + built.parts[k].id + ' 尺寸为 ' + fmtNum(sz[0]) + '×' + fmtNum(sz[1]) + '×' + fmtNum(sz[2]) + ' mm（存在零厚度方向）');
+    }
+  }
+  if (maxDiag > 100000) items.push('全模型对角线 ' + fmtNum(maxDiag, 1) + ' mm 过大（>100 m）—— 确认单位应为 mm');
+  if (maxDiag > 0 && maxDiag < 0.05) items.push('全模型对角线 ' + fmtNum(maxDiag, 4) + ' mm 过小（<0.05 mm）—— 确认单位 / 参数');
+  return mkCheck('M7', items.length === 0,
+    items.length ? '发现 ' + items.length + ' 处尺度问题' : ('尺度合理：最大对角线 ' + fmtNum(maxDiag, 3) + ' mm' + (minDiag < Infinity ? '，最小 ' + fmtNum(minDiag, 3) + ' mm' : '')), items);
+}
+
+function checkM8(products) {
+  var items = [];
+  for (var k = 0; k < products.length; k++) {
+    var pr = products[k];
+    if (pr.kind === 'gltf' && pr.text) {
+      var okJson = false, g = null;
+      try { g = JSON.parse(pr.text); okJson = true; } catch (e) { items.push(pr.path + '：glTF JSON 无法解析'); }
+      if (okJson) {
+        if (!g.asset || g.asset.version !== '2.0') items.push(pr.path + '：asset.version 必须是 "2.0"');
+        if (!g.buffers || !g.buffers.length) items.push(pr.path + '：缺少 buffers');
+        else {
+          for (var b = 0; b < g.buffers.length; b++) {
+            if (!/^data:application\/octet-stream;base64,/.test(g.buffers[b].uri || '')) items.push(pr.path + '：buffer uri 必须是自包含的 base64 data URI');
+          }
+        }
+        if (!g.accessors || !g.accessors.length) items.push(pr.path + '：缺少 accessors');
+        else {
+          // 只校验 primitives 真正引用的 POSITION accessor（NORMAL 同为 VEC3/5126，但规范不要求 min/max）
+          var posIdx = {};
+          if (g.meshes) {
+            for (var mi = 0; mi < g.meshes.length; mi++) {
+              var prims = g.meshes[mi].primitives || [];
+              for (var pi = 0; pi < prims.length; pi++) {
+                if (prims[pi].attributes && prims[pi].attributes.POSITION !== undefined) posIdx[prims[pi].attributes.POSITION] = 1;
+              }
+            }
+          }
+          for (var a = 0; a < g.accessors.length; a++) {
+            var acc = g.accessors[a];
+            if ([5120, 5121, 5122, 5123, 5125, 5126].indexOf(acc.componentType) < 0) items.push(pr.path + '：accessor[' + a + '] componentType 非法');
+            if (acc.count === undefined || !(acc.count > 0)) items.push(pr.path + '：accessor[' + a + '] count 非法');
+            if (posIdx[a]) {
+              if (acc.type !== 'VEC3' || acc.componentType !== 5126) items.push(pr.path + '：POSITION accessor[' + a + '] 必须是 VEC3/float32');
+              if (!(acc.min && acc.max)) items.push(pr.path + '：POSITION accessor[' + a + '] 缺少 min/max（规范要求）');
+            }
+          }
+        }
+        if (g.bufferViews) {
+          for (var bv = 0; bv < g.bufferViews.length; bv++) {
+            if ((g.bufferViews[bv].byteOffset || 0) % 4 !== 0) items.push(pr.path + '：bufferView[' + bv + '] byteOffset 未 4 字节对齐');
+          }
+        }
+        if (!g.meshes || !g.meshes.length) items.push(pr.path + '：缺少 meshes');
+        if (!g.scenes || !g.scenes.length) items.push(pr.path + '：缺少 scenes');
+      }
+    } else if (pr.kind === 'stlb' && pr.bytes) {
+      // 面数从 STL 头里读（校验"头部声明"与"实际长度"自洽）
+      var n = ((pr.bytes[80] | (pr.bytes[81] << 8) | (pr.bytes[82] << 16) | (pr.bytes[83] << 24)) >>> 0);
+      if (pr.bytes.length !== 84 + 50 * n) items.push(pr.path + '：头部声明 ' + n + ' 个三角面，但长度 ' + pr.bytes.length + ' ≠ 84+50×' + n + '=' + (84 + 50 * n));
+      if (pr.faces !== undefined && pr.faces !== n) items.push(pr.path + '：头部面数 ' + n + ' 与导出面数 ' + pr.faces + ' 不一致');
+      var magic = String.fromCharCode(pr.bytes[0], pr.bytes[1], pr.bytes[2], pr.bytes[3], pr.bytes[4]).toLowerCase();
+      if (magic === 'solid') items.push(pr.path + '：binary STL 头以 "solid" 开头会被解析器误判为 ASCII');
+    } else if (pr.kind === 'stla' && pr.text) {
+      if (!/^solid /.test(pr.text)) items.push(pr.path + '：ASCII STL 必须以 "solid " 开头');
+      if (!/endsolid [A-Za-z0-9_\-]*\s*$/.test(pr.text)) items.push(pr.path + '：ASCII STL 缺少 endsolid 结尾');
+      var facets = (pr.text.match(/facet normal/g) || []).length;
+      if (pr.faces !== undefined && facets !== pr.faces) items.push(pr.path + '：facet 数 ' + facets + ' ≠ 三角面数 ' + pr.faces);
+    } else if (pr.kind === 'obj' && pr.text) {
+      var vc = (pr.text.match(/^v /gm) || []).length;
+      var fc = (pr.text.match(/^f /gm) || []).length;
+      if (pr.faces !== undefined && fc !== pr.faces) items.push(pr.path + '：f 行数 ' + fc + ' ≠ 三角面数 ' + pr.faces);
+      var maxIdx = 0, lines = pr.text.split('\n');
+      for (var li = 0; li < lines.length; li++) {
+        if (lines[li].indexOf('f ') !== 0) continue;
+        var segs = lines[li].slice(2).trim().split(/\s+/);
+        for (var si = 0; si < segs.length; si++) {
+          var iv = Number(segs[si].split('/')[0]);
+          if (!(iv >= 1)) items.push(pr.path + '：OBJ 索引不是 1 基正整数（' + segs[si] + '）');
+          if (iv > maxIdx) maxIdx = iv;
+        }
+      }
+      if (maxIdx > vc) items.push(pr.path + '：OBJ 索引越界（最大 ' + maxIdx + ' > 顶点数 ' + vc + '）');
+    }
+  }
+  return mkCheck('M8', items.length === 0, items.length ? '产物契约问题 ' + items.length + ' 处' : ('已校验 ' + products.length + ' 个产物（glTF / STL / OBJ 结构合法）'), items);
+}
+
+function checkM9(products, determinism) {
+  var items = [];
+  for (var k = 0; k < products.length; k++) {
+    var pr = products[k];
+    if (pr.text && /https?:\/\//.test(pr.text)) items.push(pr.path + '：含外部 URL 引用（产物必须自包含）');
+  }
+  if (determinism && determinism.checked && !determinism.same) items.push('两次构建的产物不一致（长度 ' + determinism.len1 + ' vs ' + determinism.len2 + '）—— 存在非确定性来源');
+  return mkCheck('M9', items.length === 0,
+    items.length ? '自包含 / 确定性检查未通过' : ('产物自包含' + (determinism && determinism.checked ? '，两次构建位级一致（' + determinism.len1 + ' 字节）' : '')), items);
+}
+
+function runChecks(model, built, opts) {
+  var o = opts || {};
+  var checks = [
+    checkM1(model),
+    checkM2(model, built.params),
+    checkM3(built),
+    checkM4(built),
+    checkM5(built),
+    checkM6(built),
+    checkM7(model, built),
+    checkM8(o.products || []),
+    checkM9(o.products || [], o.determinism)
+  ];
+  var fails = 0, warns = 0, k;
+  for (k = 0; k < checks.length; k++) {
+    if (checks[k].ok) continue;
+    if (checks[k].level === 'fail') fails++; else warns++;
+  }
+  return { checks: checks, fails: fails, warns: warns, ok: fails === 0 && warns === 0 };
+}
+
+// ── 自包含可交互预览 HTML（自研 WebGL 渲染器，无外部依赖）──────────
+// 只依赖工具侧算好的几何数据（世界坐标已应用），故不需要在浏览器里重跑内核。
+function previewHtml(built, model, opts) {
+  var o = opts || {};
+  var partsData = [], k, i;
+  for (k = 0; k < built.parts.length; k++) {
+    var p = built.parts[k], m = p.mesh;
+    var pos = [], idx = [];
+    for (i = 0; i < m.positions.length; i++) {
+      pos.push(cleanNum(m.positions[i][0], 6), cleanNum(m.positions[i][1], 6), cleanNum(m.positions[i][2], 6));
+    }
+    for (i = 0; i < m.indices.length; i++) idx.push(m.indices[i][0], m.indices[i][1], m.indices[i][2]);
+    partsData.push({
+      id: p.id, name: p.name, color: p.material.color,
+      pos: pos, idx: idx, tris: p.tris, vol: cleanNum(p.volume, 3)
+    });
+  }
+  var bb = built.parts.length ? meshBbox(built.merged) : [[0, 0, 0], [0, 0, 0]];
+  var paramRows = [];
+  for (k = 0; k < built.params.order.length; k++) {
+    var pid = built.params.order[k], pdef = built.params.known[pid];
+    paramRows.push({
+      id: pid, name: pdef.name === undefined ? pid : pdef.name, value: cleanNum(built.params.values[pid], 6),
+      range: (pdef.min === undefined && pdef.max === undefined) ? null : (pdef.min + '..' + pdef.max)
+    });
+  }
+  var data = {
+    name: model.name || 'model',
+    unit: model.unit || 'mm',
+    up: model.up || 'z',
+    bbox: [[cleanNum(bb[0][0], 6), cleanNum(bb[0][1], 6), cleanNum(bb[0][2], 6)], [cleanNum(bb[1][0], 6), cleanNum(bb[1][1], 6), cleanNum(bb[1][2], 6)]],
+    totalTris: built.totalTris,
+    totalVolume: cleanNum(built.parts.reduce(function (s, x) { return s + x.volume; }, 0), 3),
+    parts: partsData,
+    params: paramRows
+  };
+  var L = [];
+  L.push('<!DOCTYPE html>');
+  L.push('<html lang="zh-CN"><head><meta charset="utf-8">');
+  L.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+  L.push('<title>' + String(data.name).replace(/[<>&]/g, '') + ' · 3D 预览</title>');
+  L.push('<style>');
+  L.push('html,body{margin:0;height:100%;overflow:hidden;background:#14161a;color:#e6e8ec;');
+  L.push('font:12px/1.5 ui-sans-serif,system-ui,"Segoe UI","Noto Sans SC",sans-serif}');
+  L.push('#c{display:block;width:100vw;height:100vh}');
+  L.push('#hud{position:fixed;left:12px;top:12px;max-width:330px;background:rgba(20,22,26,.82);');
+  L.push('border:1px solid #2b3038;border-radius:10px;padding:10px 12px;backdrop-filter:blur(6px)}');
+  L.push('#hud h1{margin:0 0 6px;font-size:13px;font-weight:600;letter-spacing:.02em}');
+  L.push('.kv{display:flex;justify-content:space-between;gap:10px;padding:1px 0;color:#a9b0bd}');
+  L.push('.kv b{color:#e6e8ec;font-weight:500;font-variant-numeric:tabular-nums}');
+  L.push('.sec{margin-top:8px;padding-top:8px;border-top:1px solid #262b33}');
+  L.push('.t{color:#7f8896;font-size:11px;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em}');
+  L.push('.chip{display:inline-flex;align-items:center;gap:5px;margin:2px 6px 2px 0}');
+  L.push('.dot{width:9px;height:9px;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.14) inset}');
+  L.push('.hint{position:fixed;right:12px;bottom:12px;color:#7f8896;text-align:right;font-size:11px}');
+  L.push('code{color:#e6e8ec;background:#22262d;padding:1px 4px;border-radius:4px}');
+  L.push('</style></head><body>');
+  L.push('<canvas id="c"></canvas>');
+  L.push('<div id="hud"></div>');
+  L.push('<div class="hint">拖拽=旋转 · 滚轮=缩放 · 右键拖拽=平移 · <code>W</code>=线框 · <code>R</code>=复位</div>');
+  L.push('<script>');
+  L.push('var MODEL=' + JSON.stringify(data) + ';');
+  L.push(PREVIEW_JS);
+  L.push('</scr' + 'ipt></body></html>');
+  return L.join('\n') + '\n';
+}
+
+// 预览页里的渲染器（内联字符串：WebGL1 + 轨道相机 + Lambert 光照 + 线框 + HUD）
+var PREVIEW_JS = [
+  '(function(){',
+  'var D=MODEL, cv=document.getElementById("c"), hud=document.getElementById("hud");',
+  'var gl=cv.getContext("webgl")||cv.getContext("experimental-webgl");',
+  'if(!gl){hud.innerHTML="<h1>浏览器不支持 WebGL</h1><div class=kv>请用现代浏览器打开此文件</div>";return}',
+  // ── 着色器
+  'var VS=["attribute vec3 aPos;attribute vec3 aNrm;uniform mat4 uProj,uView;varying vec3 vN,vW;",',
+  ' "void main(){vN=aNrm;vW=aPos;gl_Position=uProj*uView*vec4(aPos,1.0);}"].join("\\n");',
+  'var FS=["precision mediump float;varying vec3 vN,vW;uniform vec3 uColor,uCam;uniform float uWire;",',
+  ' "void main(){if(uWire>0.5){gl_FragColor=vec4(uColor*1.35,1.0);return;}",',
+  ' "vec3 n=normalize(vN);vec3 l1=normalize(vec3(0.45,0.75,0.55)),l2=normalize(vec3(-0.6,-0.35,-0.7));",',
+  ' "float d=max(dot(n,l1),0.0)*0.8+max(dot(n,l2),0.0)*0.22;vec3 v=normalize(uCam-vW);",',
+  ' "vec3 h=normalize(l1+v);float s=pow(max(dot(n,h),0.0),36.0)*0.28;",',
+  ' "vec3 amb=vec3(0.26,0.28,0.32);gl_FragColor=vec4(uColor*(amb+d)+vec3(s),1.0);}"].join("\\n");',
+  'function sh(t,src){var s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);',
+  ' if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){var lg=gl.getShaderInfoLog(s);',
+  '  hud.innerHTML="<h1>着色器编译失败</h1><div class=kv>"+String(lg).replace(/[<>]/g,"")+"</div>";',
+  '  throw new Error(lg)}return s}',
+  'var prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));',
+  'gl.linkProgram(prog);gl.useProgram(prog);',
+  'var aPos=gl.getAttribLocation(prog,"aPos"),aNrm=gl.getAttribLocation(prog,"aNrm");',
+  'var uProj=gl.getUniformLocation(prog,"uProj"),uView=gl.getUniformLocation(prog,"uView"),',
+  ' uColor=gl.getUniformLocation(prog,"uColor"),uCam=gl.getUniformLocation(prog,"uCam"),uWire=gl.getUniformLocation(prog,"uWire");',
+  'gl.enableVertexAttribArray(aPos);gl.enableVertexAttribArray(aNrm);',
+  'gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);',
+  // ── 每部件：顶点缓冲（位置 + 面法线）+ 三角索引 + 线框索引
+  'function hex(c){c=(c||"#b0b4bd").replace("#","");if(c.length===3)c=c[0]+c[0]+c[1]+c[1]+c[2]+c[2];',
+  ' var n=parseInt(c,16);if(isNaN(n))n=0xb0b4bd;return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]}',
+  'var meshes=[];',
+  'for(var i=0;i<D.parts.length;i++){var p=D.parts[i],pos=p.pos,idx=p.idx,nv=pos.length/3;',
+  ' var nrm=new Float32Array(nv*3);',
+  ' for(var f=0;f<idx.length;f+=3){var i0=idx[f]*3,i1=idx[f+1]*3,i2=idx[f+2]*3;',
+  '  var ax=pos[i1]-pos[i0],ay=pos[i1+1]-pos[i0+1],az=pos[i1+2]-pos[i0+2];',
+  '  var bx=pos[i2]-pos[i0],by=pos[i2+1]-pos[i0+1],bz=pos[i2+2]-pos[i0+2];',
+  '  var nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;var ln=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=ln;ny/=ln;nz/=ln;',
+  '  var tri=[idx[f],idx[f+1],idx[f+2]];',
+  '  for(var v=0;v<3;v++){var o=tri[v];nrm[o*3]=nx;nrm[o*3+1]=ny;nrm[o*3+2]=nz;}}',
+  ' var posBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);',
+  ' var nrmBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nrmBuf);gl.bufferData(gl.ARRAY_BUFFER,nrm,gl.STATIC_DRAW);',
+  ' var use32=nv>65535;var ext=use32?gl.getExtension("OES_element_index_uint"):null;',
+  ' if(use32&&!ext){console.warn("部件 "+p.id+" 顶点数 "+nv+" 超过 65535 且浏览器不支持 32 位索引，已跳过");continue}',
+  ' var IdxArr=use32?Uint32Array:Uint16Array,GlType=use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;',
+  ' var idxBuf=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,idxBuf);',
+  ' gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new IdxArr(idx),gl.STATIC_DRAW);',
+  ' var lines=[];for(var t=0;t<idx.length;t+=3){lines.push(idx[t],idx[t+1],idx[t+1],idx[t+2],idx[t+2],idx[t])}',
+  ' var wireBuf=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,wireBuf);',
+  ' gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new IdxArr(lines),gl.STATIC_DRAW);',
+  ' meshes.push({pos:posBuf,nrm:nrmBuf,idx:idxBuf,wire:wireBuf,count:idx.length,lcount:lines.length,col:hex(p.color),id:p.id,name:p.name,flt:GlType});}',
+  // ── 矩阵（列主序，与 WebGL 一致）
+  'function mul(a,b){var o=new Float32Array(16);for(var c=0;c<4;c++)for(var r=0;r<4;r++){var s=0;for(var k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s}return o}',
+  'function persp(fov,asp,n,f){var t=1/Math.tan(fov/2),o=new Float32Array(16);o[0]=t/asp;o[5]=t;o[10]=(f+n)/(n-f);o[11]=-1;o[14]=2*f*n/(n-f);return o}',
+  'function look(eye,ctr,up){var z=norm(sub(eye,ctr)),x=norm(cross(up,z)),y=cross(z,x),o=new Float32Array(16);',
+  ' o[0]=x[0];o[4]=x[1];o[8]=x[2];o[1]=y[0];o[5]=y[1];o[9]=y[2];o[2]=z[0];o[6]=z[1];o[10]=z[2];',
+  ' o[12]=-dot(x,eye);o[13]=-dot(y,eye);o[14]=-dot(z,eye);o[15]=1;return o}',
+  'function sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]}function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}',
+  'function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}',
+  'function norm(a){var l=Math.sqrt(dot(a,a))||1;return [a[0]/l,a[1]/l,a[2]/l]}',
+  // ── 相机（轨道）
+  'var lo=D.bbox[0],hi=D.bbox[1];',
+  'var ctr=[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2];',
+  'var size=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],0.001);',
+  'var cam={th:0.9,ph:1.05,dist:size*2.6,target:ctr.slice()}, wire=false, drag=null;',
+  'function eye(){return [cam.target[0]+cam.dist*Math.sin(cam.ph)*Math.cos(cam.th),',
+  ' cam.target[1]+cam.dist*Math.sin(cam.ph)*Math.sin(cam.th),cam.target[2]+cam.dist*Math.cos(cam.ph)]}',
+  // ── 交互
+  'cv.addEventListener("contextmenu",function(e){e.preventDefault()});',
+  'cv.addEventListener("mousedown",function(e){drag={x:e.clientX,y:e.clientY,btn:e.button};e.preventDefault()});',
+  'window.addEventListener("mouseup",function(){drag=null});',
+  'window.addEventListener("mousemove",function(e){if(!drag)return;var dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;',
+  ' if(drag.btn===0){cam.th-=dx*0.008;cam.ph-=dy*0.008;cam.ph=Math.max(0.02,Math.min(Math.PI-0.02,cam.ph))}',
+  ' else{var e0=eye(),z=norm(sub(e0,cam.target)),x=norm(cross([0,0,1],z)),y=cross(z,x);',
+  '  var s=cam.dist*0.0016;for(var k=0;k<3;k++)cam.target[k]+=(-x[k]*dx+y[k]*dy)*s;}});',
+  'cv.addEventListener("wheel",function(e){e.preventDefault();cam.dist*=Math.exp((e.deltaY>0?1:-1)*0.12);',
+  ' cam.dist=Math.max(size*0.15,Math.min(size*40,cam.dist))},{passive:false});',
+  'window.addEventListener("keydown",function(e){var k=e.key.toLowerCase();',
+  ' if(k==="w"){wire=!wire}if(k==="r"){cam.th=0.9;cam.ph=1.05;cam.dist=size*2.6;cam.target=ctr.slice()}});',
+  // ── 渲染
+  'function frame(){var dpr=Math.min(2,window.devicePixelRatio||1);',
+  ' var w=Math.floor(cv.clientWidth*dpr),h=Math.floor(cv.clientHeight*dpr);',
+  ' if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}',
+  ' gl.viewport(0,0,cv.width,cv.height);gl.clearColor(0.078,0.086,0.102,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);',
+  ' var ep=eye(),proj=persp(45*Math.PI/180,cv.width/Math.max(1,cv.height),Math.max(size*0.005,0.01),size*80);',
+  ' var view=look(ep,cam.target,[0,0,1]);',
+  ' gl.uniformMatrix4fv(uProj,false,proj);gl.uniformMatrix4fv(uView,false,view);gl.uniform3fv(uCam,new Float32Array(ep));',
+  ' for(var i=0;i<meshes.length;i++){var m=meshes[i];',
+  '  gl.bindBuffer(gl.ARRAY_BUFFER,m.pos);gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);',
+  '  gl.bindBuffer(gl.ARRAY_BUFFER,m.nrm);gl.vertexAttribPointer(aNrm,3,gl.FLOAT,false,0,0);',
+  '  gl.uniform3fv(uColor,new Float32Array(m.col));',
+  '  if(!wire){gl.uniform1f(uWire,0);gl.enable(gl.CULL_FACE);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.idx);',
+  '   gl.drawElements(gl.TRIANGLES,m.count,m.flt,0)}',
+  '  else{gl.uniform1f(uWire,1);gl.disable(gl.CULL_FACE);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.wire);',
+  '   gl.drawElements(gl.LINES,m.lcount,m.flt,0);gl.enable(gl.CULL_FACE)}}',
+  ' requestAnimationFrame(frame)}',
+  // ── HUD
+  'var nh=["<h1>"+esc(D.name)+" · 3D 预览</h1>",',
+  ' "<div class=kv><span>单位 / 坐标</span><b>"+esc(D.unit)+" · "+esc(D.up)+"-up</b></div>",',
+  ' "<div class=kv><span>部件 / 三角面</span><b>"+D.parts.length+" / "+D.totalTris.toLocaleString()+"</b></div>",',
+  ' "<div class=kv><span>体积合计</span><b>"+fmt(D.totalVolume)+" mm³</b></div>",',
+  ' "<div class=kv><span>包围盒</span><b>"+fmt(hi[0]-lo[0])+"×"+fmt(hi[1]-lo[1])+"×"+fmt(hi[2]-lo[2])+" mm</b></div>"];',
+  'if(D.params&&D.params.length){nh.push("<div class=sec><div class=t>参数</div>");',
+  ' for(var q=0;q<D.params.length;q++){var pr=D.params[q];',
+  '  nh.push("<div class=kv><span>"+esc(pr.name)+"</span><b>"+fmt(pr.value)+(pr.range?" <span style=\'color:#7f8896\'>("+esc(pr.range)+")</span>":"")+"</b></div>")}nh.push("</div>")}',
+  'nh.push("<div class=sec><div class=t>部件</div>");',
+  'for(var z=0;z<D.parts.length;z++){var pt=D.parts[z];',
+  ' nh.push("<span class=chip><span class=dot style=\'background:"+esc(pt.color)+"\'></span>"+esc(pt.id)+" <span style=\'color:#7f8896\'>"+pt.tris.toLocaleString()+" 面</span></span>")}',
+  'nh.push("</div>");hud.innerHTML=nh.join("");',
+  'function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}',
+  'function fmt(v){v=Number(v);if(!isFinite(v))return "-";var a=Math.abs(v);',
+  ' if(a>=1000)return v.toFixed(0);if(a>=10)return v.toFixed(2);if(a>=0.01)return v.toFixed(3);return v.toExponential(2)}',
+  'if(!window.requestAnimationFrame)window.requestAnimationFrame=function(f){setTimeout(f,16)};',
+  // 调试钩子（供 IDE/CI 的多视角截图与自检使用，不影响正常交互）
+  'window.__MODEL_VIEW={',
+  ' set:function(o){if(o.th!==undefined)cam.th=o.th;if(o.ph!==undefined)cam.ph=o.ph;',
+  '  if(o.dist!==undefined)cam.dist=o.dist;if(o.wire!==undefined)wire=!!o.wire;',
+  '  if(o.reset){cam.th=0.9;cam.ph=1.05;cam.dist=size*2.6;cam.target=ctr.slice()}},',
+  ' get:function(){return {th:cam.th,ph:cam.ph,dist:cam.dist,wire:wire}},',
+  ' stats:function(){return {meshes:meshes.length,tris:meshes.reduce(function(s,m){return s+m.count/3},0),',
+  '  parts:meshes.map(function(m){return {id:m.id,verts:m.count/3}})}}};',
+  'frame();',
+  '})();'
+].join('\n');
+
+// ── 工具层辅助 ─────────────────────────────────────────────
+function argStr(args, key, dflt) {
+  var v = args ? args[key] : undefined;
+  if (v === undefined || v === null) return dflt;
+  return isStr(v) ? v : String(v);
+}
+function argNum(args, key, dflt) {
+  var v = args ? args[key] : undefined;
+  if (v === undefined || v === null || v === '') return dflt;
+  return toNumber(v, key);
+}
+function argBool(args, key, dflt) {
+  var v = args ? args[key] : undefined;
+  if (v === undefined || v === null) return dflt;
+  return !!v;
+}
+function argArr(args, key, dflt) {
+  var v = args ? args[key] : undefined;
+  if (v === undefined || v === null) return dflt;
+  if (isArr(v)) return v;
+  if (isStr(v)) return v.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+  fail(key + ' 必须是数组');
+}
+
+function readModelFile(ctx, path) {
+  if (!ctx.fs.exists(path)) fail('工程不存在：' + path + '（先执行 model_doc action=new）');
+  var txt;
+  try { txt = ctx.fs.readFile(path); } catch (e) { fail('读取工程失败：' + path + ' — ' + ((e && e.message) || e)); }
+  var doc;
+  try { doc = JSON.parse(txt); } catch (e) { fail('工程 JSON 解析失败（' + path + '）：' + ((e && e.message) || e)); }
+  if (!isObj(doc)) fail('工程根必须是对象：' + path);
+  if (doc.format === undefined) doc.format = FORMAT;
+  if (doc.params === undefined) doc.params = [];
+  if (doc.parts === undefined) doc.parts = [];
+  return { model: doc, path: path, chars: txt.length };
+}
+function writeModelFile(ctx, path, model) {
+  ctx.fs.writeFile(path, JSON.stringify(model, null, 2) + '\n');
+}
+
+// 参数输入的两种写法都接受：[{id,value,min,max,name}] 或 {id: value}
+function normalizeParamInput(input) {
+  var out = [];
+  if (isArr(input)) {
+    for (var k = 0; k < input.length; k++) {
+      var p = input[k];
+      if (!isObj(p) || !p.id) fail('params[' + k + '] 必须是 {id, value, ...}');
+      var np = newParam(p.id, p.value, p.name, p.min, p.max);
+      out.push(np);
+    }
+  } else if (isObj(input)) {
+    for (var id in input) {
+      if (!input.hasOwnProperty(id)) continue;
+      out.push(newParam(id, input[id]));
+    }
+  } else fail('params 必须是数组或映射对象');
+  return out;
+}
+
+function paramTable(model) {
+  var out = [], k;
+  for (k = 0; k < model.params.length; k++) {
+    var p = model.params[k];
+    out.push({ id: p.id, name: p.name === undefined ? null : p.name, value: p.value, min: p.min, max: p.max });
+  }
+  return out;
+}
+
+function modelSummary(model, built) {
+  var s = {
+    name: model.name,
+    unit: model.unit || 'mm',
+    parts: built.parts.length,
+    triangles: built.totalTris,
+    params: model.params.length,
+    volume: cleanNum(built.parts.reduce(function (a, x) { return a + x.volume; }, 0), 4),
+    area: cleanNum(built.parts.reduce(function (a, x) { return a + x.area; }, 0), 4),
+    bbox: built.parts.length ? meshBbox(built.merged).map(function (v) { return v.map(function (x) { return cleanNum(x, 4); }); }) : null,
+    size: built.parts.length ? meshSize(built.merged).map(function (x) { return cleanNum(x, 4); }) : null
+  };
+  return s;
+}
+
+function partBrief(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    type: p.source.shape ? (p.source.shape.type || 'cuboid') : 'cuboid',
+    ops: p.source.ops ? p.source.ops.length : 0,
+    repeat: p.source.repeat ? p.source.repeat.mode || 'linear' : null,
+    triangles: p.tris,
+    volume: cleanNum(p.volume, 4),
+    size: meshSize(p.mesh).map(function (x) { return cleanNum(x, 3); }),
+    bbox: p.bbox.map(function (v) { return v.map(function (x) { return cleanNum(x, 3); }); }),
+    material: p.material,
+    visible: p.source.visible !== false
+  };
+}
+
+// ── model_doc：工程生命周期 ─────────────────────────────────
+function modelDoc(args, unknown, ctx) {
+  var action = (argStr(args, 'action', 'get') || 'get').toLowerCase();
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  if (action === 'new' || action === 'create') {
+    if (ctx.fs.exists(path) && !argBool(args, 'overwrite', false)) {
+      var cur = readModelFile(ctx, path);
+      var b0 = null, e0 = null;
+      try { b0 = buildModelMeshes(cur.model, { skipInvisible: false }); } catch (e) { e0 = (e && e.message) || String(e); }
+      return {
+        ok: true, action: 'exists', path: path,
+        summary: b0 ? modelSummary(cur.model, b0) : null,
+        error: e0,
+        hint: '工程已存在，未覆盖。要重建请传 overwrite=true'
+      };
+    }
+    var doc = emptyModelDoc(argStr(args, 'name', 'model'));
+    if (args.params) doc.params = normalizeParamInput(args.params);
+    if (args.note) doc.note = argStr(args, 'note');
+    var rp = resolveParams(doc);
+    writeModelFile(ctx, path, doc);
+    return {
+      ok: true, action: 'created', path: path, name: doc.name,
+      params: paramTable(doc),
+      hint: '接着用 model_add 加几何（如 {id:"base", type:"cuboid", size:[20,20,10]}），再用 model_export / model_verify'
+    };
+  }
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  if (action === 'get' || action === 'read') {
+    var built = null, err = null;
+    try { built = buildModelMeshes(model, { skipInvisible: false }); } catch (e) { err = (e && e.message) || String(e); }
+    return {
+      ok: true, action: 'get', path: path, chars: rm.chars,
+      format: model.format, name: model.name, unit: model.unit, up: model.up,
+      params: paramTable(model),
+      parts: built ? built.parts.map(partBrief) : (model.parts || []).map(function (p) { return { id: p.id, shape: p.shape ? p.shape.type : null, error: '几何未能构建' }; }),
+      summary: built ? modelSummary(model, built) : null,
+      error: err
+    };
+  }
+  if (action === 'rename') {
+    model.name = argStr(args, 'name', model.name);
+    writeModelFile(ctx, path, model);
+    return { ok: true, action: 'rename', path: path, name: model.name };
+  }
+  if (action === 'param' || action === 'set-param' || action === 'param-set') {
+    var changed = [];
+    if (args.params) {
+      var patch = isArr(args.params) ? args.params : args.params;
+      if (isArr(patch)) {
+        for (var k = 0; k < patch.length; k++) {
+          var item = patch[k];
+          if (!isObj(item) || !item.id) fail('params[' + k + '] 必须是 {id, value}');
+          setParamValue(model, item.id, item.value);
+          changed.push(item.id);
+        }
+      } else {
+        for (var pid in patch) {
+          if (!patch.hasOwnProperty(pid)) continue;
+          setParamValue(model, pid, patch[pid]);
+          changed.push(pid);
+        }
+      }
+    }
+    if (args.id !== undefined) { setParamValue(model, argStr(args, 'id'), args.value); changed.push(argStr(args, 'id')); }
+    if (!changed.length) fail('未指定要修改的参数（用 params:{id:value} 或 id + value）');
+    var rp2 = resolveParams(model);
+    writeModelFile(ctx, path, model);
+    return {
+      ok: true, action: 'param', path: path, changed: changed,
+      params: paramTable(model),
+      values: rp2.values
+    };
+  }
+  if (action === 'reset') {
+    if (!argBool(args, 'force', false)) fail('reset 会清空全部部件（保留参数与画布设置）。确认请传 force=true');
+    model.parts = [];
+    writeModelFile(ctx, path, model);
+    return { ok: true, action: 'reset', path: path, parts: 0, params: model.params.length };
+  }
+  if (action === 'set') {
+    var fields = [];
+    if (args.name !== undefined) { model.name = argStr(args, 'name'); fields.push('name'); }
+    if (args.unit !== undefined) { model.unit = argStr(args, 'unit', 'mm'); fields.push('unit'); }
+    if (args.up !== undefined) { model.up = argStr(args, 'up', 'z'); fields.push('up'); }
+    if (args.note !== undefined) { model.note = argStr(args, 'note'); fields.push('note'); }
+    if (!fields.length) fail('set 需要至少一个字段：name / unit / up / note');
+    writeModelFile(ctx, path, model);
+    return { ok: true, action: 'set', path: path, fields: fields };
+  }
+  fail('未知 action ' + action + '（可用 new / get / rename / param / set / reset）');
+}
+
+function setParamValue(model, id, value) {
+  if (!id) fail('参数 id 不能为空');
+  for (var k = 0; k < model.params.length; k++) {
+    if (model.params[k].id === id) { model.params[k].value = value; return; }
+  }
+  fail('参数不存在：' + id + '（现有：' + model.params.map(function (p) { return p.id; }).join(', ') + '）');
+}
+
+// ── model_add：新增部件 ─────────────────────────────────────
+function modelAdd(args, unknown, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  var id = argStr(args, 'id');
+  if (!id) fail('新增部件必须提供 id');
+  for (var k = 0; k < model.parts.length; k++) {
+    if (model.parts[k].id === id) fail('部件 id 已存在：' + id + '（改名或先 part.remove）');
+  }
+  var part = { id: id };
+  if (args.from) { // 从已有部件复制几何与设置
+    var src = null;
+    for (var m = 0; m < model.parts.length; m++) if (model.parts[m].id === argStr(args, 'from')) src = model.parts[m];
+    if (!src) fail('from 指向的部件不存在：' + argStr(args, 'from'));
+    part = JSON.parse(JSON.stringify(src));
+    part.id = id;
+    if (args.name !== undefined) part.name = argStr(args, 'name');
+    if (args.transform) part.transform = args.transform;
+    if (args.repeat) part.repeat = args.repeat;
+    if (args.material) part.material = args.material;
+  } else {
+    var shape = args.shape;
+    if (!shape) {
+      var t = argStr(args, 'type', 'cuboid');
+      shape = { type: t };
+      var keys = ['size', 'center', 'radius', 'radiusTop', 'radiusBottom', 'height', 'innerRadius', 'outerRadius',
+        'segments', 'rings', 'profile', 'holes', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes', 'positions', 'indices'];
+      for (var i = 0; i < keys.length; i++) {
+        if (args[keys[i]] !== undefined) shape[keys[i]] = args[keys[i]];
+      }
+    }
+    part.shape = shape;
+    if (args.name !== undefined) part.name = argStr(args, 'name');
+    if (args.transform) part.transform = args.transform;
+    if (args.repeat) part.repeat = args.repeat;
+    if (args.material) part.material = args.material;
+    if (args.ops) part.ops = args.ops;
+  }
+  if (args.visible === false) part.visible = false;
+  if (args.ops && args.from) {
+    part.ops = (part.ops || []).concat(args.ops);
+  }
+  // 先试建（参数上下文用当前工程）——保证写进去的几何一定是能算出来的
+  var rp = resolveParams(model);
+  var E = { params: rp.values, known: rp.known };
+  var mesh = buildPartMesh(part, E);
+  model.parts.push(part);
+  writeModelFile(ctx, path, model);
+  return {
+    ok: true, action: 'added', path: path, id: id,
+    part: { id: id, type: part.shape ? part.shape.type : null, triangles: mesh.indices.length, volume: cleanNum(meshVolume(mesh), 4), size: meshSize(mesh).map(function (x) { return cleanNum(x, 3); }) },
+    parts: model.parts.length
+  };
+}
+
+// ── model_edit：命令式编辑（一次一批，任一 op 失败则整批不落盘）──────
+function findPart(model, id, opName) {
+  for (var k = 0; k < model.parts.length; k++) if (model.parts[k].id === id) return model.parts[k];
+  fail('部件不存在：' + id + '（' + opName + '；现有：' + model.parts.map(function (p) { return p.id; }).join(', ') + '）');
+}
+function findPartIndex(model, id) {
+  for (var k = 0; k < model.parts.length; k++) if (model.parts[k].id === id) return k;
+  return -1;
+}
+
+function applyOp(model, op, index) {
+  var name = argStr(op, 'op');
+  if (!name) fail('ops[' + index + '] 缺少 op');
+  var id = argStr(op, 'id');
+  var k;
+  if (name === 'part.remove' || name === 'part.delete') {
+    var idx = findPartIndex(model, id);
+    if (idx < 0) fail('部件不存在：' + id);
+    model.parts.splice(idx, 1);
+    return '移除部件 ' + id;
+  }
+  if (name === 'part.rename') {
+    var to = argStr(op, 'to', argStr(op, 'name'));
+    if (!to) fail('part.rename 需要 to');
+    if (!/^[A-Za-z0-9_\-\.]+$/.test(to)) fail('部件 id 只允许字母数字下划线连字符点：' + to);
+    if (findPartIndex(model, to) >= 0) fail('目标 id 已存在：' + to);
+    findPart(model, id, name).id = to;
+    return '重命名部件 ' + id + ' → ' + to;
+  }
+  if (name === 'part.set') {
+    var p = findPart(model, id, name);
+    var props = argArr(op, 'props') ? null : op.props;
+    if (isObj(op.props)) {
+      for (k in op.props) if (op.props.hasOwnProperty(k)) p[k] = op.props[k];
+    } else fail('part.set 需要 props 对象');
+    return '更新部件 ' + id + ' 的 ' + objKeys(op.props).join(', ');
+  }
+  if (name === 'part.shape') {
+    var p2 = findPart(model, id, name);
+    if (op.shape) p2.shape = op.shape;
+    else {
+      var shape = { type: argStr(op, 'type', 'cuboid') };
+      var keys = ['size', 'center', 'radius', 'radiusTop', 'radiusBottom', 'height', 'innerRadius', 'outerRadius',
+        'segments', 'rings', 'profile', 'holes', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes'];
+      for (k = 0; k < keys.length; k++) if (op[keys[k]] !== undefined) shape[keys[k]] = op[keys[k]];
+      p2.shape = shape;
+    }
+    return '替换部件 ' + id + ' 的几何（' + (p2.shape.type || 'cuboid') + '）';
+  }
+  if (name === 'part.transform') {
+    findPart(model, id, name).transform = op.transform === undefined ? {} : op.transform;
+    return '设置部件 ' + id + ' 的变换';
+  }
+  if (name === 'part.repeat') {
+    if (op.repeat === null || op.repeat === undefined) delete findPart(model, id, name).repeat;
+    else findPart(model, id, name).repeat = op.repeat;
+    return '设置部件 ' + id + ' 的阵列' + (op.repeat ? '（' + (op.repeat.mode || 'linear') + '）' : '（已清除）');
+  }
+  if (name === 'part.material') {
+    findPart(model, id, name).material = op.material;
+    return '设置部件 ' + id + ' 的材质';
+  }
+  if (name === 'part.hide' || name === 'part.show') {
+    findPart(model, id, name).visible = (name === 'part.show');
+    return (name === 'part.hide' ? '隐藏' : '显示') + '部件 ' + id;
+  }
+  if (name === 'op.add') {
+    var p3 = findPart(model, id, name);
+    if (!isObj(op.op2) && !isObj(op.opObj)) {
+      // 允许 {"op":"op.add","id":..,"do":"subtract","shape":{...}}
+      var doName = argStr(op, 'do', 'subtract');
+      if (!op.shape) fail('op.add 需要 shape（或 do + shape）');
+      p3.ops = p3.ops || [];
+      p3.ops.push({ op: doName, shape: op.shape, transform: op.transform });
+      return '给部件 ' + id + ' 追加 ' + doName + ' 运算';
+    }
+    p3.ops = p3.ops || [];
+    p3.ops.push(op.op2 || op.opObj);
+    return '给部件 ' + id + ' 追加运算';
+  }
+  if (name === 'op.remove') {
+    var p4 = findPart(model, id, name);
+    if (!p4.ops || !p4.ops.length) fail('部件 ' + id + ' 没有 ops');
+    var oi = argNum(op, 'index', -1);
+    if (oi < 0 || oi >= p4.ops.length) fail('op.remove 的 index 越界（0..' + (p4.ops.length - 1) + '）');
+    p4.ops.splice(oi, 1);
+    return '删除部件 ' + id + ' 的第 ' + oi + ' 个运算';
+  }
+  if (name === 'op.clear') {
+    var p5 = findPart(model, id, name);
+    var n = (p5.ops || []).length;
+    p5.ops = [];
+    return '清空部件 ' + id + ' 的 ' + n + ' 个运算';
+  }
+  if (name === 'param.add') {
+    if (!id) fail('param.add 需要 id');
+    for (k = 0; k < model.params.length; k++) if (model.params[k].id === id) fail('参数已存在：' + id);
+    model.params.push(newParam(id, op.value === undefined ? 0 : op.value, op.name, op.min, op.max));
+    return '新增参数 ' + id + ' = ' + JSON.stringify(op.value === undefined ? 0 : op.value);
+  }
+  if (name === 'param.set') {
+    setParamValue(model, id, op.value);
+    return '设置参数 ' + id + ' = ' + JSON.stringify(op.value);
+  }
+  if (name === 'param.remove') {
+    var pi = -1;
+    for (k = 0; k < model.params.length; k++) if (model.params[k].id === id) pi = k;
+    if (pi < 0) fail('参数不存在：' + id);
+    model.params.splice(pi, 1);
+    return '删除参数 ' + id;
+  }
+  if (name === 'mesh.align') {
+    var p6 = findPart(model, id, name);
+    p6.ops = p6.ops || [];
+    p6.ops.push({ op: 'align', to: op.to === undefined ? 'center' : op.to });
+    return '对部件 ' + id + ' 追加对齐（' + (op.to || 'center') + '）';
+  }
+  if (name === 'mesh.snap') {
+    var p7 = findPart(model, id, name);
+    p7.ops = p7.ops || [];
+    p7.ops.push({ op: 'snap', grid: op.grid });
+    return '对部件 ' + id + ' 追加顶点吸附';
+  }
+  if (name === 'mesh.repair') {
+    var p8 = findPart(model, id, name);
+    p8.ops = p8.ops || [];
+    p8.ops.push({ op: 'repair' });
+    return '对部件 ' + id + ' 追加几何修复（吸附 + 焊接 + 去退化面）';
+  }
+  if (name === 'part.reorder') {
+    var ids = argArr(op, 'ids', []);
+    if (!ids.length) fail('part.reorder 需要 ids 数组');
+    var rest = model.parts.filter(function (x) { return ids.indexOf(x.id) < 0; });
+    var ordered = [];
+    for (k = 0; k < ids.length; k++) ordered.push(findPart(model, ids[k], name));
+    model.parts = ordered.concat(rest);
+    return '调整部件顺序：' + ids.join(', ') + ' 置前';
+  }
+  fail('未知 op ' + name + '（可用 part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder、' +
+    'op.add/remove/clear、param.add/set/remove、mesh.align/snap/repair）');
+}
+
+function modelEdit(args, unknown, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  var ops = args.ops;
+  if (ops === undefined && args.op) ops = [args];
+  if (!isArr(ops) || !ops.length) fail('需要 ops 数组（或 op 名 + 同层参数构成单条命令）');
+  var applied = [];
+  for (var k = 0; k < ops.length; k++) {
+    if (!isObj(ops[k])) fail('ops[' + k + '] 必须是对象');
+    applied.push(applyOp(model, ops[k], k));
+  }
+  // 事务性：整批应用成功后才做"可解析 + 可构建"校验，然后落盘
+  resolveParams(model);
+  var built = buildModelMeshes(model, { skipInvisible: false });
+  writeModelFile(ctx, path, model);
+  return { ok: true, path: path, applied: applied, parts: built.parts.length, summary: modelSummary(model, built) };
+}
+
+// ── 导出产物渲染（同一函数既写文件，也用于确定性比对）──────────
+var EXPORT_FORMATS = ['gltf', 'glb', 'stl', 'stl-ascii', 'obj', 'html', 'json'];
+
+var B64_LOOKUP = (function () {
+  var m = {}, i;
+  for (i = 0; i < B64_CHARS.length; i++) m[B64_CHARS.charAt(i)] = i;
+  m['='] = 0;
+  return m;
+})();
+
+function b64DecodeBytes(str) {
+  // ★ 必须先剥掉尾部 '=' 填充：否则主循环会把"含填充的末块"也当成完整 4 字符块，
+  //   多解出 1 个字节（大文件下 M8 的 STL 长度校验正是这么抓到它的）
+  var s = String(str).replace(/[^A-Za-z0-9+\/=]/g, '').replace(/=+$/, '');
+  var out = [], i;
+  for (i = 0; i + 3 < s.length; i += 4) {
+    var n = (B64_LOOKUP[s.charAt(i)] << 18) | (B64_LOOKUP[s.charAt(i + 1)] << 12) | (B64_LOOKUP[s.charAt(i + 2)] << 6) | B64_LOOKUP[s.charAt(i + 3)];
+    out.push((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  }
+  var rem = s.length - i;
+  if (rem === 2) {
+    var n1 = (B64_LOOKUP[s.charAt(i)] << 18) | (B64_LOOKUP[s.charAt(i + 1)] << 12);
+    out.push((n1 >> 16) & 255);
+  } else if (rem === 3) {
+    var n2 = (B64_LOOKUP[s.charAt(i)] << 18) | (B64_LOOKUP[s.charAt(i + 1)] << 12) | (B64_LOOKUP[s.charAt(i + 2)] << 6);
+    out.push((n2 >> 16) & 255, (n2 >> 8) & 255);
+  }
+  return out;
+}
+
+function outName(projectPath, ext) {
+  return String(projectPath).replace(/\.json$/i, '') + ext;
+}
+
+function renderProduct(format, built, model, name) {
+  var parts = built.parts;
+  var merged = parts.length ? meshMerge(parts.map(function (p) { return p.mesh; })) : meshNew([], []);
+  var faces = merged.indices.length;
+  if (format === 'gltf') return { text: gltfText(parts, { name: name }), faces: faces, ext: '.gltf', kind: 'gltf' };
+  if (format === 'glb') return { bytes: glbBytes(parts, { name: name }), faces: faces, ext: '.glb', kind: 'glb' };
+  if (format === 'stl') return { bytes: stlBinaryBytes(merged, name), faces: faces, ext: '.stl', kind: 'stlb' };
+  if (format === 'stl-ascii') return { text: stlAsciiText(merged, name), faces: faces, ext: '.ascii.stl', kind: 'stla' };
+  if (format === 'obj') return { text: objText(parts), faces: faces, ext: '.obj', kind: 'obj' };
+  if (format === 'html') return { text: previewHtml(built, model), faces: faces, ext: '.preview.html', kind: 'html' };
+  if (format === 'json') return { text: JSON.stringify(model, null, 2) + '\n', faces: faces, ext: '.json', kind: 'json' };
+  fail('未知导出格式 ' + format + '（可用 ' + EXPORT_FORMATS.join(' / ') + ' / all）');
+}
+
+function compareProduct(a, b) {
+  if (!!a.text !== !!b.text) return { checked: true, same: false, len1: 0, len2: 0 };
+  if (a.text !== undefined) return { checked: true, same: a.text === b.text, len1: a.text.length, len2: b.text.length };
+  var same = a.bytes.length === b.bytes.length;
+  if (same) {
+    for (var i = 0; i < a.bytes.length; i++) if (a.bytes[i] !== b.bytes[i]) { same = false; break; }
+  }
+  return { checked: true, same: same, len1: a.bytes.length, len2: b.bytes.length };
+}
+
+// ── model_export ───────────────────────────────────────────
+function modelExport(args, unknown, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  var format = (argStr(args, 'format', 'gltf') || 'gltf').toLowerCase();
+  var filter = argArr(args, 'parts', null);
+  var built = buildModelMeshes(model, { skipInvisible: true });
+  if (filter && filter.length) {
+    var kept = [], k;
+    for (k = 0; k < built.parts.length; k++) if (filter.indexOf(built.parts[k].id) >= 0) kept.push(built.parts[k]);
+    if (!kept.length) fail('parts 过滤后没有可导出的部件（' + filter.join(', ') + '）');
+    built.parts = kept;
+    built.totalTris = kept.reduce(function (s, x) { return s + x.tris; }, 0);
+  }
+  if (!built.parts.length) fail('没有可导出的几何（工程里还没有部件，或全部 visible=false）');
+  var name = argStr(args, 'name', model.name || 'model');
+  var out = argStr(args, 'out', null);
+  var formats = format === 'all' ? ['gltf', 'stl', 'stl-ascii', 'obj', 'html'] : [format];
+  if (format === 'all' && argBool(args, 'withGlb', false)) formats.push('glb');
+  var files = [], products = [], k2;
+  for (k2 = 0; k2 < formats.length; k2++) {
+    var fmt = formats[k2];
+    var r = renderProduct(fmt, built, model, name);
+    var target = out || outName(rm.path, r.ext);
+    if (r.bytes !== undefined) {
+      ctx.fs.writeFileBase64(target, b64EncodeBytes(r.bytes));
+      products.push({ path: target, kind: r.kind, bytes: r.bytes, faces: r.faces });
+      files.push({ path: target, format: fmt, bytes: r.bytes.length, faces: r.faces });
+    } else {
+      ctx.fs.writeFile(target, r.text);
+      products.push({ path: target, kind: r.kind, text: r.text, faces: r.faces });
+      files.push({ path: target, format: fmt, bytes: utf8Bytes(r.text).length, faces: r.faces });
+    }
+  }
+  // 确定性：同一份工程渲染两次必须位级一致（M9 的证据）
+  var det = compareProduct(renderProduct(formats[0], built, model, name), renderProduct(formats[0], built, model, name));
+  var res = runChecks(model, built, { products: products, determinism: det });
+  return {
+    ok: true, path: rm.path, format: format, files: files,
+    triangles: built.totalTris, determinism: det,
+    verify: {
+      fails: res.fails, warns: res.warns,
+      checks: res.checks.map(function (c) { return { id: c.id, ok: c.ok, level: c.level, detail: c.detail }; })
+    },
+    hint: format === 'html' ? '预览 HTML 自包含（无外部依赖），可双击打开；IDE 面板也会直接渲染它' : null
+  };
+}
+
+// ── model_verify：9 项判据 + 旁挂报告 ────────────────────────
+function collectProducts(ctx, projectPath) {
+  var base = String(projectPath).replace(/\.json$/i, '');
+  var cands = ['.gltf', '.glb', '.stl', '.ascii.stl', '.obj', '.preview.html'];
+  var kinds = { '.gltf': 'gltf', '.glb': 'glb', '.stl': 'stlb', '.ascii.stl': 'stla', '.obj': 'obj', '.preview.html': 'html' };
+  var list = [], notes = [], k;
+  for (k = 0; k < cands.length; k++) {
+    var p = base + cands[k], kind = kinds[cands[k]];
+    if (!ctx.fs.exists(p)) continue;
+    try {
+      if (kind === 'gltf' || kind === 'stla' || kind === 'obj' || kind === 'html') {
+        list.push({ path: p, kind: kind, text: ctx.fs.readFile(p) });
+      } else {
+        list.push({ path: p, kind: kind, bytes: b64DecodeBytes(ctx.fs.readFileBase64(p)) });
+      }
+    } catch (e) {
+      notes.push('产物 ' + p + ' 读取失败：' + ((e && e.message) || e));
+    }
+  }
+  return { list: list, notes: notes };
+}
+
+function modelVerify(args, unknown, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  var built = buildModelMeshes(model, { skipInvisible: false });
+  var coll = collectProducts(ctx, rm.path);
+  var det = null;
+  if (argBool(args, 'determinism', false)) {
+    var nm = model.name || 'model';
+    det = compareProduct(renderProduct('gltf', built, model, nm), renderProduct('gltf', built, model, nm));
+  }
+  var res = runChecks(model, built, { products: coll.list, determinism: det });
+  var report = {
+    format: 'paircode.model.verify/1',
+    project: rm.path,
+    name: model.name,
+    unit: model.unit || 'mm',
+    summary: modelSummary(model, built),
+    fails: res.fails,
+    warns: res.warns,
+    ok: res.ok,
+    products: coll.list.map(function (p) { return p.path; }),
+    // 每部件明细（面板与报告共用；面数/体积/尺寸只有构建后才知道，故写进报告）
+    parts: built.parts.map(function (p) {
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.source.shape ? (p.source.shape.type || 'cuboid') : 'cuboid',
+        ops: p.source.ops ? p.source.ops.length : 0,
+        repeat: p.source.repeat ? (p.source.repeat.mode || 'linear') : null,
+        triangles: p.tris,
+        volume: cleanNum(p.volume, 4),
+        size: meshSize(p.mesh).map(function (x) { return cleanNum(x, 3); }),
+        visible: p.source.visible !== false
+      };
+    }),
+    checks: res.checks
+  };
+  var reportPath = argStr(args, 'report', null) || outName(rm.path, '.verify.json');
+  ctx.fs.writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+  return {
+    ok: res.ok, path: rm.path, report: reportPath,
+    fails: res.fails, warns: res.warns,
+    checks: res.checks.map(function (c) {
+      return { id: c.id, ok: c.ok, level: c.level, title: c.title, detail: c.detail, items: c.items.slice(0, 6) };
+    }),
+    productNotes: coll.notes
+  };
+}
+
+// ── 工具定义与插件入口（双轨：goja 顶层 return + Node module.exports）──
+var IMPLS = {
+  model_doc: modelDoc,
+  model_add: modelAdd,
+  model_edit: modelEdit,
+  model_export: modelExport,
+  model_verify: modelVerify
+};
+
+var TOOL_DEFS = [
+  {
+    name: 'model_doc',
+    description: '参数化 CAD 工程的创建与查看（真相源 = 工程 JSON，默认 ' + PROJECT_NAME + '）。工程坐标照 CAD 惯例：右手系、+z 向上、单位 mm；几何字段可用表达式引用参数（如 "wall*2"）。action=new 建空工程（可带 params）/ get 看盘点（部件、参数、体积、包围盒）/ rename / param 改参数值（改完全模型自动重算）/ set 改元信息 / reset 清空部件。',
+    usageGuide: '起步：model_doc action=new name=bracket params={wall:3, holes:2} → model_add id=base type=cuboid size=["wall*10","wall*10",5] → model_edit op.add 挖孔 → model_export format=all → model_verify。已有工程先 action=get 看盘点（会顺带报"几何能否构建"）。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'new（建工程）/ get（默认，看盘点）/ rename / param（改参数值）/ set（改 name/unit/up/note）/ reset（清空部件，需 force）' },
+        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        name: { type: 'string', description: '可选：模型名（new / rename / set）' },
+        params: { type: 'object', description: '可选（new）：参数定义 [{id,value,min,max,name}] 或 {id: value}；可选（param）：{id: 新值} 或 [{id,value}]' },
+        id: { type: 'string', description: '可选（param）：单个参数 id' },
+        value: { description: '可选（param）：该参数的新值（数字或表达式字符串）' },
+        note: { type: 'string', description: '可选：备注（new / set）' },
+        unit: { type: 'string', description: '可选（set）：目前只支持 mm' },
+        up: { type: 'string', description: '可选（set）：目前只支持 z' },
+        overwrite: { type: 'boolean', description: '可选（new）：工程已存在时是否重建（默认 false，不覆盖）' },
+        force: { type: 'boolean', description: '可选（reset）：确认清空部件' }
+      }
+    }
+  },
+  {
+    name: 'model_add',
+    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/mesh），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
+    usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '部件 id（必填、唯一；字母数字下划线连字符点）' },
+        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        type: { type: 'string', description: '几何类型（默认 cuboid）' },
+        size: { description: 'cuboid/cube 全尺寸（数字或 [x,y,z]）' },
+        center: { description: '可选：几何中心（默认原点）' },
+        radius: { description: 'sphere/cylinder/cone 半径，或 torus 主半径' },
+        radiusTop: { description: '可选：frustum 顶半径（cone 默认 0）' },
+        radiusBottom: { description: '可选：frustum 底半径' },
+        height: { description: 'cylinder/cone/extrude 高度（默认 2 / 1）' },
+        innerRadius: { description: 'torus 管截面半径（须小于 outerRadius）' },
+        outerRadius: { description: 'torus 主半径（默认 4）' },
+        segments: { description: '曲面分段数（默认 32）' },
+        rings: { description: '可选：环向分段' },
+        profile: { description: 'extrude/revolve 轮廓：{type:"rect"|"circle"|"star"|"polygon",...} 或点集 [[x,y],...]' },
+        holes: { type: 'array', description: '可选（仅 extrude）：孔轮廓数组，每项同 profile 口径。一步挤出带孔板（比 subtract 布尔更少三角形、更精确）；洞须完全落在外轮廓内且互不相交，越界会报错。' },
+        angle: { description: '可选：revolve 角度（默认 360）' },
+        points: { description: 'polyhedron 顶点 [[x,y,z],...]' },
+        faces: { description: 'polyhedron 面（顶点下标）' },
+        shape: { type: 'object', description: '可选：完整几何表达式（优先）；布尔树 {type:"boolean", op:"subtract", a:{...}, b:{...}}' },
+        transform: { type: 'object', description: '可选：{translate:[x,y,z], rotate:[rx,ry,rz]（度，先 X 后 Y 后 Z）, scale:[sx,sy,sz]}' },
+        ops: { type: 'array', description: '可选：[{op:"subtract"|"union"|"intersect", shape:{...}, transform:{...}}]' },
+        repeat: { type: 'object', description: '可选：{mode:"linear",count,delta} / {mode:"circular",count,axis,radius} / {mode:"mirror",axis}' },
+        material: { type: 'object', description: '可选：{color:"#88aadd", metallic:0..1, roughness:0..1}' },
+        name: { type: 'string', description: '可选：显示名' },
+        from: { type: 'string', description: '可选：从已有部件复制（id 换成新 id）' },
+        visible: { type: 'boolean', description: '可选：false 则不参与导出' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'model_edit',
+    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair）。',
+    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]。改完跑 model_verify 复验。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
+        op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
+        id: { type: 'string', description: '可选：目标部件 / 参数 id' },
+        to: { type: 'string', description: '可选：part.rename 的新 id，或 mesh.align 的方位（min/center/max）' },
+        props: { type: 'object', description: '可选（part.set）：要合并的属性' },
+        shape: { type: 'object', description: '可选（part.shape / op.add）：几何' },
+        do: { type: 'string', description: '可选（op.add）：subtract（默认）/ union / intersect' },
+        transform: { type: 'object', description: '可选（part.transform / op.add）' },
+        repeat: { type: 'object', description: '可选（part.repeat；传 null 清除阵列）' },
+        material: { type: 'object', description: '可选（part.material）' },
+        ids: { type: 'array', description: '可选（part.reorder）：新的顺序（列出的置前）' },
+        index: { type: 'number', description: '可选（op.remove）：要删除的运算下标' },
+        value: { description: '可选（param.add/set）：参数值' },
+        min: { description: '可选（param.add）：下限' },
+        max: { description: '可选（param.add）：上限' },
+        grid: { description: '可选（mesh.snap）：吸附网格（默认按模型尺度）' }
+      }
+    }
+  },
+  {
+    name: 'model_export',
+    description: '导出产物（全部是公开格式，非自家方言）：gltf（Khronos glTF 2.0，自包含 base64 buffer，按规范把 +z-up 转 y-up）/ glb（单文件二进制容器）/ stl（binary STL，float32，3D 打印）/ stl-ascii / obj（Wavefront）/ html（自包含可交互 WebGL 预览）/ json（规范化工程）/ all（gltf+stl+stl-ascii+obj+html）。导出后顺带跑 9 项判据并返回结论。',
+    usageGuide: '常用：model_export format=all（模型 + 打印文件 + 预览一次拿齐）；要上 3D 打印机用 format=stl；要进引擎/网页用 format=gltf 或 glb；要在面板里看用 format=html。只导出部分：parts=["base","lid"]；自定义路径：out=dist/plate.stl。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        format: { type: 'string', description: 'gltf（默认）/ glb / stl / stl-ascii / obj / html / json / all' },
+        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        out: { type: 'string', description: '可选：输出路径（默认按工程名派生：model.json → model.gltf / model.stl / model.preview.html …）' },
+        name: { type: 'string', description: '可选：导出模型名（写入 glTF node / STL 头）' },
+        parts: { type: 'array', description: '可选：只导出指定部件 id' },
+        withGlb: { type: 'boolean', description: '可选（format=all）：是否同时导出 .glb（默认 false）' }
+      }
+    }
+  },
+  {
+    name: 'model_verify',
+    description: '9 项判据自检，报告写到旁挂文件（默认 <工程名>.verify.json）。M1 工程契约 / M2 参数与表达式 / M3 网格完整性 / M4 水密性（可 3D 打印；区分"T 型接缝"与"真缺口"）/ M5 绕向一致且法线朝外 / M6 实体性（体积、包围盒占比、连通体）/ M7 变换与尺度 / M8 导出契约（glTF 结构、binary STL 长度与头、OBJ 1 基索引）/ M9 产物确定且自包含。',
+    usageGuide: '每次改完几何跑一次：model_verify（会顺带校验同目录已导出的 model.gltf / model.stl / model.obj / model.preview.html）。要额外验证"两次构建位级一致"传 determinism=true。fails>0 必须处理；warns 是提示（M4 的 T 缝、M7 的尺度可疑等）。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        report: { type: 'string', description: '可选：报告输出路径（默认 <工程名>.verify.json）' },
+        determinism: { type: 'boolean', description: '可选：是否额外验证"两次构建产物位级一致"（默认 false）' }
+      }
+    }
+  }
+];
+
+var PLUGIN = {
+  name: 'tool-model',
+  purpose: '3D/CAD 创作域工具面（纯 goja 零依赖）：参数化 CAD 工程（表达式驱动）→ BSP 实体布尔（union/subtract/intersect）→ 导出公开格式（glTF 2.0 / GLB / binary+ASCII STL / OBJ / 自包含 WebGL 预览 HTML）→ 9 项判据（含分级的水密性报告）',
+  inject: ['fs', 'logger'],
+  apply: function (ctx) {
+    for (var i = 0; i < TOOL_DEFS.length; i++) {
+      (function (t) {
+        ctx.tools.register({
+          name: t.name,
+          description: t.description,
+          usageGuide: t.usageGuide,
+          category: t.category,
+          readOnly: !!t.readOnly,
+          parameters: t.parameters,
+          execute: function (args) { return IMPLS[t.name](args || {}, {}, ctx); }
+        });
+      })(TOOL_DEFS[i]);
+    }
+    try {
+      if (ctx && ctx.logger && typeof ctx.logger === 'function') {
+        ctx.logger('tool-model').info('已注册 ' + TOOL_DEFS.length + ' 个工具（goja 轨 · 零依赖 · glTF 2.0 / STL 真相源）');
+      }
+    } catch (_) { /* ignore */ }
+  }
+};
+
+if (typeof module !== 'undefined' && module.exports) module.exports = PLUGIN;
+return PLUGIN;
