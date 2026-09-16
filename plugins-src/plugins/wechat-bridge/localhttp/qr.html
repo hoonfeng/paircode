@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>微信扫码登录 — PairCode 微信桥</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+         background: #f5f5f4; color: #1c1917; }
+  .card { width: min(400px, 92vw); background: #fff; border: 1px solid #e7e5e4; border-radius: 12px;
+          padding: 28px 32px 24px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: #78716c; margin-bottom: 20px; line-height: 1.5; }
+  #qrbox { width: 264px; height: 264px; margin: 0 auto 14px; display: flex; align-items: center;
+           justify-content: center; border: 1px solid #e7e5e4; border-radius: 8px; background: #fff; }
+  #qrbox img { width: 100%; height: 100%; image-rendering: pixelated; }
+  .placeholder { color: #a8a29e; font-size: 13px; }
+  .status { font-size: 14px; padding: 6px 0; min-height: 22px; line-height: 1.5; }
+  .status.ok { color: #15803d; font-weight: 600; }
+  .status.warn { color: #b45309; }
+  .status.err { color: #b91c1c; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  input[type=text] { flex: 1; min-width: 0; padding: 9px 12px; font-size: 16px;
+                     border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; color: inherit; }
+  button { padding: 9px 16px; font-size: 14px; border: 1px solid #d6d3d1; border-radius: 8px;
+           background: #fafaf9; color: inherit; cursor: pointer; white-space: nowrap; }
+  button:hover { background: #f0efee; }
+  button:disabled { opacity: .5; cursor: default; }
+  .meta { font-size: 12px; color: #a8a29e; margin-top: 14px; min-height: 16px; }
+  a { color: #57534e; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1c1917; color: #e7e5e4; }
+    .card { background: #292524; border-color: #44403c; box-shadow: none; }
+    .sub, .meta { color: #a8a29e; }
+    #qrbox { background: #fff; border-color: #44403c; }
+    input[type=text] { background: #1c1917; border-color: #57534e; }
+    button { background: #3a3633; border-color: #57534e; }
+    button:hover { background: #44403c; }
+    a { color: #d6d3d1; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>微信扫码登录</h1>
+  <div class="sub">手机微信 → 我 → 设置 → 插件 → ClawBot</div>
+  <div id="qrbox"><div class="placeholder">二维码加载中…</div></div>
+  <div id="status" class="status">…</div>
+  <div id="verify" class="row" style="display:none">
+    <input type="text" id="code" placeholder="输入手机显示的数字" autocomplete="off" inputmode="numeric">
+    <button id="btn-verify" type="button">提交</button>
+  </div>
+  <div class="row" id="actions" style="display:none">
+    <button id="btn-refresh" type="button">刷新二维码</button>
+  </div>
+  <div class="meta" id="meta"></div>
+</div>
+<script>
+(function () {
+  var lastRev = -1, lastText = '', lastCls = '';
+  var box = document.getElementById('qrbox');
+  var el = document.getElementById('status');
+  var meta = document.getElementById('meta');
+  var verifyRow = document.getElementById('verify');
+  var actions = document.getElementById('actions');
+  var input = document.getElementById('code');
+
+  var TEXTS = {
+    none: '等待桥创建登录会话…',
+    wait: '请用手机微信扫描二维码',
+    scaned: '已扫码，请在手机上确认授权',
+    need_verifycode: '请在手机微信上查看数字，输入后点「提交」',
+    verify_code_blocked: '验证码多次错误，正在刷新二维码…',
+    expired: '二维码已过期，正在自动刷新…',
+    scaned_but_redirect: '正在切换登录接入点…',
+    confirmed: '登录成功！可以关闭此页面了',
+    stopped: '登录会话已停止',
+  };
+
+  function setStatus(st) {
+    var t = TEXTS[st.status] || ('状态：' + st.status);
+    if (st.status === 'failed') { t = '登录失败：' + (st.err || '未知错误'); }
+    var cls = '';
+    if (st.status === 'confirmed') cls = 'ok';
+    else if (st.status === 'failed' || st.status === 'stopped') cls = 'err';
+    else if (st.status === 'scaned' || st.status === 'need_verifycode') cls = 'warn';
+    if (t !== lastText || cls !== lastCls) {
+      el.textContent = t; el.className = 'status ' + cls; lastText = t; lastCls = cls;
+    }
+    verifyRow.style.display = st.status === 'need_verifycode' ? 'flex' : 'none';
+    actions.style.display = (st.status === 'none' || st.status === 'failed' || st.status === 'stopped') ? 'none' : 'flex';
+    meta.textContent = st.refreshCount ? ('二维码已刷新 ' + st.refreshCount + ' 次（约 2 分钟有效）') : '二维码约 2 分钟有效，过期自动刷新';
+  }
+
+  function poll() {
+    fetch('qr/state', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (st) {
+      if (st.hasQR) {
+        if (st.rev !== lastRev) {
+          lastRev = st.rev;
+          box.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = 'qr.png?rev=' + st.rev;
+          img.alt = '登录二维码';
+          box.appendChild(img);
+        }
+      } else if (box.firstChild && box.firstChild.tagName === 'IMG') {
+        box.innerHTML = '<div class="placeholder">等待二维码…</div>';
+      } else if (!box.firstChild) {
+        box.innerHTML = '<div class="placeholder">等待二维码…</div>';
+      }
+      setStatus(st);
+    }).catch(function () { /* 瞬时网络抖动：下轮重试 */ });
+  }
+
+  function submitCode() {
+    var code = input.value.trim();
+    if (!code) return;
+    fetch('qr/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    }).then(function () { input.value = ''; });
+  }
+
+  function refreshQR() {
+    fetch('qr/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+  }
+
+  document.getElementById('btn-verify').addEventListener('click', submitCode);
+  document.getElementById('btn-refresh').addEventListener('click', refreshQR);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitCode(); });
+
+  setInterval(poll, 1000);
+  poll();
+})();
+</script>
+</body>
+</html>

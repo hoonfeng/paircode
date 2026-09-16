@@ -81,6 +81,9 @@
                       <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
                       <PresetManager v-else-if="f.type === 'preset-manager'" :preset-fields="f.presetFields || []" @saved="onPresetSaved" />
                       
+                      <!-- link（纯展示：href 经 linkHref 白名单校验；文本用 {{ }} 插值防注入） -->
+                      <a v-else-if="f.type === 'link'" class="field-link" :href="linkHref(f)" target="_blank" rel="noopener noreferrer">{{ f.linkText || '打开' }}</a>
+
                       <!-- 兜底 text -->
                       <input v-else class="field-input" type="text" v-model="form[tab.key][f.name]" />
                     </div>
@@ -231,7 +234,7 @@ function buildForm() {
     form[s.key] = {}
     for (const f of (s.fields || [])) {
       let v
-      if (f.type === 'project' || f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') { continue }
+      if (f.type === 'project' || f.type === 'link' || f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') { continue }
       if (f.binding) {
         v = top[f.binding] !== undefined ? top[f.binding] : f.default
       } else {
@@ -253,6 +256,16 @@ function buildForm() {
 }
 
 // tags 显示/输入
+// link 字段：href 安全化——仅允许 http/https 与同源相对路径；其余协议
+// （javascript:/data:/vbscript: 等）一律拒绝返回 '#'（防 XSS/开放重定向）。
+function linkHref(f) {
+  const href = String(f.href || f.default || '').trim()
+  if (!href) return '#'
+  if (/^https?:\/\//i.test(href)) return href
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return '#'
+  return location.origin + (href.startsWith('/') ? href : '/' + href)
+}
+
 function tagsText(tabKey, f) {
   const v = form[tabKey]?.[f.name]
   return Array.isArray(v) ? v.join(', ') : (v || '')
@@ -311,7 +324,7 @@ const saveSettings = async () => {
           await api.saveInstructions('project', projectInst.value)
           continue
         }
-        if (f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') {
+        if (f.type === 'link' || f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') {
           // 服务商/模型参数/AI 配置预设维护走独立面板（各自内部保存），不并入通用表单保存
           continue
         }
@@ -444,6 +457,13 @@ h2 {
   font-size: 11px; color: var(--text-secondary, #888);
   line-height: 1.45; min-width: 0;
 }
+.field-link {
+  display: inline-flex; align-items: center; height: 28px; padding: 0 10px;
+  font-size: 12px; color: var(--accent, #4f8cff); text-decoration: none;
+  border: 1px solid rgba(79, 140, 255, .35); border-radius: 6px;
+  background: rgba(79, 140, 255, .08); transition: background .15s;
+}
+.field-link:hover { background: rgba(79, 140, 255, .16); }
 .field-textarea {
   width: 100%; box-sizing: border-box; resize: vertical;
   background: var(--input-bg, #14141f);

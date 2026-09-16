@@ -1,5 +1,5 @@
 $errs = $null
-$null = [System.Management.Automation.Language.Parser]::ParseFile('E:\paircode-master\scripts\deploy-pair-exe.ps1', [ref]$null, [ref]$errs)
+$null = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Split-Path -Parent $PSScriptRoot) 'deploy-pair-exe.ps1'), [ref]$null, [ref]$errs)
 if ($errs.Count -gt 0) { $errs | ForEach-Object { Write-Output ('  SYNTAX ERR: ' + $_.Message + ' @line ' + $_.Extent.StartLineNumber) } }
 else { Write-Output '  [1] syntax OK' }
 
@@ -26,7 +26,7 @@ function HttpProbe([string]$url) {
   }
 }
 
-$a = HttpProbe 'http://127.0.0.1:9090/api/conversations/probe-nonexistent-0001/run-stats?workspaceRoot=E%3A%5Cpaircode-master'
+$a = HttpProbe 'http://127.0.0.1:9090/api/conversations/probe-nonexistent-0001/run-stats?workspaceRoot=D%3A%5CPairCodeData'
 Write-Output ('  [4] probe run-stats -> HTTP ' + $a.code)
 Write-Output ('      body: ' + $a.body.Substring(0, [Math]::Min(90, $a.body.Length)))
 $b = HttpProbe 'http://127.0.0.1:9090/api/definitely-not-a-route-xyz'

@@ -1,0 +1,865 @@
+// Package bridge 桥主循环：收（getupdates 长轮询）→ 投喂（PairCode）→ 双路等待
+// （WS 流式主路 + JSONL 兜底）→ 发（sendmessage）。
+//
+// 多账号模型：每账号一个 Bridge（独立 goroutine 组与状态），共享一条
+// EventStream（按 convId 路由事件）。账号级隔离：单桥 panic/异常不扩散。
+//
+// 蓝图：M1 Node 原型 temp/wx-bridge/src/bridge.mjs（线上实测版本）。
+package bridge
+
+import (
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/account"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/config"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/ilink"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/login"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/paircode"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/store"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/stream"
+)
+
+// logf 日志函数（由宿主注入；桥内所有输出经此）。
+type logf func(format string, args ...any)
+
+// -14（token 暂时失效）重试策略：先观察恢复，多次失败后才请求重新登录。
+var staleRetryWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 32 * time.Second, 60 * time.Second}
+
+const (
+	processedKeep   = 500 // 去重集合裁剪保留数
+	processedMax    = 800 // 超过则裁剪
+	saveDebounceMs  = 500 // 状态持久化防抖
+	msgSendGapMs    = 500 // 分片发送间隔
+	sendTimeoutSec  = 30  // 投喂超时
+	askUserSnippet  = 500 // ask_user 通知截断
+	replyMsgTimeout = 30 * time.Minute
+)
+
+// State 桥运行状态（accounts/<id>/state.json）。
+type State struct {
+	GetUpdatesBuf string            `json:"get_updates_buf"`
+	ProcessedIDs  []string          `json:"processedIds"`
+	ContextTokens map[string]string `json:"context_tokens"`
+}
+
+// pendingMsg 待处理消息（enqueue 解析产物）。
+type pendingMsg struct {
+	from      string
+	text      string
+	mediaOnly bool
+}
+
+// Bridge 单账号桥主循环。
+type Bridge struct {
+	cfg  config.Config
+	info account.Info
+	dir  string // 账号数据目录（state.json 位置）
+	api  *ilink.Client
+	es   *EventStream
+	log  logf
+
+	onStale func(id string) // -14 持续失败：请求宿主发起重新登录
+
+	mu            sync.Mutex
+	getUpdatesBuf string
+	processed     map[string]struct{}
+	processedQ    []string
+	ctxTokens     map[string]string
+	typingTickets map[string]string
+	activeSession *stream.Session
+
+	queue    chan pendingMsg
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	unwatch  func()
+
+	saveMu    sync.Mutex
+	saveTimer *time.Timer
+}
+
+// New 创建桥（dir = 账号数据目录；不自动启动）。
+func New(cfg config.Config, info account.Info, dir string, creds *login.Credentials, es *EventStream, log logf, onStale func(id string)) *Bridge {
+	b := &Bridge{
+		cfg:           cfg,
+		info:          info,
+		dir:           dir,
+		api:           ilink.NewClient(creds.BaseURL, creds.Token),
+		es:            es,
+		log:           log,
+		onStale:       onStale,
+		processed:     map[string]struct{}{},
+		ctxTokens:     map[string]string{},
+		typingTickets: map[string]string{},
+		queue:         make(chan pendingMsg, 100),
+		stopCh:        make(chan struct{}),
+	}
+	var st State
+	if store.ReadJSON(filepath.Join(dir, "state.json"), &st) {
+		b.getUpdatesBuf = st.GetUpdatesBuf
+		for _, id := range st.ProcessedIDs {
+			if _, ok := b.processed[id]; !ok {
+				b.processed[id] = struct{}{}
+				b.processedQ = append(b.processedQ, id)
+			}
+		}
+		for k, v := range st.ContextTokens {
+			b.ctxTokens[k] = v
+		}
+	}
+	return b
+}
+
+// Start 启动桥循环（pollLoop + workLoop + 事件订阅）。
+func (b *Bridge) Start() {
+	b.unwatch = b.es.Watch(b.info.ConvID, b.onStreamEvent)
+	go b.guard("pollLoop", b.pollLoop)
+	go b.guard("workLoop", b.workLoop)
+	b.log("桥循环已启动（conv=%s workspace=%s）", b.info.ConvID, b.resolveWorkspace())
+}
+
+// Stop 停止桥循环（幂等；不阻塞等待在网络 I/O 上的 goroutine 退出）。
+func (b *Bridge) Stop() {
+	b.stopOnce.Do(func() {
+		close(b.stopCh)
+		if b.unwatch != nil {
+			b.unwatch()
+		}
+		b.saveNow()
+		b.log("桥循环已停止（id=%s）", b.info.ID)
+	})
+}
+
+// guard panic 隔离（单桥异常不扩散）。
+func (b *Bridge) guard(name string, fn func()) {
+	defer func() {
+		if p := recover(); p != nil {
+			b.log("[%s] panic（已隔离）: %v", name, p)
+		}
+	}()
+	fn()
+}
+
+func (b *Bridge) stopping() bool {
+	select {
+	case <-b.stopCh:
+		return true
+	default:
+		return false
+	}
+}
+
+// resolveWorkspace 会话工作区：账号指定 > 全局配置 > 从 data-dir 推断。
+func (b *Bridge) resolveWorkspace() string {
+	if b.info.WorkspaceRoot != "" {
+		return b.info.WorkspaceRoot
+	}
+	if b.cfg.WorkspaceRoot != "" {
+		return b.cfg.WorkspaceRoot
+	}
+	// data-dir 通常为 <workspace>/.pair/wechat-bridge → 上溯两级
+	if b.dir != "" {
+		p := filepath.Dir(filepath.Dir(b.dir))
+		if p != "." && p != string(filepath.Separator) {
+			return p
+		}
+	}
+	return b.dir
+}
+
+// ── 收消息（长轮询）────────────────────────────────────────────────
+
+func (b *Bridge) pollLoop() {
+	failures := 0
+	staleRetries := 0
+	for !b.stopping() {
+		resp, err := b.api.GetUpdates(b.getUpdatesBuf, b.cfg.LongPollTimeoutSec)
+		if err != nil {
+			if b.stopping() {
+				break
+			}
+			failures++
+			b.log("getUpdates 异常（%d/3）: %v", failures, err)
+			if failures >= 3 {
+				time.Sleep(30 * time.Second)
+				failures = 0
+			} else {
+				time.Sleep(2 * time.Second)
+			}
+			continue
+		}
+		if resp.Ret != 0 || resp.Errcode != 0 {
+			if resp.Ret == -14 || resp.Errcode == -14 {
+				staleRetries++
+				if staleRetries <= len(staleRetryWaits) {
+					wait := staleRetryWaits[staleRetries-1]
+					b.log("会话失效（-14，第 %d/%d 次），%s 后自动重试（观察 token 是否恢复）…",
+						staleRetries, len(staleRetryWaits), wait)
+					if b.sleepInterruptible(wait) {
+						break
+					}
+					continue
+				}
+				b.log("会话持续失效（-14 重试 %d 次仍未恢复），请求重新登录…", len(staleRetryWaits))
+				if b.onStale != nil {
+					b.onStale(b.info.ID)
+				}
+				return // 停止本桥循环；重新登录成功后宿主会用新凭据重建
+			}
+			failures++
+			b.log("getUpdates 错误 ret=%d errcode=%d errmsg=%s（%d/3）",
+				resp.Ret, resp.Errcode, resp.Errmsg, failures)
+			if b.sleepInterruptible(sleepOr(failures >= 3, 30*time.Second, 2*time.Second)) {
+				break
+			}
+			if failures >= 3 {
+				failures = 0
+			}
+			continue
+		}
+		failures = 0
+		staleRetries = 0
+		if resp.GetUpdatesBuf != "" {
+			b.mu.Lock()
+			b.getUpdatesBuf = resp.GetUpdatesBuf
+			b.mu.Unlock()
+			b.queueSave()
+		}
+		for _, raw := range resp.Msgs {
+			b.enqueue(raw)
+		}
+	}
+	b.log("pollLoop 退出")
+}
+
+func sleepOr(cond bool, a, b time.Duration) time.Duration {
+	if cond {
+		return a
+	}
+	return b
+}
+
+func (b *Bridge) sleepInterruptible(d time.Duration) bool {
+	select {
+	case <-b.stopCh:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
+
+// enqueue 过滤 + 入队（只处理 USER 消息；去重；维护 context_token）。
+func (b *Bridge) enqueue(raw json.RawMessage) {
+	var m ilink.RawMsg
+	if json.Unmarshal(raw, &m) != nil {
+		return
+	}
+	if m.MessageType != 1 { // 仅 USER（忽略 BOT 等）
+		return
+	}
+
+	msgID := string(m.MessageID)
+	if msgID == "" {
+		msgID = string(m.Seq)
+	}
+	if msgID != "" {
+		b.mu.Lock()
+		if _, dup := b.processed[msgID]; dup {
+			b.mu.Unlock()
+			return
+		}
+		b.processed[msgID] = struct{}{}
+		b.processedQ = append(b.processedQ, msgID)
+		if len(b.processedQ) > processedMax {
+			cut := len(b.processedQ) - processedKeep
+			for _, id := range b.processedQ[:cut] {
+				delete(b.processed, id)
+			}
+			b.processedQ = append([]string(nil), b.processedQ[cut:]...)
+		}
+		b.mu.Unlock()
+	}
+
+	from := m.FromUserID
+	if from != "" && m.ContextToken != "" {
+		b.mu.Lock()
+		if b.ctxTokens[from] != m.ContextToken {
+			b.ctxTokens[from] = m.ContextToken
+		}
+		b.mu.Unlock()
+	}
+
+	// 解析 item：文本（含引用前缀）/ 媒体
+	var textSB strings.Builder
+	hasMedia := false
+	for _, item := range m.ItemList {
+		switch item.Type {
+		case 1:
+			if item.TextItem != nil {
+				textSB.WriteString(item.TextItem.Text)
+			}
+			if item.RefMsg != nil {
+				var parts []string
+				if item.RefMsg.Title != "" {
+					parts = append(parts, item.RefMsg.Title)
+				}
+				if rmi := item.RefMsg.MessageItem; rmi != nil && rmi.Type == 1 && rmi.TextItem != nil {
+					if rb := rmi.TextItem.Text; rb != "" {
+						parts = append(parts, rb)
+					}
+				}
+				if len(parts) > 0 {
+					textSB.Reset()
+					textSB.WriteString("[引用: " + strings.Join(parts, " | ") + "]\n" + textSB.String())
+				}
+			}
+		case 2, 3, 4, 5:
+			hasMedia = true
+		}
+	}
+	text := strings.TrimSpace(textSB.String())
+
+	if text == "" && hasMedia {
+		b.push(pendingMsg{from: from, mediaOnly: true})
+		b.queueSave()
+		return
+	}
+	if text == "" || from == "" {
+		return
+	}
+	b.log("📥 收到消息 from=%s：%s", from, truncateRunes(text, 80))
+	b.push(pendingMsg{from: from, text: text})
+	b.queueSave()
+}
+
+// push 入队（队列满时阻塞；消息仍在服务器游标之后，不丢）。
+func (b *Bridge) push(m pendingMsg) {
+	select {
+	case b.queue <- m:
+	case <-b.stopCh:
+	}
+}
+
+// ── 处理队列（串行）────────────────────────────────────────────────
+
+func (b *Bridge) workLoop() {
+	for {
+		select {
+		case <-b.stopCh:
+			b.log("workLoop 退出")
+			return
+		case item := <-b.queue:
+			b.handleOne(item)
+		}
+	}
+}
+
+func (b *Bridge) handleOne(item pendingMsg) {
+	b.log("■ 开始处理（队列剩余 %d 条）", len(b.queue))
+	if item.mediaOnly {
+		b.sendToWeixin(item.from, "（微信桥）目前仅支持文本消息，图片/文件/语音请稍候再试～")
+		return
+	}
+
+	// 0)「正在输入」占位（即时反馈；失败静默忽略）
+	typing := b.beginTyping(item.from)
+	defer typing.Stop()
+
+	var askOnce sync.Once
+	notifyAskUser := func(q string) {
+		askOnce.Do(func() {
+			snippet := truncateRunes(q, askUserSnippet)
+			msg := "（微信桥）任务需要你的确认/输入：\n" + orDefault(snippet, "(需要交互输入)") +
+				"\n\n请到 PairCode 界面打开「微信桥」会话回复；完成后最终结果会发回这里。"
+			go b.sendToWeixin(item.from, msg)
+		})
+	}
+
+	// 1) 基线 idx
+	baseline := (&paircode.Waiter{WorkspaceRoot: b.resolveWorkspace(), ConvID: b.info.ConvID}).BaselineIdx()
+
+	// 2) 挂载流式会话（必须在投喂之前）
+	var session *stream.Session
+	if b.cfg.StreamEnabled && b.es.Connected() {
+		session = stream.New(stream.Options{
+			FirstMinChars:  b.cfg.StreamFirstMinChars,
+			FirstMaxWaitMs: b.cfg.StreamFirstMaxWaitMs,
+			NextMinChars:   b.cfg.StreamNextMinChars,
+			NextMaxWaitMs:  b.cfg.StreamNextMaxWaitMs,
+			SoftLimit:      b.cfg.StreamSoftLimit,
+			OnFlush: func(text string, meta stream.FlushMeta) {
+				if !b.sendToWeixin(item.from, text) {
+					b.log("[stream] 第 %d 片发送失败（%d 字符）", meta.N, meta.Len)
+				}
+			},
+			OnToolCall: func(tool, args string) {
+				if tool == "ask_user" {
+					notifyAskUser(extractAskQuestion(args))
+				}
+			},
+			OnDone: func(full string, s stream.Summary) {
+				b.log("[stream] 流式完成（%d 片 / %d 字符 / toolCalls=%d）",
+					s.Flushes, runeLen(s.Text), s.ToolCalls)
+			},
+			Logf: b.log,
+		})
+		b.mu.Lock()
+		b.activeSession = session
+		b.mu.Unlock()
+		defer func() {
+			b.mu.Lock()
+			b.activeSession = nil
+			b.mu.Unlock()
+		}()
+	}
+
+	// 3) 投喂 PairCode
+	if err := paircode.Send(b.cfg.PairCodeURL, b.info.ConvID, b.resolveWorkspace(),
+		item.text, sendTimeoutSec*time.Second); err != nil {
+		b.log("投喂失败: %v", err)
+		b.sendToWeixin(item.from, "（微信桥）消息投喂失败："+truncateRunes(err.Error(), 300))
+		if session != nil {
+			session.Abort()
+		}
+		return
+	}
+	b.log("已投喂 PairCode（baseline idx=%d，流式=%v）", baseline, session != nil)
+
+	// 4) 双路等待（WS 流式主路 + JSONL 兜底）
+	b.awaitReply(item, baseline, session, notifyAskUser)
+}
+
+// onStreamEvent 事件流分发（按 convId 路由后进入活动会话）。
+func (b *Bridge) onStreamEvent(ev stream.Event) {
+	b.mu.Lock()
+	s := b.activeSession
+	b.mu.Unlock()
+	if s != nil {
+		s.Feed(ev)
+	}
+}
+
+type waitResult struct {
+	src string // jsonl | stream | timeout | stopped
+	r   paircode.Result
+	s   stream.Summary
+}
+
+// awaitReply 双路等待：
+//   - WS 流式 done 先到：内容已由 OnFlush 全部发出 → 直接完成（JSONL 路后台校验一致性）；
+//   - JSONL 先到（WS 半死/断流）：中止流式，按前缀比对补发未发出的部分；
+//   - 超时：提示用户到界面查看。
+func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Session, notifyAskUser func(string)) {
+	timeout := time.Duration(b.cfg.ReplyTimeoutMs) * time.Millisecond
+	ch := make(chan waitResult, 3)
+
+	waiter := &paircode.Waiter{
+		WorkspaceRoot: b.resolveWorkspace(),
+		ConvID:        b.info.ConvID,
+		PollMs:        b.cfg.ReplyPollMs,
+		QuietMs:       b.cfg.ReplyQuietMs,
+		TimeoutMs:     b.cfg.ReplyTimeoutMs,
+		Logf:          b.log,
+	}
+	go func() {
+		r := waiter.WaitForReply(baseline, notifyAskUser)
+		ch <- waitResult{src: "jsonl", r: r}
+	}()
+	if session != nil {
+		go func() {
+			s := <-session.Done()
+			ch <- waitResult{src: "stream", s: s}
+		}()
+	}
+
+	var w waitResult
+	select {
+	case w = <-ch:
+	case <-time.After(timeout):
+		w = waitResult{src: "timeout"}
+	case <-b.stopCh:
+		w = waitResult{src: "stopped"}
+	}
+
+	switch w.src {
+	case "stream":
+		b.log("↩ 回复已通过流式全部发出（%d 字符 / %d 片）", runeLen(w.s.Text), w.s.Flushes)
+		// JSONL 路后台一致性校验（仅记录）
+		go func() {
+			r := <-ch
+			if r.src != "jsonl" || r.r.Text == "" {
+				return
+			}
+			if r.r.Text != w.s.Text {
+				b.log("[stream] 一致性校验：WS=%d 字符 vs JSONL=%d 字符（不一致，仅记录）",
+					runeLen(w.s.Text), runeLen(r.r.Text))
+			} else {
+				b.log("[stream] 一致性校验通过（WS 与 JSONL 文本一致）")
+			}
+		}()
+	case "jsonl":
+		if session != nil {
+			session.Abort()
+		}
+		if w.r.Timeout {
+			b.sendToWeixin(item.from, "（微信桥）处理已超过 30 分钟仍未完成。请到 PairCode 界面查看进度；完成后可在界面继续对话。")
+			b.log("等待回复超时（30 分钟）")
+			return
+		}
+		text := w.r.Text
+		if text == "" {
+			b.log("JSONL 兜底未取得文本（流式亦未完成）")
+			return
+		}
+		sent := ""
+		if session != nil {
+			sent = session.SentText()
+		}
+		toSend := text
+		switch {
+		case sent == "":
+			// 无流式已发内容：全量发送
+		case strings.HasPrefix(text, sent):
+			toSend = text[len(sent):]
+			if toSend != "" {
+				b.log("[stream] JSONL 兜底补发 %d 字符（已流式发出 %d）", runeLen(toSend), runeLen(sent))
+			} else {
+				b.log("[stream] JSONL 兜底：内容与流式发送一致，无需补发")
+			}
+		default:
+			b.log("[stream] JSONL 文本不以已发内容为前缀（sent=%d jsonl=%d），全量补发",
+				runeLen(sent), runeLen(text))
+		}
+		if toSend != "" {
+			ok := b.sendToWeixin(item.from, toSend)
+			b.log("↩ 回复已发送（兜底，%s），共 %d 字符", map[bool]string{true: "成功", false: "失败"}[ok], runeLen(toSend))
+		}
+	case "timeout":
+		if session != nil {
+			session.Abort()
+		}
+		b.sendToWeixin(item.from, "（微信桥）处理已超过 30 分钟仍未完成。请到 PairCode 界面查看进度；完成后可在界面继续对话。")
+		b.log("等待回复超时（30 分钟）")
+	case "stopped":
+		if session != nil {
+			session.Abort()
+		}
+	}
+}
+
+// ── 发送 ─────────────────────────────────────────────────────────────
+
+// SendTo 主动向指定用户发送文本（Agent 工具 wechat_send / 壳经本地 HTTP 调用）。
+// 需要该联系人已与桥交互过（存在 context_token，即曾给桥发过消息）。
+func (b *Bridge) SendTo(userID, text string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return fmt.Errorf("收件人（to）不能为空")
+	}
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("消息文本不能为空")
+	}
+	if !b.sendToWeixin(userID, text) {
+		return fmt.Errorf("发送失败：该联系人暂无有效会话（需先给桥发过消息以建立 context_token）")
+	}
+	return nil
+}
+
+// Contacts 已知联系人列表（有过 context_token 的微信用户；稳定排序）。
+func (b *Bridge) Contacts() []map[string]any {
+	b.mu.Lock()
+	ids := make([]string, 0, len(b.ctxTokens))
+	for id := range b.ctxTokens {
+		ids = append(ids, id)
+	}
+	b.mu.Unlock()
+	sort.Strings(ids)
+	out := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, map[string]any{"id": id, "hasSession": true})
+	}
+	return out
+}
+
+// sendToWeixin 发送文本（按用户 context_token；支持长文本分片）。
+func (b *Bridge) sendToWeixin(toUserID, text string) bool {
+	b.mu.Lock()
+	token := b.ctxTokens[toUserID]
+	b.mu.Unlock()
+	if token == "" {
+		b.log("无 context_token（%s），无法发送", toUserID)
+		return false
+	}
+	chunks := splitText(text, b.cfg.TextChunkLimit)
+	for i, chunk := range chunks {
+		resp, err := b.api.SendText(toUserID, chunk, token)
+		if err != nil {
+			b.log("发送失败（分片 %d/%d）: %v", i+1, len(chunks), err)
+			return false
+		}
+		if resp.Ret == -14 || resp.Errcode == -14 {
+			b.log("发送返回 -14：会话过期，丢弃 context_token（等下次消息刷新）")
+			b.mu.Lock()
+			delete(b.ctxTokens, toUserID)
+			b.mu.Unlock()
+			b.queueSave()
+			return false
+		}
+		if resp.Ret != 0 || resp.Errcode != 0 {
+			b.log("发送响应异常 ret=%d errcode=%d errmsg=%s", resp.Ret, resp.Errcode, resp.Errmsg)
+		} else {
+			b.log("📤 已发送（%d/%d 片，%d 字符）", i+1, len(chunks), runeLen(chunk))
+		}
+		if i < len(chunks)-1 {
+			time.Sleep(msgSendGapMs * time.Millisecond)
+		}
+	}
+	return true
+}
+
+// splitText 长文本分片（优先段落/换行处切分；limit 按 rune 计）。
+func splitText(text string, limit int) []string {
+	if limit <= 0 {
+		limit = 4000
+	}
+	rs := []rune(text)
+	if len(rs) <= limit {
+		return []string{text}
+	}
+	var chunks []string
+	rest := rs
+	for len(rest) > 0 {
+		if len(rest) <= limit {
+			chunks = append(chunks, string(rest))
+			break
+		}
+		cut := -1
+		for p := limit; p >= 1; p-- { // 段落切分：最后一个双换行的起点（≤limit）
+			if p+1 < len(rest) && rest[p] == '\n' && rest[p+1] == '\n' {
+				cut = p
+				break
+			}
+		}
+		if cut <= 0 {
+			for p := limit; p >= 1; p-- { // 退化为单换行
+				if rest[p] == '\n' {
+					cut = p
+					break
+				}
+			}
+		}
+		if cut <= 0 {
+			cut = limit
+		}
+		chunks = append(chunks, string(rest[:cut]))
+		rest = rest[cut:]
+		for len(rest) > 0 && rest[0] == '\n' {
+			rest = rest[1:]
+		}
+	}
+	return chunks
+}
+
+// ── 「正在输入」指示 ─────────────────────────────────────────────────
+
+type typingHandle struct {
+	stopOnce sync.Once
+	stopFn   func()
+}
+
+// Stop 停止「正在输入」（发送 status=2；失败忽略）。
+func (h *typingHandle) Stop() {
+	if h == nil || h.stopFn == nil {
+		return
+	}
+	h.stopOnce.Do(h.stopFn)
+}
+
+// beginTyping 开始「正在输入」指示；返回句柄（Stop 幂等）。
+// 失败静默忽略（不影响主流程）。
+func (b *Bridge) beginTyping(userID string) *typingHandle {
+	h := &typingHandle{}
+	if !b.cfg.TypingEnabled {
+		return h
+	}
+	var mu sync.Mutex
+	ticket := b.getTypingTicket(userID)
+	stopped := false
+
+	call := func(status int) {
+		mu.Lock()
+		st := stopped
+		tk := ticket
+		mu.Unlock()
+		if st && status == 1 {
+			return
+		}
+		if tk == "" {
+			b.mu.Lock()
+			ctxToken := b.ctxTokens[userID]
+			b.mu.Unlock()
+			resp, err := b.api.GetConfig(userID, ctxToken)
+			if err != nil {
+				b.log("typing getConfig 异常（忽略）: %v", err)
+				return
+			}
+			if resp.Ret == 0 {
+				tk = resp.TypingTicket
+				if tk != "" {
+					mu.Lock()
+					ticket = tk
+					mu.Unlock()
+					b.setTypingTicket(userID, tk)
+				}
+			} else {
+				b.log("typing getConfig 失败 ret=%d errcode=%d", resp.Ret, resp.Errcode)
+			}
+		}
+		if tk == "" {
+			return
+		}
+		resp, err := b.api.SendTyping(userID, tk, status)
+		if err != nil {
+			b.log("typing 调用异常（忽略）: %v", err)
+			return
+		}
+		if resp.Ret != 0 || resp.Errcode != 0 {
+			b.log("sendTyping(%d) ret=%d errcode=%d %s", status, resp.Ret, resp.Errcode, resp.Errmsg)
+			if status == 1 { // 失效重取
+				mu.Lock()
+				ticket = ""
+				mu.Unlock()
+				b.deleteTypingTicket(userID)
+			}
+		}
+	}
+
+	call(1) // 即时反馈（同步；失败静默）
+	ticker := time.NewTicker(time.Duration(b.cfg.TypingKeepaliveMs) * time.Millisecond)
+	go func() {
+		for range ticker.C {
+			mu.Lock()
+			st := stopped
+			mu.Unlock()
+			if st {
+				return
+			}
+			call(1)
+		}
+	}()
+	h.stopFn = func() {
+		mu.Lock()
+		stopped = true
+		has := ticket != ""
+		mu.Unlock()
+		ticker.Stop()
+		if !has {
+			return
+		}
+		call(2)
+	}
+	return h
+}
+
+// ── 状态存取辅助 ─────────────────────────────────────────────────────
+
+func (b *Bridge) getTypingTicket(userID string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.typingTickets[userID]
+}
+
+func (b *Bridge) setTypingTicket(userID, ticket string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.typingTickets[userID] = ticket
+}
+
+func (b *Bridge) deleteTypingTicket(userID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.typingTickets, userID)
+}
+
+// queueSave 防抖保存状态（500ms 合并）。
+func (b *Bridge) queueSave() {
+	b.saveMu.Lock()
+	defer b.saveMu.Unlock()
+	if b.saveTimer != nil {
+		return
+	}
+	b.saveTimer = time.AfterFunc(saveDebounceMs*time.Millisecond, func() {
+		b.saveMu.Lock()
+		b.saveTimer = nil
+		b.saveMu.Unlock()
+		b.saveNow()
+	})
+}
+
+// saveNow 立即持久化状态（原子写）。
+func (b *Bridge) saveNow() {
+	b.mu.Lock()
+	state := State{
+		GetUpdatesBuf: b.getUpdatesBuf,
+		ProcessedIDs:  append([]string(nil), b.processedQ...),
+		ContextTokens: make(map[string]string, len(b.ctxTokens)),
+	}
+	for k, v := range b.ctxTokens {
+		state.ContextTokens[k] = v
+	}
+	b.mu.Unlock()
+	if err := store.WriteJSONAtomic(filepath.Join(b.dir, "state.json"), state); err != nil {
+		b.log("状态保存失败: %v", err)
+	}
+}
+
+// ── 工具 ─────────────────────────────────────────────────────────────
+
+func runeLen(s string) int { return len([]rune(s)) }
+
+func truncateRunes(s string, n int) string {
+	rs := []rune(s)
+	if len(rs) <= n {
+		return s
+	}
+	return string(rs[:n]) + "…"
+}
+
+func orDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
+// extractAskQuestion 从 ask_user 工具参数中提取问题文本。
+func extractAskQuestion(args string) string {
+	var a struct {
+		Question  string `json:"question"`
+		Questions []struct {
+			Question string `json:"question"`
+		} `json:"questions"`
+	}
+	if json.Unmarshal([]byte(args), &a) != nil {
+		return ""
+	}
+	if len(a.Questions) > 0 {
+		parts := make([]string, 0, len(a.Questions))
+		for _, q := range a.Questions {
+			if q.Question != "" {
+				parts = append(parts, q.Question)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
+	}
+	return a.Question
+}
+
+var _ = fmt.Sprintf // 保留 fmt（防御性引用，便于调试扩展）

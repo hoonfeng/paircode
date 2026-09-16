@@ -19,19 +19,24 @@
     powershell -ExecutionPolicy Bypass -File scripts\deploy-pair-exe.ps1
 #>
 param(
-  [string]$Src     = "E:\paircode-master\temp\build\pair.exe",
+  [string]$Src     = "",      # default: <repo-root>\temp\build\pair.exe (repo root inferred from this script's own location)
   [string]$Target  = "D:\PairCode\pair.exe",
   [string]$WorkDir = "D:\PairCode",
   [int]$Port       = 9090,
-  [string]$WorkspaceRoot = "E:\paircode-master",
+  [string]$WorkspaceRoot = "D:\PairCodeData",
   [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 $ts      = Get-Date -Format "yyyyMMdd-HHmmss"
+# Repo root is DERIVED (this script lives in <repo-root>\scripts\) instead of hard-coded:
+#   * survives any future relocation of the source tree (2026-09-16: E:\paircode-master -> D:\PairCodeData\...)
+#   * keeps this file pure ASCII, so PowerShell 5.1 cannot mis-decode a non-ASCII path
+#     (BOM-less UTF-8 .ps1 files are read as ANSI on this host)
+$repoRoot = Split-Path -Parent $PSScriptRoot
+if (-not $Src) { $Src = Join-Path $repoRoot "temp\build\pair.exe" }
 $outDir  = Join-Path $env:TEMP "pair-deploy-$ts"
-if (-not (Test-Path "E:\paircode-master\temp")) { $outDir = Join-Path $env:TEMP "pair-deploy-$ts" }
-else { $outDir = "E:\paircode-master\temp\deploy-$ts" }
+if (Test-Path (Join-Path $repoRoot "temp")) { $outDir = Join-Path $repoRoot "temp\deploy-$ts" }
 $logFile = Join-Path $outDir "deploy.log"
 $resFile = Join-Path $outDir "RESULT.txt"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null

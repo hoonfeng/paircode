@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -204,9 +205,13 @@ func findMessageStoreRoot() string {
 }
 
 // startWebUI 在后台启动 Web UI 服务器。
-func startWebUI(port int) {
+// ★ 2026-09-16：改为「先同步抢端口，再异步 Serve」——net.Listen 失败立刻把错误
+//   回传调用方（StartWebServer → main 明确提示并退出）。旧实现直接 ListenAndServe：
+//   bind 失败只在日志留一行「服务器错误」，进程继续以「有窗口、无 WebUI」的
+//   僵尸实例驻留（9090 已被既有实例占用时极易发生）。
+func startWebUI(port int) error {
 	if ws != nil {
-		return
+		return nil
 	}
 	ws = &webServer{
 		port:      port,
@@ -434,7 +439,7 @@ func startWebUI(port int) {
 		subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
 		if err != nil {
 			log.Printf("[WebUI] 内嵌资源加载失败: %v", err)
-			return
+			return fmt.Errorf("内嵌前端资源加载失败: %w", err)
 		}
 		fileServer = http.FileServer(http.FS(subFS))
 	}
@@ -446,6 +451,15 @@ func startWebUI(port int) {
 		fileServer.ServeHTTP(w, r)
 	}))
 
+	// ★ 端口占用检查（同步抢端口）：先拿到 listener 再 Serve——绑定失败即
+	//   「启动失败」并回传，不再静默成僵尸实例。
+	//   注意：Go 对通配符地址 0.0.0.0:9090 在 Windows 上创建的是双栈 socket，
+	//   故此处失败等价于整机两个地址族都抢不到该端口。
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return &PortInUseError{Port: port, Err: err}
+	}
+
 	ws.server = &http.Server{
 		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
 		Handler: corsMiddleware(agent.ExtWSMiddleware(agent.ExtSSEMiddleware(agent.ExtRouteMiddleware(mux)))),
@@ -453,10 +467,11 @@ func startWebUI(port int) {
 
 	go func() {
 		log.Printf("[WebUI] PairCode Web IDE 启动于 http://0.0.0.0:%d（局域网内其他设备可用本机 IP 访问）", port)
-		if err := ws.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := ws.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("[WebUI] 服务器错误: %v", err)
 		}
 	}()
+	return nil
 }
 
 // stopWebUI 停止 Web 服务器。

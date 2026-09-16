@@ -5,10 +5,15 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
 )
@@ -54,8 +59,18 @@ func StartWebServer(port int) error {
 	if serverRunning.Load() {
 		return fmt.Errorf("服务器已在运行中")
 	}
+	// ★ 2026-09-16 端口预检（快速失败）：抢不到端口立即返回错误。
+	//   本机已有 PairCode 实例时（双击第二个 pair.exe 的典型场景），旧实现要等
+	//   插件/工具集装载几十秒后才在日志里冒一行「服务器错误」，且进程继续运行，
+	//   留下「有窗口、无 WebUI」的僵尸实例（白占一整份内存）。现由 main 明确
+	//   提示「已有实例在运行」并退出。
+	if err := preflightPort(port); err != nil {
+		return err
+	}
 	log.Printf("[server] 正在初始化 Web 服务 (端口 %d)…", port)
-	startWebUI(port)
+	if err := startWebUI(port); err != nil {
+		return err
+	}
 	serverRunning.Store(true)
 	log.Printf("[server] Web 服务已启动 (端口 %d)", port)
 	return nil
@@ -75,4 +90,52 @@ func StopWebServer() {
 // IsWebServerRunning 查询 Web 服务器是否运行中。
 func IsWebServerRunning() bool {
 	return serverRunning.Load()
+}
+
+// ─── 端口占用诊断（2026-09-16）────────────────────────────────
+
+// PortInUseError 表示 Web 服务端口无法绑定（启动失败）。
+// 最常见成因是「本机已有 PairCode 实例在运行」。
+type PortInUseError struct {
+	Port int
+	Err  error
+}
+
+func (e *PortInUseError) Error() string {
+	return fmt.Sprintf("端口 %d 已被占用: %v", e.Port, e.Err)
+}
+
+// Unwrap 保留底层错误（net.OpError / WSAEADDRINUSE），供 errors.Is 判定。
+func (e *PortInUseError) Unwrap() error { return e.Err }
+
+// ServingPairCode 探测占用该端口的服务是否为另一个 PairCode 实例：
+// GET http://127.0.0.1:<port>/ 返回页面含 "PairCode" 特征即认定。
+// 仅用于把用户提示写准（PairCode 实例 vs 其它程序），探测失败一律按后者处理。
+func (e *PortInUseError) ServingPairCode() bool {
+	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/", e.Port))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(body), "PairCode")
+}
+
+// preflightPort 启动前端口预检：试绑通配地址成功即立即释放。
+// Go 对通配符地址（0.0.0.0）会创建双栈 socket（IPv4/IPv6 一并占用），
+// 因此这里失败即等价于「两个地址族都抢不到该端口」。
+func preflightPort(port int) error {
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return &PortInUseError{Port: port, Err: err}
+	}
+	_ = ln.Close()
+	return nil
 }

@@ -2,7 +2,9 @@
 // 模型（同步等待 → yield 让出 → 会话续写）。bgRegistry 跨轮次存活（globalBG 单例）。
 // Windows: bash 优先（Git Bash，UTF-8）、cmd /C 兜底；输出经 io.Writer 累积到带锁
 // 缓冲（尾部上限防撑爆内存）+ 增量游标（write_stdin 读新输出段）。
-// 注意：进程在 app 退出时不自动清理，agent 用完应自行 kill_process。
+// 注意：库层不自动清理（agent 用完应自行 kill_process）；宿主退出由
+// cmd/companion/main.go 退出钩子调用 KillAllBackgroundProcesses() 统一收口
+// （2026-09-16：补「子进程泄漏」缺口，退出路径 10s 内无残留）。
 
 package agent
 
@@ -516,5 +518,30 @@ func killProcessTree(pid int) {
 	// Unix 兜底
 	if p, err := os.FindProcess(pid); err == nil {
 		p.Kill()
+	}
+}
+
+// KillAllBackgroundProcesses 终止全部后台进程（宿主退出清理；cmd/companion/main.go
+// 退出钩子调用）。覆盖所有经 runBackground / exec_command 启动的进程——agent 的
+// dev server、插件后台进程（如微信桥 wxbridge.exe）等，堵住「子进程孤儿化残留」缺口。
+// 幂等：无进程时无副作用；已结束的进程跳过（不做 PID 复用误杀）。
+func KillAllBackgroundProcesses() {
+	globalBG.mu.Lock()
+	procs := make([]*bgProc, 0, len(globalBG.procs))
+	for _, p := range globalBG.procs {
+		if p != nil {
+			procs = append(procs, p)
+		}
+	}
+	globalBG.mu.Unlock()
+	for _, p := range procs {
+		p.mu.Lock()
+		done := p.done
+		cmd := p.cmd
+		p.mu.Unlock()
+		if done || cmd == nil || cmd.Process == nil {
+			continue
+		}
+		killProcessTree(cmd.Process.Pid)
 	}
 }

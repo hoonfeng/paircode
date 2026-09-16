@@ -5,14 +5,20 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/hoonfeng/paircode/internal/agent"
 )
+
+// portInUseHoldSeconds 端口被占用时，提示信息在控制台停留的秒数
+// （双击启动的窗口不会一闪而过，用户能看清原因）。
+const portInUseHoldSeconds = 10
 
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
 // 也用于 /api/system/info 返回给前端 About 弹窗展示。
@@ -51,20 +57,40 @@ func main() {
 
 	log.Printf("[main] 正在启动 Web 服务器 (端口 %d)...", port)
 	if err := StartWebServer(port); err != nil {
+		// ★ 2026-09-16：端口占用 = 启动失败。明确提示 + 停留后退出，
+		//   不再留下「有窗口、无 WebUI」的僵尸实例。
+		var pie *PortInUseError
+		if errors.As(err, &pie) {
+			if pie.ServingPairCode() {
+				log.Printf("[main] 启动中止：端口 %d 已被另一个 PairCode 实例占用（本机已有实例在运行）。", pie.Port)
+				log.Printf("[main] 请直接打开 http://localhost:%d 使用现有实例；若确实需要并行运行，请设环境变量 WEB_PORT 指定其它端口。", pie.Port)
+			} else {
+				log.Printf("[main] 启动中止：端口 %d 已被其它程序占用（%v）。", pie.Port, pie.Err)
+				log.Printf("[main] 可设环境变量 WEB_PORT 指定其它端口后重试。")
+			}
+			log.Printf("[main] 本窗口将在 %d 秒后自动关闭。", portInUseHoldSeconds)
+			time.Sleep(portInUseHoldSeconds * time.Second)
+			os.Exit(1)
+		}
 		log.Fatalf("[main] 启动失败: %v", err)
 	}
 	log.Printf("[main] 已启动，请打开 http://0.0.0.0:%d（本机浏览器可用 http://localhost:%d，局域网设备用本机 IP）", port, port)
 
 	// ★ 2026-09-15：退出信号钩子——Ctrl+C / SIGTERM 时清理 MCP 连接池中的子进程，
 	//   避免 MCP 服务器进程孤儿化残留。
+	// ★ 2026-09-16：追加 KillAllBackgroundProcesses——终止全部后台进程
+	//   （run_background/exec_command 启动的 dev server、插件后台进程如
+	//   微信桥 wxbridge.exe），堵住「子进程孤儿残留」同类缺口；与插件的
+	//   stdin-EOF 自守护（如微信桥）形成双保险。
 	//   注意：Windows 强杀（任务管理器终止进程）不触发任何清理（OS 限制），
 	//   由空闲回收兜底（PAIR_MCP_IDLE_TTL_SEC，默认 10 分钟）。
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		log.Printf("[main] 收到退出信号，清理 MCP 连接…")
+		log.Printf("[main] 收到退出信号，清理 MCP 连接与后台进程…")
 		agent.CloseAllMCPConnections()
+		agent.KillAllBackgroundProcesses()
 		os.Exit(0)
 	}()
 
