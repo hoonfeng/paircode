@@ -40,15 +40,16 @@ type SessionLike interface {
 
 // Options 依赖注入（main 接线；nil 表示该能力未启用，相关端点返回 501）。
 type Options struct {
-	Token      string                             // 写操作校验 token（空=不校验，调试模式）
-	Login      func() SessionLike                 // 当前登录会话（nil=无）
-	Status     func() map[string]any              // /status 数据（由 account.Manager 提供）
-	Accounts   func() []map[string]any            // 可选：/accounts 列表
-	RemoveAcct func(id string) error              // 可选：移除账号
-	Relogin    func(id string) error              // 可选：重新登录
-	AddAcct    func(alias string) (string, error) // 可选：新增账号
+	Token      string                                         // 写操作校验 token（空=不校验，调试模式）
+	Login      func() SessionLike                             // 当前登录会话（nil=无）
+	Status     func() map[string]any                          // /status 数据（由 account.Manager 提供）
+	Accounts   func() []map[string]any                        // 可选：/accounts 列表
+	RemoveAcct func(id string) error                          // 可选：移除账号
+	Relogin    func(id string) error                          // 可选：重新登录
+	AddAcct    func(alias string) (string, error)             // 可选：新增账号
 	Send       func(account, to, text string) error           // 可选：主动发送文本（Agent 工具 wechat_send）
 	Contacts   func(account string) ([]map[string]any, error) // 可选：联系人列表（wechat_contacts）
+	SendMedia  func(account, to, file, text string) error     // 可选：主动发送媒体（wechat_send 的 file 参数）
 }
 
 // Server 本地 HTTP 服务。
@@ -361,7 +362,20 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.File != "" {
-		writeJSON(w, 501, errJSON("媒体发送暂未支持（file 字段预留）；请先使用 text"))
+		if s.opts.SendMedia == nil {
+			writeJSON(w, 501, errJSON("媒体发送未接线"))
+			return
+		}
+		if strings.TrimSpace(body.To) == "" {
+			writeJSON(w, 400, errJSON("缺少 to（收件人）"))
+			return
+		}
+		if err := s.opts.SendMedia(strings.TrimSpace(body.Account), strings.TrimSpace(body.To),
+			strings.TrimSpace(body.File), strings.TrimSpace(body.Text)); err != nil {
+			writeJSON(w, 409, errJSON(err.Error()))
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "sentAt": time.Now().Format(time.RFC3339), "file": body.File})
 		return
 	}
 	if strings.TrimSpace(body.To) == "" {

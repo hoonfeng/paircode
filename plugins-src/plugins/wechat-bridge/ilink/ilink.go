@@ -188,6 +188,63 @@ type MsgItem struct {
 	Type     int       `json:"type"` // 1=文本 2=图片 3=语音 4=文件 5=视频
 	TextItem *TextItem `json:"text_item,omitempty"`
 	RefMsg   *RefMsg   `json:"ref_msg,omitempty"`
+
+	// 媒体条目（P2-4 抓样补全；类型 2/3/4/5）
+	ImageItem *ImageItem `json:"image_item,omitempty"`
+	VoiceItem *VoiceItem `json:"voice_item,omitempty"`
+	FileItem  *FileItem  `json:"file_item,omitempty"`
+	VideoItem *VideoItem `json:"video_item,omitempty"`
+}
+
+// CDNMedia CDN 媒体引用（收/发同构）。
+// aes_key 为 base64，内层可能是 16 字节原始 key 或 32 字符 hex 字符串（两种都在线见过）。
+type CDNMedia struct {
+	EncryptQueryParam string `json:"encrypt_query_param,omitempty"`
+	AESKey            string `json:"aes_key,omitempty"`
+	EncryptType       int    `json:"encrypt_type,omitempty"`
+	FullURL           string `json:"full_url,omitempty"`
+}
+
+// ImageItem 图片条目。
+type ImageItem struct {
+	Media       *CDNMedia `json:"media,omitempty"`
+	ThumbMedia  *CDNMedia `json:"thumb_media,omitempty"`
+	AESKey      string    `json:"aeskey,omitempty"` // 原始 AES key（hex 字符串），优先于 media.aes_key
+	MidSize     int64     `json:"mid_size,omitempty"`
+	ThumbSize   int64     `json:"thumb_size,omitempty"`
+	HdSize      int64     `json:"hd_size,omitempty"`
+	ThumbWidth  int       `json:"thumb_width,omitempty"`
+	ThumbHeight int       `json:"thumb_height,omitempty"`
+}
+
+// VoiceItem 语音条目（含微信侧 ASR 转写 text）。
+type VoiceItem struct {
+	Media         *CDNMedia `json:"media,omitempty"`
+	EncodeType    int       `json:"encode_type,omitempty"`
+	BitsPerSample int       `json:"bits_per_sample,omitempty"`
+	SampleRate    int       `json:"sample_rate,omitempty"`
+	Playtime      int       `json:"playtime,omitempty"` // 毫秒
+	Text          string    `json:"text,omitempty"`     // ASR 转写
+}
+
+// FileItem 文件条目。
+type FileItem struct {
+	Media    *CDNMedia  `json:"media,omitempty"`
+	FileName string     `json:"file_name,omitempty"`
+	MD5      string     `json:"md5,omitempty"`
+	Len      FlexString `json:"len,omitempty"` // 明文字节数（协议为字符串）
+}
+
+// VideoItem 视频条目。
+type VideoItem struct {
+	Media       *CDNMedia `json:"media,omitempty"`
+	ThumbMedia  *CDNMedia `json:"thumb_media,omitempty"`
+	VideoSize   int64     `json:"video_size,omitempty"`  // 明文字节数
+	PlayLength  int       `json:"play_length,omitempty"` // 秒
+	VideoMD5    string    `json:"video_md5,omitempty"`
+	ThumbSize   int64     `json:"thumb_size,omitempty"`
+	ThumbWidth  int       `json:"thumb_width,omitempty"`
+	ThumbHeight int       `json:"thumb_height,omitempty"`
 }
 
 // TextItem 文本条目。
@@ -206,6 +263,16 @@ type SendTextResp struct {
 	Ret     int    `json:"ret"`
 	Errcode int    `json:"errcode"`
 	Errmsg  string `json:"errmsg"`
+}
+
+// GetUploadUrlResp getuploadurl 响应（发媒体前的 CDN 预签名参数）。
+type GetUploadUrlResp struct {
+	Ret              int    `json:"ret"`
+	Errcode          int    `json:"errcode"`
+	Errmsg           string `json:"errmsg"`
+	UploadParam      string `json:"upload_param"`
+	ThumbUploadParam string `json:"thumb_upload_param"`
+	UploadFullURL    string `json:"upload_full_url"`
 }
 
 // GetConfigResp getconfig 响应。
@@ -350,6 +417,27 @@ func (c *Client) SendText(toUserID, text, contextToken string) (*SendTextResp, e
 			"context_token": contextToken,
 		},
 	}, postOpt{retries: 2})
+}
+
+// SendItem 发送单条结构化消息条目（媒体等；item = item_list 的单个元素）。
+// 与 SendText 同构：message_type=2(BOT)/message_state=2(FINISH)，必须带对应用户的 context_token。
+func (c *Client) SendItem(toUserID string, item map[string]any, contextToken string) (*SendTextResp, error) {
+	return post[SendTextResp](c, "ilink/bot/sendmessage", map[string]any{
+		"msg": map[string]any{
+			"from_user_id":  "",
+			"to_user_id":    toUserID,
+			"client_id":     randomHex(8),
+			"message_type":  2,
+			"message_state": 2,
+			"item_list":     []map[string]any{item},
+			"context_token": contextToken,
+		},
+	}, postOpt{retries: 2})
+}
+
+// GetUploadUrl 获取 CDN 上传预签名（发媒体；请求字段见 media 包 Upload）。
+func (c *Client) GetUploadUrl(req map[string]any) (*GetUploadUrlResp, error) {
+	return post[GetUploadUrlResp](c, "ilink/bot/getuploadurl", req, postOpt{timeout: 20 * time.Second, retries: 2})
 }
 
 // GetConfig 获取配置（typing_ticket 等）。

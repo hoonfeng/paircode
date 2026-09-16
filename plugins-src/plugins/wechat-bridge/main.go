@@ -107,6 +107,7 @@ func run() error {
 		RemoveAcct: mgr.Remove,
 		Relogin:    mgr.Relogin,
 		Send:       host.SendTo,
+		SendMedia:  host.SendMedia,
 		Contacts:   host.Contacts,
 	})
 	port, err := srv.Start(cfg.Port)

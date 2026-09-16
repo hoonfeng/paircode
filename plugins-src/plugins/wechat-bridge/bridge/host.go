@@ -168,6 +168,26 @@ func (h *Host) Contacts(accountID string) ([]map[string]any, error) {
 	return b.Contacts(), nil
 }
 
+// SendMedia 主动发送媒体文件（account 空 = 唯一运行中的桥）。供本地 HTTP /send 的 file 分支调用。
+func (h *Host) SendMedia(accountID, userID, filePath, caption string) error {
+	if accountID == "" {
+		h.mu.Lock()
+		n := len(h.bridges)
+		h.mu.Unlock()
+		if n > 1 {
+			return fmt.Errorf("存在多个运行中的账号，请指定 account")
+		}
+	}
+	b := h.pickBridge(accountID)
+	if b == nil {
+		if accountID != "" {
+			return fmt.Errorf("账号 %s 未运行（不存在或未登录）", accountID)
+		}
+		return fmt.Errorf("没有运行中的账号桥")
+	}
+	return b.SendMediaTo(userID, filePath, caption)
+}
+
 // handleStale -14 持续失效：停旧桥并请求重新登录（用户扫码成功后
 // OnReady 回调重新 StartAccount，桥以新凭据重建）。
 func (h *Host) handleStale(id string) {

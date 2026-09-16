@@ -10,6 +10,7 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/config"
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/ilink"
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/login"
+	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/media"
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/paircode"
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/store"
 	"github.com/hoonfeng/paircode/plugins-src/plugins/wechat-bridge/stream"
@@ -50,9 +52,9 @@ type State struct {
 
 // pendingMsg 待处理消息（enqueue 解析产物）。
 type pendingMsg struct {
-	from      string
-	text      string
-	mediaOnly bool
+	from  string
+	text  string
+	media []ilink.MsgItem // 附带的媒体条目（type 2/3/4/5）
 }
 
 // Bridge 单账号桥主循环。
@@ -63,6 +65,7 @@ type Bridge struct {
 	api  *ilink.Client
 	es   *EventStream
 	log  logf
+	raw  *rawLogger // raw 抓样（默认开；config.RawDump=false 时为 nil）
 
 	onStale func(id string) // -14 持续失败：请求宿主发起重新登录
 
@@ -112,6 +115,13 @@ func New(cfg config.Config, info account.Info, dir string, creds *login.Credenti
 			b.ctxTokens[k] = v
 		}
 	}
+	if cfg.RawDump {
+		if rl, err := newRawLogger(cfg.DataDir, info.ID, log); err != nil {
+			log("raw 抓样初始化失败: %v", err)
+		} else {
+			b.raw = rl
+		}
+	}
 	return b
 }
 
@@ -120,6 +130,9 @@ func (b *Bridge) Start() {
 	b.unwatch = b.es.Watch(b.info.ConvID, b.onStreamEvent)
 	go b.guard("pollLoop", b.pollLoop)
 	go b.guard("workLoop", b.workLoop)
+	if b.raw != nil {
+		b.log("raw 抓样 → %s", b.raw.path)
+	}
 	b.log("桥循环已启动（conv=%s workspace=%s）", b.info.ConvID, b.resolveWorkspace())
 }
 
@@ -131,6 +144,9 @@ func (b *Bridge) Stop() {
 			b.unwatch()
 		}
 		b.saveNow()
+		if b.raw != nil {
+			b.raw.close()
+		}
 		b.log("桥循环已停止（id=%s）", b.info.ID)
 	})
 }
@@ -255,6 +271,7 @@ func (b *Bridge) sleepInterruptible(d time.Duration) bool {
 
 // enqueue 过滤 + 入队（只处理 USER 消息；去重；维护 context_token）。
 func (b *Bridge) enqueue(raw json.RawMessage) {
+	b.raw.write(raw) // raw 抓样（默认开；非 USER/BOT 也落，供协议排查）
 	var m ilink.RawMsg
 	if json.Unmarshal(raw, &m) != nil {
 		return
@@ -297,6 +314,7 @@ func (b *Bridge) enqueue(raw json.RawMessage) {
 	// 解析 item：文本（含引用前缀）/ 媒体
 	var textSB strings.Builder
 	hasMedia := false
+	var mediaItems []ilink.MsgItem
 	for _, item := range m.ItemList {
 		switch item.Type {
 		case 1:
@@ -320,12 +338,13 @@ func (b *Bridge) enqueue(raw json.RawMessage) {
 			}
 		case 2, 3, 4, 5:
 			hasMedia = true
+			mediaItems = append(mediaItems, item)
 		}
 	}
 	text := strings.TrimSpace(textSB.String())
 
 	if text == "" && hasMedia {
-		b.push(pendingMsg{from: from, mediaOnly: true})
+		b.push(pendingMsg{from: from, media: mediaItems})
 		b.queueSave()
 		return
 	}
@@ -333,7 +352,7 @@ func (b *Bridge) enqueue(raw json.RawMessage) {
 		return
 	}
 	b.log("📥 收到消息 from=%s：%s", from, truncateRunes(text, 80))
-	b.push(pendingMsg{from: from, text: text})
+	b.push(pendingMsg{from: from, text: text, media: mediaItems})
 	b.queueSave()
 }
 
@@ -361,9 +380,24 @@ func (b *Bridge) workLoop() {
 
 func (b *Bridge) handleOne(item pendingMsg) {
 	b.log("■ 开始处理（队列剩余 %d 条）", len(b.queue))
-	if item.mediaOnly {
-		b.sendToWeixin(item.from, "（微信桥）目前仅支持文本消息，图片/文件/语音请稍候再试～")
-		return
+
+	// 媒体预处理：下载/解密/落盘 → 描述并入投喂文本
+	if len(item.media) > 0 {
+		desc, okCount := b.processMedia(item.media)
+		switch {
+		case okCount > 0:
+			prefix := "【微信媒体】（已自动保存到本机，供你读取）\n" + desc
+			if item.text != "" {
+				item.text = prefix + "\n【用户留言】\n" + item.text
+			} else {
+				item.text = prefix
+			}
+		case item.text != "":
+			item.text = "【微信媒体】接收失败（下载/解密异常），未能取得内容：\n" + desc + "\n【用户留言】\n" + item.text
+		default:
+			b.sendToWeixin(item.from, "（微信桥）媒体接收失败，未取得可用内容，请重试或改发文本。")
+			return
+		}
 	}
 
 	// 0)「正在输入」占位（即时反馈；失败静默忽略）
@@ -554,6 +588,27 @@ func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Ses
 
 // ── 发送 ─────────────────────────────────────────────────────────────
 
+// processMedia 下载/解密/保存媒体条目（收方向），返回（投喂描述, 成功条数）。
+func (b *Bridge) processMedia(items []ilink.MsgItem) (string, int) {
+	dir := filepath.Join(b.cfg.DataDir, "inbound")
+	var lines []string
+	okCount := 0
+	for i := range items {
+		path, note, err := media.Inbound(dir, &items[i], b.cfg.CDNBaseURL)
+		if err != nil {
+			b.log("媒体处理失败（type=%d）: %v", items[i].Type, err)
+		} else {
+			okCount++
+			b.log("📥 媒体已保存：%s", path)
+		}
+		if note == "" {
+			note = "（无描述）"
+		}
+		lines = append(lines, "- "+note)
+	}
+	return strings.Join(lines, "\n"), okCount
+}
+
 // SendTo 主动向指定用户发送文本（Agent 工具 wechat_send / 壳经本地 HTTP 调用）。
 // 需要该联系人已与桥交互过（存在 context_token，即曾给桥发过消息）。
 func (b *Bridge) SendTo(userID, text string) error {
@@ -567,6 +622,63 @@ func (b *Bridge) SendTo(userID, text string) error {
 	if !b.sendToWeixin(userID, text) {
 		return fmt.Errorf("发送失败：该联系人暂无有效会话（需先给桥发过消息以建立 context_token）")
 	}
+	return nil
+}
+
+// SendMediaTo 主动发送媒体文件（wechat_send 的 file 参数 / 壳经本地 HTTP 调用）。
+// 相对路径按会话工作区解析；类型按扩展名推断（图片/视频/其他文件）。
+func (b *Bridge) SendMediaTo(userID, filePath, caption string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return fmt.Errorf("收件人（to）不能为空")
+	}
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return fmt.Errorf("文件路径（file）不能为空")
+	}
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(b.resolveWorkspace(), filePath)
+	}
+	if fi, err := os.Stat(filePath); err != nil || fi.IsDir() {
+		return fmt.Errorf("文件不存在或不可读: %s", filePath)
+	}
+	kind, mediaType, ok := media.KindFromPath(filePath)
+	if !ok {
+		return fmt.Errorf("无法按扩展名识别文件类型: %s（支持图片/视频/常见文档）", filePath)
+	}
+	b.mu.Lock()
+	token := b.ctxTokens[userID]
+	b.mu.Unlock()
+	if token == "" {
+		return fmt.Errorf("该联系人暂无有效会话（需先给桥发过消息以建立 context_token）")
+	}
+
+	up, err := media.Upload(b.api, filePath, userID, mediaType, b.cfg.CDNBaseURL)
+	if err != nil {
+		return fmt.Errorf("媒体上传失败: %w", err)
+	}
+	itemMap, err := media.BuildItem(kind, up, filepath.Base(filePath))
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(caption) != "" {
+		b.sendToWeixin(userID, caption)
+	}
+	resp, err := b.api.SendItem(userID, itemMap, token)
+	if err != nil {
+		return fmt.Errorf("媒体发送失败: %w", err)
+	}
+	if resp.Ret == -14 || resp.Errcode == -14 {
+		b.mu.Lock()
+		delete(b.ctxTokens, userID)
+		b.mu.Unlock()
+		b.queueSave()
+		return fmt.Errorf("会话已过期（-14），请等待对方重新发消息后重试")
+	}
+	if resp.Ret != 0 || resp.Errcode != 0 {
+		return fmt.Errorf("发送响应异常 ret=%d errcode=%d errmsg=%s", resp.Ret, resp.Errcode, resp.Errmsg)
+	}
+	b.log("📤 媒体已发送（%s，%s）", kind, filePath)
 	return nil
 }
 

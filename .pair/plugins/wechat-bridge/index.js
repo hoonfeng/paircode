@@ -506,13 +506,13 @@ return {
     ctx.tools.register({
       name: 'wechat_send',
       category: 'web',
-      description: '主动向微信联系人发送消息（文本）。to 用 wechat_contacts 查询；file 为预留字段（媒体发送暂未支持）。',
+      description: '主动向微信联系人发送消息。to 用 wechat_contacts 查询；text 纯文本；file 为工作区内文件路径（图片/视频/文档，自动上传发送）。',
       parameters: {
         type: 'object',
         properties: {
           to: { type: 'string', description: '联系人 id（来自 wechat_contacts）' },
           text: { type: 'string', description: '消息内容（纯文本）' },
-          file: { type: 'string', description: '预留：工作区内文件路径（媒体发送暂未支持，传了会报错）' },
+          file: { type: 'string', description: '工作区内文件路径（可选；图片/视频/pdf 等，经微信 CDN 上传发送）' },
         },
         required: ['to'],
       },

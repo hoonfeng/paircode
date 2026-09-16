@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config 微信桥运行配置。
@@ -46,8 +47,18 @@ type Config struct {
 	LongPollTimeoutSec int    // getupdates 长轮询秒数（超时视为空批）
 	TextChunkLimit     int    // 长文本分片上限（sendmessage 单条文本）
 
+	// ── 媒体 CDN ──
+	// CDNBaseURL 微信 CDN 基础地址（媒体上传/下载 URL 拼接 fallback；
+	// 服务端返回 full_url / upload_full_url 时优先用之）。
+	CDNBaseURL string
+
 	// ── 单实例 ──
 	LockFile string // 实例锁文件路径（默认 <DataDir>/bridge.lock）
+
+	// ── 调试 ──
+	// RawDump raw 抓样：把 getupdates 原始消息按行落盘到 <DataDir>/raw/
+	// （默认开；协议字段校准与故障复盘用，WX_BRIDGE_RAW_DUMP=0 可关闭）。
+	RawDump bool
 }
 
 // Default 返回默认配置（含 WX_BRIDGE_* 环境变量覆盖）。
@@ -74,6 +85,10 @@ func Default() Config {
 		BaseURL:            "https://ilinkai.weixin.qq.com",
 		LongPollTimeoutSec: 35,
 		TextChunkLimit:     4000,
+
+		CDNBaseURL: "https://novac2c.cdn.weixin.qq.com/c2c",
+
+		RawDump: true,
 	}
 
 	if v := os.Getenv("WX_BRIDGE_PAIRCODE_URL"); v != "" {
@@ -83,6 +98,13 @@ func Default() Config {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Port = n
 		}
+	}
+	switch strings.ToLower(os.Getenv("WX_BRIDGE_RAW_DUMP")) {
+	case "0", "false", "off", "no":
+		cfg.RawDump = false
+	}
+	if v := os.Getenv("WX_BRIDGE_CDN_BASE_URL"); v != "" {
+		cfg.CDNBaseURL = v
 	}
 	return cfg
 }
