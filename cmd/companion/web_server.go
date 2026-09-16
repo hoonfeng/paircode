@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/hoonfeng/paircode/pkg/executil"
 	"io"
@@ -2568,6 +2569,31 @@ func (s *webServer) launchConvRun(convID, wsRoot, task string, autonomous bool) 
 		setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer setupCancel()
 		if err := agentMgr.Start(setupCtx, convID, task, opts); err != nil {
+			// ★ 2026-09-16：会话忙（ErrSessionRunning）改为排队重试——消息已在
+			//   handleChatSend 同步段落盘，若不排队则「投喂成功但无人处理」，
+			//   用户侧表现为回复丢失（微信桥投喂连发消息实测）。排队等待会话
+			//   空闲后用同一 opts 重试启动；其他错误与超时仍走 PushStartError。
+			if errors.Is(err, agent.ErrSessionRunning) {
+				log.Printf("[chat] conv=%s 已有运行中任务，消息排队等待重试启动", convID)
+				go func() {
+					serr := waitIdleAndStart(convID,
+						agentMgr.IsRunning,
+						func() error {
+							retryCtx, retryCancel := context.WithTimeout(context.Background(), 30*time.Second)
+							defer retryCancel()
+							return agentMgr.Start(retryCtx, convID, task, opts)
+						},
+						func(d time.Duration) bool { time.Sleep(d); return true },
+						time.Now().Add(busyQueueMaxWait),
+						log.Printf,
+					)
+					if serr != nil {
+						log.Printf("[chat] 排队重试启动失败 conv=%s err=%v", convID, serr)
+						agentMgr.PushStartError(convID, "消息排队等待后仍未能启动："+serr.Error())
+					}
+				}()
+				return
+			}
 			// ★ Start 失败日志（排查「无响应」：异步后经 WS error 事件推送，此处留档）
 			log.Printf("[chat] Start 失败 conv=%s err=%v", convID, err)
 			agentMgr.PushStartError(convID, err.Error())
