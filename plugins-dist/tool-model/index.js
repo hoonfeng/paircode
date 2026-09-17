@@ -40,6 +40,7 @@ var EDGE_NEIGHBOR_HOPS = 6;     // 边的"邻域"跳数（判定斜面只切到�
 var LIMIT_CONVEX_FACES = 4000;  // 走"H-rep 直接构造"的凸体面数上限（面平面去重是 O(F²)）
 var LIMIT_CONVEX_PLANES = 140;  // H-rep 直接构造的平面数上限（顶点枚举 O(n³)）
 var LIMIT_FILLET_EDGES = 8;     // 单次圆角的边数上限（圆角要布尔，见 meshFillet 的成本说明）
+var LIMIT_RB_PLANES = 32;       // rolling-ball 圆角直接构造的凸体平面数上限（三平面枚举 O(n³)，且片数∝棱数×segs）
 
 var EPS = 1e-9;
 var EPS_AREA = 1e-10;           // 退化三角面面积阈值
@@ -1755,8 +1756,8 @@ function meshBoolean(meshA, meshB, op, tol) {
 //       ③ 圆角：先按半径 r 倒角切掉棱部楔块，再把「圆柱片段」拼回去（路线 B 的布尔近似）。
 //   · 斜面平移量为什么是 d·cos(θ/2)：要求斜面恰好经过「两个邻面内距棱 d」的那两点 ——
 //     d 就是用户直觉的"倒角量"（面内距离），θ 是内二面角（凸边 θ < 180°）。
-//   · 顶点混合（三条以上棱交会处的球面过渡）**不做**：凸体由半空间求交自然得到正确的小平面，
-//     边端为近似 —— 文档如实标注，不静默降级。
+//   · 顶点处（三条以上棱交会）：chamfer 由半空间求交自然得到正确的小平面；圆角的顶点混合见文档 I.9.6
+//     —— 凸体全棱走 rolling-ball（顶点处是解析球片），不再是"不做"。
 //   · 凹边（内二面角 > 180°）不支持：凹边倒角要「填」材料而非「切」（另一套 union 逻辑）——
 //     默认跳过并在诊断里报告条数，用户显式指定凹边时明确报错。
 
@@ -2143,6 +2144,223 @@ function meshChamfer(mesh, op, E, stats) {
   return out;
 }
 
+// ── 凸体圆角：rolling-ball 的**开运算**构造 (P ⊖ Ball_r) ⊕ Ball_r ──────────────────────
+// 圆角的几何本质是形态学**开运算**（先用球把实体磨小、再滚回去），对凸体它可以解析构造，不必做布尔：
+//   ① P ⊖ Ball_r：把每个面平面沿法线内缩 r ⇒ 仍是 H-rep 凸体 P'；
+//   ② P' ⊕ Ball_r：半径 r 的球绕 P' 边界滚一圈 ⇒ 边界恰好是三类面片的拼合：
+//        平面片（P' 的面外移 r）／圆柱片（轴 = P' 的棱）／球片（球心 = P' 的顶点）。
+//   ★ 三类片沿**同一条解析曲线**相接，所以拼接天然水密：棱 (i,j) 的方向 ⊥ n_i、n_j
+//     ⇒ span(n_i,n_j) 正好是轴的正交补 ⇒ 圆柱片在端点的径向 = 球面上由 n_i、n_j 张成的**大圆弧**；
+//     两侧用同一个 slerpDir 取点 ⇒ 顶点坐标逐位相同，不需任何容差兜底。
+//   ★ 顶点球片就是 rolling-ball 的**顶点混合面**，因此"相邻棱交会"不再是多个弧块的交集 ——
+//     这正是路线 B（布尔拼弧块）做不到、而文档 I.9.5 列为"下一步①"的那件事。
+//   结果 ⊆ 原体（自证）：Q ∈ P' ⇒ 对任意面 m 有 n_m·Q ≤ w_m − r；片上的点 X = Q + r·d（|d| = 1）⇒
+//     n_m·X ≤ w_m − r + r·n_m·d ≤ w_m。所以圆角只会"切料"，不会外扩。
+// 适用：**仅凸体**（非凸要"凹边填角"，是另一套逻辑）。返回 {m[,blendVerts]} / {err} / null(不适用→交路线 B)。
+
+// 单位向量球面线性插值（大圆弧）。端点显式返回 b/a ⇒ 与相邻片共用时坐标逐位一致（水密的关键）。
+function slerpDir(a, b, t) {
+  if (!(t > 0)) return a.slice();
+  if (t >= 1) return b.slice();
+  var c = vDot(a, b);
+  if (c > 1) c = 1; else if (c < -1) c = -1;
+  var om = Math.acos(c), s = Math.sin(om);
+  if (s < 1e-12) return vNorm(vAdd(a, b));
+  return vNorm(vAdd(vMul(a, Math.sin((1 - t) * om) / s), vMul(b, Math.sin(t * om) / s)));
+}
+
+// 一组面法线按"绕中心方向"排序（凸锥的球面多边形顶点顺序）
+function sortDirsAround(planes, on) {
+  var m = [0, 0, 0], k;
+  for (k = 0; k < on.length; k++) m = vAdd(m, planes[on[k]].n);
+  if (vLen(m) < 1e-12) return null;
+  m = vNorm(m);
+  var helper = Math.abs(m[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  var u = vNorm(vCross(m, helper)), vv = vNorm(vCross(m, u));
+  var ang = [];
+  for (k = 0; k < on.length; k++) {
+    var d = planes[on[k]].n, rel = vSub(d, vMul(m, vDot(d, m)));
+    ang.push([Math.atan2(vDot(rel, vv), vDot(rel, u)), d]);
+  }
+  ang.sort(function (A, B) { return A[0] - B[0]; });
+  var out = [];
+  for (k = 0; k < ang.length; k++) out.push(ang[k][1]);
+  return out;
+}
+
+// 球面多边形 → 三角形。边界分段与圆柱片端线用同一个 slerpDir（逐位一致 ⇒ 接缝水密）。
+//   ★ 只做"单极点扇形"精度不够：apex（重心方向）到边界的角距可达 50°+，三角形弦面会把球顶
+//     削掉（实测 r=2 时顶点处偏差 ≈0.32，体积缺口 7.9e-5 且**不随 segments 收敛** —— 因为缺陷
+//     来自"径向一刀切"，与边界分几段无关）。所以在每个扇形内再按径向分 rings 层同心环：
+//     环 k 的点 = slerp(重心方向, 边界点, k/rings)，环间连成四边形 ⇒ 径向误差按 rings 收敛，
+//     而边界点仍是 slerp(d0, d1, j/segs) —— 与圆柱片端线同源，水密性不受影响。
+//   内接离散：顶点全落在名义半径的球面上，绝不超出（与弧面切平面的口径一致）。
+function sphericalCapTris(center, dirs, r, segs, rings) {
+  var m = [0, 0, 0], i, j, k;
+  for (i = 0; i < dirs.length; i++) m = vAdd(m, dirs[i]);
+  if (vLen(m) < 1e-12) return [];
+  var G = vNorm(m);
+  var fan = [];
+  for (i = 0; i < dirs.length; i++) {
+    var d0 = dirs[i], d1 = dirs[(i + 1) % dirs.length];
+    var edge = [];
+    for (j = 0; j <= segs; j++) edge.push(slerpDir(d0, d1, j / segs));
+    var prev = [G];                                   // 环 0：退化成重心方向
+    for (k = 1; k <= rings; k++) {
+      var ring = [];
+      for (j = 0; j <= segs; j++) ring.push(k === rings ? edge[j] : slerpDir(G, edge[j], k / rings));
+      if (k === 1) {
+        for (j = 0; j < segs; j++) fan.push([G, ring[j], ring[j + 1]]);
+      } else {
+        for (j = 0; j < segs; j++) {
+          fan.push([prev[j], prev[j + 1], ring[j + 1]]);
+          fan.push([prev[j], ring[j + 1], ring[j]]);
+        }
+      }
+      prev = ring;
+    }
+  }
+  var out = [], a;
+  for (a = 0; a < fan.length; a++) {
+    out.push([
+      vAdd(center, vMul(fan[a][0], r)),
+      vAdd(center, vMul(fan[a][1], r)),
+      vAdd(center, vMul(fan[a][2], r))
+    ]);
+  }
+  return out;
+}
+
+// 凸体 rolling-ball 圆角：见上方说明。tab 已由调用方建好（复用其凸性判定）。
+function rollingBallFillet(tab, r, segs, eps) {
+  var planes = meshConvexPlanes(tab, eps);
+  if (!planes || planes.length > LIMIT_RB_PLANES) return null;
+  var n = planes.length, i, j, k, a;
+  // ① 内缩 r
+  var inner = [];
+  for (i = 0; i < n; i++) inner.push({ n: planes[i].n, w: planes[i].w - r });
+  // ② P' 的顶点 = 三平面交点且满足所有内缩半空间；同时记录"通过它的面"（供棱/球片用）
+  var verts = [], seen = {};
+  for (i = 0; i < n; i++) {
+    for (j = i + 1; j < n; j++) {
+      for (k = j + 1; k < n; k++) {
+        var p = planesIntersect(inner[i], inner[j], inner[k]);
+        if (!p) continue;
+        var ok = true, on = [];
+        for (a = 0; a < n; a++) {
+          var dv = vDot(inner[a].n, p) - inner[a].w;
+          if (dv > eps) { ok = false; break; }
+          if (dv >= -eps) on.push(a);
+        }
+        if (!ok || on.length < 3) continue;
+        var vk = Math.round(p[0] / eps) + '_' + Math.round(p[1] / eps) + '_' + Math.round(p[2] / eps);
+        if (seen[vk] !== undefined) {
+          var ex = verts[seen[vk]];
+          for (a = 0; a < on.length; a++) if (ex.on.indexOf(on[a]) < 0) ex.on.push(on[a]);
+          continue;
+        }
+        seen[vk] = verts.length;
+        verts.push({ p: p, on: on });
+      }
+    }
+  }
+  if (verts.length < 4) return { err: 'deg' };   // 内缩后实体消失 ⇒ 半径过大
+  // ③ 每个面的顶点环（面内按角度排序，与 halfspacesMesh 同口径）
+  var faces = [];
+  for (i = 0; i < n; i++) {
+    var vids = [];
+    for (a = 0; a < verts.length; a++) if (verts[a].on.indexOf(i) >= 0) vids.push(a);
+    if (vids.length < 3) continue;
+    var nv = planes[i].n;
+    var helper = Math.abs(nv[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    var u = vNorm(vCross(nv, helper)), vv = vNorm(vCross(nv, u));
+    var acc = [0, 0, 0];
+    for (a = 0; a < vids.length; a++) acc = vAdd(acc, verts[vids[a]].p);
+    var ctr = vMul(acc, 1 / vids.length), ring = [];
+    for (a = 0; a < vids.length; a++) {
+      var rel = vSub(verts[vids[a]].p, ctr);
+      ring.push([Math.atan2(vDot(rel, vv), vDot(rel, u)), vids[a]]);
+    }
+    ring.sort(function (A, B) { return A[0] - B[0]; });
+    var ord = [];
+    for (a = 0; a < ring.length; a++) ord.push(ring[a][1]);
+    faces.push({ i: i, ring: ord });
+  }
+  // ④ P' 的棱：恰好被两个面共用的两个顶点（>2 个 ⇒ 退化，交给路线 B；相对面只有 0 个，跳过）
+  var ribs = [];
+  for (i = 0; i < n; i++) {
+    for (j = i + 1; j < n; j++) {
+      var sh = [];
+      for (a = 0; a < verts.length; a++) {
+        if (verts[a].on.indexOf(i) >= 0 && verts[a].on.indexOf(j) >= 0) sh.push(a);
+      }
+      if (sh.length === 2) ribs.push({ i: i, j: j, A: sh[0], B: sh[1] });
+      else if (sh.length > 2) return null;
+    }
+  }
+  var tris = [];
+  // ★ 统一绕向：三类片的顶点顺序由各自的参数化决定（面内角序／弧段方向／轴方向），彼此不一致，
+  //   而"整体有向体积翻转"只能翻**全部**面、修不了部分反向（实测 flipped=108、体积偏小 17.7%）。
+  //   凸体的外法线判据很干净：任意片的法线都应背离内缩体内部 ⇒ 以内缩体质心为参考逐片定向。
+  var refC = [0, 0, 0];
+  for (a = 0; a < verts.length; a++) refC = vAdd(refC, verts[a].p);
+  refC = vMul(refC, 1 / verts.length);
+  var emit = function (p0, p1, p2) {
+    var nn = vCross(vSub(p1, p0), vSub(p2, p0));
+    var c2 = vMul(vAdd(vAdd(p0, p1), p2), 1 / 3);
+    if (vDot(nn, vSub(c2, refC)) < 0) tris.push([p0, p2, p1]);
+    else tris.push([p0, p1, p2]);
+  };
+  // ⑤-1 平面片：面环整体外移 r
+  for (k = 0; k < faces.length; k++) {
+    var f = faces[k], fn = planes[f.i].n, w2 = [];
+    for (a = 0; a < f.ring.length; a++) w2.push(vAdd(verts[f.ring[a]].p, vMul(fn, r)));
+    for (a = 1; a + 1 < w2.length; a++) emit(w2[0], w2[a], w2[a + 1]);
+  }
+  // ⑤-2 圆柱片：轴 = P' 的棱，径向 = 两个面法线之间的大圆弧（与球片边界同源 ⇒ 逐位相接）
+  for (k = 0; k < ribs.length; k++) {
+    var e = ribs[k], A = verts[e.A].p, B = verts[e.B].p;
+    var n1 = planes[e.i].n, n2 = planes[e.j].n;
+    for (a = 0; a < segs; a++) {
+      var d0 = slerpDir(n1, n2, a / segs), d1 = slerpDir(n1, n2, (a + 1) / segs);
+      var q00 = vAdd(A, vMul(d0, r)), q01 = vAdd(A, vMul(d1, r));
+      var q10 = vAdd(B, vMul(d0, r)), q11 = vAdd(B, vMul(d1, r));
+      emit(q00, q01, q11);
+      emit(q00, q11, q10);
+    }
+  }
+  // ⑤-3 球片（顶点混合面）：球心 = P' 的顶点，方向域 = 该顶点相邻面法线张成的凸锥。
+  //   径向分层数与弧面段数同量级（√segs，2~6）：让"球面顶点处"与"圆柱面处"的离散精度相当。
+  var blendRings = Math.ceil(Math.sqrt(segs));
+  if (blendRings < 2) blendRings = 2; else if (blendRings > 6) blendRings = 6;
+  var blendVerts = 0;
+  for (a = 0; a < verts.length; a++) {
+    if (verts[a].on.length < 3) continue;
+    var dirs = sortDirsAround(planes, verts[a].on);
+    if (!dirs) continue;
+    var st = sphericalCapTris(verts[a].p, dirs, r, segs, blendRings);
+    if (!st.length) continue;
+    blendVerts++;
+    for (k = 0; k < st.length; k++) emit(st[k][0], st[k][1], st[k][2]);
+  }
+  if (!tris.length) return null;
+  var out = trisToMesh(tris, eps);
+  if (!out.indices.length) return null;
+  return { m: meshOrientOutward(out), blendVerts: blendVerts, pieces: faces.length + ribs.length + blendVerts };
+}
+
+// 选中集是否 = **全部**真实棱（rolling-ball 走"整体开运算"，只圆一部分棱会破坏其前提）。
+//   ★ 判据不能用"convex 的边数"：共面边（同一平面被三角形切开的对角线）sgn ≈ 0，按凸凹判定也算 convex，
+//     立方体 18 条内部边里 6 条对角线会被算进来 ⇒ 永远判否、rolling-ball 形同虚设。
+//     正确口径 = 折角 ≥ minAngle 的边总数（那才是"棱"），与 sel.list 比数量即集合相等（list ⊆ 棱）。
+function rbCoversAllConvexEdges(tab, sel) {
+  var sharp = 0, i;
+  for (i = 0; i < tab.edges.length; i++) {
+    if (tab.edges[i].angleDeg >= sel.minAngle - 1e-9) sharp++;
+  }
+  return sharp > 0 && sel.list.length === sharp;
+}
+
 // 圆角弧块的半空间表示（凸 = 扇形柱）：轴 = 距两邻面各 r 的直线（在实体内部），半径 r，
 //   角度范围 = 内二面角 θ，沿边范围 = 边本身；弧面用 segs 个切平面离散（顶点落在半径 r 的圆上）。
 function filletArcHalfspaces(edge, r, segs) {
@@ -2179,9 +2397,9 @@ function filletArcHalfspaces(edge, r, segs) {
 
 // 圆角：先按 r 倒角切掉棱部楔块（复用 chamferCut），再把「圆柱片段（弧块）」拼回去 —— 路线 B 的布尔近似。
 //   · 弧块**先合并成一个网格、再整体 union 一次**：逐块 union 会让 BSP 把整个网格反复切碎
-//     （实测 12 条棱逐块 union 把 12 面的立方体顶到 5.4 万面）。合并时各弧块都是十几面的小体，
-//     相邻棱的弧块在顶点处相交也由 BSP union 正确处理。
-//   · 顶点处（三条以上棱交会）是多个弧块的交集，不是解析过渡面 —— 近似，文档如实标注。
+//     （实测 12 条棱逐块 union 把 12 面的立方体顶到 5.4 万面）。
+//     ★ 本路径**不做顶点混合**：相邻棱的弧块在顶点处相交会留下大量未配对边，故那里明确拒绝。
+//   · 顶点处是多个弧块的交集（非解析过渡面）—— 这正是必须拒绝相邻棱的原因；凸体全棱改走 rolling-ball。
 function meshFillet(mesh, op, E, stats) {
   var what = (stats && stats.label) ? stats.label : '圆角';
   if (op.radius === undefined && op.distance === undefined) fail(what + '（fillet）需要 radius');
@@ -2190,16 +2408,42 @@ function meshFillet(mesh, op, E, stats) {
   var segs = op.segments === undefined ? ARC_SEG_DEFAULT : clampInt(evalNum(op.segments, E, 'segments'), 2, 64, what + ' 的 segments');
   var tab = meshEdgeTable(mesh);
   var sel = selectBevelEdges(tab, op, E, what + '（fillet）');
-  if (sel.list.length > LIMIT_FILLET_EDGES) {
-    fail(what + '：选中 ' + sel.list.length + ' 条边，超过单次圆角上限 ' + LIMIT_FILLET_EDGES + ' 条。' +
-      '原因：圆角要「切棱部料 + 拼回圆柱片段」，走布尔；多条棱在顶点交会时相邻弧块彼此相交，' +
-      'BSP 的三角形数会超线性膨胀（实测 12 条棱的立方体要 76 s / 5.2 万面，且水密性明显变差）。' +
-      '请用 edges 数组分批处理（每批 ≤ ' + LIMIT_FILLET_EDGES + ' 条），或改用 chamfer（倒角走 H-rep，一次可处理 64 条且精确水密）');
+  // ① rolling-ball 精确路径（凸体 + 选中集 = 全部凸棱）：结果 = (P ⊖ Ball_r) ⊕ Ball_r，解析构造、
+  //    天然水密、无布尔，顶点处是解析球片 ⇒ **相邻棱（含立方体 12 棱全圆角）也支持**。
+  //    ★ 必须在下面的边数上限之前：那种上限是布尔路径的成本约束，rolling-ball 不受它限制。
+  if (rbCoversAllConvexEdges(tab, sel)) {
+    var rb = rollingBallFillet(tab, r, segs, halfspaceEps(tab.mesh));
+    if (rb && rb.err) {
+      fail(what + '：radius=' + r + ' 过大 —— 各个面沿法线内缩 ' + r + ' 后实体已经消失，请减小 radius');
+    }
+    if (rb && rb.m) {
+      var vb0 = Math.abs(meshVolume(mesh)), vb1 = Math.abs(meshVolume(rb.m));
+      if (vb1 > vb0 * (1 + 1e-9)) fail(what + '：结果体积反而变大（' + fmtNum(vb1, 3) + ' > ' + fmtNum(vb0, 3) + '），几何异常');
+      if (vb1 < vb0 * 1e-6) fail(what + '：radius=' + r + ' 过大，几乎切光实体（剩余体积 ' + fmtNum(vb1, 3) + '）');
+      if (stats) {
+        stats.edges = sel.list.length;
+        stats.skippedFlat = sel.flat;
+        stats.skippedConcave = sel.concave;
+        stats.cutRatio = (vb0 - vb1) / vb0;
+        stats.mode = 'rolling-ball';
+        stats.blendVerts = rb.blendVerts;
+        stats.pieces = rb.pieces;
+      }
+      return rb.m;
+    }
   }
-  // 相邻棱（共享顶点）的圆角需要「顶点混合」（三条棱交会处的球面过渡面），本实现不做：
-  //   两条相邻棱的加回块在角部相交，BSP 会留下大量未配对边（实测 2 条相邻棱 boundary=206、
-  //   「4 竖 + 1 横」boundary=554，而互不相邻的棱是 boundary=0）。这里明确拒绝，不静默产出坏网格。
-  //   chamfer 没有这个限制：它只做半空间求交，顶点处天然正确（12 条棱 boundary=0、精确）。
+  // ② 布尔近似路径（路线 B）：只圆部分棱、或非凸体，继续走下面。
+  if (sel.list.length > LIMIT_FILLET_EDGES) {
+    fail(what + '：选中 ' + sel.list.length + ' 条边，超过这条（布尔近似）路径的单次上限 ' + LIMIT_FILLET_EDGES + ' 条。' +
+      '原因：它要「切棱部料 + 拼回圆柱片段」，走布尔；多条棱在顶点交会时相邻弧块彼此相交，' +
+      'BSP 的三角形数会超线性膨胀（实测 12 条棱的立方体要 76 s / 5.2 万面，且水密性明显变差）。' +
+      '若对象是**凸体**：不指定 edges（或指定全部凸棱）即走 rolling-ball 精确路径，条数不受此限；' +
+      '否则请用 edges 数组分批处理（每批 ≤ ' + LIMIT_FILLET_EDGES + ' 条），或改用 chamfer（倒角走 H-rep，一次可处理 64 条且精确水密）');
+  }
+  // 这条（布尔近似）路径不支持相邻棱（共享顶点）：两条相邻棱的加回块在角部相交，BSP 会留下大量
+  //   未配对边（实测 2 条相邻棱 boundary=206、「4 竖 + 1 横」boundary=554，而互不相邻的棱是 0）。
+  //   凸体全棱已由上面的 rolling-ball 处理（顶点处是解析球片，12 条棱 boundary=0）；这里明确拒绝，
+  //   不静默产出坏网格。chamfer 也没有这个限制：它只做半空间求交，顶点处天然正确且精确。
   var useCount = {}, shared = 0, kk;
   for (kk = 0; kk < sel.list.length; kk++) {
     useCount[sel.list[kk].a] = (useCount[sel.list[kk].a] || 0) + 1;
@@ -2208,8 +2452,10 @@ function meshFillet(mesh, op, E, stats) {
   for (kk in useCount) if (useCount.hasOwnProperty(kk) && useCount[kk] > 1) shared++;
   if (shared) {
     fail(what + '：选中的棱里有 ' + shared + ' 个顶点被两条以上棱共用（相邻棱交会）。' +
-      '圆角的顶点过渡面（rolling-ball 顶点混合）未实现，硬做会产出不水密网格（实测 2 条相邻棱即 206 条开边界）——' +
-      '请只选**互不相邻**的棱（如同方向的 4 条竖棱、异面棱），或改用 chamfer（半空间求交，顶点处天然正确且精确水密）');
+      '这条（布尔近似）路径不做顶点混合，硬做会产出不水密网格（实测 2 条相邻棱即 206 条开边界）——' +
+      '若对象是**凸体**：不指定 edges（或指定全部凸棱）即走 rolling-ball 精确路径，' +
+      '顶点处是解析球片，相邻棱同样严格水密；非凸体请只选**互不相邻**的棱（如同方向的 4 条竖棱、异面棱），' +
+      '或改用 chamfer（半空间求交，顶点处天然正确且精确水密）');
   }
   var eps = halfspaceEps(tab.mesh), diag = meshDiagonal(tab.mesh);
   if (!(diag > 0)) fail(what + '：网格尺度为 0，无法圆角');
@@ -4310,8 +4556,8 @@ var TOOL_DEFS = [
   },
   {
     name: 'model_edit',
-    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair/chamfer 倒角/fillet 圆角）。倒角与圆角作用在**网格级**（不是参数化特征）：按相邻面折角识别棱，默认处理全部凸棱、也可用坐标对数组精确指定；凹边（内二面角 > 180°）需填材料、暂不支持，指定时会明确报错。',
-    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]；倒角：[{op:"mesh.chamfer", id:"base", distance:1.5}]（全部凸棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]）—— 尺寸大或棱多时用倒角（一次构造、精确且水密）；圆角：[{op:"mesh.fillet", id:"base", radius:2, edges:[[[20,15,-3],[20,15,3]]]}]（半径内尺寸，可传 segments 控制弧面离散）—— 圆角要布尔运算，单次只支持**互不相邻**的棱（相邻棱交会需顶点过渡面，会明确报错），棱多时改用 chamfer。改完跑 model_verify 复验。',
+    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair/chamfer 倒角/fillet 圆角）。倒角与圆角作用在**网格级**（不是参数化特征）：按相邻面折角识别棱，默认处理全部凸棱、也可用坐标对数组精确指定；凹边（内二面角 > 180°）需填材料、暂不支持，指定时会明确报错。圆角对**凸体**默认（不指定 edges = 全部棱）走 rolling-ball 开运算解析路径 —— 相邻棱、多棱交会的顶点同样严格水密；只选部分棱或非凸体才走布尔近似路径。',
+    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]；倒角：[{op:"mesh.chamfer", id:"base", distance:1.5}]（全部凸棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]）—— 尺寸大或棱多时用倒角（一次构造、精确且水密）；圆角：[{op:"mesh.fillet", id:"base", radius:2}]（全部棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]，可传 segments 控制弧面离散）—— **凸体全棱（含相邻棱，如立方体 12 棱）走 rolling-ball 解析路径，严格水密**；只选部分棱或非凸体则走布尔近似，那时单次只支持**互不相邻**的棱（相邻棱交会会明确报错）。改完跑 model_verify 复验。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -4334,7 +4580,7 @@ var TOOL_DEFS = [
         max: { description: '可选（param.add）：上限' },
         grid: { description: '可选（mesh.snap）：吸附网格（默认按模型尺度）' },
         distance: { description: '可选（mesh.chamfer）：倒角量（面内尺寸，必须为正；可写表达式）。check：具体值须小于相邻面尺寸，过大（把实体切光）会报错' },
-        radius: { description: '可选（mesh.fillet）：圆角半径（必须为正；可写表达式）。须小于相邻面尺寸，且同一顶点处的半径不能相互重叠' },
+        radius: { description: '可选（mesh.fillet）：圆角半径（必须为正；可写表达式）。须小于最薄处尺寸（凸体全棱要求各面沿法线内缩 r 后实体仍在）；凸体全棱走 rolling-ball 时可含相邻棱，布尔近似路径则要求同一顶点处的半径不相互重叠' },
         edges: { description: '可选（mesh.chamfer / mesh.fillet）：只处理指定棱，传坐标对数组 [[[x,y,z],[x,y,z]],…]（端点须是焊接后的顶点坐标；与顶点编号顺序无关，可复现）。缺省 = 全部折角 ≥ minAngle 的凸棱' },
         minAngle: { description: '可选（mesh.chamfer / mesh.fillet）：认定"棱"的最小折角（度，默认 30）——相邻面外法线夹角小于它的边视为同一曲面（如圆柱侧面的分段边）不处理' },
         segments: { description: '可选（mesh.fillet）：弧面离散段数（默认 8，2~64）。越大越接近真圆、面数越多' }
