@@ -3,6 +3,9 @@
 //   - 断线自动重连（指数退避 1s→30s）
 //   - Watch(convID, onEvent)：按会话订阅（每账号一个 watch，事件按 convId 路由）
 //   - Connected()：连接状态维护，供桥判断「流式通道是否可用」
+//   - ★ 忙对齐（2026-09-17）：被 Watch 的会话维护「运行活动状态」
+//     （content/tool_call 置忙、done 清除、status 快照按 runningConvs 权威校正），
+//     供桥在投喂前判断「会话是否已有任务在跑」（排队对齐，防回复错配）。
 //
 // 蓝图：M1 Node 原型 temp/wx-bridge/src/eventstream.mjs（线上实测版本）。
 package bridge
@@ -29,6 +32,7 @@ type EventStream struct {
 	conn       *wsclient.Client
 	connected  bool
 	watches    map[string]*watchEntry
+	acts       map[string]*convActivity // 被 Watch 会话的运行活动状态（忙对齐用）
 	retryDelay time.Duration
 
 	stopCh   chan struct{}
@@ -41,6 +45,13 @@ type watchEntry struct {
 	closed  bool
 }
 
+// convActivity 会话运行活动状态（由事件流 + status 快照共同维护）。
+// active=true 表示「该会话有任务在跑」。
+type convActivity struct {
+	active bool
+	lastAt time.Time
+}
+
 // NewEventStream 创建事件流（url 形如 ws://127.0.0.1:9090/ws）。
 func NewEventStream(url string, connTimeout time.Duration, log logf) *EventStream {
 	return &EventStream{
@@ -48,6 +59,7 @@ func NewEventStream(url string, connTimeout time.Duration, log logf) *EventStrea
 		connTimeout: connTimeout,
 		logf:        log,
 		watches:     map[string]*watchEntry{},
+		acts:        map[string]*convActivity{},
 		retryDelay:  time.Second,
 		stopCh:      make(chan struct{}),
 		loopDone:    make(chan struct{}),
@@ -95,6 +107,9 @@ func (es *EventStream) Watch(convID string, onEvent func(ev stream.Event)) func(
 	entry := &watchEntry{convID: convID, onEvent: onEvent}
 	es.mu.Lock()
 	es.watches[convID] = entry
+	if es.acts[convID] == nil {
+		es.acts[convID] = &convActivity{}
+	}
 	es.mu.Unlock()
 	return func() {
 		es.mu.Lock()
@@ -195,7 +210,7 @@ func (es *EventStream) onMessage(raw []byte) {
 	es.dispatchItem(trimmed)
 }
 
-// dispatchItem 解析单条事件并按 convId 路由到 watch。
+// dispatchItem 解析单条事件：更新会话活动状态并按 convId 路由到 watch。
 func (es *EventStream) dispatchItem(raw json.RawMessage) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -206,8 +221,25 @@ func (es *EventStream) dispatchItem(raw json.RawMessage) {
 	if json.Unmarshal(raw, &ev) != nil {
 		return
 	}
-	if ev.Type == "ping" || ev.Type == "status" || ev.ConvID == "" {
+	if ev.Type == "ping" {
 		return
+	}
+	if ev.Type == "status" {
+		// ★ 忙对齐：status 携带 runningConvs（权威运行集快照；连接建立与
+		//   done/error 后推送）——据此校正各会话活动状态，兜底 done 事件丢失。
+		es.applyStatus(raw)
+		return
+	}
+	if ev.ConvID == "" {
+		return
+	}
+	// ★ 忙对齐：content/tool_call 置「忙」、done 清除、snapshot 视为忙；
+	//   error 不改变状态（忙错误的误报与终结性错误均不改变运行集事实）。
+	switch ev.Type {
+	case "content", "tool_call", "snapshot":
+		es.setConvActive(ev.ConvID, true)
+	case "done":
+		es.setConvActive(ev.ConvID, false)
 	}
 	es.mu.Lock()
 	w := es.watches[ev.ConvID]
@@ -216,6 +248,48 @@ func (es *EventStream) dispatchItem(raw json.RawMessage) {
 		return
 	}
 	w.onEvent(ev)
+}
+
+// setConvActive 更新被跟踪会话的活动状态（未跟踪的会话忽略）。
+func (es *EventStream) setConvActive(convID string, active bool) {
+	es.mu.Lock()
+	if a := es.acts[convID]; a != nil {
+		a.active = active
+		a.lastAt = time.Now()
+	}
+	es.mu.Unlock()
+}
+
+// applyStatus 用 status 快照的 runningConvs 校正全部被跟踪会话的活动状态。
+func (es *EventStream) applyStatus(raw json.RawMessage) {
+	var st struct {
+		RunningConvs []string `json:"runningConvs"`
+	}
+	if json.Unmarshal(raw, &st) != nil {
+		return
+	}
+	running := make(map[string]bool, len(st.RunningConvs))
+	for _, id := range st.RunningConvs {
+		running[id] = true
+	}
+	now := time.Now()
+	es.mu.Lock()
+	for id, a := range es.acts {
+		a.active = running[id]
+		a.lastAt = now
+	}
+	es.mu.Unlock()
+}
+
+// ConvActive 会话当前是否处于「有任务运行」状态（忙对齐用）。
+// 未被 Watch 跟踪的会话返回 false（按「不忙」处理）。
+func (es *EventStream) ConvActive(convID string) bool {
+	es.mu.Lock()
+	defer es.mu.Unlock()
+	if a := es.acts[convID]; a != nil {
+		return a.active
+	}
+	return false
 }
 
 // wsURL 从 PairCode 地址推导事件流地址（http→ws）。

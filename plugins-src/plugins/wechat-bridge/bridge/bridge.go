@@ -76,6 +76,8 @@ type Bridge struct {
 	ctxTokens     map[string]string
 	typingTickets map[string]string
 	activeSession *stream.Session
+	draining      bool          // ★ 忙对齐：drain 相位（等待前序任务结束，丢弃其输出）
+	drainDone     chan struct{} // drain 结束信号（endDrain 关闭；幂等）
 
 	queue    chan pendingMsg
 	stopCh   chan struct{}
@@ -434,6 +436,27 @@ func (b *Bridge) handleOne(item pendingMsg) {
 	// 1) 基线 idx
 	baseline := (&paircode.Waiter{WorkspaceRoot: b.resolveWorkspace(), ConvID: b.info.ConvID}).BaselineIdx()
 
+	// 1.5) ★ 忙对齐（2026-09-17）：投喂前若会话已有任务在跑（如 PC 端触发/历史
+	//      遗留的运行），本消息将在宿主侧排队——先进入 drain 相位：丢弃该任务
+	//      的输出，等它结束（done / 状态校正）后再把后续输出当作本消息的回复，
+	//      避免把别的任务的输出误当回复发回微信（「微信端收到 PC 端内容」根因）。
+	busy := b.es.ConvActive(b.info.ConvID)
+	var drainCh chan struct{}
+	if busy {
+		drainCh = make(chan struct{})
+		b.mu.Lock()
+		b.draining = true
+		b.drainDone = drainCh
+		b.mu.Unlock()
+		// 复核：检测到忙之后、drain 建立之前，若前序任务恰已结束（done 已被处理、
+		// 状态机已校正空闲），立即结束 drain——避免把本消息（即将投喂/启动）的输出误丢。
+		if !b.es.ConvActive(b.info.ConvID) {
+			b.endDrain("建立后复核已空闲")
+		}
+		b.log("[stream] 会话忙（有任务运行中）：先等其结束，再接收本消息回复（排队对齐）")
+		defer b.endDrain("handleOne 退出兜底")
+	}
+
 	// 2) 挂载流式会话（必须在投喂之前）
 	var session *stream.Session
 	if b.cfg.StreamEnabled && b.es.Connected() {
@@ -482,17 +505,42 @@ func (b *Bridge) handleOne(item pendingMsg) {
 	b.log("已投喂 PairCode（baseline idx=%d，流式=%v）", baseline, session != nil)
 
 	// 4) 双路等待（WS 流式主路 + JSONL 兜底）
-	b.awaitReply(item, baseline, session, notifyAskUser)
+	b.awaitReply(item, baseline, session, notifyAskUser, drainCh)
 }
 
 // onStreamEvent 事件流分发（按 convId 路由后进入活动会话）。
+// ★ 忙对齐（2026-09-17）：drain 相位丢弃「前序任务」的全部输出（不发微信），
+// 直到 done（或状态校正为空闲）后才开始接收本消息的回复。
 func (b *Bridge) onStreamEvent(ev stream.Event) {
 	b.mu.Lock()
+	draining := b.draining
 	s := b.activeSession
 	b.mu.Unlock()
+	if draining {
+		if ev.Type == "done" {
+			b.endDrain("done 事件")
+		}
+		return
+	}
 	if s != nil {
 		s.Feed(ev)
 	}
+}
+
+// endDrain 结束 drain 相位（幂等；done 事件、状态校正或 handleOne 退出兜底触发）。
+func (b *Bridge) endDrain(reason string) {
+	b.mu.Lock()
+	if !b.draining {
+		b.mu.Unlock()
+		return
+	}
+	b.draining = false
+	if b.drainDone != nil {
+		close(b.drainDone)
+		b.drainDone = nil
+	}
+	b.mu.Unlock()
+	b.log("[stream] 前序任务结束（%s）：开始接收本消息的回复", reason)
 }
 
 type waitResult struct {
@@ -501,12 +549,60 @@ type waitResult struct {
 	s   stream.Summary
 }
 
+// waitDrain 等待 drain（前序任务）结束。返回 true 可继续正式等待；false 放弃。
+// 出口：① drainCh 关闭（done 事件经 endDrain）；② 每 1.5s 检查事件状态机，
+// 被 status 快照校正为空闲（兜底 done 丢失/断线）；③ deadline 超时（给用户
+// 提示后返回 false，绝不无界阻塞）；④ 桥停止。
+func (b *Bridge) waitDrain(item pendingMsg, drainCh chan struct{}, deadline time.Time) bool {
+	ticker := time.NewTicker(1500 * time.Millisecond)
+	deadlineTimer := time.NewTimer(time.Until(deadline))
+	defer ticker.Stop()
+	defer deadlineTimer.Stop()
+	for {
+		select {
+		case <-drainCh:
+			return true
+		case <-ticker.C:
+			if !b.es.ConvActive(b.info.ConvID) {
+				b.endDrain("状态校正为空闲")
+				return true
+			}
+		case <-deadlineTimer.C:
+			b.log("等待前序任务结束超时（drain）")
+			b.sendToWeixin(item.from, "（微信桥）该会话有任务运行较久仍未结束，本消息暂未处理。请稍后重试，或到 PairCode 界面查看进度。")
+			return false
+		case <-b.stopCh:
+			return false
+		}
+	}
+}
+
 // awaitReply 双路等待：
 //   - WS 流式 done 先到：内容已由 OnFlush 全部发出 → 直接完成（JSONL 路后台校验一致性）；
 //   - JSONL 先到（WS 半死/断流）：中止流式，按前缀比对补发未发出的部分；
 //   - 超时：提示用户到界面查看。
-func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Session, notifyAskUser func(string)) {
+//   - ★ 忙对齐（2026-09-17）：drainCh 非 nil（投喂时会话忙）时，先等前序任务
+//     结束并重锚基线，再做正式双路等待——前序任务的输出不会进入本消息回复。
+func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Session, notifyAskUser func(string), drainCh chan struct{}) {
 	timeout := time.Duration(b.cfg.ReplyTimeoutMs) * time.Millisecond
+
+	// ★ 忙对齐：先等前序任务结束（drain），再重锚基线、进入正式双路等待。
+	// drain 等待与正式等待共享同一超时上限 timeout；超时由 waitDrain 内部
+	// deadline 计时器触发（给用户提示并返回 false），不会无界阻塞。
+	if drainCh != nil {
+		if !b.waitDrain(item, drainCh, time.Now().Add(timeout)) {
+			if session != nil {
+				session.Abort()
+			}
+			return
+		}
+		// 重锚：done 后短暂等待（前序任务收尾落盘可能稍滞后），再取新基线。
+		// 本消息若已开始落盘，其行 idx 只会更大（更早的行不会被误扫），不会漏。
+		time.Sleep(500 * time.Millisecond)
+		baseline = (&paircode.Waiter{WorkspaceRoot: b.resolveWorkspace(), ConvID: b.info.ConvID}).BaselineIdx()
+		b.log("[stream] 前序任务已结束，重锚基线 idx=%d（其输出不会进入回复）", baseline)
+	}
+
 	ch := make(chan waitResult, 3)
 
 	waiter := &paircode.Waiter{
