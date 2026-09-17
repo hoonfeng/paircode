@@ -173,7 +173,7 @@
 <script setup>
 // DesignPanel — UI 设计工程只读视图（与 Agent 共用同一份真相源：design.project.json + design.tokens.json
 // + 产物 design.html + 旁挂 design.verify.json）。
-// 设计取舍（与 ui-art / ui-music / ui-voice 一致）：面板不写工作区 —— 节点/令牌编辑一律经 Agent 的
+// 设计取舍（与 tool-art / tool-music / tool-voice 一致）：面板不写工作区 —— 节点/令牌编辑一律经 Agent 的
 // design_edit（命令式 op），避免「工具写工程 / 面板写工程」两条写路径导致真相源分叉。
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api.js'

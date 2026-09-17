@@ -127,7 +127,7 @@
 
 <script setup>
 // RigPanel — 2D 角色工程只读视图（与 Agent 共用真相源：rig.model.iki.json + rig.preview.html + rig.verify.json）
-// 设计取舍（与 ui-design / ui-art / ui-music 一致）：面板不写工作区 —— 部件/骨骼/绑定编辑一律经 Agent 的
+// 设计取舍（与 tool-design / tool-art / tool-music 一致）：面板不写工作区 —— 部件/骨骼/绑定编辑一律经 Agent 的
 // rig_edit（命令式 op），避免"工具写工程 / 面板写工程"两条写路径导致真相源分叉。
 // 预览 iframe 用 sandbox="allow-scripts"（无 allow-same-origin）：预览内需要脚本才能拖参数滑块、
 // 跑弹簧/角链二级运动，但它拿不到宿主 DOM，且产物本身无外链。

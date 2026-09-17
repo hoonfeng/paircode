@@ -1,14 +1,21 @@
-// ui-art — client 半：注册「画板」插件面板并注入 bundle
+// tool-art — client 半：注册「画板」插件面板并注入 bundle
+//
+// ★ 2026-09-17 合并：本插件原本拆成 tool-art（工具面）+ ui-art（UI 面）两个独立
+//   发布包，同属一个创作域却分两处维护（版本/文档/发布各一份，且用户看不出「AI 用的
+//   工具」和「面板」是同一件事）。现合并为**单包**：host 半 = 画板工程/SVG 内核 + 5 个
+//   工具（index.js），client 半 = 本文件，UI bundle = assets/art-panel.js。
 //
 // 编译产物 assets/art-panel.js（Vite lib IIFE，window.ArtPanel）由
-// node scripts/build-ui.mjs --region art 生成（manifest 的 dsh.ui.build 声明）。
+// node scripts/build-ui.mjs --region art 生成（manifest 的 dsh.ui.build 声明；
+// 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与 ui-voice / ui-music 同样走通用 ui.registerPanel（不动壳、纯加法，卸载插件即消失）。
+// 与 tool-design / tool-music / tool-rig / tool-voice 同样走通用 ui.registerPanel
+// （不动壳、纯加法，卸载插件即消失）。
 (ui) => {
   const GLOBAL = 'ArtPanel'
-  const JS = 'plugins-assets/ui-art/assets/art-panel.js'
-  const CSS = 'plugins-assets/ui-art/assets/art-panel.css'
+  const JS = 'plugins-assets/tool-art/assets/art-panel.js'
+  const CSS = 'plugins-assets/tool-art/assets/art-panel.css'
 
   // 样式注入（幂等）
   if (!document.querySelector('link[data-art-panel-css]')) {
@@ -54,7 +61,7 @@
   }
   s.onerror = () => {
     const msg = '画板面板 bundle 加载失败: ' + JS
-    console.warn('[ui-art]', msg)
+    console.warn('[tool-art]', msg)
     ui.reportFailure('render', msg)
   }
   document.head.appendChild(s)

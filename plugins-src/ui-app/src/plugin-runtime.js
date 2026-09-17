@@ -688,8 +688,18 @@ export async function syncClientHalves(plugins) {
     }
   }
   // 卸载已停止/删除的
+  // ★ 2026-09-17（创作域五域合并）：保留 **boot 图（dsh.ui 区域包）装载的实例** —— 这些包
+  //   不一定出现在 /api/plugins 清单里：Node 桥轨插件（声明了运行期 npm 依赖，host 半由
+  //   Node 桥装载、goja 轨跳过）即此情形，其 client 半只经 /api/ui-boot 的 entries 下发。
+  //   若此处只按 /api/plugins 对齐卸载，会连带清掉它注册的面板/视图（tool-voice 与 UI 同包后
+  //   「人声」面板一度消失的根因）——与 boot() 注释里「两类包并存装载」的语义不符。
+  const bootIds = (() => {
+    const core = (typeof window !== 'undefined') ? window.__PAIRCODE_CORE : null
+    const entries = (core && core.bootGraph && core.bootGraph.entries) || []
+    return new Set(entries.map(e => e && e.id).filter(Boolean))
+  })()
   for (let i = instances.length - 1; i >= 0; i--) {
-    if (!active.has(instances[i].name)) {
+    if (!active.has(instances[i].name) && !bootIds.has(instances[i].name)) {
       instances.splice(i, 1)
     }
   }

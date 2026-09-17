@@ -133,16 +133,24 @@
 
 | 域 | host 半 | ui 半 | 形态 | 依赖（许可） |
 |---|---|---|---|---|
-| 音乐 | `tool-music` | `ui-music` | goja（MIDI/ABC 文本处理）+ Node 桥（WAV 渲染） | `@tonejs/midi`(MIT)、Tone(MIT)、VexFlow(MIT) |
-| 音乐·人声 | `tool-voice` | `ui-voice` | **Node 桥**（`@audio/*` 原子库） | `@audio/*`(MIT，40+ 包实测)、wavesurfer.js(BSD-3) |
-| 矢量/图像 | `tool-art` | `ui-art` | goja + 浏览器画布 | Konva(MIT) |
-| UI 设计 | `tool-design` | `ui-design` | goja | mermaid(MIT，已有) |
-| 3D/CAD | `tool-model`（★ 2026-09-17 起 **UI 与工具同包**，原 `ui-model` 已并入） | —— | goja 零依赖（自研内核，已偏离本表原设想） | @jscad/modeling(MIT，仅测试交叉验证)、gltf-validator(官方) |
-| 2D 角色 | `tool-rig` | `ui-rig` | goja + 浏览器 WebGL | ag-psd(MIT) |
+| 音乐 | `tool-music` | ★ 已并入 host 包（2026-09-17） | goja（MIDI/ABC 文本处理）+ Node 桥（WAV 渲染） | `@tonejs/midi`(MIT)、Tone(MIT)、VexFlow(MIT) |
+| 音乐·人声 | `tool-voice` | ★ 已并入 host 包（2026-09-17） | **Node 桥**（`@audio/*` 原子库） | `@audio/*`(MIT，40+ 包实测)、wavesurfer.js(BSD-3) |
+| 矢量/图像 | `tool-art` | ★ 已并入 host 包（2026-09-17） | goja + 浏览器画布 | Konva(MIT) |
+| UI 设计 | `tool-design` | ★ 已并入 host 包（2026-09-17） | goja | mermaid(MIT，已有) |
+| 3D/CAD | `tool-model` | ★ 已并入 host 包（2026-09-17，本形态首创域） | goja 零依赖（自研内核，已偏离本表原设想） | @jscad/modeling(MIT，仅测试交叉验证)、gltf-validator(官方) |
+| 2D 角色 | `tool-rig` | ★ 已并入 host 包（2026-09-17） | goja + 浏览器 WebGL | ag-psd(MIT) |
+
+> ★ **形态注记（2026-09-17 修订，六域统一落地）**：上表原设计为「一域两包」（host / ui 各自独立
+> 发布），实测后改为 **UI 与工具同包**：`plugins-dist/tool-<x>/` 内 = host 半 `index.js` + client 半
+> `client.js` + `dsh.ui` 段 + UI bundle `assets/<x>-panel.{js,css}`；对应的 `ui-<x>` 包已删除，
+> npm 上的 `@paircode/ui-<x>` 停止维护（建议 deprecate）。修订理由、逐域执行清单与验收证据见
+> 附录 I.0 与 `.pair/project.md`「UI 与工具同包」「桥轨插件的 UI 面走 boot 图源」两条。
 
 **拆分粒度原则**
 
-1. 一域两包（host/ui）——host 半可被 LLM 调用，ui 半只负责呈现，各自独立版本、独立修复；
+1. **一域一包（2026-09-17 修订，六域已落地）**：工具面与 UI 面同包 —— host 半 `index.js` 可被 LLM
+   调用，client 半 `client.js` + `assets/` 只负责呈现并随工具一起装卸。原「一域两包」的问题是
+   版本/文档双份维护，且用户看不出「AI 用的工具」与「面板」是同一件事；
 2. 域之间零 import（不共享构建产物），只共享宿主契约（`ctx.*` / `@paircode/core`）；
 3. 第三方库走 `/plugins-assets/<plugin>/vendor/*` 懒加载，不塞进宿主 bundle；
 4. **首发试点选"音乐·人声"**：PoC 已实证六环跑通（`docs/research/voice-poc/`），风险最低、价值最直观。
@@ -602,9 +610,9 @@ PoC 与方案 §7 的判据在实现时暴露出**物理不可达**之处，已�
    `--publish --only …`（源目录已含 `plugins-dist`，CI 无需改动）；
 2. **本地开发挂载**：默认 junction（`dev-sync-dist-plugins.mjs`）——Windows 下由
    `isPluginDirEntry` 支持；若在非 Windows 环境用 symlink 亦可（同判定分支）；
-3. 创作域其余五域（`tool-music`/`ui-music`、`tool-art`/`ui-art`、`tool-design`/`ui-design`、
-   `tool-model`（工具 + UI 同包）、`tool-rig`/`ui-rig`）按 L2 推进 —— 其一经实现即应落在
-   `plugins-dist/`（护栏会强制其进 exclude，漏了就打不了包）。
+3. ~~创作域其余五域按 L2 推进~~ **已完成（2026-09-17）**：六域 `tool-{art,design,model,music,rig,voice}`
+   全部实现且 **UI 与工具同包**，均落在 `plugins-dist/`（护栏会强制其进 packager exclude，漏了就打不了包）；
+   六域版本统一 0.2.0，待 npm 凭据就绪后整批发布（并 deprecate 5 个 `@paircode/ui-*` 孤儿包）。
 
 ---
 
@@ -966,6 +974,17 @@ CDP 的 `Page.captureScreenshot({captureBeyondViewport:true})` 在 `--headless=n
 > `statArtifact` 复核）。面板内补「这个面板是什么 · 怎么用」与三种打开入口指引。
 > 端到端验证：`_temp/model-panel-verify.cjs`（CDP，31 项）+ `_temp/model-ui-live-test.cjs`
 > （host 半，19 项）。下表的 `ui-model` 行即修订前的历史形态，保留以存证。
+>
+> ★ **同日推广（2026-09-17 夜，六域全部完成）**：其余五域（art/design/music/rig/voice）按同一形态
+> 完成合并 —— `plugins-dist/tool-<x>` 单包内含 `client.js` + UI bundle，`ui-<x>` 包与
+> `.pair/plugins/ui-<x>` 挂载已删除，packager exclude 11 → 6。端到端验证：
+> `node _temp/panels-merge-verify.cjs 9098 9224` → **42 ✓ / 0 ✗**（boot 图 6 entry、6 域 client 半装载、
+> 视图 + 面板注册、主内容区 tab 点击、面板真实挂载），截图 `screenshots/merge-<x>-panel.png` 目检
+> 六域面板均渲染真实数据（图元 26 项 / 令牌 13 项 + HTML 预览 / 五线谱 7/7 校验 / 19 参数 + 预览 /
+> 六项自检 6/6 / 模型 440 面）。踩坑两条：① `tool-voice` 的 `name` 带 scope（`@paircode/tool-voice`）
+> 会破坏 boot 图 entry URL（必须规范为 `tool-voice`）；② **桥轨插件**（tool-voice 声明运行期 npm
+> 依赖）不在 `/api/plugins` 清单里，前端 `syncClientHalves` 会把 boot 图装载的实例当孤儿卸载 →
+> 已修为「不在 active **且不在** `bootGraph.entries` 才卸载」，否则「人声」面板/视图被静默清掉。
 
 ### I.1 交付物
 

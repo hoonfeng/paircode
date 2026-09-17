@@ -135,17 +135,12 @@
         "optional": true,
         "recursive": true,
         "exclude": [
-          "tool-music",
-          "tool-voice",
           "tool-art",
-          "ui-music",
-          "ui-voice",
-          "ui-art",
           "tool-design",
-          "ui-design",
+          "tool-model",
+          "tool-music",
           "tool-rig",
-          "ui-rig",
-          "tool-model"
+          "tool-voice"
         ]
       },
       {

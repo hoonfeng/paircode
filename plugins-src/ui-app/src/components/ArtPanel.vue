@@ -141,7 +141,7 @@
 
 <script setup>
 // ArtPanel — 矢量画板只读视图（与 Agent 共用同一份真相源：art.project.json + art.svg + 旁挂 art.verify.json）。
-// 设计取舍（与 ui-music / ui-voice 一致）：面板不写工作区——图元编辑一律经 Agent 的 art_edit（命令式 op），
+// 设计取舍（与 tool-music / tool-voice 一致）：面板不写工作区——图元编辑一律经 Agent 的 art_edit（命令式 op），
 // 避免「工具写工程 / 面板写工程」两条写路径导致真相源分叉；需要改动时面板给出可直接复制的 op 片段。
 // 唯一产出动作是浏览器侧 PNG 导出（canvas 绘制已渲染的 SVG → 本地下载），同样不写回工作区。
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
@@ -507,7 +507,7 @@ watch(selectedId, () => { updateDispWidth() })
 </script>
 
 <style scoped>
-/* 配色一律取自设计系统变量（不另起一套配色），与 ui-music / ui-voice 保持一致 */
+/* 配色一律取自设计系统变量（不另起一套配色），与 tool-music / tool-voice 保持一致 */
 .art-panel {
   display: flex;
   flex-direction: column;

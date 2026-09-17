@@ -11977,8 +11977,13 @@
         }
       }
     }
+    const bootIds = (() => {
+      const core = typeof window !== "undefined" ? window.__PAIRCODE_CORE : null;
+      const entries = core && core.bootGraph && core.bootGraph.entries || [];
+      return new Set(entries.map((e) => e && e.id).filter(Boolean));
+    })();
     for (let i = instances.length - 1; i >= 0; i--) {
-      if (!active.has(instances[i].name)) {
+      if (!active.has(instances[i].name) && !bootIds.has(instances[i].name)) {
         instances.splice(i, 1);
       }
     }

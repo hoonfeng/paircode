@@ -1,14 +1,21 @@
-// ui-design — client 半：注册「设计」插件面板并注入 bundle
+// tool-design — client 半：注册「设计」插件面板并注入 bundle
+//
+// ★ 2026-09-17 合并：本插件原本拆成 tool-design（工具面）+ ui-design（UI 面）两个独立
+//   发布包，同属一个创作域却分两处维护（版本/文档/发布各一份，且用户看不出「AI 用的
+//   工具」和「面板」是同一件事）。现合并为**单包**：host 半 = 设计令牌/界面工程/确定性
+//   布局内核 + 6 个工具（index.js），client 半 = 本文件，UI bundle = assets/design-panel.js。
 //
 // 编译产物 assets/design-panel.js（Vite lib IIFE，window.DesignPanel）由
-// node scripts/build-ui.mjs --region design 生成（manifest 的 dsh.ui.build 声明）。
+// node scripts/build-ui.mjs --region design 生成（manifest 的 dsh.ui.build 声明；
+// 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与 ui-voice / ui-music / ui-art 同样走通用 ui.registerPanel（不动壳、纯加法，卸载插件即消失）。
+// 与 tool-art / tool-music / tool-rig / tool-voice 同样走通用 ui.registerPanel
+// （不动壳、纯加法，卸载插件即消失）。
 (ui) => {
   const GLOBAL = 'DesignPanel'
-  const JS = 'plugins-assets/ui-design/assets/design-panel.js'
-  const CSS = 'plugins-assets/ui-design/assets/design-panel.css'
+  const JS = 'plugins-assets/tool-design/assets/design-panel.js'
+  const CSS = 'plugins-assets/tool-design/assets/design-panel.css'
 
   // 样式注入（幂等）
   if (!document.querySelector('link[data-design-panel-css]')) {
@@ -52,7 +59,7 @@
   }
   s.onerror = () => {
     const msg = '设计面板 bundle 加载失败: ' + JS
-    console.warn('[ui-design]', msg)
+    console.warn('[tool-design]', msg)
     ui.reportFailure('render', msg)
   }
   document.head.appendChild(s)

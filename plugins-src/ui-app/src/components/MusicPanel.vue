@@ -93,7 +93,7 @@
 
 <script setup>
 // MusicPanel — 音乐工程只读视图（与 Agent 共用同一份真相源：music.project.json + 旁挂 music.verify.json）。
-// 设计取舍（与 ui-voice 一致）：面板不做写操作——音符编辑一律经 Agent 的 music_edit（命令式 op），
+// 设计取舍（与 tool-voice 一致）：面板不做写操作——音符编辑一律经 Agent 的 music_edit（命令式 op），
 // 避免出现「工具写工程 / 面板写工程」两条写路径导致真相源分叉。
 // 播放用原生 Web Audio（零第三方依赖），是「试听」能力，不改动任何工程数据。
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'

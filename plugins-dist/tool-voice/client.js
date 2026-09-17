@@ -1,15 +1,22 @@
-// ui-voice — client 半：注册「人声」插件面板并注入 bundle
+// tool-voice — client 半：注册「人声」插件面板并注入 bundle
+//
+// ★ 2026-09-17 合并：本插件原本拆成 tool-voice（工具面，Node 桥）+ ui-voice（UI 面）
+//   两个独立发布包，同属一个创作域却分两处维护（版本/文档/发布各一份，且用户看不出
+//   「AI 用的工具」和「面板」是同一件事）。现合并为**单包**：host 半 = 纯 DSP 人声链
+//   （导入/分析/编辑/渲染/自检，5 个工具 + lib/），client 半 = 本文件，
+//   UI bundle = assets/voice-panel.js。
 //
 // 编译产物 assets/voice-panel.js（Vite lib IIFE，window.VoicePanel）由
-// node scripts/build-ui.mjs --region voice 生成（manifest 的 dsh.ui.build 声明）。
+// node scripts/build-ui.mjs --region voice 生成（manifest 的 dsh.ui.build 声明；
+// 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与 git-api/marketplace 的「活动栏图标 + Sidebar 条件挂载」不同：本插件用
-// 通用 ui.registerPanel 注册进插件面板区（不动壳、纯加法，卸载插件即消失）。
+// 与 tool-art / tool-design / tool-music / tool-rig 同样走通用 ui.registerPanel
+// （不动壳、纯加法，卸载插件即消失）。
 (ui) => {
   const GLOBAL = 'VoicePanel'
-  const JS = 'plugins-assets/ui-voice/assets/voice-panel.js'
-  const CSS = 'plugins-assets/ui-voice/assets/voice-panel.css'
+  const JS = 'plugins-assets/tool-voice/assets/voice-panel.js'
+  const CSS = 'plugins-assets/tool-voice/assets/voice-panel.css'
 
   // 样式注入（幂等）
   if (!document.querySelector('link[data-voice-panel-css]')) {
@@ -53,7 +60,7 @@
   }
   s.onerror = () => {
     const msg = '人声面板 bundle 加载失败: ' + JS
-    console.warn('[ui-voice]', msg)
+    console.warn('[tool-voice]', msg)
     ui.reportFailure('render', msg)
   }
   document.head.appendChild(s)

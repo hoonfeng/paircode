@@ -175,7 +175,7 @@ function absPath(rel) {
 }
 
 async function readJSON(rel) {
-  // ★ 同上：apiURL 已加 /api 前缀，写成 '/api/fs/read' 会 404（ui-voice 面板此前一直读不到文件）。
+  // ★ 同上：apiURL 已加 /api 前缀，写成 '/api/fs/read' 会 404（tool-voice 面板此前一直读不到文件）。
   const r = await api.apiGet('/fs/read', { path: absPath(rel) })
   return JSON.parse(r.content)
 }

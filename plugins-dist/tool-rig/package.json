@@ -1,10 +1,30 @@
 {
   "name": "tool-rig",
-  "purpose": "2D 角色创作域工具面（纯 goja 零依赖）：真相源是上游 .iki v1 文档（可直接被 @ikijs/engine 加载）—— PSD 分层导入（自研最小结构解析，不读像素）→ 命名约定自动绑定（deformer 树 + 参数线性绑定 + 弹簧/角链二级运动）→ 命令式编辑 → 自包含可交互预览 HTML / 部件布局 SVG / 图层命名清单 JSON → 9 项判据自检（结构契约 / 命名 / 骨骼树 / 蒙皮 / 参数绑定 / 物理 / 部件重叠 / 网格 / 产物自包含）",
-  "version": "0.1.0",
+  "purpose": "2D 角色创作域插件（★ 工具 + UI 同包，2026-09-17 合并）：工具面（纯 goja 零依赖）真相源是上游 .iki v1 文档（可直接被 @ikijs/engine 加载）—— PSD 分层导入（自研最小结构解析，不读像素）→ 命名约定自动绑定（deformer 树 + 参数线性绑定 + 弹簧/角链二级运动）→ 命令式编辑 → 自包含可交互预览 HTML / 部件布局 SVG / 图层命名清单 JSON → 9 项判据自检（结构契约 / 命名 / 骨骼树 / 蒙皮 / 参数绑定 / 物理 / 部件重叠 / 网格 / 产物自包含）；UI 面（client 半 + assets/rig-panel.js bundle）「角色」面板：可交互预览（iframe sandbox=allow-scripts，含参数滑块与弹簧/角链二级运动）/ 骨骼树 / 部件列表 / 参数与驱动来源 / 物理 / 9 项校验报告",
+  "version": "0.2.0",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "sidebar",
+      "kind": "list",
+      "scope": "root",
+      "inject": [
+        "@paircode/core"
+      ],
+      "immediately": false,
+      "build": {
+        "entry": "src/ui-main-rig.js",
+        "global": "RigPanel",
+        "outDir": "plugins-dist/tool-rig/assets",
+        "fileName": "rig-panel",
+        "region": "rig"
+      }
+    }
+  },
   "keywords": [
     "paircode"
   ],
