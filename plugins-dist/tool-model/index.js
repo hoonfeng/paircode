@@ -1663,6 +1663,435 @@ function meshRepair(m, epsOverride) {
   return { mesh: cur, epsilon: eps };
 }
 
+// ── 共面三角形合并（I.6-1：BSP 碎片的根治手段）───────────────────────────────
+// 动机：BSP 裁剪把每个面切成大量小三角形 —— 60×40×6 底板挖 4 个 ∅6 孔得 **5823 面**（理想 ~400），
+//   碎片同时是 T 缝与导出体积膨胀（glTF 826 KB / STL 395 KB）的来源。
+// 口径：**按平面分组 → 簇内边界环 → 环嵌套分类（外环/洞）→ 带孔重三角化 → 面积守恒校验**；
+//   任一环节不通过则**整簇回退** —— 宁可留碎片，也绝不产出"看起来更少但其实破了"的网格。
+//   · 只合并**同朝向**三角形（外法线一致）：薄壁的内外两面共面但朝向相反，不可合并。
+//   · 共边判据 = **顶点索引相同**（调用前必须已焊接）；顶点落在边内部的 T 缝按投影参数分裂边消解。
+//   · 平面内坐标 = 原始坐标 ÷ eps：顶点此前已吸附到 eps 格点 ⇒ 缩放后为整数格点，面积量级大、
+//     共线/水平边判据都落在整数量级上（沿用 triangulatePolygonWithHoles 的 EPS 判据才稳）。
+//   · 返回 { mesh, stats }：stats 供测试与诊断（合并/回退的簇数、面数前后）。
+function meshMergeCoplanar(m, epsIn) {
+  var eps = epsIn === undefined ? meshEpsilon(m) : epsIn;
+  var src = m.indices, pos = m.positions;
+  var stats = { clusters: 0, merged: 0, fellBack: 0, trisBefore: src.length, trisAfter: src.length };
+  if (src.length < 2 || pos.length < 3) return { mesh: m, stats: stats };
+  var k, j, i;
+  // ① 三角形 → 平面（单位法线 n + 偏移 d = n·p）；退化面不参与合并
+  var nrm = [], off = [];
+  for (k = 0; k < src.length; k++) {
+    var t = meshTriangle(m, k);
+    var cr = vCross(vSub(t[1], t[0]), vSub(t[2], t[0]));
+    var L = vLen(cr);
+    if (!(L > EPS_AREA)) { nrm.push(null); off.push(0); continue; }
+    var n = vMul(cr, 1 / L);
+    nrm.push(n);
+    off.push(vDot(n, t[0]));
+  }
+  // ② 分组：法线粗桶（1e-3 分辨率）→ 桶内按偏移聚类（容差 eps）。
+  //    同一平面的法线出自同一批计算路径（差异 ~1e-16）⇒ 必然同桶；恰被桶边界拆开的只是
+  //    "少合并一些"，不会合错（偏差落在保守方向）。
+  var buckets = {};
+  for (k = 0; k < src.length; k++) {
+    if (!nrm[k]) continue;
+    var bk = Math.round(nrm[k][0] * 1000) + ':' + Math.round(nrm[k][1] * 1000) + ':' + Math.round(nrm[k][2] * 1000);
+    (buckets[bk] = buckets[bk] || []).push(k);
+  }
+  // ③ 逐簇合并；替换表：null = 原样保留 / [] = 已被吸收 / 列表 = 替代三角形
+  var repl = [];
+  for (k = 0; k < src.length; k++) repl.push(null);
+  for (var bkey in buckets) {
+    var list = buckets[bkey];
+    if (list.length < 2) continue;
+    var reps = [];
+    for (j = 0; j < list.length; j++) {
+      var found = -1;
+      for (i = 0; i < reps.length; i++) {
+        if (Math.abs(reps[i].d - off[list[j]]) <= eps) { found = i; break; }
+      }
+      if (found < 0) reps.push({ d: off[list[j]], tris: [list[j]] });
+      else reps[found].tris.push(list[j]);
+    }
+    for (i = 0; i < reps.length; i++) {
+      var cl = reps[i].tris;
+      if (cl.length < 2) continue;
+      stats.clusters++;
+      var res = null;
+      try { res = coplanarMergeCluster(m, cl, nrm[cl[0]], eps); } catch (e) { res = null; }
+      if (res && res.length) {
+        repl[cl[0]] = res;
+        for (j = 1; j < cl.length; j++) repl[cl[j]] = [];
+        stats.merged++;
+      } else {
+        stats.fellBack++;
+      }
+    }
+  }
+  // ④ 重建（顶点表原样复用 ⇒ 坐标逐位不变；末尾去掉孤立顶点）
+  var outIdx = [];
+  for (k = 0; k < src.length; k++) {
+    var rr = repl[k];
+    if (!rr) { outIdx.push(src[k].slice()); continue; }
+    for (j = 0; j < rr.length; j++) outIdx.push(rr[j]);
+  }
+  stats.trisAfter = outIdx.length;
+  if (stats.merged === 0) return { mesh: m, stats: stats };
+  return { mesh: meshCompact(meshNew(pos, outIdx)), stats: stats };
+}
+
+// 单个共面簇 → 替代三角形（顶点索引三元组）；返回 null 表示**回退**（保持原碎片）
+// 共面合并的回退原因记录（诊断用：回退不是错误，但必须能说清"为什么没合并"）
+var CP_REASON = { last: '', counts: {} };
+function cpRevert(reason) {
+  CP_REASON.last = reason;
+  CP_REASON.counts[reason] = (CP_REASON.counts[reason] || 0) + 1;
+  return null;
+}
+
+// 三角形的有向键（从最小顶点索引起、按绕向展开）：绕向相反的重复面键不同
+function triKeyOf(T) {
+  var m = (T[0] < T[1]) ? ((T[0] < T[2]) ? 0 : 2) : ((T[1] < T[2]) ? 1 : 2);
+  return T[m] + ':' + T[(m + 1) % 3] + ':' + T[(m + 2) % 3];
+}
+
+function coplanarMergeCluster(m, cl, n, eps) {
+  var pos = m.positions, k, j;
+  var inv = 1 / eps;
+  // 平面内正交基（右手：u × v = n）⇒ 2D 投影是等距映射，长度/面积都守恒
+  var ax = (Math.abs(n[0]) <= Math.abs(n[1]) && Math.abs(n[0]) <= Math.abs(n[2])) ? [1, 0, 0]
+         : (Math.abs(n[1]) <= Math.abs(n[2]) ? [0, 1, 0] : [0, 0, 1]);
+  var uu = vNorm(vCross(ax, n)), vv = vCross(n, uu);
+  var cache = [];
+  function to2(vi) {
+    if (cache[vi]) return cache[vi];
+    var p = pos[vi];
+    var q = [vDot(uu, p) * inv, vDot(vv, p) * inv];
+    cache[vi] = q;
+    return q;
+  }
+  // ⓪ 簇内 T 缝细分（BSP 输出的固有形态：几何上闭合、分段不同 —— 顶点落在**三角形边**内部）。
+  //    不先消解则边界环串不起来（实测最大簇有 160 处）。做法：落在某条边内部的顶点按投影参数
+  //    插入该边，三角形随之 1→n+1 分裂（纯拓扑细分，覆盖与面积不变）。
+  //    ★ 必须对**所有**三角形边做，不能只对边界边 —— 实测 T 缝的宿主边多数是内部边（两侧都有面）。
+  var cur = [];
+  for (k = 0; k < cl.length; k++) cur.push(m.indices[cl[k]].slice());
+  for (var rds = 0; rds < 8; rds++) {
+    var vset0 = {}, q, ch = false;
+    for (k = 0; k < cur.length; k++) { vset0[cur[k][0]] = 1; vset0[cur[k][1]] = 1; vset0[cur[k][2]] = 1; }
+    var vl = [], vk0;
+    for (vk0 in vset0) vl.push(+vk0);
+    // 顶点空间网格（格 = 2D bbox 的 1/64）：边只查自身 AABB 覆盖的格子 ⇒ 避免 O(E·V)
+    var gx0 = 0, gy0 = 0, gx1 = 0, gy1 = 0;
+    for (q = 0; q < vl.length; q++) {
+      var qc = to2(vl[q]);
+      if (q === 0) { gx0 = gx1 = qc[0]; gy0 = gy1 = qc[1]; }
+      if (qc[0] < gx0) gx0 = qc[0];
+      if (qc[0] > gx1) gx1 = qc[0];
+      if (qc[1] < gy0) gy0 = qc[1];
+      if (qc[1] > gy1) gy1 = qc[1];
+    }
+    var gs = Math.max(1, Math.max(gx1 - gx0, gy1 - gy0) / 64);
+    var grid = {};
+    for (q = 0; q < vl.length; q++) {
+      var qd = to2(vl[q]);
+      var gk = Math.floor((qd[0] - gx0) / gs) + ':' + Math.floor((qd[1] - gy0) / gs);
+      (grid[gk] = grid[gk] || []).push(vl[q]);
+    }
+    var out2 = [];
+    for (k = 0; k < cur.length; k++) {
+      var Tc = cur[k], split = false;
+      for (j = 0; j < 3; j++) {
+        var ia = Tc[j], ib = Tc[(j + 1) % 3], ic = Tc[(j + 2) % 3];
+        var A2 = to2(ia), B2 = to2(ib);
+        var ex = B2[0] - A2[0], ey = B2[1] - A2[1];
+        var L2s = ex * ex + ey * ey;
+        if (!(L2s > 4)) continue;                       // 短边（≤ 2 格）不查
+        var Ls = Math.sqrt(L2s);
+        var bx0 = Math.min(A2[0], B2[0]) - 1, bx1 = Math.max(A2[0], B2[0]) + 1;
+        var by0 = Math.min(A2[1], B2[1]) - 1, by1 = Math.max(A2[1], B2[1]) + 1;
+        var ga0 = Math.floor((bx0 - gx0) / gs), ga1 = Math.floor((bx1 - gx0) / gs);
+        var gb0 = Math.floor((by0 - gy0) / gs), gb1 = Math.floor((by1 - gy0) / gs);
+        var hits0 = [], ga, gb;
+        for (ga = ga0; ga <= ga1; ga++) {
+          for (gb = gb0; gb <= gb1; gb++) {
+            var cells = grid[ga + ':' + gb];
+            if (!cells) continue;
+            for (q = 0; q < cells.length; q++) {
+              var pv = cells[q];
+              if (pv === ia || pv === ib || pv === ic) continue;
+              var P2 = to2(pv);
+              var px = P2[0] - A2[0], py = P2[1] - A2[1];
+              if (Math.abs(ex * py - ey * px) > Ls * 0.25) continue;   // 到直线距离 > eps/4 才不算 T 缝
+              var tp = (px * ex + py * ey) / L2s;
+              if (tp * Ls <= 1 || (1 - tp) * Ls <= 1) continue;   // 距端点 ≤ eps
+              hits0.push({ p: pv, t: tp });
+            }
+          }
+        }
+        if (!hits0.length) continue;
+        hits0.sort(function (u, w) { return u.t - w.t; });
+        var prev0 = ia;
+        for (q = 0; q < hits0.length; q++) { out2.push([prev0, hits0[q].p, ic]); prev0 = hits0[q].p; }
+        out2.push([prev0, ib, ic]);
+        split = true; ch = true;
+        break;                                          // 一轮只细分一条边（其余留到下一轮）
+      }
+      if (!split) out2.push(Tc);
+    }
+    cur = out2;
+    if (!ch) break;
+    if (cur.length > cl.length * 8 + 64) return cpRevert('T 缝细分膨胀过大');   // 病态几何保护
+  }
+  // ① 有向边统计：同向边出现 >1 次 ⇒ 非流形。但若成因是「完全重复的三角形」（BSP 偶发产物）
+  //    则先去重再判 —— 重复面会让边统计与覆盖面积同时错，去重后两处都自洽（面积校验仍兜底）。
+  function countEdges(list) {
+    var c = {}, kk, jj;
+    for (kk = 0; kk < list.length; kk++) {
+      for (jj = 0; jj < 3; jj++) {
+        var key = list[kk][jj] + ':' + list[kk][(jj + 1) % 3];
+        c[key] = (c[key] || 0) + 1;
+      }
+    }
+    return c;
+  }
+  var cnt = countEdges(cur), ekey, hasDup = false;
+  for (ekey in cnt) {
+    if (cnt[ekey] > 1) { hasDup = true; break; }
+  }
+  if (hasDup) {
+    // (a) 完全重复的三角形（BSP 偶发产物）去重
+    var seenT = {}, uniq = [];
+    for (k = 0; k < cur.length; k++) {
+      var Tk = triKeyOf(cur[k]);
+      if (seenT[Tk]) continue;
+      seenT[Tk] = 1;
+      uniq.push(cur[k]);
+    }
+    if (uniq.length !== cur.length) cur = uniq;
+    // (b) 微碎片清理：面积 ≤ 4 格²（2D 缩放坐标）的三角形是 BSP 在孔/边附近浮点噪声的产物，
+    //     正是"同一条短边被 5 个面共享"这类非流形的制造者。删除它们对覆盖率的影响在 1e-8 相对
+    //     量级（由 ⑦ 的弱校验记账）；若清理后边界不闭合，后面各步仍会回退，不会产出坏网格。
+    var keep = [];
+    for (k = 0; k < cur.length; k++) {
+      var Tm = cur[k];
+      var m0 = to2(Tm[0]), m1 = to2(Tm[1]), m2 = to2(Tm[2]);
+      var arm = (m1[0] - m0[0]) * (m2[1] - m0[1]) - (m1[1] - m0[1]) * (m2[0] - m0[0]);
+      if (Math.abs(arm) / 2 > 4) keep.push(Tm);
+    }
+    if (keep.length !== cur.length) cur = keep;
+    if (cur.length < 3) return cpRevert('清理微碎片后三角形不足');
+    cnt = countEdges(cur);
+    var still = false;
+    for (ekey in cnt) { if (cnt[ekey] > 1) { still = true; break; } }
+    if (still) {
+      // (c) 清理后仍非流形 ⇒ 回退。曾试过「短边塌缩」（把 ≤3 格的边两端点并成一个代表）——
+      //     它会**移动顶点、改变几何**（实测单孔场景体积偏差 4e-8），且并未真正解决非流形，已删除。
+      return cpRevert('非流形：同向边出现多次（清理后仍在）');
+    }
+  }
+  var edges = [];
+  for (ekey in cnt) {
+    var ab = ekey.split(':');
+    if (cnt[ab[1] + ':' + ab[0]]) continue;            // 内部边成对出现 ⇒ 跳过
+    edges.push([+ab[0], +ab[1]]);
+  }
+  if (edges.length < 3) return cpRevert('边界边不足 3 条');
+  // ② T 缝消解：边界顶点落在某条边界边内部 ⇒ 按投影参数分裂该边（不消解则环串不起来）
+  for (var rd = 0; rd < 4; rd++) {
+    var vset = {}, changed = false, vk;
+    for (k = 0; k < edges.length; k++) { vset[edges[k][0]] = 1; vset[edges[k][1]] = 1; }
+    var vlist = [];
+    for (vk in vset) vlist.push(+vk);
+    var next = [];
+    for (k = 0; k < edges.length; k++) {
+      var a = edges[k][0], b = edges[k][1];
+      var A = to2(a), B = to2(b);
+      var abx = B[0] - A[0], aby = B[1] - A[1];
+      var L2 = abx * abx + aby * aby;
+      if (!(L2 > 1)) { next.push(edges[k]); continue; }   // 边长不足一个格距 ⇒ 不动
+      var L = Math.sqrt(L2);
+      var hits = [];
+      for (j = 0; j < vlist.length; j++) {
+        var p = vlist[j];
+        if (p === a || p === b) continue;
+        var Q = to2(p);
+        var qx = Q[0] - A[0], qy = Q[1] - A[1];
+        if (Math.abs(abx * qy - aby * qx) > L * 0.25) continue;   // 到直线距离 > eps/4
+        var tt = (qx * abx + qy * aby) / L2;
+        if (tt * L <= 1 || (1 - tt) * L <= 1) continue;   // 距端点 ≤ eps ⇒ 视为端点而非 T 缝
+        hits.push({ p: p, t: tt });
+      }
+      if (!hits.length) { next.push(edges[k]); continue; }
+      hits.sort(function (x, y) { return x.t - y.t; });
+      var prev = a;
+      for (j = 0; j < hits.length; j++) { next.push([prev, hits[j].p]); prev = hits[j].p; }
+      next.push([prev, b]);
+      changed = true;
+    }
+    edges = next;
+    if (!changed) break;
+  }
+  // ③ 串环：**边界跟随**（平面图的面遍历）—— 允许顶点处出度 > 1（BSP 输出的边界可能在一点
+  //    自接触/分叉）。在每个顶点处选「相对入边反向的最小左转」出边 ⇒ 沿覆盖域边界行走；
+  //    规整簇（出/入度均为 1）下这是唯一选择，结果与"严格配对"完全一致。
+  var outList = {}, inList = {}, ea, eb;
+  for (k = 0; k < edges.length; k++) {
+    ea = edges[k][0]; eb = edges[k][1];
+    (outList[ea] = outList[ea] || []).push(eb);
+    (inList[eb] = inList[eb] || []).push(ea);
+  }
+  function turnAt(P, from, to) {                 // 在 P 处从「P→from」转到「P→to」的转角 ∈ (-π, π]
+    var a0 = Math.atan2(from[1] - P[1], from[0] - P[0]);
+    var b0 = Math.atan2(to[1] - P[1], to[0] - P[0]);
+    var t0 = b0 - a0;
+    while (t0 <= -Math.PI) t0 += 2 * Math.PI;
+    while (t0 > Math.PI) t0 -= 2 * Math.PI;
+    return t0;
+  }
+  var usedE = {}, rings = [], totalVs = 0, usedN = 0;
+  for (k = 0; k < edges.length; k++) {
+    if (usedE[edges[k][0] + ':' + edges[k][1]]) continue;
+    var ring = [], ra = edges[k][0], rb = edges[k][1], guard = 0, closed = false;
+    while (true) {
+      var ek2 = ra + ':' + rb;
+      if (usedE[ek2]) break;
+      usedE[ek2] = 1; usedN++;
+      ring.push(ra);
+      var outs = outList[rb] || [], pick = -1, bestT = Infinity, P3 = to2(rb), Q3 = to2(ra);
+      var sA = edges[k][0], sB = edges[k][1];
+      for (j = 0; j < outs.length; j++) {
+        var cand = outs[j];
+        // 起始边允许作为"闭合步"再被选中（它此刻已被标记为已用）
+        if (usedE[rb + ':' + cand] && !(rb === sA && cand === sB)) continue;
+        var t3 = turnAt(P3, Q3, to2(cand));
+        if (t3 < bestT) { bestT = t3; pick = cand; }
+      }
+      if (pick < 0) break;
+      ra = rb; rb = pick;
+      if (++guard > edges.length + 2) return cpRevert('环遍历超步数');
+      if (ra === sA && rb === sB) { closed = true; break; }
+      if (usedE[ra + ':' + rb]) break;               // 撞上已用边但不是起始边 ⇒ 该簇拓扑不可靠
+    }
+    if (!closed || ring.length < 3) return cpRevert('边界跟随未闭合（该簇拓扑不可靠）');
+    var a2 = 0;
+    for (j = 0; j < ring.length; j++) {
+      var q1 = to2(ring[j]), q2 = to2(ring[(j + 1) % ring.length]);
+      a2 += q1[0] * q2[1] - q2[0] * q1[1];
+    }
+    totalVs += ring.length;
+    // 零宽通道（T 缝/自接触）会走出面积为 0 的退化环：它不贡献任何区域，直接忽略
+    //（否则会被当成"方向不对的洞"而让整簇回退）。
+    if (Math.abs(a2) <= 2) continue;
+    rings.push({ vs: ring, a2: a2 });
+  }
+  if (!rings.length || usedN !== edges.length) return cpRevert('存在未被使用的边界边');
+  // ④ 环嵌套分类：depth 偶 = 外环（CCW ⇒ a2 > 0），奇 = 洞（CW ⇒ a2 < 0）；方向不符则回退
+  var ring2 = [];
+  for (k = 0; k < rings.length; k++) {
+    var arr = [];
+    for (j = 0; j < rings[k].vs.length; j++) arr.push(to2(rings[k].vs[j]));
+    ring2.push(arr);
+  }
+  function inRing(ri, rj) {                     // ri 是否落在 rj 内（顶点多数表决）
+    var pts = ring2[ri], ins = 0, q;
+    for (q = 0; q < pts.length; q++) if (pointInPoly(pts[q], ring2[rj])) ins++;
+    return ins * 2 > pts.length;
+  }
+  var parent = [], depth = [];
+  for (k = 0; k < rings.length; k++) {
+    var best = -1, bestA = Infinity;
+    for (j = 0; j < rings.length; j++) {
+      if (j === k || !inRing(k, j)) continue;
+      var ar = Math.abs(rings[j].a2);
+      if (ar < bestA) { bestA = ar; best = j; }
+    }
+    parent.push(best);
+  }
+  for (k = 0; k < rings.length; k++) {
+    var dd = 0, up = parent[k], g2 = 0;
+    while (up >= 0) { dd++; up = parent[up]; if (++g2 > rings.length) return cpRevert('环嵌套成环'); }
+    depth.push(dd);
+    if ((dd % 2 === 0) !== (rings[k].a2 > 0)) {      return cpRevert(dd % 2 === 0 ? '外环方向不是 CCW' : '洞方向不是 CW');
+    }
+  }
+  // ⑤ 面积守恒基准 = 簇内三角形在平面内的**有向**面积之和（覆盖量的如实值，重叠/裂缝都会偏离）
+  var aBefore = 0;
+  for (k = 0; k < cur.length; k++) {
+    var Ft = cur[k];
+    var b0 = to2(Ft[0]), b1 = to2(Ft[1]), b2 = to2(Ft[2]);
+    aBefore += ((b1[0] - b0[0]) * (b2[1] - b0[1]) - (b1[1] - b0[1]) * (b2[0] - b0[0])) / 2;
+  }
+  // ⑥ 每个外环 + 其直接子环（洞）→ 带孔三角化（索引口径：外环各点 + 依次各洞各点）
+  var out = [];
+  for (k = 0; k < rings.length; k++) {
+    if (depth[k] % 2 !== 0) continue;
+    var holesIdx = [], holesPts = [], z, h;
+    for (j = 0; j < rings.length; j++) {
+      if (parent[j] !== k) continue;
+      var hp = [];
+      for (z = 0; z < rings[j].vs.length; z++) hp.push(to2(rings[j].vs[z]));
+      holesIdx.push(rings[j].vs);
+      holesPts.push(hp);
+    }
+    var idxMap = rings[k].vs.slice();
+    for (h = 0; h < holesIdx.length; h++) {
+      for (z = 0; z < holesIdx[h].length; z++) idxMap.push(holesIdx[h][z]);
+    }
+    var loc = null;
+    try { loc = triangulatePolygonWithHoles(ring2[k], holesPts); } catch (e) { return cpRevert('带孔三角化抛错'); }
+    var got = 0;
+    for (j = 0; j < loc.length; j++) {
+      var t3 = loc[j];
+      var I = idxMap[t3[0]], J = idxMap[t3[1]], K = idxMap[t3[2]];
+      if (I === undefined || J === undefined || K === undefined) return cpRevert('三角化输出索引越界');
+      if (I === J || J === K || I === K) continue;
+      var c0 = to2(I), c1 = to2(J), c2 = to2(K);
+      var ar3 = ((c1[0] - c0[0]) * (c2[1] - c0[1]) - (c1[1] - c0[1]) * (c2[0] - c0[0])) / 2;
+      if (!(ar3 > 0)) return cpRevert('三角化输出反向三角形');                        // 反向/退化 ⇒ 回退（绝不静默产出坏面）
+      out.push([I, J, K]);
+      got++;
+    }
+    if (!got) return cpRevert('三角化输出为空');
+  }
+  // ⑦ 双重守恒校验 + 面数确实减少，否则不值得替换
+  //    ① 强：三角化输出必须**恰好铺满环区域**（同一次参数化下计算 ⇒ 只剩浮点误差）；
+  //    ② 弱：环区域与原三角形覆盖一致 —— T 缝细分会把"距边 ≤ eps 的近似点"按真实位置插入，
+  //       带来 O(eps·L) 量级的面积漂移（eps 是吸附格距，远小于几何尺度），用 1e-6 相对容差记账；
+  //       超出即回退（说明原覆盖本就不自洽：有重叠或真缺口）。
+  var aAfter = 0, aRings = 0;
+  for (k = 0; k < out.length; k++) {
+    var d0 = to2(out[k][0]), d1 = to2(out[k][1]), d2 = to2(out[k][2]);
+    aAfter += ((d1[0] - d0[0]) * (d2[1] - d0[1]) - (d1[1] - d0[1]) * (d2[0] - d0[0])) / 2;
+  }
+  for (k = 0; k < rings.length; k++) aRings += rings[k].a2 / 2;
+  if (Math.abs(aAfter - aRings) > Math.max(1, Math.abs(aRings) * 1e-9)) {
+    return cpRevert('三角化未铺满环区域（面积不符）');
+  }
+  if (Math.abs(aRings - aBefore) > Math.max(1, Math.abs(aBefore) * 1e-5)) {
+    return cpRevert('环面积与原覆盖不符（细分漂移过大）');
+  }
+  // 输出三角形**不得重叠**：每条有向边 (a,b) 与 (b,a) 的出现次数之和至多 2，且为 2 时必须
+  // 一正一反。同向重复 = 同一区域被覆盖两次 ⇒ 会制造非流形边（实测单孔场景能造出 4 条）。
+  var oc = {}, ekey2;
+  for (k = 0; k < out.length; k++) {
+    for (j = 0; j < 3; j++) {
+      var ok1 = out[k][j] + ':' + out[k][(j + 1) % 3];
+      oc[ok1] = (oc[ok1] || 0) + 1;
+    }
+  }
+  for (ekey2 in oc) {
+    var pq = ekey2.split(':');
+    var fwd = oc[ekey2], bwd = oc[pq[1] + ':' + pq[0]] || 0;
+    if (fwd + bwd > 2 || (fwd + bwd === 2 && (fwd !== 1 || bwd !== 1))) {
+      return cpRevert('输出存在重叠/同向重复边（会产生非流形）');
+    }
+  }
+  if (out.length >= cl.length) return cpRevert('面数未减少');
+  return out;
+}
+
 function meshToTris(m) {
   var out = [];
   for (var k = 0; k < m.indices.length; k++) {
@@ -1717,7 +2146,20 @@ function weldTolerance(m) { return meshEpsilon(m) * 0.5; }
 function tjTolerance(m) { return meshEpsilon(m); }
 
 // 布尔运算（union / subtract / intersect），输入输出都是索引网格
-function meshBoolean(meshA, meshB, op, tol) {
+// statsOut 可选：传入对象则回填共面合并的诊断（before/after 面数 + merge 统计），供测试与诊断用
+function meshBoolean(meshA, meshB, op, tol, statsOut) {
+  var repaired = meshBooleanRaw(meshA, meshB, op, tol);
+  var mg = meshMergeCoplanar(repaired);
+  if (statsOut) {
+    statsOut.before = repaired.indices.length;
+    statsOut.after = mg.mesh.indices.length;
+    statsOut.merge = mg.stats;
+  }
+  return mg.mesh;
+}
+
+// BSP 布尔的**原始输出**（只做 meshRepair、不做共面合并）—— 共面合并的回退基线/诊断对照组
+function meshBooleanRaw(meshA, meshB, op, tol) {
   if (!(meshA.indices.length > 0) || !(meshB.indices.length > 0)) fail('布尔运算的两个实体都不能为空');
   if (meshA.indices.length > LIMIT_BOOL_INPUT || meshB.indices.length > LIMIT_BOOL_INPUT) {
     fail('布尔运算输入过大（' + meshA.indices.length + ' + ' + meshB.indices.length + ' 面，单次上' + LIMIT_BOOL_INPUT + '）——请降低 segments 或拆分部件');
@@ -1743,6 +2185,7 @@ function meshBoolean(meshA, meshB, op, tol) {
   var out = trisToMesh(bspAllTris(A), TOL);
   if (!out.indices.length) fail('布尔运算结果为空（' + op + '）——检查两个实体是否有交集/是否完全包含');
   // BSP 裁剪必然产生 T 型接缝 → 统一修复（水密性是可打印的前提，也是 M 判据的验收面）
+  // 共面合并（I.6-1）在 meshBoolean 里对修复结果做，本函数不含它。
   return meshRepair(out).mesh;
 }
 
