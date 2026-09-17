@@ -44,6 +44,14 @@ var LIMIT_RB_PLANES = 32;       // rolling-ball 圆角直接构造的凸体平�
 
 var EPS = 1e-9;
 var EPS_AREA = 1e-10;           // 退化三角面面积阈值
+
+// 焊接容差相对 eps 的比例（★ 实测确定，2026-09-17）：
+//   T 缝消解（meshAbsorbToEnds + meshFillTJunctions）会暴露出"横向错开 1~1.4 eps"的成对顶点，
+//   0.5×eps 的焊接容差合并不了它们 ⇒ 残留单边（真缺口）。实测扫描（60×40×6 板 − 4×∅6 柱 @24 段）：
+//     0.5× → 真缺口 10、单边 11      1× → 真缺口 1、单边 3
+//     1.5× → 真缺口 0、单边 0  ← 拐点   2×/3× → 同为 0（无进一步收益，仅多合并真实特征）
+//   体积影响：1.5× 时相对变化 1.3e-6（可忽略）。故取 1.5。
+var WELD_RATIO = 1.5;
 // 空间分辨率（对齐 JSCAD maths.EPS = 1e-5，其注释为"空间分辨率 = 100 纳米"）
 var EPS_SPATIAL = 1e-5;
 var EPS_PLANE = 1e-6;           // BSP 平面判定（与 csg.js 同量级）
@@ -431,7 +439,9 @@ function meshTopology(m, tol) {
 //   于是能区分：真正的开边界（缺口）vs 分段不同但几何闭合的 T 缝。
 function meshWatertightReport(m, tol) {
   var eps = tol === undefined ? meshEpsilon(m) : tol;
-  var welded = meshWeld(m, eps * 0.5).mesh;
+  // 焊接容差须与 meshRepair 一致（见 WELD_RATIO）：判定必须看"生产实际交付的那个网格"，
+  // 否则会出现"修复后仍报缺口"的口径错位（实测踩过：一边 0.5×eps 一边 1.5×eps ⇒ 数字对不上）。
+  var welded = meshWeld(m, eps * WELD_RATIO).mesh;
   var pos = welded.positions, tris = welded.indices;
   var i, e, k;
   var half = [];
@@ -497,7 +507,7 @@ function meshWatertightReport(m, tol) {
     if (vDist(proj, p) > eps) return null;
     return t;
   }
-  var tolerantUnpaired = 0, tj = 0;
+  var tolerantUnpaired = 0, tj = 0, gapLength = 0, gapMax = 0;
   for (k = 0; k < half.length; k++) {
     var a = half[k][0], b = half[k][1];
     if (has[b + '_' + a]) continue; // 已严格配对
@@ -520,14 +530,26 @@ function meshWatertightReport(m, tol) {
       if (ivs[w][0] > cur + 1e-9) break;
       if (ivs[w][1] > cur) cur = ivs[w][1];
     }
-    if (cur >= 1 - 1e-6) tj++; else tolerantUnpaired++;
+    if (cur >= 1 - 1e-6) tj++;
+    else {
+      tolerantUnpaired++;
+      // ★ 缝的**几何长度**（mm）：未覆盖的弧长。这是"可打印性"的直接度量 ——
+      //   条数会被"同一条缝被切成很多段"放大，长度才是真实缺陷量（M4 判据用它更贴题）。
+      var miss = (1 - cur) * Math.sqrt(L2);
+      gapLength += miss;
+      if (miss > gapMax) gapMax = miss;
+    }
   }
   return {
     strictUnpaired: unpairedStrict,
     tolerantUnpaired: tolerantUnpaired,
     tJunctions: tj,
+    gapLength: gapLength,     // 未覆盖缝总长（mm）
+    gapMax: gapMax,           // 单条最长缝（mm）
     watertightStrict: unpairedStrict === 0,
     watertightTolerant: tolerantUnpaired === 0,
+    // "可打印"口径：缝在数值噪声内（总长 ≤ eps/10，单条 ≤ eps/10）即视为闭合
+    printableClosed: gapLength <= eps * 0.1 && gapMax <= eps * 0.1,
     halfEdges: half.length,
     epsilon: eps
   };
@@ -2168,20 +2190,164 @@ function polyBspNodes(node) {
   return out;
 }
 
-// 布尔结果修复：顶点吸附到统一网格 → 焊接 → 去零面积面 → 去孤立顶点。
+// 轻量"缝量"指标：严格未配对的**半边**数（不建空间索引，O(F)）。
+//   用于 meshRepair 的**不劣化保护**：消解是启发式的，在"多簇共面合并"等复杂输入上可能帮倒忙
+//   （实测：板 − 8 孔场景 10 → 30）。凡消解后该指标变差，就回退到消解前的网格。
+function meshSeamScore(m) {
+  var tris = m.indices, has = {}, k, e;
+  for (k = 0; k < tris.length; k++) {
+    var f = tris[k];
+    for (e = 0; e < 3; e++) has[f[e] + '_' + f[(e + 1) % 3]] = 1;
+  }
+  var n = 0;
+  for (k = 0; k < tris.length; k++) {
+    var g = tris[k];
+    for (e = 0; e < 3; e++) if (!has[g[(e + 1) % 3] + '_' + g[e]]) n++;
+  }
+  return n;
+}
+
+// ── T 缝消解之一：把"落在未配对边内部、且贴近该边端点"的顶点吸附到端点 ────────────
+//   动机（实测，2026-09-17）：BSP 布尔的分割点是由**每次布尔各自的容差**算出来的，跨次错开
+//   ~1 eps（实例：(-20.2330616,-15.1227675) 与 (-20.2334149,-15.1231208)，相距 1.4 eps）。
+//   这类"微边"用 0.5×eps 焊接不掉 ⇒ 在半边的严格意义上找不到配对 ⇒ M4 报 758 条真缺口。
+//   收敛把关：只处理**严格未配对**的有向边（约占 16%），且顶点必须确实落在该边上（垂距 ≤ eps）。
+//   只有"顶点沿边方向距端点 ≤ eps"才吸附到端点 —— 否则它是真正的分割点，交给 meshFillTJunctions。
+function meshAbsorbToEnds(m, eps) {
+  var pos = m.positions, tris = m.indices;
+  if (!tris.length || !pos.length) return m;
+  var has = {}, f, e, k;
+  for (k = 0; k < tris.length; k++) {
+    f = tris[k];
+    for (e = 0; e < 3; e++) has[f[e] + '_' + f[(e + 1) % 3]] = 1;
+  }
+  var tgt = [], bd = [];
+  for (k = 0; k < pos.length; k++) { tgt.push(null); bd.push(Infinity); }
+  var n = 0;
+  for (k = 0; k < tris.length; k++) {
+    f = tris[k];
+    for (e = 0; e < 3; e++) {
+      var a = f[e], b = f[(e + 1) % 3];
+      if (has[b + '_' + a]) continue;                  // 已配对 ⇒ 不动
+      var pa = pos[a], pb = pos[b], ab = vSub(pb, pa), L2 = vDot(ab, ab);
+      if (!(L2 > 0)) continue;
+      var L = Math.sqrt(L2);
+      for (var v = 0; v < pos.length; v++) {
+        if (v === a || v === b) continue;
+        var pv = pos[v], w = vSub(pv, pa);
+        var t = vDot(w, ab) / L2;
+        if (t <= 0 || t >= 1) continue;
+        var pr = [pa[0] + ab[0] * t, pa[1] + ab[1] * t, pa[2] + ab[2] * t];
+        var dd = vDist(pr, pv);
+        if (dd > eps || dd >= bd[v]) continue;
+        var to = null;
+        if (t * L <= eps) to = pa;
+        else if ((1 - t) * L <= eps) to = pb;
+        if (!to) continue;
+        bd[v] = dd; tgt[v] = to; n++;
+      }
+    }
+  }
+  if (!n) return m;
+  var out = [];
+  for (k = 0; k < pos.length; k++) out.push(tgt[k] ? tgt[k].slice() : pos[k]);
+  return meshNew(out, tris);
+}
+
+// ── T 缝消解之二：把"落在未配对边内部"的顶点插入该边（链式分割 + 从对顶点扇形）──────
+//   ① 必须从**边的对顶点**出发逐条边分割并递归：对整条边界链扇形是错的 —— 链上
+//      "插入点 + 该边两端点"三点共线，扇形会造出 [a,v1,b] 这样的零面积三角形，
+//      它在对面留下同向重复边（实测 4 条非流形），还会把角三角形丢掉（实测 11 条单边）。
+//   ② 插入点排序必须稳定（t 相同时按顶点索引）：否则同一组点在相邻三角形里顺序不同，
+//      链式展开就会产出同向重复边 ⇒ 非流形。
+//   ③ 本函数只读不写坐标；合并/去隐患由调用方的 meshWeld + meshDropDegenerate 完成。
+function meshFillTJunctions(m, eps) {
+  var pos = m.positions, tris = m.indices;
+  if (!tris.length || !pos.length) return m;
+  var has = {}, k, f, e;
+  for (k = 0; k < tris.length; k++) {
+    f = tris[k];
+    for (e = 0; e < 3; e++) has[f[e] + '_' + f[(e + 1) % 3]] = 1;
+  }
+  var ins = {}, nE = 0, nI = 0;
+  for (k = 0; k < tris.length; k++) {
+    f = tris[k];
+    for (e = 0; e < 3; e++) {
+      var a = f[e], b = f[(e + 1) % 3];
+      if (has[b + '_' + a]) continue;                  // 已配对 ⇒ 不切
+      var key = a + '|' + b;
+      if (ins[key]) continue;                          // 同一有向边只算一次
+      nE++;
+      var pa = pos[a], pb = pos[b], ab = vSub(pb, pa), L2 = vDot(ab, ab);
+      if (!(L2 > 0)) { ins[key] = []; continue; }
+      var list = [];
+      for (var v = 0; v < pos.length; v++) {
+        if (v === a || v === b) continue;
+        var pv = pos[v], w = vSub(pv, pa);
+        var t = vDot(w, ab) / L2;
+        if (t <= 0 || t >= 1) continue;
+        var pr = [pa[0] + ab[0] * t, pa[1] + ab[1] * t, pa[2] + ab[2] * t];
+        if (vDist(pr, pv) > eps) continue;
+        list.push([t, v]);
+      }
+      list.sort(function (x, y) { return (x[0] - y[0]) || (x[1] - y[1]); });
+      ins[key] = list; nI += list.length;
+    }
+  }
+  if (!nI) return m;
+  var out = [];
+  function buildTri(a, b, c) {
+    var tri = [[a, b, c], [b, c, a], [c, a, b]];
+    for (var i = 0; i < 3; i++) {
+      var u = tri[i][0], w2 = tri[i][1], x = tri[i][2];
+      var list = ins[u + '|' + w2];
+      if (!list || !list.length) continue;
+      var seq = [u];
+      for (var q = 0; q < list.length; q++) {
+        var iv = list[q][1];
+        if (iv !== u && iv !== w2) seq.push(iv);
+      }
+      if (seq.length < 2) continue;
+      seq.push(w2);
+      for (var j = 0; j + 1 < seq.length; j++) buildTri(seq[j], seq[j + 1], x);
+      return;                                          // 该子三角形已递归展开
+    }
+    if (a !== b && b !== c && a !== c) out.push([a, b, c]);
+  }
+  for (k = 0; k < tris.length; k++) buildTri(tris[k][0], tris[k][1], tris[k][2]);
+  return meshNew(pos, out);
+}
+
+// 布尔结果修复：顶点吸附到统一网格 → 焊接 → T 缝消解 → 再焊接 → 去零面积面 → 去孤立顶点。
 //   ★ 实测结论（有 JSCAD 对照，见测试基线）：BSP 布尔的输出在"严格边匹配"意义下**本来就不水密**——
 //     同一交点在相邻面里由各自插值算出（坐标差约 1e-4 量级），相邻面片的边分段方式还可能不同
 //     （T 型接缝）。JSCAD 的原始 subtract 输出同样如此（boundary=152，其 generalize 后才是 0）——
 //     它靠的是**多边形**表示（一条边对一条边，天生没有 T 缝）。
-//   本实现是三角网格表示，故用"吸附 + 焊接"把缝压到最小，并把**残余缝量**如实交给判据 M4 报告
-//     （不假称水密）；确实需要严格水密的 3D 打印场景走导出层的打印预处理。
-//   注：曾尝试"T 型接缝缝合"（把落在边内的顶点纳入三角形重新三角化）——实测有害：
-//     会引入上千条非流形边并把三角形数量顶到 30 万级（细分爆炸），已撤销。
+//   本实现是三角网格表示，故用"吸附 + 焊接 + **T 缝消解**"把缝压到零，并把**残余缝量**如实交给
+//     判据 M4 报告（不假称水密）；确实需要严格水密的 3D 打印场景走导出层的打印预处理。
+//   ★ 历史与订正：早期试过"T 型接缝缝合"（把落在边内的顶点纳入三角形重新三角化）——实测有害：
+//     上千条非流形边 + 三角形顶到 30 万级。2026-09-17 定位到当时的做法有两处硬伤，订正后成功：
+//     ① **无收敛条件**：当时对全部边、所有落在其上的顶点都插（含大量本不该动的），这里只处理
+//        **严格未配对**的有向边（约占 16%），且顶点垂距必须 ≤ eps；
+//     ② **三角化方式错**：对整条边界链扇形会把"插入点 + 该边两端点"三点共线拼成零面积三角形，
+//        在对面留下同向重复边（非流形），还丢掉角三角形（单边）。订正为**从对顶点出发逐边分割并递归**。
+//     订正后（同上场景）：真缺口 758 → **0**、严格未配对 0、非流形 0、单边 0，面数 2102 → 2540
+//     （+20.8%，而非 30 万级），体积相对变化 1.3e-6、连通分量保持 1。
 function meshRepair(m, epsOverride) {
   var eps = epsOverride === undefined ? meshEpsilon(m) : epsOverride;
+  var wt = eps * WELD_RATIO;               // 见 WELD_RATIO 注释（T 缝消解需要 >1×eps 的合并半径）
   var cur = meshSnap(m, eps);
-  cur = meshWeld(cur, eps * 0.5).mesh;
+  cur = meshWeld(cur, wt).mesh;
   cur = meshDropDegenerate(meshCompact(cur), EPS_AREA);
+  var base = cur;
+  var score0 = meshSeamScore(base);
+  if (!score0) return { mesh: base, epsilon: eps };          // 已水密 ⇒ 不做消解（省时且零风险）
+  cur = meshWeld(meshAbsorbToEnds(base, eps), wt).mesh;      // ① eps 级微边并入端点
+  cur = meshWeld(meshFillTJunctions(cur, eps), wt).mesh;     // ② 真分割点切开未配对边
+  cur = meshDropDegenerate(meshCompact(cur), EPS_AREA);
+  // ★ 不劣化保护：消解是启发式的，在复杂输入上可能帮倒忙（实测 板−8孔 10→30）。变差即回退，
+  //   保证 meshRepair 的输出在"缝量"上**单调不劣于**不做消解的结果。
+  if (meshSeamScore(cur) > score0) return { mesh: base, epsilon: eps };
   return { mesh: cur, epsilon: eps };
 }
 
@@ -2718,12 +2884,18 @@ function meshBoolean(meshA, meshB, op, tol, statsOut) {
 function meshBooleanTrig(meshA, meshB, op, tol, statsOut) {
   var repaired = meshBooleanRaw(meshA, meshB, op, tol);
   var mg = meshMergeCoplanar(repaired);
+  // ★ 合并会**自己引入 T 缝**：它按簇重三角化，新边与邻居的分段方式可能又对不上
+  //   （实测 60×40×6 板 − 柱：合并前 boundary 10 → 合并后 26）。这些缝是"合并的产物"，
+  //   与本路径无关，但会留在交付网格里 ⇒ 合并后再走一次 meshRepair（含 T 缝消解）。
+  //   代价：面数回到与"未合并的修复结果"相近的量级（消解会补回部分面）。
+  var fixed = meshRepair(mg.mesh).mesh;
   if (statsOut) {
     statsOut.before = repaired.indices.length;
-    statsOut.after = mg.mesh.indices.length;
+    statsOut.after = fixed.indices.length;
     statsOut.merge = mg.stats;
+    statsOut.mergeRaw = mg.mesh.indices.length;
   }
-  return mg.mesh;
+  return fixed;
 }
 
 // ★ BSP 平面判定容差的动态设定（实测结论，2026-09-17；M4 真缺口的根因修复）
