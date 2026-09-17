@@ -109,3 +109,13 @@ _desktop-archive/
 
 # headless chrome 测试数据（cdp 验证临时）
 .chrome-test/
+
+# tool-model 导出产物（测试/演示脚本以项目根为 cwd 跑时会泄漏到根目录；只限根层，不误伤子目录）
+/model.stl
+/model.ascii.stl
+/model.obj
+/model.gltf
+/model.glb
+/model.json
+/model.verify.json
+/model.preview.html
