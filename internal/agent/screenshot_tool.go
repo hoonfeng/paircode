@@ -450,7 +450,7 @@ func extractHost(urlStr string) string {
 }
 
 func saveScreenshot(root string, img image.Image, customName string, label string) (string, error) {
-	screenshotsDir := filepath.Join(root, "screenshots")
+	screenshotsDir := screenshotOutputDir(root) // ★ 兜底 + 绝对化（见 screenshot_path.go）
 	if err := os.MkdirAll(screenshotsDir, 0755); err != nil {
 		return "", fmt.Errorf("创建 screenshots 目录失败: %w", err)
 	}
@@ -481,7 +481,7 @@ func saveScreenshot(root string, img image.Image, customName string, label strin
 }
 
 func saveScreenshotFromBytes(root string, data []byte, customName string, label string) (string, error) {
-	screenshotsDir := filepath.Join(root, "screenshots")
+	screenshotsDir := screenshotOutputDir(root) // ★ 兜底 + 绝对化（见 screenshot_path.go）
 	if err := os.MkdirAll(screenshotsDir, 0755); err != nil {
 		return "", fmt.Errorf("创建 screenshots 目录失败: %w", err)
 	}

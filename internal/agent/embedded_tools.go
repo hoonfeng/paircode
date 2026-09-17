@@ -12,10 +12,18 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"sync"
 )
 
-// embeddedToolRegistry：内嵌工具内核注册表（进程内单例，只读）。
-var embeddedToolRegistry *Registry
+// embeddedToolRegistry：内嵌工具内核注册表（进程内缓存，只读）。
+// ★ 2026-09-17 多工作区修复：原为「首次 root 永久缓存」的单例 —— 切换工作区/新会话后
+//   仍沿用第一个 root，使 screenshot / web_debug 等落盘工具把产物写进**旧工作区**
+//   （现象：新工作区里找不到截图文件，被误判为「截图不落盘」）。现按 root 键控缓存。
+var (
+	embeddedToolRegistry     *Registry
+	embeddedToolRegistryRoot string
+	embeddedToolRegistryMu   sync.Mutex
+)
 
 // embeddedToolRegistrars：内核注册函数（与 .pair/plugins/tool-*/bin/*.exe 同源）。
 var embeddedToolRegistrars = []func(r *Registry, root string){
@@ -31,9 +39,17 @@ var embeddedToolRegistrars = []func(r *Registry, root string){
 	registerOfficeTools, // tool-office（word/xlsx/pdf 仍走宿主的内核）
 }
 
-// InitEmbeddedToolRegistry 构建内嵌工具注册表（幂等；懒调用）。
+// InitEmbeddedToolRegistry 构建内嵌工具注册表（按 root 缓存：同 root 幂等，root 变化即重建）。
+//
+// ★ 2026-09-17 多工作区修复：调用方 callEmbeddedTool 的 root 来自「当前工具调用会话根」
+//   （jsplugin.go:697 ctxServiceRoot —— 会话/工作区间本应相互隔离）。原实现首次 root 即永久
+//   缓存 → 第二个工作区/会话调用时仍用旧 root：截图落到旧工作区 screenshots/、codegraph 用错
+//   项目根等。现按 root 键控：root 不同即重建（注册函数只做工具声明注册，无昂贵副作用，
+//   handler 均为惰性闭包）。
 func InitEmbeddedToolRegistry(root string) *Registry {
-	if embeddedToolRegistry != nil {
+	embeddedToolRegistryMu.Lock()
+	defer embeddedToolRegistryMu.Unlock()
+	if embeddedToolRegistry != nil && embeddedToolRegistryRoot == root {
 		return embeddedToolRegistry
 	}
 	r := NewRegistry()
@@ -41,6 +57,7 @@ func InitEmbeddedToolRegistry(root string) *Registry {
 		f(r, root)
 	}
 	embeddedToolRegistry = r
+	embeddedToolRegistryRoot = root
 	return r
 }
 
