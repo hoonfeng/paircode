@@ -23,6 +23,7 @@ import {
 import {
   processAgentEvent, processAgentDone, processStatus, processAllDisconnected,
 } from './agent-events.js'
+import { visibleConversations } from './conv-filters.js'
 
 // ─── 工作区列表 ──────────────────────────────────────────────
 // （原 App.vue：wsList 从后端 /api/settings 拉取；desktop(goja) 预取逻辑
@@ -142,7 +143,7 @@ export async function loadConversationsForWorkspace(path) {
   if (typeof path !== 'string' || !path) return
   try {
     const list = await api.apiGet('/conversations', { workspace: path })
-    state.conversations = list || []
+    state.conversations = visibleConversations(list)
     // ★ 2026-08-21 修复"刷新后不自动选对话"：加载列表后自动选中最近更新的对话
     //   （后端按 UpdatedAt 倒序 → 取第一个）；currentConvId 赋值触发 RightPanel 的
     //   watch → switchConv 加载消息。同时触发 save-conversations 持久化选中状态。
@@ -398,7 +399,7 @@ export function desktopPrefetch() {
           state.workspaceName = _health.workspace.split('\\').filter(Boolean).pop() || _health.workspace
           const _c = JSON.parse(go.bridge_call('GET', '/api/conversations?workspace=' + encodeURIComponent(_health.workspace), '', ''))
           const _list = JSON.parse(_c.body || '[]')
-          if (Array.isArray(_list) && _list.length > 0) state.conversations = _list
+          if (Array.isArray(_list) && _list.length > 0) state.conversations = visibleConversations(_list)
         }
       } catch {}
     }

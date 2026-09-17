@@ -122,6 +122,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { state, layout } from '../ui-state.js'
 import api from '../api.js'
+import { visibleConversations } from '../conv-filters.js'
 import FileTreeItem from './FileTreeItem.vue'
 
 // ★ desktop(goja) workaround：渲染 effect 对整体赋值数组的 set 不收集依赖（v-for/v-if 不更新）。
@@ -210,7 +211,7 @@ async function loadConversationsForWorkspace(path) {
   if (typeof path !== 'string' || !path) return
   try {
     const list = await api.apiGet('/conversations', { workspace: path })
-    state.conversations = list || []
+    state.conversations = visibleConversations(list)
   } catch (e) {
     console.warn('从后端加载对话消息失败:', e)
   }

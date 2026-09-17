@@ -527,12 +527,10 @@ export function processAgentEvent(convId, data) {
     return
   } else if (data.type === 'usage' && data.usage) {
     const u = data.usage
-    // ★ 运行统计：本次运行的 token 累计（不受 isCurrent 限制——多会话并行各自累计）
-    if (runStat) {
-      runStat.promptTokens += u.prompt_tokens || 0
-      runStat.completionTokens += u.completion_tokens || 0
-      runStat.llmCalls++
-    }
+    // ★ 运行统计一律由后端累计（GET /api/conversations/{id}/run-stats，前端只拉取渲染）。
+    //   此前「后端权威改造」后残留的本地累加代码引用了未定义变量 runStat——
+    //   每条 usage 事件都抛 ReferenceError 并中断本分支后续的 convCtxStats 更新
+    //   （2026-09-17 修复：删除残留）。
     // wsTokenStats 从 API /api/tokens/stats 加载（工作区级累积），不被 per-call 值覆盖
     // 仅当前对话才更新 convCtxStats（避免跨对话串扰）
     if (isCurrent) {

@@ -266,6 +266,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { state, layout, setFocusMode, rightPanelWidth, savePersistentState } from '../ui-state.js'
 import api from '../api.js'
+import { visibleConversations } from '../conv-filters.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
@@ -1909,7 +1910,7 @@ const forceScrollToBottom = () => {
 const loadConvList = async () => {
   try {
     const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
-    state.conversations = list || []
+    state.conversations = visibleConversations(list)
     // ★ 2026-08-21 修复"刷新后不自动选对话"：列表加载后若无当前对话（或当前对话已被删），
     //   自动选中最近更新的对话（后端按 UpdatedAt 倒序 → 取第一个）。
     //   currentConvId 赋值即触发 watch → switchConv 加载消息。
@@ -2058,7 +2059,9 @@ const refreshConvMeta = async () => {
   try {
     const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
     if (!Array.isArray(list)) return
-    for (const m of list) {
+    // ★ 桥专用会话（conv_wx_*）不进 PC 端列表：与加载路径同口径过滤
+    const visible = visibleConversations(list)
+    for (const m of visible) {
       const local = state.conversations.find(c => c.id === m.id)
       if (local) {
         // 仅合并权威标量字段（保持本地引用与顺序稳定）
