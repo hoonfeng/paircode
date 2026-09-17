@@ -225,7 +225,25 @@ func (w *Waiter) WaitForReply(baseline int64, onAskUser func(question string)) R
 		}
 		if sig != fileSig {
 			fileSig = sig
-			for _, o := range ReadConversation(w.WorkspaceRoot, w.ConvID, 0) {
+			lines := ReadConversation(w.WorkspaceRoot, w.ConvID, 0)
+			// ★ 会话文件「重建/轮换」检测与重锚（2026-09-17 实锤）：会话「交接」
+			//   会把活跃 JSONL 整体重写（idx 从 0 重新编号），旧基线可能大于新
+			//   文件的 max idx——「idx > lastSeen」恒不满足，等待会一直卡到 30
+			//   分钟超时（实测：投喂前读得基线 564，回合中被重建为 0..222，最终
+			//   回复永不发出）。检测到 max idx 回退即重锚（lastSeen=-1 全扫）：
+			//   下方处理分支天然忽略 user/tool 行与带 tool_calls 的 assistant
+			//   行，重建文件尾部的最终回复仍会被识别为候选。
+			maxIdx := int64(-1)
+			for _, o := range lines {
+				if o.Idx > maxIdx {
+					maxIdx = o.Idx
+				}
+			}
+			if maxIdx < lastSeen {
+				w.logf("会话文件已重建（max idx=%d < 基线 %d），重锚全扫", maxIdx, lastSeen)
+				lastSeen = -1
+			}
+			for _, o := range lines {
 				if o.Idx <= lastSeen {
 					continue
 				}
