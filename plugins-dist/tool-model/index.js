@@ -2689,7 +2689,23 @@ function meshBooleanPath() { return meshBoolLegacy ? 'trig' : 'poly'; }
 // 使同一几何顶点在板面/孔壁/侧面获得**同一个代表坐标**（详见 polyNodeToTris 注释）。
 // 每次布尔运行开始前清空（生命周期 = 一次 meshBooleanPoly）。
 var POLY_QUANT_COORD = null;
-function polyQuantBegin() { POLY_QUANT_COORD = {}; }
+var POLY_QUANT_KEYS = [];        // 全局量化键列表（供环边跨节点对齐用）
+function polyQuantBegin() { POLY_QUANT_COORD = {}; POLY_QUANT_KEYS = []; }
+
+// 收集所有节点的全部多边形顶点到全局量化表（key 唯一）。供 polyNodeToTris 做环边对齐。
+//   eps 必须与 polyNodeToTris 使用的量化格一致（调用方传入同一个 TOL），否则 key 对不上。
+function polyQuantCollect(nodes, eps) {
+  var inv = 1 / eps;
+  for (var k = 0; k < nodes.length; k++) {
+    var ps = nodes[k].polys;
+    for (var j = 0; j < ps.length; j++) for (var i = 0; i < ps[j].length; i++) {
+      var p = ps[j][i];
+      var key = Math.round(p[0] * inv) + '|' + Math.round(p[1] * inv) + '|' + Math.round(p[2] * inv);
+      if (!POLY_QUANT_COORD[key]) { POLY_QUANT_COORD[key] = p; POLY_QUANT_KEYS.push(key); }
+    }
+  }
+  return POLY_QUANT_KEYS.length;
+}
 
 function meshBoolean(meshA, meshB, op, tol, statsOut) {
   if (statsOut) statsOut.path = meshBooleanPath();
@@ -2818,6 +2834,48 @@ function polyNodeToTris(node, eps) {
     if (cur !== starts[k]) return cpRevert('多边形 BSP 输出边界自接触（环未闭合回起点）');
     if (ring.length >= 3) rings.push(ring);
   }
+  // ③′ 环边跨节点对齐（M4 真缺口收尾修复）：把"落在环边内部"的其他节点顶点插进环里。
+  //   ★ 时机是关键：必须放在 ② 有向边对消**之后**。对消的判据是"反向边严格存在"，
+  //     若在对消前插点会破坏对消 —— 实测（在多边形上插）引入 10 条非流形边、面数 +50%。
+  //     插在环上时对消已完成，只延长顶点序列，不改变任何既有拓扑关系。
+  //     相邻节点（T 缝的两侧）读同一张全局量化表，故两侧插点集合一致 ⇒ 三角化后边能配对。
+  if (POLY_QUANT_KEYS.length) {
+    for (k = 0; k < rings.length; k++) {
+      var rg = rings[k], nrg = rg.length, grown = [], mm;
+      for (j = 0; j < nrg; j++) {
+        var ka2 = rg[j], kb2 = rg[(j + 1) % nrg];
+        grown.push(ka2);
+        var pa2 = coord[ka2], pb2 = coord[kb2];
+        var eab = [pb2[0] - pa2[0], pb2[1] - pa2[1], pb2[2] - pa2[2]];
+        var eL2 = eab[0] * eab[0] + eab[1] * eab[1] + eab[2] * eab[2];
+        if (eL2 <= 4 * eps * eps) continue;
+        var midk = [];
+        for (mm = 0; mm < POLY_QUANT_KEYS.length; mm++) {
+          var kq = POLY_QUANT_KEYS[mm];
+          if (kq === ka2 || kq === kb2) continue;
+          var pq = coord[kq];
+          if (!pq) continue;
+          if (Math.abs(vDot(pl.n, pq) - pl.w) > eps) continue;   // 平面过滤：T 缝两侧必共面
+          var tq = ((pq[0] - pa2[0]) * eab[0] + (pq[1] - pa2[1]) * eab[1] + (pq[2] - pa2[2]) * eab[2]) / eL2;
+          if (tq <= 0 || tq >= 1) continue;
+          var qx = pa2[0] + eab[0] * tq - pq[0], qy = pa2[1] + eab[1] * tq - pq[1], qz = pa2[2] + eab[2] * tq - pq[2];
+          if (qx * qx + qy * qy + qz * qz > 4 * eps * eps) continue;
+          midk.push([tq, kq]);
+        }
+        if (midk.length) {
+          midk.sort(function (u, v) { return u[0] - v[0]; });
+          for (mm = 0; mm < midk.length; mm++) grown.push(midk[mm][1]);
+        }
+      }
+      var cleaned = [];
+      for (j = 0; j < grown.length; j++) {
+        if (j && grown[j] === grown[j - 1]) continue;
+        cleaned.push(grown[j]);
+      }
+      if (cleaned.length >= 3 && cleaned[0] === cleaned[cleaned.length - 1]) cleaned.pop();
+      if (cleaned.length >= 3) rings[k] = cleaned;
+    }
+  }
   // ④ 平面内正交基（右手：u × v = n ⇒ 2D 绕向与 3D 绕向一致，面积符号可直接用来分内外环）
   var nrm = pl.n;
   var ax = (Math.abs(nrm[0]) <= Math.abs(nrm[1]) && Math.abs(nrm[0]) <= Math.abs(nrm[2])) ? [1, 0, 0]
@@ -2916,6 +2974,8 @@ function meshBooleanPoly(meshA, meshB, op, tol, statsOut) {
     fail('未知布尔运算 ' + op + '（可用 union / subtract / intersect）');
   }
   var nodes = polyBspNodes(A), tris = [], npoly = 0, reverted = 0, ni, ti, pi, fi;
+  // 收集全局量化顶点表（供 polyNodeToTris 做环边跨节点对齐；见其中 ③′ 步骤）
+  var qkeys = polyQuantCollect(nodes, TOL);
   for (ni = 0; ni < nodes.length; ni++) {
     npoly += nodes[ni].polys.length;
     var t = polyNodeToTris(nodes[ni], TOL);
@@ -2938,6 +2998,7 @@ function meshBooleanPoly(meshA, meshB, op, tol, statsOut) {
     statsOut.polyReverted = reverted;
     statsOut.beforeRepair = out.indices.length;
     statsOut.afterRepair = rep.mesh.indices.length;
+    statsOut.polyQuantKeys = qkeys;
   }
   return rep.mesh;
   } finally { EPS_PLANE = savedPlaneEps; }
