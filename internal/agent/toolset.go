@@ -590,6 +590,23 @@ func GlobalPluginsPath() string {
 	return globalPluginsDir()
 }
 
+// isPluginDirEntry 判定目录项是否为插件包目录（base = 其父目录）。
+// ★ 2026-09-17（独立发布插件迁出配套）：独立发布插件真源在仓库 plugins-dist/
+//   （不进 IDE 发布包），本地开发/验收以 junction 挂在全局插件目录下。
+//   os.ReadDir 的 DirEntry 走 lstat 语义，而 Windows junction 在 Go 中
+//   **既不带 ModeDir 也不带 ModeSymlink**（Type()==0，仅是可跟随的重解析点）——
+//   实测：IsDir()=false、Type()=0、Stat 跟随 isDir=true。故此处不能靠 Type 位判定，
+//   一律用 Stat 跟随后判定是否为目录（普通文件自然被排除）。
+//   注：packager copyDistEntry 显式跳过 symlink；junction 在打包侧同样不复制，
+//   挂载态天然不进发布包（护栏 scripts/verify-dist-isolation.mjs 放行并提示）。
+func isPluginDirEntry(base string, de os.DirEntry) bool {
+	if de.IsDir() {
+		return true
+	}
+	st, err := os.Stat(filepath.Join(base, de.Name()))
+	return err == nil && st.IsDir()
+}
+
 // GlobalPluginPackage 全局插件包描述（<name>/package.json）。
 type GlobalPluginPackage struct {
 	Name    string           `json:"name"`              // 插件名（包目录名）
@@ -601,6 +618,10 @@ type GlobalPluginPackage struct {
 	Client  string           `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
 	Config  map[string]any   `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
 	Dsh     *GlobalPluginDsh `json:"dsh,omitempty"`     // ★ 外部兼容二段式 manifest 的 dsh.ui 段（UI 区域/功能包声明；新增，旧包无此段仍按 client.js 直载）
+	// ★ 2026-09 L1（修 G1）：运行期依赖字段 —— 用于运行时轨判定（nodePluginRuntime）。
+	//   非空 = Node 桥轨（真实 npm install + bridge.js 装载），**不进 goja 沙箱轨**。
+	Dependencies     map[string]any `json:"dependencies,omitempty"`
+	PeerDependencies map[string]any `json:"peerDependencies,omitempty"`
 }
 
 // diskPluginCodeAvailable 磁盘插件包是否存在且 main 源码非空（R2-8 去重用）。
@@ -637,7 +658,7 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 	}
 	n := 0
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
+		if !isPluginDirEntry(globalPluginsDir(), e) || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
 			continue
 		}
 		// ★ 源码包目录约定：<name>-src 是插件源码（UI 源码工程在项目根 ui-app/，不进 .pair），
@@ -648,6 +669,20 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 		// ★ 非插件目录（无 package.json，如 config/ 模型模板、README 等）静默跳过
 		if _, err := os.Stat(filepath.Join(globalPluginsDir(), e.Name(), "package.json")); err != nil {
 			continue
+		}
+		// ★ 2026-09 L1（修 G1）：运行时轨判定 —— 声明了运行期 npm 依赖（或 cordis4 peer）
+		//   的插件包由 **Node 桥**（.pair/cordis/node/plugins.json + bridge.js）装载，
+		//   不走 goja 沙箱。此前一律按 goja 插件装载：沙箱里依赖是 mock 空模块，
+		//   插件只能靠自身运行时自检让位 → 白装载一次、日志噪声，且工具落地矩阵测试
+		//   （要求每个 tool-* 目录都有落地工具）变红。
+		if pkg, ok := readGlobalPluginPackage(filepath.Join(globalPluginsDir(), e.Name())); ok {
+			if nodePluginRuntime(map[string]any{
+				"dependencies":     pkg.Dependencies,
+				"peerDependencies": pkg.PeerDependencies,
+			}) != "" {
+				log.Printf("[global-plugin] %s 是 Node 桥轨插件（声明了运行期 npm 依赖）——交由 Node 桥装载，跳过 goja 轨", e.Name())
+				continue
+			}
 		}
 		if err := applyGlobalPluginDir(ph, filepath.Join(globalPluginsDir(), e.Name())); err != nil {
 			log.Printf("[global-plugin] %s 装载失败: %v", e.Name(), err)
@@ -754,6 +789,85 @@ func syncGlobalPlugin(entry ToolsetPlugin) error {
 		if err := os.WriteFile(filepath.Join(dir, "client.js"), []byte(entry.Client), 0644); err != nil {
 			return err
 		}
+	}
+	data, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "package.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// syncGlobalPluginPackage 把「已解压的 npm 包目录」**整包**固化为磁盘插件包
+// <InstallDir>/.pair/plugins/<name>/。
+//
+// ★ 2026-09 L1（修 G2）：市场安装的 goja 分支此前只把 main 源码写成 index.js，
+//   导致 ①UI 半（assets/*.js bundle 与 client.js）丢失 → dsh.ui 声明的区域
+//   永远装不上；②多文件实现（lib/）丢失 → 运行时缺模块；③原 package.json 的
+//   dsh.ui/version 等字段被丢弃。改为整包复制 + 保留原始 manifest 字段。
+//
+// 参数：name=磁盘插件目录名；purpose=用途（写入 manifest）；srcDir=解压后的包目录；
+// rawManifest=原始 package.json（保留其全部字段）；config=插件配置（config.npm 等）。
+func syncGlobalPluginPackage(name, purpose, srcDir string, rawManifest map[string]any, config map[string]any) error {
+	if name == "" {
+		return fmt.Errorf("插件目录名不能为空")
+	}
+	dir := filepath.Join(globalPluginsDir(), name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	// 1. 白名单内容整包复制（目录递归、文件直拷）
+	for _, item := range []string{"index.js", "client.js", "assets", "lib", "bin", "README.md"} {
+		src := filepath.Join(srcDir, item)
+		info, err := os.Stat(src)
+		if err != nil {
+			continue
+		}
+		dst := filepath.Join(dir, item)
+		if info.IsDir() {
+			if err := os.RemoveAll(dst); err != nil {
+				return err
+			}
+			if err := copyDir(src, dst); err != nil {
+				return fmt.Errorf("复制 %s 失败: %v", item, err)
+			}
+			continue
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			return err
+		}
+	}
+	// 2. package.json：保留原始字段（dsh.ui 等），覆盖装载相关字段
+	pkg := map[string]any{}
+	for k, v := range rawManifest {
+		pkg[k] = v
+	}
+	pkg["name"] = name
+	if purpose != "" {
+		pkg["purpose"] = purpose
+	}
+	if _, ok := pkg["main"]; !ok {
+		pkg["main"] = "index.js"
+	}
+	if _, ok := pkg["version"]; !ok {
+		pkg["version"] = "1.0.0"
+	}
+	if _, ok := pkg["type"]; !ok {
+		pkg["type"] = "plugin"
+	}
+	if _, ok := pkg["scope"]; !ok {
+		pkg["scope"] = "project"
+	}
+	if config != nil {
+		pkg["config"] = config
 	}
 	data, err := json.MarshalIndent(pkg, "", "  ")
 	if err != nil {

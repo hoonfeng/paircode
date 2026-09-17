@@ -336,7 +336,8 @@ func presetAllToolPlugins() []string {
 	var out []string
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || !strings.HasPrefix(name, "tool-") || !diskPluginCodeAvailable(name) {
+		// ★ 2026-09-17：含 junction/symlink 挂载的插件包（见 isPluginDirEntry）。
+		if !isPluginDirEntry(globalPluginsDir(), e) || !strings.HasPrefix(name, "tool-") || !diskPluginCodeAvailable(name) {
 			continue
 		}
 		out = append(out, name)

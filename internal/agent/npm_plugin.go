@@ -354,11 +354,12 @@ func npmMarketInstall(pkg string) (string, error) {
 		}
 	}
 
-	// 固化为磁盘插件包（package.json + index.js，重启自动装配）
+	// 固化为磁盘插件包（**整包**：保 assets/client.js/lib + 原始 manifest 的 dsh.ui
+	// 等字段，重启自动装配）——★ 2026-09 L1 修 G2：此前只写 main 源码，
+	// UI 插件（dsh.ui + assets bundle）市场安装后永远装不上。
 	// ★ config.npm 记录 npm 来源与版本（更新机制元数据：checkUpdates 扫描它）
-	if err := syncGlobalPlugin(ToolsetPlugin{
-		Name: pluginName, Purpose: purpose, Code: code, Scope: "project",
-		Config: map[string]any{"npm": map[string]any{"pkg": pkg, "version": info.Version}},
+	if err := syncGlobalPluginPackage(pluginName, purpose, dir, manifest, map[string]any{
+		"npm": map[string]any{"pkg": pkg, "version": info.Version},
 	}); err != nil {
 		if ph != nil && defID != "" {
 			_ = ph.Unload(defID)

@@ -55,6 +55,10 @@ if (existsSync(distAssets)) {
 //   cmd/companion/web-ui/node_modules）
 const uiRoot = path.join(repoRoot, 'plugins-src', 'ui-app')
 const pluginsDir = path.join(repoRoot, '.pair', 'plugins')
+// ★ 2026-09-17 独立发布插件（市场分发）真源目录：区域发现/构建与 .pair/plugins 同权，
+//   但**不进 IDE 发布包**（packager.json 的 .pair/plugins 项已 exclude 这些包名；
+//   护栏见 scripts/verify-dist-isolation.mjs）。
+const distPluginsDir = path.join(repoRoot, 'plugins-dist')
 
 // ─── 区域发现（分布式：从 manifest 解耦，不再硬编码 9 区域）──────────
 // 每 UI 区域/功能插件包的 package.json 含 `dsh.ui`（manifest，见契约 §3.1）与
@@ -62,25 +66,33 @@ const pluginsDir = path.join(repoRoot, '.pair', 'plugins')
 // 任一满足「含 dsh.ui 且含 dsh.ui.build」的包即为一独立可构建的分布式 UI 区域插件。
 function discoverRegions() {
   const regions = []
-  if (!existsSync(pluginsDir)) return regions
-  for (const dir of readdirSync(pluginsDir)) {
-    const pkgPath = path.join(pluginsDir, dir, 'package.json')
-    if (!existsSync(pkgPath)) continue
-    let pkg
-    try { pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) } catch { continue }
-    const ui = pkg && pkg.dsh && pkg.dsh.ui
-    if (!ui || !ui.build) continue
-    regions.push({
-      id: pkg.name,               // == package.json name（唯一装配 key）
-      entry: ui.build.entry,      // 相对 plugins-src/ui-app（如 src/ui-main-titlebar.js）
-      global: ui.build.global,    // IIFE 全局名（如 UiTitlebar / GitPanel）
-      outDir: ui.build.outDir,    // 相对仓库根（如 .pair/plugins/ui-titlebar/assets）
-      fileName: ui.build.fileName,// 产物基底名（如 ui-titlebar / git-panel）
-      manifest: ui,
-      // ★ region 短名：优先 manifest.dsh.ui.build.region（显式），否则从包名剥离 ui- 前缀
-      //   （editor ↔ ui-editor；git-api/marketplace 无前缀即包名）。
-      region: (ui.build.region) || pkg.name.replace(/^ui-/, ''),
-    })
+  // ★ 去重（2026-09-17）：plugins-dist 插件在本地开发态常以 junction 挂在
+  //   .pair/plugins 下 → 两个目录都会扫到同一包，不去重会重复构建同一区域。
+  const seen = new Set()
+  for (const base of [pluginsDir, distPluginsDir]) {
+    if (!existsSync(base)) continue
+    for (const dir of readdirSync(base)) {
+      const pkgPath = path.join(base, dir, 'package.json')
+      if (!existsSync(pkgPath)) continue
+      let pkg
+      try { pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) } catch { continue }
+      const ui = pkg && pkg.dsh && pkg.dsh.ui
+      if (!ui || !ui.build) continue
+      const key = pkg.name || dir
+      if (seen.has(key)) continue
+      seen.add(key)
+      regions.push({
+        id: pkg.name,               // == package.json name（唯一装配 key）
+        entry: ui.build.entry,      // 相对 plugins-src/ui-app（如 src/ui-main-titlebar.js）
+        global: ui.build.global,    // IIFE 全局名（如 UiTitlebar / GitPanel）
+        outDir: ui.build.outDir,    // 相对仓库根（如 .pair/plugins/ui-titlebar/assets）
+        fileName: ui.build.fileName,// 产物基底名（如 ui-titlebar / git-panel）
+        manifest: ui,
+        // ★ region 短名：优先 manifest.dsh.ui.build.region（显式），否则从包名剥离 ui- 前缀
+        //   （editor ↔ ui-editor；git-api/marketplace 无前缀即包名）。
+        region: (ui.build.region) || pkg.name.replace(/^ui-/, ''),
+      })
+    }
   }
   return regions
 }

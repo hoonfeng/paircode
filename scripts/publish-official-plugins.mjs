@@ -24,6 +24,9 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pluginsDir = path.join(root, '.pair', 'plugins')
+// ★ 2026-09-17 独立发布插件（市场分发）真源目录：与 .pair/plugins 同权参与发布，
+//   但不进 IDE 发布包（packager.json exclude 这些包名）。
+const distPluginsDir = path.join(root, 'plugins-dist')
 const publishDir = path.join(root, '.pair', 'publish')
 const REGISTRY = process.env.PAIRCODE_NPM_REGISTRY || 'https://registry.npmjs.org'
 
@@ -33,7 +36,14 @@ const proxyArgs = PROXY ? ` --proxy=${PROXY} --https-proxy=${PROXY}` : ''
 
 // ── npm 认证：显式引用 .pair/publish/.npmrc（与 plugin-publisher 共享同一 token 文件）──
 //   ★ 不引用时 npm 走全局 ~/.npmrc——用户改 token 时只改一处，两脚本同步生效。
-const npmrcPath = path.join(publishDir, '.npmrc')
+//   ★ T3（2026-09-12）：PAIRCODE_NPM_USERCONFIG 环境变量可覆盖——CI/临时环境用
+//     一次性 userconfig（内容写 `//registry.npmjs.org/:_authToken=${NPM_TOKEN}`，
+//     npm 自行做环境变量插值）注入凭据，token 明文不落任何文件。
+const npmrcPathRaw = process.env.PAIRCODE_NPM_USERCONFIG || path.join(publishDir, '.npmrc')
+// ★ 绝对路径锚定（2026-09-12 实测坑）：npm 命令的 cwd 会切到目标包目录（execSync cwd=dst），
+//   相对路径的 userconfig 解析错位 → 认证失败（ENEEDAUTH：「need auth ... registry.npmjs.org」）。
+//   故一律 resolve 到仓库根绝对路径后再传给 --userconfig。
+const npmrcPath = path.isAbsolute(npmrcPathRaw) ? npmrcPathRaw : path.resolve(root, npmrcPathRaw)
 
 // 同步冷却（npm 限流防护）：Atomics.wait 无子进程开销，Node 主线程可用
 function sleepSync(ms) {
@@ -43,6 +53,9 @@ function sleepSync(ms) {
 const args = process.argv.slice(2)
 const DO_PUBLISH = args.includes('--publish')
 const DO_CHECK = args.includes('--check')
+const DO_PLAN = args.includes('--plan')
+const DO_ORPHANS = args.includes('--orphans')
+const DO_DEPRECATE_ORPHANS = args.includes('--deprecate-orphans')
 const otpIdx = args.indexOf('--otp')
 const OTP = otpIdx >= 0 ? args[otpIdx + 1] : ''
 const onlyIdx = args.indexOf('--only')
@@ -51,7 +64,10 @@ const ONLY = onlyIdx >= 0 ? args[onlyIdx + 1].split(',').map((s) => s.trim()).fi
 // 拷贝文件/目录（白名单：只拷发布所需，排除 node_modules/.git 等）
 // ★ 2026-08-20 修复：topLevel 只在顶层做 PUBLISH_FILES 过滤；
 //   递归进入 assets/bin 等子目录时复制全部内容（否则 UI 构建产物全被过滤掉）。
-const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
+// ★ 2026-09（L1 人声插件试点）：新增 'lib' —— Node 桥插件的多文件实现必须随包发布。
+//   背景：tool-voice 是第一个使用 lib/（wav/dsp/ops/verify/…）的插件，此前白名单
+//   只放行 index.js/client.js/assets/bin，会导致发布包缺模块、市场安装后运行即失败。
+const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'README.md']
 function copyDir(src, dst, topLevel = true) {
   fs.mkdirSync(dst, { recursive: true })
   for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
@@ -65,18 +81,29 @@ function copyDir(src, dst, topLevel = true) {
 }
 
 // 插件目录清单（跳过空目录 = 已废弃的 market-mcp/market-plugin/market-skill）
+// ★ 扫描面（2026-09-17）：.pair/plugins（IDE 基线）+ plugins-dist（独立发布插件）。
+//   同名同时存在于两处时以基线为准并告警——避免同一包名两个源头的发布歧义。
 function listPlugins() {
   const out = []
-  for (const ent of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
-    if (!ent.isDirectory()) continue
-    const dir = path.join(pluginsDir, ent.name)
-    const pkgPath = path.join(dir, 'package.json')
-    if (!fs.existsSync(path.join(dir, 'index.js')) && !fs.existsSync(pkgPath)) continue
-    let pkg = {}
-    if (fs.existsSync(pkgPath)) {
-      try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) } catch { pkg = {} }
+  const seen = new Set()
+  for (const base of [pluginsDir, distPluginsDir]) {
+    if (!fs.existsSync(base)) continue
+    for (const ent of fs.readdirSync(base, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue
+      if (seen.has(ent.name)) {
+        console.warn(`[listPlugins] 同名插件同时存在于 .pair/plugins 与 plugins-dist：${ent.name}（以 .pair/plugins 为准，已忽略 ${base}）`)
+        continue
+      }
+      const dir = path.join(base, ent.name)
+      const pkgPath = path.join(dir, 'package.json')
+      if (!fs.existsSync(path.join(dir, 'index.js')) && !fs.existsSync(pkgPath)) continue
+      seen.add(ent.name)
+      let pkg = {}
+      if (fs.existsSync(pkgPath)) {
+        try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) } catch { pkg = {} }
+      }
+      out.push({ name: ent.name, dir, pkg })
     }
-    out.push({ name: ent.name, dir, pkg })
   }
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -155,8 +182,33 @@ function bumpPatch(pkgPath) {
   return raw.version
 }
 
+// ── T1（2026-09-12）：本地版本 < 线上版本的处理 ──
+// 场景：线上更高（历史发布后本地版本号被回退/分叉）。npm 不允许对已发布版本重发，
+// 直接发必 EPUBLISHCONFLICT。故自动 bump 到「线上版本的下一个 patch」再发布。
+// 前置纪律：本地内容必须 ≥ 线上（否则是降级发布）——用 --compare 逐包核对内容。
+function semverCmp(a, b) {
+  const pa = String(a || '0').split('.').map((x) => parseInt(x, 10) || 0)
+  const pb = String(b || '0').split('.').map((x) => parseInt(x, 10) || 0)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0)
+  }
+  return 0
+}
+function bumpAbove(pkgPath, onlineVer) {
+  const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  raw.version = nextPatch(onlineVer)
+  fs.writeFileSync(pkgPath, JSON.stringify(raw, null, 2) + '\n')
+  return raw.version
+}
+function nextPatch(ver) {
+  const v = String(ver || '0.0.0').split('.')
+  v[2] = (parseInt(v[2] || '0', 10) + 1).toString()
+  return v.join('.')
+}
+
 // 检查 npm 上是否已存在（返回已发布版本或 null）
 function npmExists(pkgName) {
+
   // 用 dist-tags 端点检测（registry 对新包 metadata 可能 404，但 dist-tags 立即可查）
   try {
     const out = execSync(`curl -s${PROXY ? ` -x "${PROXY}"` : ''} -w "\\n%{http_code}" "${REGISTRY}/-/package/${pkgName}/dist-tags"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
@@ -165,6 +217,46 @@ function npmExists(pkgName) {
     if (code !== '200') return null
     try { return JSON.parse(lines.slice(0, -1).join('\n')).latest || null } catch { return null }
   } catch { return null }
+}
+
+// ── T2（2026-09-12）：孤儿包（本地已删、registry 仍在）检测与 deprecate ──
+// 替代关系映射（本地孤儿名 → 处置说明）；未列出者给通用文案。
+const ORPHAN_HINTS = {
+  'tool-vision': '已并入 @paircode/tool-web（read_image 工具）',
+  'tool-vision-llm': '已并入 @paircode/tool-web（read_image 工具）',
+  'tool-screenshot': '已并入 @paircode/tool-web（screenshot 工具）',
+  'tool-web-debug': '已并入 @paircode/tool-web（web_debug 工具）',
+  'tool-shell': '已由 @paircode/tool-exec 取代（exec_command/write_stdin/kill_process）',
+  'tool-core': '已移除：multi_edit/move_file/delete_file 由 apply_patch 覆盖',
+  'tool-debug': '已移除（纯命令行包装壳，无独立价值）',
+  'tool-git': '已移除：git 操作统一走命令执行（exec_command）',
+  'tool-verify': '已并入 @paircode/tool-resource',
+  'tool-codegraph-extra': '已并入 @paircode/tool-codegraph',
+  'host-capability-probe': '已移除（宿主能力探针，验证完成后删除）',
+  'web-api': '已移除（/api/ext 示例插件，能力由 ext_routes + 插件生态覆盖）',
+}
+
+// registry 上全部官方包（keywords:paircode 全集；search 索引可能滞后于新发布，
+// 故只用于「孤儿」判定——多出的名字才是孤儿，缺名字不代表未发布）
+function npmOfficialPackageNames() {
+  const url = `${REGISTRY}/-/v1/search?text=keywords:paircode&size=250`
+  try {
+    const out = execSync(`curl -s${PROXY ? ` -x "${PROXY}"` : ''} "${url}"`, {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60000,
+    })
+    const j = JSON.parse(out)
+    return (j.objects || []).map((o) => o.package && o.package.name).filter(Boolean)
+  } catch { return [] }
+}
+
+// 孤儿 = registry 有、本地插件目录无（去掉 @paircode/ 前缀比对）
+function findOrphans(localNames) {
+  const local = new Set(localNames)
+  return npmOfficialPackageNames()
+    .filter((n) => n.startsWith('@paircode/'))
+    .map((n) => n.slice('@paircode/'.length))
+    .filter((n) => n && !local.has(n))
+    .sort()
 }
 
 function main() {
@@ -181,6 +273,48 @@ function main() {
       const ver = npmExists(full)
       console.log(`  ${ver ? `@paircode/${p.name}@${ver}（已存在）` : `${full}（未发布）`}`)
     }
+    return
+  }
+
+  // ── T2：孤儿包（registry 有、本地已删）检测 / deprecate ──
+  if (DO_ORPHANS || DO_DEPRECATE_ORPHANS) {
+    const orphans = findOrphans(plugins.map((p) => p.name))
+    console.log(`\n── 孤儿包检查（registry 有 / 本地插件目录无）──`)
+    if (!orphans.length) console.log('  无孤儿包（registry 与本地一致）')
+    for (const o of orphans) console.log(`  - @paircode/${o}：${ORPHAN_HINTS[o] || '本地已移除（不再维护）'}`)
+    if (DO_DEPRECATE_ORPHANS) {
+      console.log(`\n── 执行 npm deprecate（${orphans.length} 个）──`)
+      for (const o of orphans) {
+        const msg = `不再维护：${ORPHAN_HINTS[o] || '本地已移除（不再维护）'}。`
+        try {
+          execSync(`npm deprecate @paircode/${o}@* "${msg}" --registry=${REGISTRY} --userconfig=${npmrcPath}${proxyArgs}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
+          console.log(`  ✅ @paircode/${o} 已标注废弃`)
+        } catch (e) {
+          console.log(`  ❌ @paircode/${o}: ${cleanNpmError(e.stderr || e.message)}`)
+          process.exitCode = 1
+        }
+      }
+    }
+    return
+  }
+
+  // ── T4：发布计划（只读；不发不打包）──
+  if (DO_PLAN) {
+    const pub = []; const update = []; const bump = []; const same = []
+    for (const p of plugins) {
+      const existing = npmExists(`@paircode/${p.name}`)
+      if (!existing) pub.push(`${p.name}@${p.pkg.version}`)
+      else if (semverCmp(p.pkg.version, existing) < 0) bump.push(`${p.name}（本地 ${p.pkg.version} < 线上 ${existing} → 自动升到 ${nextPatch(existing)}）`)
+      else if (existing !== p.pkg.version) update.push(`${p.name}（${existing} → ${p.pkg.version}）`)
+      else same.push(`${p.name}@${existing}`)
+    }
+    const orphans = findOrphans(plugins.map((p) => p.name))
+    console.log('\n── 发布计划（只读，不写 registry）──')
+    console.log(`  ① 未发布 ${pub.length}：${pub.join(', ') || '无'}`)
+    console.log(`  ② 本地更高 ${update.length}：${update.join(', ') || '无'}`)
+    console.log(`  ③ 本地更低 ${bump.length}（自动 bump patch 后发布）：${bump.join(', ') || '无'}`)
+    console.log(`  ④ 已一致 ${same.length}（跳过）：${same.join(', ') || '无'}`)
+    console.log(`  ⑤ 孤儿包 ${orphans.length}（建议 --deprecate-orphans）：${orphans.map((o) => '@paircode/' + o).join(', ') || '无'}`)
     return
   }
 
@@ -219,6 +353,14 @@ function main() {
     let h = { src: '', artifact: '' }
     try { h = dirHashSplit(p.dir) } catch {}
     const rec = migrateRec(hashes[pkgName]) || {}
+    // ★ T1（2026-09-12）：本地版本低于线上（历史回退/分叉）→ npm 不允许对已发布版本重发，
+    //   直接发必 EPUBLISHCONFLICT。自动 bump 到「线上版本的下一个 patch」再发布。
+    //   前置纪律：本地内容必须 ≥ 线上（用 --compare 逐包核对过内容才允许走此路径）。
+    if (existing && semverCmp(p.pkg.version, existing) < 0) {
+      const forced = bumpAbove(path.join(p.dir, 'package.json'), existing)
+      console.log(`  ⤴ ${pkgName} 本地 ${p.pkg.version} < 线上 ${existing} → 自动升到 ${forced}（npm 不可降版本重发）`)
+      p.pkg.version = forced
+    }
     if (existing && existing === p.pkg.version) {
       if (rec.src === h.src && rec.artifact === h.artifact) {
         console.log(`  ⏭ ${pkgName} 已一致（@${existing}，内容指纹相同），跳过`)
@@ -260,7 +402,7 @@ function main() {
       pkg.keywords = ['paircode']
       pkg.license = pkg.license || 'MIT'
       pkg.publishConfig = { access: 'public' }
-      pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'package.json']
+      pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json']
       fs.writeFileSync(path.join(dst, 'package.json'), JSON.stringify(pkg, null, 2))
       // 3. 验证/发布（支持代理：npm --proxy / --https-proxy）
       // ★ stderr 必须 pipe 捕获——否则 npm 真实错误（401/网络/权限）被丢弃，只剩 "Command failed" 外壳

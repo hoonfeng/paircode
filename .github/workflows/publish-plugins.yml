@@ -1,0 +1,72 @@
+name: Publish Plugins
+
+# 插件独立发布流水线（2026-09-12 新增）
+#
+# 定位：插件包与主程序**版本解耦**——主程序走 packager.json 流水线，插件走本条
+# （@paircode/<name> 独立语义化版本，独立发布，互不阻塞）。
+#
+# 触发：
+#   ① workflow_dispatch：手填要发的插件（逗号分隔），默认 dry-run（只出计划）
+#   ② push tag plugin-v*：全量发布（tag 只是触发器，插件各自用自身 package.json 版本）
+#
+# 凭据：secrets.NPM_TOKEN（granular token，bypass-2FA）→ 写入一次性 userconfig，
+#       经 PAIRCODE_NPM_USERCONFIG 注入；token 明文不落仓库文件（.npmrc 只存占位符）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '只发布指定插件（逗号分隔，如 tool-voice,ui-voice；留空=全量）'
+        required: false
+        default: ''
+      dry_run:
+        description: '仅输出发布计划（不写 registry）'
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'plugin-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install UI build deps
+        run: npm ci --prefix plugins-src/ui-app
+
+      - name: Configure npm auth (one-shot userconfig, no plaintext on disk)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::secrets.NPM_TOKEN 未配置——插件发布需要 granular token"
+            exit 1
+          fi
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$RUNNER_TEMP/npmrc"
+          echo "PAIRCODE_NPM_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
+
+      - name: Plan (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: node scripts/publish-official-plugins.mjs --plan
+
+      - name: Check orphans (registry 有 / 本地已删)
+        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+        run: node scripts/publish-official-plugins.mjs --orphans
+
+      - name: Publish plugins
+        if: github.event_name == 'push' || !inputs.dry_run
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          ARGS=""
+          if [ -n "$ONLY" ]; then ARGS="--only $ONLY"; fi
+          node scripts/publish-official-plugins.mjs --publish $ARGS

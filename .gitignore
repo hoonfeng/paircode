@@ -39,6 +39,8 @@ config/models/
 # Temporary files
 tmp/
 _temp/
+# 覆盖备份（design_codegen / 写盘工具的 .bak 回滚副本，属临时产物）
+*.bak
 
 # Frontend dependencies (not committed)
 node_modules/

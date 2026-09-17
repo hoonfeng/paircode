@@ -79,7 +79,8 @@ func BuildUIBootGraphFrom(dir string) UIBootGraph {
 	}
 	entries := make([]UIBootEntry, 0, 16)
 	for _, de := range dirents {
-		if !de.IsDir() {
+		// ★ 2026-09-17：挂载（junction/symlink）的插件包目录也须纳入（见 isPluginDirEntry）。
+		if !isPluginDirEntry(dir, de) {
 			continue
 		}
 		name := de.Name()
