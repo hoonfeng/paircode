@@ -8,6 +8,10 @@
 // 壳（ShellApp）与 app-actions 也引用本模块。
 // ═══════════════════════════════════════════════════════════════
 import { reactive, ref, computed } from 'vue'
+// ★ 视图打开状态真源在 plugin-runtime（localStorage viewOpen:<插件>:<视图id>）——
+//   本模块只做「主区 tab 激活位」与「并排布局」的状态机，打开/关闭动作委托它。
+//   （plugin-runtime 不反向 import 本模块，无循环依赖。）
+import { setViewOpen } from './plugin-runtime.js'
 
 // ─── 持久化键名 ──────────────────────────────────────────────
 export const PERSIST_KEY = 'paircode-ide-state'
@@ -164,8 +168,17 @@ export const state = reactive({
     editorWidth: 360,         // 折叠后打开时的默认详情列宽（对齐 DETAILS_DEFAULT=360）
     editorLastWidth: 360,     // 上次打开宽（折叠还原用）
     // ★ 主区 tab 单一事实源（2026-09）：'conversation' | 'editor' | 'market'
+    //   | 'toolsets' | 'view:<插件名>:<视图 id>'（插件注册的中间区域视图，
+    //   见 plugin-runtime 的 registerView / clientViews）
     //   editorOpen 保留为兼容映射（view==='editor' ⇔ editorOpen=true）
     mainTab: 'conversation',
+    // ★ 与对话并排（2026-09）：主内容区左右分栏 —— 一栏对话、一栏当前视图
+    //   （编辑器/市场/工具集/插件视图）。splitView=false → 单栏（tab 互斥切换）。
+    //   splitChatSide：对话在哪一栏（'left' | 'right'）。
+    //   ★ 不持久化（与 focusMode/editorOpen 同规则）：临时视图态，避免「上次并排
+    //     → 下次启动仍是并排」的意外；刷新回到用户默认单栏。
+    splitView: false,
+    splitChatSide: 'left',
   },
 })
 
@@ -289,6 +302,51 @@ export const layout = {
   setMainView(view) {
     state.panels.mainTab = view
     state.panels.editorOpen = (view === 'editor')
+  },
+  // ─── ★ 插件中间区域视图（registerView 注册的视图 tab，2026-09）─────────
+  //   mainTab 取值 'view:<插件名>:<视图 id>'；打开状态由 plugin-runtime 持久化。
+  viewTabKey(pluginName, id) { return 'view:' + pluginName + ':' + id },
+  // 打开视图 tab（activate=true 时同时激活；默认打开是「后台 tab」语义——
+  // 插件注册时的 open:true 只是让 tab 出现，激活仍由用户点击触发）。
+  openViewTab(pluginName, id, opts) {
+    const activate = !opts || opts.activate !== false
+    setViewOpen(pluginName, id, true)
+    if (activate) this.activateViewTab(pluginName, id)
+  },
+  // 激活视图 tab（切主视图；并排开启时同时保持对话可见）。
+  activateViewTab(pluginName, id) {
+    state.panels.mainTab = this.viewTabKey(pluginName, id)
+    state.panels.editorOpen = false
+  },
+  // 关闭视图 tab（× ）：持久化关闭状态；若正激活则回对话主视图。
+  closeViewTab(pluginName, id) {
+    setViewOpen(pluginName, id, false)
+    if (state.panels.mainTab === this.viewTabKey(pluginName, id)) {
+      state.panels.mainTab = 'conversation'
+    }
+  },
+  isViewTabActive(pluginName, id) {
+    return state.panels.mainTab === this.viewTabKey(pluginName, id)
+  },
+  // ─── ★ 与对话并排（可切换）─────────────────────────────────────────
+  // 语义：主内容区左右分栏 —— 一栏固定显示对话，另一栏显示当前激活视图
+  // （编辑器/市场/工具集/插件视图）。对话本身就是主视图时「并排」无意义（会变成
+  // 两栏对话）→ 调用方需先切到某个视图；本方法对 mainTab==='conversation' 返回 false。
+  toggleSplit() {
+    if (state.panels.splitView) {
+      state.panels.splitView = false
+      return true
+    }
+    if (state.panels.mainTab === 'conversation') return false
+    state.panels.splitView = true
+    return true
+  },
+  setSplitChatSide(side) {
+    state.panels.splitChatSide = side === 'right' ? 'right' : 'left'
+  },
+  // 并排是否真正生效（开关开启 + 当前不是纯对话视图）。
+  isSplitActive() {
+    return state.panels.splitView === true && state.panels.mainTab !== 'conversation'
   },
 }
 

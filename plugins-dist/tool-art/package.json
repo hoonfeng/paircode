@@ -1,0 +1,12 @@
+{
+  "name": "tool-art",
+  "purpose": "矢量/图像创作工具面（纯 goja 零依赖）：画板工程 JSON 文本真相源 + SVG 生成/解析/回读 + 对齐分布 + 7 项自检（含 WCAG 对比度）",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "keywords": [
+    "paircode"
+  ],
+  "license": "MIT"
+}

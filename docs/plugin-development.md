@@ -474,10 +474,34 @@ field 支持：`name`（键）/ `label`（展示名）/ `type`（text/number/boo
     props: { field: 'type' },   // 面板数据契约（轻量 Slot）
   })
 
+  // 注册**中间区域视图**（在 IDE 主内容区 tab 栏开一个 tab，与 对话/编辑器/市场/工具集 同级）
+  ui.registerView({
+    id: 'my-view',
+    title: '我的视图',
+    icon: 'svg...',
+    order: 30,          // tab 顺序（小者靠前；缺省 100）
+    open: true,         // true = 默认打开为「后台 tab」：tab 出现但不抢占对话主视图
+    render(el, ui) { el.innerHTML = '<div>视图内容</div>' },  // 返回 cleanup 可清理
+  })
+
   // 调后端 API（受限）
   const data = await ui.http.get('/api/plugins')       // 或 ui.http.post(path, body)
 }
 ```
+
+**`registerPanel` vs `registerView`（2026-09 新增）**：
+
+| | `registerPanel` | `registerView` |
+|---|---|---|
+| 出现位置 | 插件面板（壳级逃生口浮动窗口）内的「客户端面板」小 tab 区 | 主内容区（`.main-area`）tab 栏，与 对话/编辑器/市场/工具集 同级 |
+| 适用场景 | 管理/总览类面板（藏在插件面板里） | 需要**长期占用主工作区**的界面（编辑器式工作台） |
+| 可关闭 | 跟随插件面板 | 每个 tab 有 ×，关闭状态持久化（`localStorage: viewOpen:<插件>:<视图 id>`） |
+| 与对话 | — | 可**并排**：tab 栏「并排对话」按钮 → 主区分左右两栏（对话 + 当前视图，可换边）；再点回单栏 |
+| 挂载策略 | 打开插件面板即挂载 | **懒挂载 + 保持**：首次激活才挂载（render(el, ui)），之后切 tab 不卸载（保住 3D 视角/滚动等状态），关闭 tab 或卸载插件才 cleanup |
+
+> 视图与对话并排时的布局状态在 `ui-state.js` 的 `layout` 服务（`toggleSplit()` /
+> `setSplitChatSide('left'|'right')` / `openViewTab()` / `closeViewTab()`），
+> 不持久化（临时视图态，刷新回单栏）。
 
 **预定义 UI 槽位**（`ui.registerSlot({slotId, ...})` 注册占用；替换型 single 区域内下拉切换占用者，叠加型 list 勾选激活）：
 

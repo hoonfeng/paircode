@@ -1,0 +1,19 @@
+{
+  "name": "@paircode/tool-voice",
+  "version": "0.1.0",
+  "description": "人声创作（说话/歌声）工具面：导入 → 分析 → 编辑 → 渲染 → 六项「非换声 / 非生成式」自检。纯 DSP（@audio/* 原子，MIT），不含换声与生成式模型。",
+  "purpose": "人声创作工具面（纯 DSP）：voice_import / voice_analyze / voice_edit / voice_render / voice_verify —— 音高修正、时值伸缩、停顿删减、确定性渲染与溯源审计",
+  "main": "index.js",
+  "dependencies": {
+    "@audio/loudness": "1.2.1",
+    "@audio/note": "1.0.2",
+    "@audio/onset": "1.0.1",
+    "@audio/pitch-yin": "1.0.5",
+    "@audio/stretch-wsola": "1.2.1",
+    "@audio/tune-snap": "1.1.3"
+  },
+  "keywords": [
+    "paircode"
+  ],
+  "license": "MIT"
+}

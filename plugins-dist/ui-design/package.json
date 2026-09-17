@@ -1,0 +1,31 @@
+{
+  "name": "ui-design",
+  "purpose": "UI 设计面板：HTML 预览（iframe sandbox，只读）/ 设计令牌与 WCAG 对比度 / 屏幕结构 / 9 项校验报告（数据来自 tool-design 的令牌、工程与旁挂报告）",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "sidebar",
+      "kind": "list",
+      "scope": "root",
+      "inject": [
+        "@paircode/core"
+      ],
+      "immediately": false,
+      "build": {
+        "entry": "src/ui-main-design.js",
+        "global": "DesignPanel",
+        "outDir": "plugins-dist/ui-design/assets",
+        "fileName": "design-panel"
+      }
+    }
+  },
+  "keywords": [
+    "paircode"
+  ],
+  "license": "MIT"
+}
