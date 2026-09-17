@@ -691,7 +691,23 @@ function profilePoints(spec, what) {
 
 // 简单多边形耳切三角化（earcut 风格：顺序切耳 + 共线点清理 + 兜底；O(n²)，轮廓顶点数很小，够用且无依赖）
 // 带孔轮廓会先经「桥接」变成带零宽通道的环（含重复顶点），顺序切耳 + 含边界遮挡判定对它同样成立。
+// 轮廓三角化（无洞）：earcut 版；返回 [[i,j,k],...]（CCW）。
+// ★ 两条路径分工（实测决定，勿随手合并）：
+//   · 挤出 / 扭转挤出 / 扫掠 / 回转 的**端盖** → 用 earcut 版（本函数）。
+//     收益：切不出反向三角形（旧实现实测 19/70 个负面积）；带孔挤出的 M4 从
+//     「208 条真缺口」直接变成「全部部件严格水密」。
+//   · I.6-1 / I.6-2 的**共面轮廓收尾** → 用 triangulatePolygonWithHolesLegacy（旧桥接+耳切）。
+//     原因：布尔路径的面数/M4 对三角化切法很敏感 —— earcut 会 splitEarcut 分割自接触环，
+//     产出的三角形邻接更碎，导致下一轮 meshToPolys 的共面合并变差：
+//     实测 4 次串行 subtract 的 polyNodes 388→677、polyInput 1913→2502、
+//     面数 2216→2797、M4 真缺口 893→1255（T 缝 221→313）。故布尔路径维持旧实现**零回归**。
+// 两个 Legacy 函数因此**不是**死代码，而是布尔路径的专用实现。
 function triangulatePolygon(pts) {
+  var flat = ecFlatten(pts);
+  return ecFinalize(flat, null, ecTriangulate(flat, null), '轮廓');
+}
+// 旧实现（桥接 + 耳切 + 取最大凸角强切）：仅供 I.6-1/I.6-2 的共面轮廓收尾使用。
+function triangulatePolygonLegacy(pts) {
   var n = pts.length;
   var idx = [], k;
   for (k = 0; k < n; k++) idx.push(k);
@@ -785,6 +801,374 @@ function triangulatePolygon(pts) {
     out.push(t);
   }
   return out;
+}
+
+// ══ 带洞轮廓三角化：mapbox/earcut 核心算法的等价移植（零依赖 / ES5 / ec 前缀避免命名冲突）══
+// 为什么必须换掉旧实现（「桥接 + 对角线可见性硬拦 + 取最大凸角强切」）：
+//   旧实现在**自接触环**（多个桥接通道彼此交叉，3 个以上洞必然出现）上会「一轮找不到耳」，
+//   而它的兜底是「取最大凸角强切」—— 强切会切穿零宽通道、产出**反向（负面积）**三角形。
+//   实测 40×30 板 + 2 圆洞 + 1 方洞（test/_temp/model-holes-e2e.cjs）：
+//     旧实现切出 19 个负面积三角形（占 70 个的 27%），报错停在「第 51 个底盖三角形」；
+//     桥接退化到「最近可见顶点」时通道横穿整个形状（(3,12)→(-20,-15)），是卡死的直接原因。
+//   earcut 的兜底是**三级递进、逐级放宽**：
+//     filterPoints（删重复/共线点） → cureLocalIntersections（局部自交就地切成三角形）
+//     → splitEarcut（用有效对角线把环一分为二后递归）—— 这才是在自接触输入上稳的原因。
+//   旧实现把这些兜底换成了「对角线可见性从源头拦住」，拦得过狠 ⇒ 卡死 ⇒ 强切 ⇒ 坏网格。
+// 坐标约定（与全模块一致，y 向上）：外轮廓 CCW（有向面积 > 0）、洞 CW（< 0）⇒ 输出三角形 CCW。
+//   earcut 的 area()/signedArea()/pointInTriangle() 只依赖「外环有向面积为正」这一**数学**约定
+//   （与屏幕 y 轴朝向无关），与上面的输入约定同构，故此处**逐字照搬、不做任何符号翻转**。
+// 省略的部分：z-order 曲线哈希（invSize 不启用 ⇒ 只走朴素 isEar 分支；数据量小、无收益）。
+var EC_BUDGET = 200000;      // 三角化步数预算（防退化输入把递归拖死）
+var ecSteps = 0;
+function ecArea(p, q, r) {
+  return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+}
+function ecSign(v) { return v > 0 ? 1 : (v < 0 ? -1 : 0); }
+function ecEquals(p1, p2) { return p1.x === p2.x && p1.y === p2.y; }
+function ecOnSegment(p, q, r) {
+  return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) &&
+         q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
+}
+function ecIntersects(p1, q1, p2, q2) {
+  var o1 = ecSign(ecArea(p1, q1, p2)), o2 = ecSign(ecArea(p1, q1, q2)),
+      o3 = ecSign(ecArea(p2, q2, p1)), o4 = ecSign(ecArea(p2, q2, q1));
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && ecOnSegment(p1, p2, q1)) return true;
+  if (o2 === 0 && ecOnSegment(p1, q2, q1)) return true;
+  if (o3 === 0 && ecOnSegment(p2, p1, q2)) return true;
+  if (o4 === 0 && ecOnSegment(p2, q1, q2)) return true;
+  return false;
+}
+function ecIntersectsPolygon(a, b) {
+  var p = a;
+  do {
+    if (p.i !== a.i && p.next.i !== a.i && p.i !== b.i && p.next.i !== b.i &&
+        ecIntersects(p, p.next, a, b)) return true;
+    p = p.next;
+  } while (p !== a);
+  return false;
+}
+function ecLocallyInside(a, b) {
+  return ecArea(a.prev, a, a.next) < 0 ?
+    (ecArea(a, b, a.next) >= 0 && ecArea(a, a.prev, b) >= 0) :
+    (ecArea(a, b, a.prev) < 0 || ecArea(a, a.next, b) < 0);
+}
+function ecMiddleInside(a, b) {
+  var p = a, inside = false, px = (a.x + b.x) / 2, py = (a.y + b.y) / 2;
+  do {
+    if (((p.y > py) !== (p.next.y > py)) && p.next.y !== p.y &&
+        (px < (p.next.x - p.x) * (py - p.y) / (p.next.y - p.y) + p.x)) inside = !inside;
+    p = p.next;
+  } while (p !== a);
+  return inside;
+}
+function ecSectorContainsSector(m, p) {
+  return ecArea(m.prev, m, p.prev) < 0 && ecArea(p.next, m, m.next) < 0;
+}
+function ecPointInTriangle(ax, ay, bx, by, cx, cy, px, py) {
+  return (cx - px) * (ay - py) >= (ax - px) * (cy - py) &&
+         (ax - px) * (by - py) >= (bx - px) * (ay - py) &&
+         (bx - px) * (cy - py) >= (cx - px) * (by - py);
+}
+function ecIsValidDiagonal(a, b) {
+  return a.next.i !== b.i && a.prev.i !== b.i && !ecIntersectsPolygon(a, b) &&
+    ((ecLocallyInside(a, b) && ecLocallyInside(b, a) && ecMiddleInside(a, b) &&
+      (ecArea(a.prev, a, b.prev) || ecArea(a, b.prev, b))) ||
+     (ecEquals(a, b) && ecArea(a.prev, a, a.next) > 0 && ecArea(b.prev, b, b.next) > 0));
+}
+function ecSignedAreaFlat(data, start, end, dim) {
+  var sum = 0, i, j;
+  for (i = start, j = end - dim; i < end; i += dim) {
+    sum += (data[j] - data[i]) * (data[i + 1] + data[j + 1]);
+    j = i;
+  }
+  return sum;
+}
+function ecCreateNode(i, x, y) {
+  return { i: i, x: x, y: y, prev: null, next: null, steiner: false };
+}
+function ecInsertNode(i, x, y, last) {
+  var p = ecCreateNode(i, x, y);
+  if (!last) { p.prev = p; p.next = p; }
+  else { p.next = last.next; p.prev = last; last.next.prev = p; last.next = p; }
+  return p;
+}
+function ecRemoveNode(p) {
+  p.next.prev = p.prev;
+  p.prev.next = p.next;
+}
+function ecLinkedList(data, start, end, dim, clockwise) {
+  var last = null, i;
+  if (clockwise === (ecSignedAreaFlat(data, start, end, dim) > 0)) {
+    for (i = start; i < end; i += dim) last = ecInsertNode(i / dim | 0, data[i], data[i + 1], last);
+  } else {
+    for (i = end - dim; i >= start; i -= dim) last = ecInsertNode(i / dim | 0, data[i], data[i + 1], last);
+  }
+  if (last && ecEquals(last, last.next)) { ecRemoveNode(last); last = last.next; }
+  return last;
+}
+function ecFilterPoints(start, end) {
+  if (!start) return start;
+  if (!end) end = start;
+  var p = start, again;
+  do {
+    again = false;
+    // ★ 只删**重复点**，**不删共线点**（earcut 原版会连共线点一起删）。
+    //   原因：轮廓上的共线中间点虽然对"面积"无贡献，却是**侧壁的顶点**——
+    //   删掉它会让底/顶盖的边界少一条边，与侧壁对不上（实测「板+2圆孔+1方洞」
+    //   boundary=6、χ=-6，model-holes-test / model-twist-test 各挂 1 项）。
+    //   代价：兜底时少了"删点解卡"这一手，但 cureLocalIntersections + splitEarcut 仍在。
+    if (!p.steiner && ecEquals(p, p.next)) {
+      ecRemoveNode(p);
+      p = end = p.prev;
+      if (p === p.next) break;
+      again = true;
+    } else p = p.next;
+  } while (again || p !== end);
+  return end;
+}
+function ecLeftmost(start) {
+  var p = start, leftmost = start;
+  do {
+    if (p.x < leftmost.x || (p.x === leftmost.x && p.y < leftmost.y)) leftmost = p;
+    p = p.next;
+  } while (p !== start);
+  return leftmost;
+}
+function ecCompareXYSlope(a, b) {
+  var result = a.x - b.x, aSlope, bSlope;
+  if (result === 0) {
+    result = a.y - b.y;
+    if (result === 0) {
+      aSlope = (a.next.y - a.y) / (a.next.x - a.x);
+      bSlope = (b.next.y - b.y) / (b.next.x - b.x);
+      result = aSlope - bSlope;
+    }
+  }
+  return result;
+}
+function ecIsEar(ear) {
+  var a = ear.prev, b = ear, c = ear.next;
+  if (ecArea(a, b, c) >= 0) return false;          // 凹角/共线 ⇒ 不可能是耳
+  var ax = a.x, ay = a.y, bx = b.x, by = b.y, cx = c.x, cy = c.y;
+  var x0 = Math.min(ax, bx, cx), y0 = Math.min(ay, by, cy),
+      x1 = Math.max(ax, bx, cx), y1 = Math.max(ay, by, cy);
+  var p = c.next;
+  while (p !== a) {
+    // 只有**凹**顶点落进耳里才挡住（凸顶点落在耳内不影响三角化），且先用包围盒预筛
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 &&
+        ecPointInTriangle(ax, ay, bx, by, cx, cy, p.x, p.y) &&
+        ecArea(p.prev, p, p.next) >= 0) return false;
+    p = p.next;
+  }
+  return true;
+}
+// 兜底 2：局部自交就地修 —— 若 a→p→p.next→b 这段自我交叉且两侧局部可达，
+// 就把 a/p/b 切一个三角形、删掉 p 与其后继，把交叉「消掉」而不是硬切。
+function ecCureLocalIntersections(start, tris) {
+  var p = start, a, b;
+  do {
+    a = p.prev; b = p.next.next;
+    if (!ecEquals(a, b) && ecIntersects(a, p, p.next, b) &&
+        ecLocallyInside(a, b) && ecLocallyInside(b, a)) {
+      tris.push([a.i, p.i, b.i]);
+      ecRemoveNode(p);
+      ecRemoveNode(p.next);
+      p = start = b;
+    }
+    p = p.next;
+  } while (p !== start);
+  return ecFilterPoints(p);
+}
+function ecSplitPolygon(a, b) {
+  var a2 = ecCreateNode(a.i, a.x, a.y), b2 = ecCreateNode(b.i, b.x, b.y),
+      an = a.next, bp = b.prev;
+  a.next = b; b.prev = a;
+  a2.next = an; an.prev = a2;
+  b2.next = a2; a2.prev = b2;
+  bp.next = b2; b2.prev = bp;
+  return b2;
+}
+// 兜底 3：用一条「有效对角线」把环一分为二，两个子环各自递归三角化。
+function ecSplitEarcut(start, tris) {
+  var a = start, b, c;
+  do {
+    b = a.next.next;
+    while (b !== a.prev) {
+      if (a.i !== b.i && ecIsValidDiagonal(a, b)) {
+        c = ecSplitPolygon(a, b);
+        a = ecFilterPoints(a, a.next);
+        c = ecFilterPoints(c, c.next);
+        ecEarcutLinked(a, tris, 0);
+        ecEarcutLinked(c, tris, 0);
+        return;
+      }
+      b = b.next;
+    }
+    a = a.next;
+  } while (a !== start);
+}
+function ecEarcutLinked(ear, tris, pass) {
+  if (!ear) return;
+  if (++ecSteps > EC_BUDGET) fail('轮廓三角化超出步数预算（轮廓过于退化或自交）');
+  var stop = ear, prev, next;
+  while (ear.prev !== ear.next) {
+    prev = ear.prev; next = ear.next;
+    if (ecIsEar(ear)) {
+      tris.push([prev.i, ear.i, next.i]);
+      ecRemoveNode(ear);
+      ear = next.next;
+      stop = next.next;
+      continue;
+    }
+    ear = next;
+    if (ear === stop) {                 // 一轮都没找到耳 ⇒ 三级兜底
+      if (!pass) ecEarcutLinked(ecFilterPoints(ear), tris, 1);
+      else if (pass === 1) ecEarcutLinked(ecCureLocalIntersections(ecFilterPoints(ear), tris), tris, 2);
+      else if (pass === 2) ecSplitEarcut(ear, tris);
+      break;
+    }
+  }
+}
+function ecFindHoleBridge(hole, outerNode) {
+  var p = outerNode, hx = hole.x, hy = hole.y, qx = -Infinity, m = null, x;
+  if (ecEquals(hole, p)) return p;
+  do {
+    if (ecEquals(hole, p.next)) return p.next;
+    else if (hy <= p.y && hy >= p.next.y && p.next.y !== p.y) {
+      x = p.x + (hy - p.y) * (p.next.x - p.x) / (p.next.y - p.y);
+      if (x <= hx && x > qx) {
+        qx = x;
+        m = p.x < p.next.x ? p : p.next;
+        if (x === hx) return m;         // 洞口正好触到外环边 ⇒ 取左端点
+      }
+    }
+    p = p.next;
+  } while (p !== outerNode);
+  if (!m) return null;
+  // 在「洞点 / 交点 / 端点」构成的三角形里找点：若有点落在里面，改取「射线切角最小」的点
+  var stop = m, mx = m.x, my = m.y, tanMin = Infinity, tan;
+  p = m;
+  do {
+    if (hx >= p.x && p.x >= mx && hx !== p.x &&
+        ecPointInTriangle(hy < my ? hx : qx, hy, mx, my, hy < my ? qx : hx, hy, p.x, p.y)) {
+      tan = Math.abs(hy - p.y) / (hx - p.x);
+      if (ecLocallyInside(p, hole) &&
+          (tan < tanMin || (tan === tanMin && (p.x > m.x || (p.x === m.x && ecSectorContainsSector(m, p)))))) {
+        m = p; tanMin = tan;
+      }
+    }
+    p = p.next;
+  } while (p !== stop);
+  return m;
+}
+function ecEliminateHole(hole, outerNode) {
+  var bridge = ecFindHoleBridge(hole, outerNode);
+  if (!bridge) return outerNode;
+  var bridgeReverse = ecSplitPolygon(bridge, hole);
+  ecFilterPoints(bridgeReverse, bridgeReverse.next);
+  return ecFilterPoints(bridge, bridge.next);
+}
+function ecEliminateHoles(data, holeIndices, outerNode, dim) {
+  var queue = [], i, len = holeIndices.length, start, end, list;
+  for (i = 0; i < len; i++) {
+    start = holeIndices[i] * dim;
+    end = i < len - 1 ? holeIndices[i + 1] * dim : data.length;
+    list = ecLinkedList(data, start, end, dim, false);
+    if (list === list.next) list.steiner = true;
+    queue.push(ecLeftmost(list));      // 按洞的**最左**点排序（配合 findHoleBridge 的向左射线）
+  }
+  queue.sort(ecCompareXYSlope);
+  for (i = 0; i < queue.length; i++) outerNode = ecEliminateHole(queue[i], outerNode);
+  return outerNode;
+}
+function ecTriangulate(data, holeIndices) {
+  var hasHoles = holeIndices && holeIndices.length;
+  var outerLen = hasHoles ? holeIndices[0] * 2 : data.length;
+  var outerNode = ecLinkedList(data, 0, outerLen, 2, true);
+  var tris = [];
+  ecSteps = 0;
+  if (!outerNode || outerNode.next === outerNode.prev) return tris;
+  if (hasHoles) outerNode = ecEliminateHoles(data, holeIndices, outerNode, 2);
+  ecEarcutLinked(outerNode, tris, 0);
+  return tris;
+}
+// 三角化结果收尾：丢退化三角形、统一为 CCW、**校验覆盖面积**（绝不静默产出坏网格）。
+// 期望面积 = 整条扁平点表的 signedArea（外轮廓 CCW 为正、各洞 CW 为负 ⇒ 相加正好是净面积）；
+// 桥接通道正反各走一次、面积自相抵消，故对自接触环该式同样成立。
+function ecTriArea2(flat, t) {
+  var ax = flat[t[0] * 2], ay = flat[t[0] * 2 + 1],
+      bx = flat[t[1] * 2], by = flat[t[1] * 2 + 1],
+      cx = flat[t[2] * 2], cy = flat[t[2] * 2 + 1];
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+function ecFinalize(flat, holeIndices, raw, what) {
+  var kept = [], got2 = 0, k, t, q, a2, tol, src, s, e, nh = holeIndices ? holeIndices.length : 0;
+  for (k = 0; k < raw.length; k++) {           // raw 是 [[i,j,k],...]（earcutLinked 逐面 push）
+    src = raw[k];
+    t = [src[0], src[1], src[2]];
+    if (t[0] === t[1] || t[1] === t[2] || t[0] === t[2]) continue;
+    a2 = ecTriArea2(flat, t);
+    if (a2 === 0) continue;
+    kept.push(t);
+    got2 += a2;
+  }
+  // 期望面积必须**按环分别累加**：外轮廓 CCW 为正、各洞 CW 为负 ⇒ 相加即净面积。
+  // （不能对整个点表一次性求 signedArea —— 那会把各环之间的「虚拟连线」也算进去。）
+  var want2 = ecSignedAreaFlat(flat, 0, nh ? holeIndices[0] * 2 : flat.length, 2);
+  for (k = 0; k < nh; k++) {
+    s = holeIndices[k] * 2;
+    e = k < nh - 1 ? holeIndices[k + 1] * 2 : flat.length;
+    want2 += ecSignedAreaFlat(flat, s, e, 2);
+  }
+  tol = Math.max(1e-8, Math.abs(want2) * 1e-8);
+  if (Math.abs(got2 - want2) > tol && Math.abs(-got2 - want2) <= tol) {
+    for (k = 0; k < kept.length; k++) { q = kept[k]; kept[k] = [q[0], q[2], q[1]]; }
+    got2 = -got2;
+  }
+  if (Math.abs(got2 - want2) > tol) {
+    fail(what + '三角化覆盖面积与轮廓不符（得 ' + (got2 / 2) + '，应为 ' + (want2 / 2) + '）' +
+      '：轮廓自交、洞与外轮廓相交，或洞之间相交');
+  }
+  // ★ 边界完整性校验：输出三角形的**边界边**（找不到反向边的有向边——与 M4 同一判据；
+  //   "恰好出现一次"是错的，内部对角线也是各出现一次的一对反向边）
+  //   必须与输入各环的边**一一对应**。少了 ⇒ 底/顶盖的边界比侧壁少顶点（earcut 的
+  //   filterPoints 删共线点就曾造成这个：实测「板+2圆孔+1方洞」boundary=6、χ=-6，
+  //   model-holes-test 与 model-twist-test 各挂 1 项）；多了 ⇒ 三角化切穿了轮廓。
+  //   面积守恒抓不住这两类缺陷（重叠与缺失可以互相抵消），故必须单独校验。
+  var edgeCnt = {}, nv = flat.length / 2, i2, j2, bs, be, bounds = [], bad = [], ekey, parts, isBnd = {};
+  for (k = 0; k < kept.length; k++) {
+    t = kept[k];
+    edgeCnt[t[0] + '_' + t[1]] = (edgeCnt[t[0] + '_' + t[1]] || 0) + 1;
+    edgeCnt[t[1] + '_' + t[2]] = (edgeCnt[t[1] + '_' + t[2]] || 0) + 1;
+    edgeCnt[t[2] + '_' + t[0]] = (edgeCnt[t[2] + '_' + t[0]] || 0) + 1;
+  }
+  for (ekey in edgeCnt) {
+    parts = ekey.split('_');
+    if (!edgeCnt[parts[1] + '_' + parts[0]]) isBnd[ekey] = 1;
+  }
+  bounds.push([0, nh ? holeIndices[0] : nv]);
+  for (k = 0; k < nh; k++) bounds.push([holeIndices[k], k + 1 < nh ? holeIndices[k + 1] : nv]);
+  var wantEdge = {};
+  for (k = 0; k < bounds.length; k++) {
+    bs = bounds[k][0]; be = bounds[k][1];
+    for (i2 = bs; i2 < be; i2++) {
+      j2 = i2 + 1 < be ? i2 + 1 : bs;
+      wantEdge[i2 + '_' + j2] = 1;
+      if (!isBnd[i2 + '_' + j2]) bad.push('缺边 ' + i2 + '→' + j2);
+    }
+  }
+  for (ekey in isBnd) if (!wantEdge[ekey]) bad.push('多边 ' + ekey);
+  if (bad.length) {
+    fail(what + '三角化的边界与输入轮廓不一致（' + bad.length + ' 处，如 ' + bad.slice(0, 4).join('、') +
+      '）：三角化丢边或越界，会直接表现为材料不水密');
+  }
+  return kept;
+}
+function ecFlatten(pts) {
+  var flat = [], k;
+  for (k = 0; k < pts.length; k++) { flat.push(pts[k][0], pts[k][1]); }
+  return flat;
 }
 
 // ── 带孔轮廓（earcut 的 eliminateHoles 思路：桥接边把洞并入外轮廓 → 复用上面的耳切）──
@@ -908,7 +1292,18 @@ function findBridge(ringIdx, all, M, counts) {
   return -1;
 }
 // 带孔三角化：索引空间 = 外轮廓（0..outer.length-1）+ 依次各洞的点（与挤出时的顶点顺序一致）
+// 带洞轮廓三角化：earcut 版（eliminateHoles：洞按最左点排序 + 向左射线桥接）+ 三级兜底耳切。
+// 索引空间与调用方一致 = 外轮廓 0..n-1、随后各洞依次。用途见上面 triangulatePolygon 的说明。
 function triangulatePolygonWithHoles(outer, holes) {
+  var flat = ecFlatten(outer), hi = [], k, j;
+  for (k = 0; k < holes.length; k++) {
+    hi.push(flat.length / 2);
+    for (j = 0; j < holes[k].length; j++) { flat.push(holes[k][j][0], holes[k][j][1]); }
+  }
+  return ecFinalize(flat, hi, ecTriangulate(flat, hi), '带孔轮廓');
+}
+// 旧实现（桥接 + 耳切）：仅供 I.6-1/I.6-2 的共面轮廓收尾（布尔路径）使用。
+function triangulatePolygonWithHolesLegacy(outer, holes) {
   var all = [], offs = [], k, j;
   offs.push(all.length);
   for (k = 0; k < outer.length; k++) all.push(outer[k]);
@@ -939,7 +1334,7 @@ function triangulatePolygonWithHoles(outer, holes) {
   }
   var pts = [];
   for (k = 0; k < ringIdx.length; k++) pts.push(all[ringIdx[k]]);
-  var local = triangulatePolygon(pts);
+  var local = triangulatePolygonLegacy(pts);
   var out = [];
   for (k = 0; k < local.length; k++) {
     var t = local[k];
@@ -2167,7 +2562,9 @@ function coplanarMergeCluster(m, cl, n, eps) {
       for (z = 0; z < holesIdx[h].length; z++) idxMap.push(holesIdx[h][z]);
     }
     var loc = null;
-    try { loc = triangulatePolygonWithHoles(ring2[k], holesPts); } catch (e) { return cpRevert('带孔三角化抛错'); }
+    // ★ 共面轮廓收尾走**旧桥接+耳切**实现：布尔路径的面数/M4 对三角化切法敏感，
+    //   换成 earcut 会让 polyNodes/polyInput 暴涨、M4 真缺口变多（见 triangulatePolygon 处实测）。
+    try { loc = triangulatePolygonWithHolesLegacy(ring2[k], holesPts); } catch (e) { return cpRevert('带孔三角化抛错'); }
     var got = 0;
     for (j = 0; j < loc.length; j++) {
       var t3 = loc[j];
@@ -2433,7 +2830,8 @@ function polyNodeToTris(node, eps) {
       hs.push(hp);                                    // 洞环已是 CW（面积负）⇒ 与桥接方向约定一致
     }
     var local;
-    try { local = triangulatePolygonWithHoles(O.pts, hs); }
+    // ★ 同上：I.6-2 共面轮廓收尾用旧实现，保证布尔路径零回归。
+    try { local = triangulatePolygonWithHolesLegacy(O.pts, hs); }
     catch (e) { return cpRevert('共面轮廓三角化失败：' + ((e && e.message) ? e.message : e)); }
     for (j = 0; j < local.length; j++) {
       out.push([pts3[local[j][0]], pts3[local[j][1]], pts3[local[j][2]]]);
