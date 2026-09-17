@@ -2684,6 +2684,13 @@ function tjTolerance(m) { return meshEpsilon(m); }
 var meshBoolLegacy = false;
 function setMeshBooleanLegacy(on) { meshBoolLegacy = !!on; return meshBoolLegacy; }
 function meshBooleanPath() { return meshBoolLegacy ? 'trig' : 'poly'; }
+
+// 多边形路径的"量化顶点表"：polyNodeToTris 在各平面节点间共享它，
+// 使同一几何顶点在板面/孔壁/侧面获得**同一个代表坐标**（详见 polyNodeToTris 注释）。
+// 每次布尔运行开始前清空（生命周期 = 一次 meshBooleanPoly）。
+var POLY_QUANT_COORD = null;
+function polyQuantBegin() { POLY_QUANT_COORD = {}; }
+
 function meshBoolean(meshA, meshB, op, tol, statsOut) {
   if (statsOut) statsOut.path = meshBooleanPath();
   if (meshBoolLegacy) return meshBooleanTrig(meshA, meshB, op, tol, statsOut);
@@ -2703,6 +2710,22 @@ function meshBooleanTrig(meshA, meshB, op, tol, statsOut) {
   return mg.mesh;
 }
 
+// ★ BSP 平面判定容差的动态设定（实测结论，2026-09-17；M4 真缺口的根因修复）
+//   EPS_PLANE 是"把顶点归类为共面"的阈值，它必须与本次输入的空间分辨率同量级；否则会把
+//   "近共面"误判成"跨平面"：同一个几何平面被拆进多个 BSP 节点，切割平面因此带有微小倾斜，
+//   在离该多边形很远处切出 1e-2 量级的坐标偏差 ⇒ 顶点 z 层爆炸、反向半边找不到配对（M4 真缺口）。
+//   实测（60×40×6 板 − 4×∅6 柱 @24 段，4 次串行 subtract；面积以 24 边形孔真值校核）：
+//     EPS_PLANE=1e-6（原值）  顶点 z 层 39、面 2216、边界边 1114、非流形 0、真缺口 893
+//     EPS_PLANE=2×eps        顶点 z 层  2、面 2099、边界边 1021、非流形 0、真缺口 817  ← 全面更优
+//   取 2×meshEpsilon：meshEpsilon 就是 eps 网格的"一格"，平面判定比一格还窄必然来回翻面。
+//   返回旧值供 finally 恢复 —— 布尔运行期的放大容差不得泄漏给 chamfer/圆角等其它几何运算。
+function bspEnterPlaneEps(meshA, meshB) {
+  var saved = EPS_PLANE;
+  var e = 2 * meshEpsilon(meshMerge([meshA, meshB]));
+  if (e > EPS_PLANE) EPS_PLANE = e;
+  return saved;
+}
+
 // BSP 布尔的**原始输出**（只做 meshRepair、不做共面合并）—— 共面合并的回退基线/诊断对照组
 function meshBooleanRaw(meshA, meshB, op, tol) {
   if (!(meshA.indices.length > 0) || !(meshB.indices.length > 0)) fail('布尔运算的两个实体都不能为空');
@@ -2710,6 +2733,8 @@ function meshBooleanRaw(meshA, meshB, op, tol) {
     fail('布尔运算输入过大（' + meshA.indices.length + ' + ' + meshB.indices.length + ' 面，单次上' + LIMIT_BOOL_INPUT + '）——请降低 segments 或拆分部件');
   }
   var TOL = tol === undefined ? weldTolerance(meshMerge([meshA, meshB])) : tol;
+  var savedPlaneEps = bspEnterPlaneEps(meshA, meshB);
+  try {
   var A = bspNew(), B = bspNew();
   bspBuild(A, meshToTris(meshA));
   bspBuild(B, meshToTris(meshB));
@@ -2732,6 +2757,7 @@ function meshBooleanRaw(meshA, meshB, op, tol) {
   // BSP 裁剪必然产生 T 型接缝 → 统一修复（水密性是可打印的前提，也是 M 判据的验收面）
   // 共面合并（I.6-1）在 meshBooleanTrig 里对修复结果做，本函数不含它。
   return meshRepair(out).mesh;
+  } finally { EPS_PLANE = savedPlaneEps; }
 }
 
 // ── I.6-2：节点内共面多边形合并 → 带孔轮廓 → 三角化 ──────────────
@@ -2745,7 +2771,11 @@ function polyNodeToTris(node, eps) {
   if (!polys.length) return [];
   var pl = node.plane || polyPlane(polys[0]);
   if (!pl) return [];
-  var inv = 1 / eps, coord = {};
+  // ★ 量化坐标表**跨节点共享**（每次布尔运行开始时清空，见 polyQuantBegin）：
+  //   板面节点与孔壁节点里"同一个几何顶点"必须用同一个代表坐标，否则两侧环各取各的代表，
+  //   边界错开 ~1 格 ⇒ 反向半边找不到配对（M4 真缺口）。实测（60×40×6 板 − 4 柱 @24 段）：
+  //   按节点独立 → 边界边 1021 / 真缺口 817；跨节点共享 → 边界边 993 / 真缺口 791。
+  var inv = 1 / eps, coord = POLY_QUANT_COORD || (POLY_QUANT_COORD = {});
   function K(p) {                                  // 顶点量化键 → 代表坐标（首次出现者）
     var key = Math.round(p[0] * inv) + '|' + Math.round(p[1] * inv) + '|' + Math.round(p[2] * inv);
     if (!coord[key]) coord[key] = p;
@@ -2863,6 +2893,11 @@ function meshBooleanPoly(meshA, meshB, op, tol, statsOut) {
     fail('布尔运算输入过大（' + meshA.indices.length + ' + ' + meshB.indices.length + ' 面，单次上' + LIMIT_BOOL_INPUT + '）——请降低 segments 或拆分部件');
   }
   var TOL = tol === undefined ? weldTolerance(meshMerge([meshA, meshB])) : tol;
+  // 平面判定容差按输入尺度放大（见 bspEnterPlaneEps）；以下 BSP 段整体处于 try 内，
+  // 保证任何出口（含 fail 抛错）都能恢复 EPS_PLANE。缩进未重排以保持改动最小。
+  var savedPlaneEps = bspEnterPlaneEps(meshA, meshB);
+  try {
+  polyQuantBegin();                                 // 量化坐标表：本次布尔运行内跨节点共享
   var A = polyBspNew(), B = polyBspNew();
   polyBspBuild(A, meshToPolys(meshA));
   polyBspBuild(B, meshToPolys(meshB));
@@ -2905,6 +2940,7 @@ function meshBooleanPoly(meshA, meshB, op, tol, statsOut) {
     statsOut.afterRepair = rep.mesh.indices.length;
   }
   return rep.mesh;
+  } finally { EPS_PLANE = savedPlaneEps; }
 }
 
 // ── 倒角 / 圆角（网格级边重建：I.8.5 路线 A/B）────────────────
