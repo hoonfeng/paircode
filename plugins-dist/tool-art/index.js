@@ -1965,7 +1965,7 @@ function artExport(args, exec, ctx) {
   if (fmt === 'png') {
     // 如实说明边界（不假装能做到）：沙箱无渲染器，PNG 由浏览器或后续 Node 桥导出
     return '⚠️ PNG 光栅化不在本插件能力内（goja 沙箱没有渲染器）。两条可行路径：\n' +
-      '  1) 在 ui-art 面板点「导出 PNG」——浏览器 canvas 绘制 SVG 后落盘（零依赖，推荐）；\n' +
+      '  1) 在「画板」面板点「导出 PNG」——浏览器 canvas 绘制 SVG 后落盘（零依赖，推荐）；\n' +
       '  2) 需要服务端批量出图时，走「服务端导出链」阶段（Node 桥 @resvg/resvg-js，MPL-2.0）。\n' +
       '现在也可直接导出矢量：art_export format=svg（SVG 无损、可再编辑、可被 read_image 视觉核对）。';
   }
@@ -1980,14 +1980,14 @@ function artExport(args, exec, ctx) {
   saveProject(ctx, path, proj);
   return '✅ 已导出 SVG → ' + out + '\n' + svg.length + ' 字符，' + proj.shapes.length + ' 个图元，' +
     proj.layers.length + ' 个图层（工程 ' + path + ' 已登记产物）\n' +
-    '提示：可用 read_image 直接「看」产物核对渲染；PNG 请在 ui-art 面板导出。';
+    '提示：可用 read_image 直接「看」产物核对渲染；PNG 请在「画板」面板导出。';
 }
 
 function artVerify(args, exec, ctx) {
   var path = argStr(args, 'path', 'art.project.json');
   var proj = loadProject(ctx, path);
   var res = verifyProject(ctx, proj, args);
-  // ★ 旁挂校验报告（供 ui-art 面板展示）：不写进工程 JSON —— 工程是真相源，必须保持纯净可 diff
+  // ★ 旁挂校验报告（供「画板」面板展示）：不写进工程 JSON —— 工程是真相源，必须保持纯净可 diff
   var reportPath = argStr(args, 'report', 'art.verify.json');
   var reportErr = '';
   try {
@@ -2073,7 +2073,7 @@ var TOOL_DEFS = [
   {
     name: 'art_verify',
     description: '画板工程专项自检（7 项判据）：V1 画板合法（尺寸/viewBox/背景可解析）、V2 图元结构合法（类型/必填字段/正尺寸/id 唯一/layer 存在）、V3 视口可见性（无图元完全落在画板外；部分越界只作提示）、V4 SVG 往返一致（导出 SVG 再导入，几何/样式/id 逐字段比对，容差 1e-3）、V5 确定性（两次导出位级一致）、V6 颜色合法 + 文本对比度达标（WCAG AA，大字 3:1；背景取文本下方的实心图元或画板底色）、V7 图层与层级合法 + 产物无脚本面（无 <script>/on* 事件/javascript: URL）。任一 FAIL 说明产物与真相源不一致或存在设计缺陷，应视为构建失败。',
-    usageGuide: '导出前跑一遍最省事；也可在 CI 里对工程文件跑（只读工程）。V4/V5 是本插件的核心契约；V6 用于挡住"看不见的文字"（低对比度），可用 minContrast 放宽阈值但建议保持 AA。结果同时写成旁挂报告（默认 art.verify.json）供 ui-art 面板展示——写报告不改工程本体。',
+    usageGuide: '导出前跑一遍最省事；也可在 CI 里对工程文件跑（只读工程）。V4/V5 是本插件的核心契约；V6 用于挡住"看不见的文字"（低对比度），可用 minContrast 放宽阈值但建议保持 AA。结果同时写成旁挂报告（默认 art.verify.json）供「画板」面板展示——写报告不改工程本体。',
     category: '创作',
     parameters: {
       type: 'object',

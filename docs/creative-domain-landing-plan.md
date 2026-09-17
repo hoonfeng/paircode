@@ -288,10 +288,15 @@ node scripts/publish-official-plugins.mjs --publish --only tool-voice
 |---|---|---|---|
 | **L0 发布基建** | 修 T1–T4；token env 化；新增 CI workflow | ① `--plan` 四类清单输出正确；② 3 个危险包内容比对有结论；③ CI workflow 在 `workflow_dispatch` 下 dry-run 通过 | 本次 |
 | **L0+ npm 同步** | 28 包发布 + 12 包 deprecate | registry 与本地清单**逐包一致**（附录 A 脚本全绿）；每个包可 `npm view` 到新版本 | 本次 |
-| **L1 独立发布试点** | `tool-voice` + `ui-voice`（人声 PoC 已实证）打包、独立版本、发布、市场安装验证 | ① 干净工作区 `marketplace_install @paircode/tool-voice` → 重启后工具可用；② `voice_verify` 六项自检通过；③ 宿主 Go 二进制**零重编译**（`git diff` 无 `internal/`、`cmd/` 变更） | 1–2 会话 |
-| **L2 创作域 P0** | `tool-music` + `ui-music`（MIDI/乐谱/播放）；`tool-art` + `ui-art`（SVG 画布） | ① 会话产出 → 工作区文件闭环；② 校验器（SMF 解析 / SVG 合法性）通过；③ 截图 + `read_image` 视觉验证 | 2–3 会话 |
+| **L1 独立发布试点** | `tool-voice`（含 UI 半，合并前为 `tool-voice` + `ui-voice`）打包、独立版本、发布、市场安装验证 | ① 干净工作区 `marketplace_install @paircode/tool-voice` → 重启后工具可用；② `voice_verify` 六项自检通过；③ 宿主 Go 二进制**零重编译**（`git diff` 无 `internal/`、`cmd/` 变更） | 1–2 会话 |
+| **L2 创作域 P0** | `tool-music`（含 UI 半，MIDI/乐谱/播放）；`tool-art`（含 UI 半，SVG 画布） | ① 会话产出 → 工作区文件闭环；② 校验器（SMF 解析 / SVG 合法性）通过；③ 截图 + `read_image` 视觉验证 | 2–3 会话 |
 | **L3 薄壳增强（可选）** | E1 渲染器注册表（` ```vocal ` 等会话内嵌）+ E2 编辑器视图注册表 | ① 未注册时行为与今天完全一致（纯加法）；② 注册后 ` ```vocal ` 在会话内渲染并通过 `read_image` 验证 | 1 会话 |
-| **L4 其余域** | `tool-model`（含 UI）、`tool-rig`/`ui-rig`、`tool-design`/`ui-design` | 逐域校验器 + 导出物断言 | 按需 |
+| **L4 其余域** | `tool-model`（含 UI）、`tool-rig`（含 UI 半）、`tool-design`（含 UI 半） | 逐域校验器 + 导出物断言 | 按需 |
+
+> ★ **形态变更（2026-09-17 生效）**：上表 L1/L2/L4 中原「`tool-X` + `ui-X`」两包组合已合并为**单包**
+> `tool-X`——UI 半（`client.js` + `assets/<x>-panel.{js,css}`）与工具面同包、同版本、同发布。当前
+> `plugins-dist/` 真源仅 6 包（`tool-art/design/model/music/rig/voice`），旧 `ui-*` 六包已删除
+> （提交 `588f339a`）并在 npm 标注废弃。下文凡出现 `ui-X` 的段落均属**合并前的历史执行记录**。
 
 **每期硬门槛**：`go vet ./...` + `go build ./cmd/companion` + `go test -short ./internal/...` 全绿；
 插件侧 `node -e "require('./.pair/plugins/<x>/index.js')"` 语法检查 + 独立端口（非 9090）冒烟。
@@ -553,6 +558,7 @@ PoC 与方案 §7 的判据在实现时暴露出**物理不可达**之处，已�
 | 本地装载 | 新增 `scripts/dev-sync-dist-plugins.mjs`（默认 junction 挂载；`--copy`/`--clean`；自管 `.git/info/exclude` 防误提交） |
 | 装载器 | `isPluginDirEntry()`（toolset.go）—— Windows junction 在 Go 中 `Type()==0`（既非 ModeDir 也非 ModeSymlink），须 `Stat` 跟随后判定；`LoadGlobalPlugins`/`BuildUIBootGraphFrom`/`presetAllToolPlugins` 三处接入 |
 | 测试 | `tool_landing_test.go` 双源扫描 + `diskPluginDir()` 双源定位（独立插件仍受模式表守卫） |
+| 现状（2026-09-17 合并后） | `plugins-dist/` = **6 包**（`tool-art/design/model/music/rig/voice`），UI 半与工具面同包；`packager.json` 的 `.pair/plugins` exclude 扩为**六包**，`scripts/verify-dist-isolation.mjs` 以 6 为期望数 |
 
 **护栏四断言**（`verify-dist-isolation.mjs`）：① `plugins-dist/*` 均被 exclude；
 ② `.pair/plugins` 无同名**真实副本**（junction 挂载放行并提示）；③ exclude 无陈旧条目；

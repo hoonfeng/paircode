@@ -10,7 +10,7 @@
 // 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与 ui-rig / ui-design / ui-art / ui-music / ui-voice 同样走通用 ui.registerPanel（不动壳、纯加法，卸载插件即消失）。
+// 与其余五域（art/design/music/rig/voice）同包面板同样走通用 ui.registerPanel（不动壳、纯加法，卸载插件即消失）。
 //
 // 数据面（★ 实时预览链路）：面板经 ui.invoke('tool-model', ...) 调 host 半的
 // registerClientMethod：

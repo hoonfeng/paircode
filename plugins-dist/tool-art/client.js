@@ -10,7 +10,7 @@
 // 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与 tool-design / tool-music / tool-rig / tool-voice 同样走通用 ui.registerPanel
+// 与其余五域（design/model/music/rig/voice）同包面板同样走通用 ui.registerPanel
 // （不动壳、纯加法，卸载插件即消失）。
 (ui) => {
   const GLOBAL = 'ArtPanel'

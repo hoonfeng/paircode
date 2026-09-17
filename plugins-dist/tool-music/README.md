@@ -4,7 +4,7 @@
 
 - 形态：**磁盘 goja 轨插件**（零 npm 依赖；沙箱内无 `require`，故单文件自包含）
 - 二进制安全：MIDI 读写走宿主 `ctx.fs.readFileBase64` / `writeFileBase64`
-- 配套 UI 半：`ui-music`（乐谱渲染 + 播放器）
+- UI 半（与工具面**同包**）：`client.js` + `assets/music-panel.{js,css}`（乐谱渲染 + 播放器）
 - 依赖第三方库：**无**（SMF/ABC/MusicXML/SVG 全部自实现，许可面干净）
 
 ## 工具面

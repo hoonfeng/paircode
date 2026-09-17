@@ -1429,7 +1429,7 @@ function musicVerify(args, exec, ctx) {
   var path = argStr(args, 'path', 'music.project.json');
   var proj = loadProject(ctx, path);
   var res = verifyProject(ctx, proj, args);
-  // ★ 旁挂校验报告（供 ui-music 面板展示）：**不写进工程 JSON** ——
+  // ★ 旁挂校验报告（供「音乐」面板展示）：**不写进工程 JSON** ——
   //   工程是音乐真相源，必须保持纯净可 diff，不能混入带时间戳的验证结果。
   var reportPath = argStr(args, 'report', 'music.verify.json');
   var reportErr = '';

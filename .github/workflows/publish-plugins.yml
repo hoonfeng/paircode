@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: '只发布指定插件（逗号分隔，如 tool-voice,ui-voice；留空=全量）'
+        description: '只发布指定插件（逗号分隔，如 tool-voice,tool-music；留空=全量）'
         required: false
         default: ''
       dry_run:

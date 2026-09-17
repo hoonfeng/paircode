@@ -309,7 +309,7 @@ async function voiceVerify(args, exec, ctx, lib) {
 // node:path 惰性包装（顶层不 require —— 保证 goja 让位路径零风险）
 function nodePathLib() { return require('node:path'); }
 
-// writeWaveCache 写波形峰值缓存（10 ms/帧的绝对值峰值）——供 UI 半（ui-voice）
+// writeWaveCache 写波形峰值缓存（10 ms/帧的绝对值峰值）——供 UI 半（同包 client.js）
 // 绘制波形，避免为"看一眼波形"新增一个工具或让 UI 去拉完整 PCM。
 // 返回旁挂文件名（相对路径）。
 function writeWaveCache(lib, mono, fs, basePath, sourceId) {
