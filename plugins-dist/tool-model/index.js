@@ -29,6 +29,7 @@ var LIMIT_TRIS_TOTAL = 400000;  // 全模型三角面上限
 var LIMIT_TRIS_PART = 60000;    // 单部件三角面上限
 var LIMIT_BOOL_INPUT = 30000;   // 单次布尔运算输入面上限（BSP 成本约束）
 var LIMIT_SEGMENTS = 512;       // 曲面分段上限
+var TWIST_LAYERS_DEFAULT = 12;  // 扭转挤出的默认分层数（口径同 JSCAD extrudeTwist）
 var LIMIT_ARRAY = 256;          // 阵列数量上限
 var LIMIT_OBJ_BYTES = 64 << 20; // 导入 STL/OBJ 上限（64MB）
 var LIMIT_EXPR_DEPTH = 32;      // 表达式括号/递归深度上限
@@ -711,6 +712,19 @@ function triangulatePolygon(pts) {
     }
     return removed;
   }
+  // 对角线 (a→c) 是否与环的某条边**真交叉**（共享端点不算）。自接触环（桥接通道使环在某些
+  // 顶点处自我接触）上，仅凭"三角形内无凹顶点"不足以判耳：对角线可能切穿通道或跨到环的另
+  // 一段，从而切出**重叠**三角形（体积仍对、拓扑坏）。earcut 用 cureLocalIntersections 兜底，
+  // 这里改用"对角线可见性"从判定源头拦住。
+  function diagClear(a, b, c) {
+    var A = pts[a], C = pts[c], i2;
+    for (i2 = 0; i2 < idx.length; i2++) {
+      var t1 = idx[i2], t2 = idx[(i2 + 1) % idx.length];
+      if (t1 === a || t1 === c || t2 === a || t2 === c || t1 === b || t2 === b) continue;
+      if (segCross(A, C, pts[t1], pts[t2])) return false;
+    }
+    return true;
+  }
   var i = 0, misses = 0, m, a, b, c, p;
   while (idx.length > 3) {
     if (++guard > n * n + 64) fail('轮廓三角化失败（顶点过多或形状自交）');
@@ -728,6 +742,7 @@ function triangulatePolygon(pts) {
         if (withinTri(a, b, c, pts[p])) { okEar = false; break; }
       }
     }
+    if (okEar && !diagClear(a, b, c)) okEar = false;
     if (okEar) {
       tris.push([a, b, c]);
       idx.splice(i, 1);
@@ -804,9 +819,48 @@ function ringInsideRing(inner, outer) {
   }
   return true;
 }
-// 桥接点：洞最右点 M 向 +x 射线取最近交点所在边的端点；不可见则退化为「最近可见顶点」
-function findBridge(ringIdx, all, M) {
-  var best = -1, bestX = Infinity;
+// 带孔轮廓的前置校验（挤出/扭转/扫掠共用）：洞须完全落在外轮廓内，且洞之间互不相交、互不嵌套。
+// 「相交/嵌套的洞」会让桥接通道彼此穿越（环自交），底/顶盖三角化必然产生重叠面 ⇒ 提前挡住。
+function validateHoles(pts, holes) {
+  var hh, h2;
+  for (hh = 0; hh < holes.length; hh++) {
+    if (!ringInsideRing(holes[hh], pts)) {
+      fail('holes[' + hh + '] 必须完全落在外轮廓内部且与外轮廓不相交（不支持洞越界/穿透）');
+    }
+  }
+  for (hh = 0; hh < holes.length; hh++) {
+    for (h2 = hh + 1; h2 < holes.length; h2++) {
+      if (ringsCross(holes[hh], holes[h2]) || ringInsideRing(holes[hh], holes[h2]) || ringInsideRing(holes[h2], holes[hh])) {
+        fail('holes[' + hh + '] 与 holes[' + h2 + '] 相交或嵌套：各洞必须互不相交、互不包含' +
+          '（同一块实体的多个独立腔体；需要"环中环"请拆成两个部件或用布尔运算）');
+      }
+    }
+  }
+}
+// 两环是否相交（只看边交叉；包含关系由 ringInsideRing 判）
+function ringsCross(a, b) {
+  var i, j;
+  for (i = 0; i < a.length; i++) {
+    var i2 = (i + 1) % a.length;
+    for (j = 0; j < b.length; j++) {
+      var j2 = (j + 1) % b.length;
+      if (segCross(a[i], a[i2], b[j], b[j2])) return true;
+    }
+  }
+  return false;
+}
+// 环中每个点的出现次数（外轮廓点 1 次；被桥接过的点 2 次 ⇒ 已被占用）
+function ringCounts(ringIdx) {
+  var c = {};
+  for (var i = 0; i < ringIdx.length; i++) c[ringIdx[i]] = (c[ringIdx[i]] || 0) + 1;
+  return c;
+}
+// 桥接点：洞最右点 M 向 +x 射线取最近交点所在边的端点；不可见则退化为「最近可见顶点」。
+// 多个洞可能都想桥接到同一个外轮廓顶点（例：两洞最右点在同一水平线上，射线打到同一交点）——
+// 同一顶点被反复桥接会让环出现多次自接触，耳切会切出重叠三角形（体积仍对、拓扑坏）。
+// 故按「环中是否已被占用」优先挑未占用的顶点，其次才取更近的射线交点。
+function findBridge(ringIdx, all, M, counts) {
+  function busy(pos) { return !!(counts && counts[ringIdx[pos]] > 1); }
   function visible(pos) {
     var P = all[ringIdx[pos]];
     for (var i2 = 0; i2 < ringIdx.length; i2++) {
@@ -816,12 +870,12 @@ function findBridge(ringIdx, all, M) {
     }
     return true;
   }
+  var cands = [];
   for (var i = 0; i < ringIdx.length; i++) {
     var a = all[ringIdx[i]], b = all[ringIdx[(i + 1) % ringIdx.length]];
     if (Math.abs(a[1] - b[1]) <= EPS) {            // 水平边
-      if (Math.abs(M[1] - a[1]) <= EPS && Math.max(a[0], b[0]) >= M[0] - EPS && Math.min(a[0], b[0]) < bestX) {
-        bestX = Math.min(a[0], b[0]);
-        best = (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length;
+      if (Math.abs(M[1] - a[1]) <= EPS && Math.max(a[0], b[0]) >= M[0] - EPS) {
+        cands.push({ pos: (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length, x: Math.min(a[0], b[0]) });
       }
       continue;
     }
@@ -830,16 +884,18 @@ function findBridge(ringIdx, all, M) {
     var t = (M[1] - a[1]) / (b[1] - a[1]);
     var x = a[0] + t * (b[0] - a[0]);
     if (x < M[0] - EPS) continue;                  // 交点在 M 左侧 → 不是右侧最近交点
-    if (x < bestX) {
-      bestX = x;
-      best = (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length;
-    }
+    cands.push({ pos: (a[0] >= b[0]) ? i : (i + 1) % ringIdx.length, x: x });
   }
-  if (best >= 0 && visible(best)) return best;
+  cands.sort(function (u, v) {
+    return (busy(u.pos) ? 1 : 0) - (busy(v.pos) ? 1 : 0) || u.x - v.x;
+  });
+  for (var z = 0; z < cands.length; z++) if (visible(cands[z].pos)) return cands[z].pos;
   var order = [];
   for (var q = 0; q < ringIdx.length; q++) order.push(q);
-  order.sort(function (u, v) { return vDist(M, all[ringIdx[u]]) - vDist(M, all[ringIdx[v]]); });
-  for (var z = 0; z < order.length; z++) if (visible(order[z])) return order[z];
+  order.sort(function (u, v) {
+    return (busy(u) ? 1 : 0) - (busy(v) ? 1 : 0) || vDist(M, all[ringIdx[u]]) - vDist(M, all[ringIdx[v]]);
+  });
+  for (var z2 = 0; z2 < order.length; z2++) if (visible(order[z2])) return order[z2];
   fail('带孔挤出：洞无法桥接到外轮廓（洞可能在外轮廓之外、自交，或与外轮廓相交）');
   return -1;
 }
@@ -852,12 +908,20 @@ function triangulatePolygonWithHoles(outer, holes) {
     offs.push(all.length);
     for (j = 0; j < holes[k].length; j++) all.push(holes[k][j]);
   }
+  // 洞的处理顺序 = 「最右点 x」降序：最靠右的洞先桥接到外轮廓，之后各洞只能桥接到已合并的环
+  // （含先前洞的顶点）——这样先处理的洞的桥接射线不会横穿尚未处理的洞，减少通道交叉。
+  var plan = [];
+  for (k = 0; k < holes.length; k++) {
+    var base0 = offs[k + 1], hlen0 = holes[k].length, mi0 = 0;
+    for (j = 1; j < hlen0; j++) if (all[base0 + j][0] > all[base0 + mi0][0] + EPS) mi0 = j;
+    plan.push({ base: base0, hlen: hlen0, mi: mi0, x: all[base0 + mi0][0] });
+  }
+  plan.sort(function (u, v) { return v.x - u.x; });
   var ringIdx = [];
   for (k = 0; k < outer.length; k++) ringIdx.push(k);
-  for (k = 0; k < holes.length; k++) {
-    var base = offs[k + 1], hlen = holes[k].length, mi = 0;
-    for (j = 1; j < hlen; j++) if (all[base + j][0] > all[base + mi][0] + EPS) mi = j;
-    var bpos = findBridge(ringIdx, all, all[base + mi]);
+  for (var pi = 0; pi < plan.length; pi++) {
+    var base = plan[pi].base, hlen = plan[pi].hlen, mi = plan[pi].mi;
+    var bpos = findBridge(ringIdx, all, all[base + mi], ringCounts(ringIdx));
     var merged = [];
     for (j = 0; j <= bpos; j++) merged.push(ringIdx[j]);
     for (j = 0; j <= hlen; j++) merged.push(base + ((mi + j) % hlen));   // 洞循环（起点=终点=M）
@@ -873,9 +937,15 @@ function triangulatePolygonWithHoles(outer, holes) {
     var t = local[k];
     var A = ringIdx[t[0]], B = ringIdx[t[1]], C = ringIdx[t[2]];
     if (A === B || B === C || A === C) continue;                        // 桥接造成的退化三角形
-    var ar = Math.abs((all[B][0] - all[A][0]) * (all[C][1] - all[A][1]) -
-                      (all[B][1] - all[A][1]) * (all[C][0] - all[A][0])) / 2;
-    if (ar <= EPS) continue;
+    var ar = ((all[B][0] - all[A][0]) * (all[C][1] - all[A][1]) -
+              (all[B][1] - all[A][1]) * (all[C][0] - all[A][0])) / 2;
+    if (Math.abs(ar) <= EPS) continue;
+    // 反向三角形（有向面积为负）= 切穿了自接触环的假耳 ⇒ 覆盖会重叠成对出现、拓扑变坏。
+    // 合法输入（洞互不相交、互不嵌套）下不会出现；这里明确报错，绝不静默产出坏网格。
+    if (ar < 0) {
+      fail('带孔挤出的底/顶盖三角化出现反向三角形：holes 或外轮廓存在自交/嵌套（各洞必须互不相交、互不包含）' +
+        '——检查第 ' + k + ' 个底盖三角形 [' + A + ',' + B + ',' + C + '] 对应的轮廓');
+    }
     out.push([A, B, C]);
   }
   return out;
@@ -1069,23 +1139,74 @@ function shapePolyhedron(args) {
   return meshNew(pos, idx);
 }
 
+// 扭转挤出的网格生成（shapeExtrude 的 twist 分支）：把轮廓沿 z 分 layers 层，
+// 第 j 层绕 z 轴按高度**线性**旋转 twist·j/layers 度（口径同 JSCAD extrudeTwist：twist = 总扭转角）。
+// 每层都是**刚体旋转** ⇒ 洞随外轮廓同步转、环的拓扑与绕向都不变（holes 的 2D 内嵌校核依然成立）。
+// 侧面 = 相邻层同名顶点直连（直纹面），绕向与直线挤出的侧壁完全一致（外侧法线朝外）。
+// 顶点表按「层优先」排列（不是直线挤出的「下块 + 上块」），故与 twist=0 的直线挤出路径分开实现、互不影响。
+function extrudeTwistMesh(rings, starts, n, cap, h, zc, twistDeg, segArg) {
+  var seg = clampInt(segArg === undefined || segArg === null ? TWIST_LAYERS_DEFAULT : segArg, 1, LIMIT_SEGMENTS, 'segments');
+  var perLayer = twistDeg / seg;
+  if (Math.abs(perLayer) >= 180) {
+    fail('扭转挤出的每层扭转角必须小于 180°（twist=' + cleanNum(twistDeg, 4) + '° / segments=' + seg + ' = ' +
+      cleanNum(perLayer, 4) + '°/层）：每层转过半圈以上时相邻层顶点会"走近路"反向跨接，侧壁自交。' +
+      '请增大 segments（建议 ≥ ' + Math.ceil(Math.abs(twistDeg) / 90) + '）或减小 twist');
+  }
+  var tris = 2 * seg * n + 2 * cap.length;
+  if (tris > LIMIT_TRIS_PART) {
+    fail('扭转挤出分段过多（segments=' + seg + ' × 轮廓 ' + n + ' 点 ⇒ 约 ' + tris + ' 面，单部件上限 ' +
+      LIMIT_TRIS_PART + '）——请降低 segments 或减少轮廓顶点');
+  }
+  var rad = twistDeg * Math.PI / 180;
+  var pos = [], idx = [], j, k, i;
+  for (j = 0; j <= seg; j++) {
+    var th = rad * j / seg;
+    var ct = Math.cos(th), st = Math.sin(th);
+    var z = zc - h / 2 + h * j / seg;
+    for (k = 0; k < rings.length; k++) {
+      for (i = 0; i < rings[k].length; i++) {
+        var p = rings[k][i];
+        pos.push([p[0] * ct - p[1] * st, p[0] * st + p[1] * ct, z]);
+      }
+    }
+  }
+  function vid(i2, j2) { return j2 * n + i2; }
+  // 端盖：与直线挤出一致（底盖反绕、顶盖正绕）；cap 的下标是「外轮廓 + 洞」拼接后的全局下标
+  for (k = 0; k < cap.length; k++) {
+    var f = cap[k];
+    idx.push([vid(f[0], 0), vid(f[2], 0), vid(f[1], 0)]);
+    idx.push([vid(f[0], seg), vid(f[1], seg), vid(f[2], seg)]);
+  }
+  // 侧壁：每层、每种环各出一圈（洞是顺时针环 → 法线朝腔内侧）
+  for (j = 0; j < seg; j++) {
+    for (k = 0; k < rings.length; k++) {
+      var st0 = starts[k], len = rings[k].length;
+      for (i = 0; i < len; i++) {
+        var a = st0 + i, b = st0 + ((i + 1) % len);
+        idx.push([vid(a, j), vid(b, j), vid(b, j + 1)]);
+        idx.push([vid(a, j), vid(b, j + 1), vid(a, j + 1)]);
+      }
+    }
+  }
+  return meshNew(pos, idx);
+}
+
 // 挤出（沿 z，居中；口径同 JSCAD extrudeLinear：height 默认 1）
+// twist 非 0 → 改为扭转挤出（见 extrudeTwistMesh）；其余情况与原先逐位一致。
 function shapeExtrude(args) {
   var pts = profilePoints(args.profile, 'profile');
   var holes = holesPoints(args.holes);
   var h = toNumber(args.height === undefined ? 1 : args.height, 'height');
   if (!(Math.abs(h) > EPS)) fail('extrude 的 height 不能为 0');
   var zc = args.center === undefined ? 0 : toNumber(args.center, 'center');
-  var hh;
-  for (hh = 0; hh < holes.length; hh++) {
-    if (!ringInsideRing(holes[hh], pts)) {
-      fail('holes[' + hh + '] 必须完全落在外轮廓内部且与外轮廓不相交（带孔挤出不支持洞越界/穿透）');
-    }
-  }
+  validateHoles(pts, holes);
   var rings = [pts].concat(holes);
   var starts = [], n = 0, k;
   for (k = 0; k < rings.length; k++) { starts.push(n); n += rings[k].length; }
   var cap = holes.length ? triangulatePolygonWithHoles(pts, holes) : triangulatePolygon(pts);
+  // twist 非 0 → 扭转挤出（分层旋转）；缺省/为 0 → 走下面的直线挤出路径（逐位不变）
+  var twistDeg = args.twist === undefined || args.twist === null ? 0 : toNumber(args.twist, 'twist');
+  if (Math.abs(twistDeg) > EPS) return extrudeTwistMesh(rings, starts, n, cap, h, zc, twistDeg, args.segments);
   var pos = [], idx = [], j2;
   for (k = 0; k < rings.length; k++) {
     for (j2 = 0; j2 < rings[k].length; j2++) pos.push([rings[k][j2][0], rings[k][j2][1], zc - h / 2]);
@@ -1103,6 +1224,199 @@ function shapeExtrude(args) {
       var a = st + j2, b = st + ((j2 + 1) % len);
       idx.push([a, b, n + b]);
       idx.push([a, n + b, n + a]);
+    }
+  }
+  return meshNew(pos, idx);
+}
+
+// ── 扫掠（sweep）：2D 轮廓沿 3D 路径扫掠 ────────────────────────────
+// 框架传播用「平行传输」（Rodrigues 旋转，等价于 RMF / double-reflection 框架）：
+//   不用 Frenet 的 n = t'/|t'| —— 直线段曲率为零、法向无定义，拐点处法向还会突然翻转，
+//   扫掠侧壁因此常自交。平行传输对任意路径都连续、无扭转突变。
+// 闭合路径额外做 holonomy 修正：把首尾框架的角差按站数均匀摊掉（否则接缝处扭转错位）。
+// 两线段最短距离（3D，标准 clamped 最近点算法；路径自交检测用）
+function segSegDist(a0, a1, b0, b1) {
+  var d1 = vSub(a1, a0), d2 = vSub(b1, b0), r = vSub(a0, b0);
+  var a = vDot(d1, d1), e = vDot(d2, d2), f = vDot(d2, r), b = vDot(d1, d2), c = vDot(d1, r);
+  var s = 0, t = 0;
+  if (a <= EPS && e <= EPS) return vLen(r);
+  if (a <= EPS) { t = Math.max(0, Math.min(1, f / e)); }
+  else if (e <= EPS) { s = Math.max(0, Math.min(1, -c / a)); }
+  else {
+    var denom = a * e - b * b;
+    s = denom > EPS ? Math.max(0, Math.min(1, (b * f - c * e) / denom)) : 0;
+    t = (b * s + f) / e;
+    if (t < 0) { t = 0; s = Math.max(0, Math.min(1, -c / a)); }
+    else if (t > 1) { t = 1; s = Math.max(0, Math.min(1, (b - c) / a)); }
+  }
+  return vLen(vSub(vAdd(a0, vMul(d1, s)), vAdd(b0, vMul(d2, t))));
+}
+
+// 路径 → 每站框架 {p, t, n, b}（b = t × n ⇒ (n,b,t) 右手系，与挤出用的 (x,y,z) 同构）
+function sweepFrames(path, closed, upHint) {
+  var n = path.length, i, k;
+  var tan = [];
+  for (i = 0; i < n; i++) {
+    var a, b;
+    if (i === 0) a = closed ? vSub(path[0], path[n - 1]) : vSub(path[1], path[0]);
+    else a = vSub(path[i], path[i - 1]);
+    if (i === n - 1) b = closed ? vSub(path[0], path[n - 1]) : vSub(path[n - 1], path[n - 2]);
+    else b = vSub(path[i + 1], path[i]);
+    var t = vAdd(vNorm(a), vNorm(b));
+    if (vLen(t) <= 1e-9) {
+      fail('扫掠路径在第 ' + i + ' 站发生 180° 折返（前后两段方向相反）——请拆分路径，或改用两段扫掠');
+    }
+    tan.push(vNorm(t));
+  }
+  var nrm;
+  if (upHint) {
+    if (Math.abs(vDot(upHint, tan[0])) > 0.999) fail('扫掠的 up 参考方向与路径起始切线几乎平行——请换一个参考方向');
+    nrm = vNorm(vSub(upHint, vMul(tan[0], vDot(upHint, tan[0]))));
+  } else {
+    // 取与起始切线最不平行的坐标轴（保证"沿 +z 直线扫掠"退化为标准挤出：n=+x、b=+y）
+    var axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], pick = axes[0], best = Infinity;
+    for (k = 0; k < 3; k++) {
+      var d = Math.abs(vDot(axes[k], tan[0]));
+      if (d < best - 1e-12) { best = d; pick = axes[k]; }
+    }
+    nrm = vNorm(vSub(pick, vMul(tan[0], vDot(pick, tan[0]))));
+  }
+  var frames = [];
+  for (i = 0; i < n; i++) {
+    if (i > 0) {
+      var ax = vCross(tan[i - 1], tan[i]), s = vLen(ax);
+      if (s > 1e-12) {
+        nrm = m4applyDir(m4rotAxis(vMul(ax, 1 / s), Math.atan2(s, vDot(tan[i - 1], tan[i])) * 180 / Math.PI), nrm);
+      }
+      nrm = vNorm(vSub(nrm, vMul(tan[i], vDot(nrm, tan[i]))));   // 消除数值漂移
+    }
+    frames.push({ p: path[i], t: tan[i], n: nrm, b: vCross(tan[i], nrm) });
+  }
+  if (closed && n > 2) {
+    var n0 = frames[0].n;
+    var ax1 = vCross(tan[n - 1], tan[0]), s1 = vLen(ax1), nf = frames[n - 1].n;
+    if (s1 > 1e-12) {
+      nf = m4applyDir(m4rotAxis(vMul(ax1, 1 / s1), Math.atan2(s1, vDot(tan[n - 1], tan[0])) * 180 / Math.PI), nf);
+    }
+    nf = vNorm(vSub(nf, vMul(tan[0], vDot(nf, tan[0]))));
+    var phi = Math.atan2(vDot(vCross(nf, n0), tan[0]), vDot(nf, n0));
+    if (Math.abs(phi) > 1e-12) {
+      for (i = 0; i < n; i++) {
+        var nn = vNorm(m4applyDir(m4rotAxis(tan[i], phi * i / n * 180 / Math.PI), frames[i].n));
+        frames[i].n = nn;
+        frames[i].b = vCross(tan[i], nn);
+      }
+    }
+  }
+  return frames;
+}
+
+// 扫掠自交校验：① 路径非相邻段相交；② 站点曲率半径小于轮廓外接半径（内凹侧侧壁穿透自身）
+function sweepSelfCheck(path, closed, rmax) {
+  var n = path.length, segCount = closed ? n : n - 1, i, j;
+  for (i = 0; i < segCount; i++) {
+    for (j = i + 1; j < segCount; j++) {
+      if (closed ? (j - i === 1 || (i === 0 && j === segCount - 1)) : (j - i === 1)) continue;
+      if (segSegDist(path[i], path[(i + 1) % n], path[j], path[(j + 1) % n]) <= EPS_SPATIAL) {
+        fail('扫掠路径自交（第 ' + i + ' 段与第 ' + j + ' 段的最近距离 ≤ ' + EPS_SPATIAL +
+          '）——请修改 path，或拆成多段分别扫掠');
+      }
+    }
+  }
+  for (i = 0; i < n; i++) {
+    var ip = i === 0 ? (closed ? n - 1 : 0) : i - 1;
+    var inx = i === n - 1 ? (closed ? 0 : n - 1) : i + 1;
+    if (ip === i || inx === i) continue;
+    var d1 = vSub(path[i], path[ip]), d2 = vSub(path[inx], path[i]);
+    var l1 = vLen(d1), l2 = vLen(d2);
+    if (l1 <= EPS || l2 <= EPS) continue;
+    var ct = Math.max(-1, Math.min(1, vDot(vMul(d1, 1 / l1), vMul(d2, 1 / l2))));
+    var dth = Math.acos(ct);
+    if (dth <= 1e-9) continue;
+    var rho = Math.min(l1, l2) / dth;
+    if (rmax > rho) {
+      fail('扫掠自交：路径第 ' + i + ' 站处曲率半径 ≈ ' + cleanNum(rho, 4) + ' 小于轮廓外接半径 ' + cleanNum(rmax, 4) +
+        '（内凹侧的侧壁会穿过自身）——请加大该处拐角半径、减小轮廓，或在 path 上加密分站');
+    }
+  }
+}
+
+// 扫掠体：轮廓（含洞）沿 path 扫掠；closed 无端盖，否则两端封盖（首站朝 -t、末站朝 +t）
+function shapeSweep(args) {
+  var pts = profilePoints(args.profile, 'profile');
+  var holes = holesPoints(args.holes);
+  validateHoles(pts, holes);
+  var path = args.along;   // 字段名 along：path 是工具层的工程文件路径，不能复用
+  if (!isArr(path) || path.length < 2) fail('sweep 需要 along 数组（≥2 个 [x,y,z] 点；工具层的 path 是工程文件路径）');
+  var closed = args.closed;
+  if (closed === undefined || closed === null) closed = vDist(path[0], path[path.length - 1]) <= EPS_SPATIAL;
+  closed = !!closed;
+  if (closed && vDist(path[0], path[path.length - 1]) <= EPS_SPATIAL) path = path.slice(0, path.length - 1);
+  if (path.length < 2) fail('sweep 的 along 去重后不足 2 个不同点');
+  var k, j, i;
+  var rmax = 0;
+  for (k = 0; k < pts.length; k++) rmax = Math.max(rmax, Math.sqrt(pts[k][0] * pts[k][0] + pts[k][1] * pts[k][1]));
+  sweepSelfCheck(path, closed, rmax);
+  var frames = sweepFrames(path, closed, args.up);
+  var twistDeg = args.twist === undefined || args.twist === null ? 0 : toNumber(args.twist, 'twist');
+  var S = path.length, segCount = closed ? S : S - 1;
+  if (Math.abs(twistDeg) > EPS && Math.abs(twistDeg / segCount) >= 180) {
+    fail('扫掠的每段扭转角必须小于 180°（twist=' + cleanNum(twistDeg, 4) + '° / ' + segCount + ' 段 = ' +
+      cleanNum(twistDeg / segCount, 4) + '°/段）——请加密 path 或减小 twist');
+  }
+  var scales = null;
+  if (args.scale !== undefined && args.scale !== null) {
+    scales = [];
+    if (isArr(args.scale)) {
+      if (args.scale.length !== S) fail('sweep 的 scale 数组长度必须等于路径站数（' + S + '）');
+      for (k = 0; k < S; k++) scales.push(toNumber(args.scale[k], 'scale'));
+    } else {
+      var sv = toNumber(args.scale, 'scale');
+      for (k = 0; k < S; k++) scales.push(sv);
+    }
+    for (k = 0; k < S; k++) if (!(scales[k] > 0)) fail('sweep 的 scale 必须大于 0');
+  }
+  var rings = [pts].concat(holes);
+  var starts = [], nn = 0;
+  for (k = 0; k < rings.length; k++) { starts.push(nn); nn += rings[k].length; }
+  var cap = null;
+  if (!closed) cap = holes.length ? triangulatePolygonWithHoles(pts, holes) : triangulatePolygon(pts);
+  var tris = 2 * segCount * nn + (closed ? 0 : 2 * cap.length);
+  if (tris > LIMIT_TRIS_PART) {
+    fail('扫掠面数过多（' + segCount + ' 段 × 轮廓 ' + nn + ' 点 ⇒ 约 ' + tris + ' 面，单部件上限 ' + LIMIT_TRIS_PART +
+      '）——请减少路径站数或轮廓顶点');
+  }
+  var pos = [], idx = [];
+  for (i = 0; i < S; i++) {
+    var fr = frames[i];
+    var sc = scales ? scales[i] : 1;
+    var ang = (twistDeg * Math.PI / 180) * (closed ? i / S : (S > 1 ? i / (S - 1) : 0));
+    var ct = Math.cos(ang), st = Math.sin(ang);
+    for (k = 0; k < rings.length; k++) {
+      for (j = 0; j < rings[k].length; j++) {
+        var pp = rings[k][j];
+        var x = (pp[0] * ct - pp[1] * st) * sc, y = (pp[0] * st + pp[1] * ct) * sc;
+        pos.push(vAdd(fr.p, vAdd(vMul(fr.n, x), vMul(fr.b, y))));
+      }
+    }
+  }
+  function vid(i2, j2) { return i2 * nn + j2; }   // i2 = 站号，j2 = 环内全局下标
+  for (k = 0; k < segCount; k++) {
+    var k2 = (k + 1) % S;
+    for (i = 0; i < rings.length; i++) {
+      var st0 = starts[i], len = rings[i].length;
+      for (j = 0; j < len; j++) {
+        var a = st0 + j, b = st0 + ((j + 1) % len);
+        idx.push([vid(k, a), vid(k, b), vid(k2, b)]);
+        idx.push([vid(k, a), vid(k2, b), vid(k2, a)]);
+      }
+    }
+  }
+  if (!closed && cap) {
+    for (k = 0; k < cap.length; k++) {
+      var f = cap[k];
+      idx.push([vid(0, f[0]), vid(0, f[2]), vid(0, f[1])]);              // 首站盖（法线朝 -t）
+      idx.push([vid(S - 1, f[0]), vid(S - 1, f[1]), vid(S - 1, f[2])]);  // 末站盖（法线朝 +t）
     }
   }
   return meshNew(pos, idx);
@@ -1644,10 +1958,28 @@ function evalHoles(spec, E) {
   for (var k = 0; k < spec.length; k++) out.push(evalProfile(spec[k], E));
   return out;
 }
+// 扫掠路径解析（支持表达式）：去相邻重合点（零长段没有切线，框架会退化）
+// ★ 字段名用 along 而不是 path —— path 在工具参数里已经是"工程文件路径"，不能复用。
+function evalPath(spec, E) {
+  if (!isArr(spec) || spec.length < 2) fail('sweep 需要 along 数组（≥2 个 [x,y,z] 点；注意工具层的 path 是工程文件路径）');
+  var out = [], k;
+  for (k = 0; k < spec.length; k++) {
+    var p = spec[k];
+    if (!isArr(p) || p.length < 3) fail('sweep.along[' + k + '] 必须是 [x,y,z]');
+    out.push([evalNum(p[0], E, 'path'), evalNum(p[1], E, 'path'), evalNum(p[2], E, 'path')]);
+  }
+  var clean = [];
+  for (k = 0; k < out.length; k++) {
+    if (clean.length && vDist(clean[clean.length - 1], out[k]) <= EPS_SPATIAL) continue;
+    clean.push(out[k]);
+  }
+  if (clean.length < 2) fail('sweep.along 去相邻重合点后不足 2 个不同点（当前 ' + clean.length + ' 个）');
+  return clean;
+}
 
 // ── 几何表达式 → 网格（形状树，支持嵌套布尔）────────────────────
 var SHAPE_TYPES = ['cuboid', 'cube', 'box', 'sphere', 'ellipsoid', 'cylinder', 'cone', 'frustum',
-  'torus', 'polyhedron', 'extrude', 'revolve', 'mesh', 'boolean', 'group'];
+  'torus', 'polyhedron', 'extrude', 'revolve', 'sweep', 'mesh', 'boolean', 'group'];
 
 // 形状构建的统一出口：**外向化**（挤出 / 旋转体等生成器的绕向差异在这里一次性归一，
 // 保证"有向体积 > 0 = 法线朝外"，下游的布尔裁剪与导出都依赖这个不变量）
@@ -1717,7 +2049,11 @@ function buildShapeInner(shape, E, depth) {
       profile: evalProfile(shape.profile, E),
       holes: evalHoles(shape.holes, E),
       height: shape.height === undefined ? 1 : evalNum(shape.height, E, 'height'),
-      center: shape.center === undefined ? undefined : evalNum(shape.center, E, 'center')
+      center: shape.center === undefined ? undefined : evalNum(shape.center, E, 'center'),
+      // twist = 总扭转角（度），segments = 分层数（extrude 的 segments 与曲面的 segments 同名字段，
+      // 但语义是「扭转方向的分层数」，与轮廓自身的 segments 各管一段，互不影响）
+      twist: shape.twist === undefined ? undefined : evalNum(shape.twist, E, 'twist'),
+      segments: shape.segments === undefined ? undefined : evalInt(shape.segments, E, 'segments', TWIST_LAYERS_DEFAULT)
     });
   }
   if (t === 'revolve') {
@@ -1725,6 +2061,26 @@ function buildShapeInner(shape, E, depth) {
       profile: evalProfile(shape.profile, E),
       segments: evalInt(shape.segments, E, 'segments', 32),
       angle: shape.angle === undefined ? 360 : evalNum(shape.angle, E, 'angle')
+    });
+  }
+  if (t === 'sweep') {
+    var swScale = null;
+    if (shape.scale !== undefined && shape.scale !== null) {
+      if (isArr(shape.scale)) {
+        swScale = [];
+        for (var si = 0; si < shape.scale.length; si++) swScale.push(evalNum(shape.scale[si], E, 'scale'));
+      } else {
+        swScale = evalNum(shape.scale, E, 'scale');
+      }
+    }
+    return shapeSweep({
+      profile: evalProfile(shape.profile, E),
+      holes: evalHoles(shape.holes, E),
+      along: evalPath(shape.along, E),
+      closed: shape.closed,
+      twist: shape.twist === undefined ? undefined : evalNum(shape.twist, E, 'twist'),
+      scale: swScale,
+      up: shape.up === undefined ? undefined : evalVec3(shape.up, E, 'up')
     });
   }
   if (t === 'mesh') return shapeMesh(shape);
@@ -2952,7 +3308,7 @@ function modelAdd(args, unknown, ctx) {
       var t = argStr(args, 'type', 'cuboid');
       shape = { type: t };
       var keys = ['size', 'center', 'radius', 'radiusTop', 'radiusBottom', 'height', 'innerRadius', 'outerRadius',
-        'segments', 'rings', 'profile', 'holes', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes', 'positions', 'indices'];
+        'segments', 'rings', 'profile', 'holes', 'twist', 'along', 'closed', 'scale', 'up', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes', 'positions', 'indices'];
       for (var i = 0; i < keys.length; i++) {
         if (args[keys[i]] !== undefined) shape[keys[i]] = args[keys[i]];
       }
@@ -3024,7 +3380,7 @@ function applyOp(model, op, index) {
     else {
       var shape = { type: argStr(op, 'type', 'cuboid') };
       var keys = ['size', 'center', 'radius', 'radiusTop', 'radiusBottom', 'height', 'innerRadius', 'outerRadius',
-        'segments', 'rings', 'profile', 'holes', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes'];
+        'segments', 'rings', 'profile', 'holes', 'twist', 'along', 'closed', 'scale', 'up', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes'];
       for (k = 0; k < keys.length; k++) if (op[keys[k]] !== undefined) shape[keys[k]] = op[keys[k]];
       p2.shape = shape;
     }
@@ -3355,8 +3711,8 @@ var TOOL_DEFS = [
   },
   {
     name: 'model_add',
-    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/mesh），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
-    usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。',
+    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/sweep/mesh；extrude 可带 holes 打孔、带 twist 做扭转挤出；sweep 让轮廓沿任意 3D 路径扫掠，可配 holes/twist/scale/closed/up），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
+    usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；扭转挤出（绞龙/麻花柱/螺旋齿轮坯）：{id:"auger", type:"extrude", profile:{type:"circle", radius:8, segments:24}, height:40, twist:180, segments:24}；带孔扭转（内螺旋槽）：在上面加 holes:[{type:"circle", radius:3, segments:16}]；扫掠弯管（轮廓沿 3D 路径走，可带孔做空心管；扫掠路径字段叫 along）：{id:"elbow", type:"sweep", profile:{type:"circle", radius:4, segments:24}, holes:[{type:"circle", radius:2.5, segments:16}], along:[[0,0,0],[0,0,20],[0,8,30],[0,24,36]]}；扫掠圆环（闭合路径无端盖）：{id:"ring", type:"sweep", profile:{type:"circle", radius:3, segments:24}, along:[[20,0,0],[0,20,0],[-20,0,0],[0,-20,0]], closed:true}；锥形扫掠：直线 along + scale:[1,2]（每站缩放，也可给标量）；扭转扫掠：along + twist:360（沿路径总扭转角）；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -3372,10 +3728,15 @@ var TOOL_DEFS = [
         height: { description: 'cylinder/cone/extrude 高度（默认 2 / 1）' },
         innerRadius: { description: 'torus 管截面半径（须小于 outerRadius）' },
         outerRadius: { description: 'torus 主半径（默认 4）' },
-        segments: { description: '曲面分段数（默认 32）' },
+        segments: { description: '分段数：曲面形状是圆周分段（默认 32）；extrude 配 twist 用时是**扭转分层数**（默认 12，每层扭转角须 < 180°）' },
         rings: { description: '可选：环向分段' },
-        profile: { description: 'extrude/revolve 轮廓：{type:"rect"|"circle"|"star"|"polygon",...} 或点集 [[x,y],...]' },
-        holes: { type: 'array', description: '可选（仅 extrude）：孔轮廓数组，每项同 profile 口径。一步挤出带孔板（比 subtract 布尔更少三角形、更精确）；洞须完全落在外轮廓内且互不相交，越界会报错。' },
+        profile: { description: 'extrude/revolve/sweep 轮廓：{type:"rect"|"circle"|"star"|"polygon",...} 或点集 [[x,y],...]（sweep 时贴在路径每一站的局部 xy 平面上，x → 法向、y → 副法向）' },
+        holes: { type: 'array', description: '可选（仅 extrude）：孔轮廓数组，每项同 profile 口径（支持 center 偏心）。一步挤出带孔板（比 subtract 布尔更少三角形、更精确）；洞须完全落在外轮廓内且互不相交，越界会报错。与 twist 同用时洞随外形一起扭转（内螺旋槽）。' },
+        twist: { description: '可选（extrude/sweep）：总扭转角（度，默认 0 = 不扭转）。extrude 时轮廓沿 z 分 segments 层、每层绕 z 轴按高度线性旋转 twist/segments（分层数默认 12）；sweep 时沿路径按站号等比分配。每层/每段扭转角须 < 180°。' },
+        along: { type: 'array', description: 'sweep 的扫掠路径：[[x,y,z],...]（≥2 点，可写表达式；相邻重合点自动去掉）。★ 名字不叫 path，因为工具参数里的 path 是工程文件路径。框架用平行传输（RMF）传播——直线段不会退化、拐点不会翻转；路径自交、180° 折返、曲率半径小于轮廓外接半径都会明确报错。' },
+        closed: { type: 'boolean', description: '可选（sweep）：路径是否闭合（默认自动：首尾点重合即视为闭合）。闭合时无端盖（圆环/弯管环）；非闭合时两端封盖。★ 首尾不重合但语义闭合的路径需显式 closed:true。' },
+        scale: { description: '可选（sweep）：沿路径的缩放，标量（恒定）或与站数等长的数组（可写表达式）——用于锥形/渐缩扫掠。' },
+        up: { type: 'array', description: '可选（sweep）：[x,y,z] 参考方向，决定起始站框架的朝向（默认取与起始切线最不平行的坐标轴）。要固定扭转姿态时显式指定。' },
         angle: { description: '可选：revolve 角度（默认 360）' },
         points: { description: 'polyhedron 顶点 [[x,y,z],...]' },
         faces: { description: 'polyhedron 面（顶点下标）' },
