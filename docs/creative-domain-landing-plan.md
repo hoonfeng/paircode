@@ -137,7 +137,7 @@
 | 音乐·人声 | `tool-voice` | `ui-voice` | **Node 桥**（`@audio/*` 原子库） | `@audio/*`(MIT，40+ 包实测)、wavesurfer.js(BSD-3) |
 | 矢量/图像 | `tool-art` | `ui-art` | goja + 浏览器画布 | Konva(MIT) |
 | UI 设计 | `tool-design` | `ui-design` | goja | mermaid(MIT，已有) |
-| 3D/CAD | `tool-model` | `ui-model` | Node 桥（WASM 几何） | three(MIT)、@jscad/modeling(MIT) |
+| 3D/CAD | `tool-model`（★ 2026-09-17 起 **UI 与工具同包**，原 `ui-model` 已并入） | —— | goja 零依赖（自研内核，已偏离本表原设想） | @jscad/modeling(MIT，仅测试交叉验证)、gltf-validator(官方) |
 | 2D 角色 | `tool-rig` | `ui-rig` | goja + 浏览器 WebGL | ag-psd(MIT) |
 
 **拆分粒度原则**
@@ -283,7 +283,7 @@ node scripts/publish-official-plugins.mjs --publish --only tool-voice
 | **L1 独立发布试点** | `tool-voice` + `ui-voice`（人声 PoC 已实证）打包、独立版本、发布、市场安装验证 | ① 干净工作区 `marketplace_install @paircode/tool-voice` → 重启后工具可用；② `voice_verify` 六项自检通过；③ 宿主 Go 二进制**零重编译**（`git diff` 无 `internal/`、`cmd/` 变更） | 1–2 会话 |
 | **L2 创作域 P0** | `tool-music` + `ui-music`（MIDI/乐谱/播放）；`tool-art` + `ui-art`（SVG 画布） | ① 会话产出 → 工作区文件闭环；② 校验器（SMF 解析 / SVG 合法性）通过；③ 截图 + `read_image` 视觉验证 | 2–3 会话 |
 | **L3 薄壳增强（可选）** | E1 渲染器注册表（` ```vocal ` 等会话内嵌）+ E2 编辑器视图注册表 | ① 未注册时行为与今天完全一致（纯加法）；② 注册后 ` ```vocal ` 在会话内渲染并通过 `read_image` 验证 | 1 会话 |
-| **L4 其余域** | `tool-model`/`ui-model`、`tool-rig`/`ui-rig`、`tool-design`/`ui-design` | 逐域校验器 + 导出物断言 | 按需 |
+| **L4 其余域** | `tool-model`（含 UI）、`tool-rig`/`ui-rig`、`tool-design`/`ui-design` | 逐域校验器 + 导出物断言 | 按需 |
 
 **每期硬门槛**：`go vet ./...` + `go build ./cmd/companion` + `go test -short ./internal/...` 全绿；
 插件侧 `node -e "require('./.pair/plugins/<x>/index.js')"` 语法检查 + 独立端口（非 9090）冒烟。
@@ -603,7 +603,7 @@ PoC 与方案 §7 的判据在实现时暴露出**物理不可达**之处，已�
 2. **本地开发挂载**：默认 junction（`dev-sync-dist-plugins.mjs`）——Windows 下由
    `isPluginDirEntry` 支持；若在非 Windows 环境用 symlink 亦可（同判定分支）；
 3. 创作域其余五域（`tool-music`/`ui-music`、`tool-art`/`ui-art`、`tool-design`/`ui-design`、
-   `tool-model`/`ui-model`、`tool-rig`/`ui-rig`）按 L2 推进 —— 其一经实现即应落在
+   `tool-model`（工具 + UI 同包）、`tool-rig`/`ui-rig`）按 L2 推进 —— 其一经实现即应落在
    `plugins-dist/`（护栏会强制其进 exclude，漏了就打不了包）。
 
 ---
@@ -953,6 +953,19 @@ CDP 的 `Page.captureScreenshot({captureBeyondViewport:true})` 在 `--headless=n
 ---
 
 ## 附录 I L2 执行记录（3D/CAD 域：tool-model + ui-model，2026-09-17 实测）
+
+> ★ **I.0 后续修订（同日，用户反馈驱动）**：原设计把工具（`tool-model`）与 UI（`ui-model`）
+> 拆成两个独立发布包，实测暴露三个问题——① 用户看不出「AI 用的工具」与「面板」是同一件事，
+> 包/版本/文档各一份；② 面板没有入口指引（不知道有什么用、怎么从工程打开预览）；③ 预览是
+> **写死的固定三件套**（model.json / model.preview.html / model.verify.json），体现不出
+> 「工具操作到具体文件」的链路。修订为：
+> **UI 与工具同包**（`plugins-dist/tool-model/` = host 半 index.js + client 半 client.js +
+> `assets/model-panel.js`，`dsh.ui` 段与工具面共存），并新增「**识别到的文件**」数据流——
+> 工具写文件即 `noteArtifact` 登记 + `ctx.emit('ui:tool-model/artifacts')` 广播 → 面板列出
+> 识别到的文件 → **点击即登记并当场预览** → 文件一变预览**自动重绘**（事件广播 + 2s
+> `statArtifact` 复核）。面板内补「这个面板是什么 · 怎么用」与三种打开入口指引。
+> 端到端验证：`_temp/model-panel-verify.cjs`（CDP，31 项）+ `_temp/model-ui-live-test.cjs`
+> （host 半，19 项）。下表的 `ui-model` 行即修订前的历史形态，保留以存证。
 
 ### I.1 交付物
 
@@ -1757,7 +1770,8 @@ ui.registerView({ id, title, icon, order, open, render(el, ui) })
 
 #### J.2.3 六个创作域接入
 
-`ui-art`(order 10) / `ui-design`(20) / `ui-model`(30) / `ui-music`(40) / `ui-rig`(50) / `ui-voice`(60)，
+`ui-art`(order 10) / `ui-design`(20) / 3D 模型(30，**由 `tool-model` 包注册**，2026-09-17 合并) /
+`ui-music`(40) / `ui-rig`(50) / `ui-voice`(60)，
 统一 `open:true`（后台 tab），**与既有 registerPanel 共用同一个 bundle**（`render` 每次调用各建独立 Vue 实例）。
 
 #### J.2.4 实测

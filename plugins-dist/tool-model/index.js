@@ -5326,6 +5326,9 @@ function readModelFile(ctx, path) {
 }
 function writeModelFile(ctx, path, model) {
   ctx.fs.writeFile(path, JSON.stringify(model, null, 2) + '\n');
+  // ★ 预览链路（2026-09-17）：工程写盘即登记为「识别到的文件」→ 面板实时刷新并可点开预览
+  noteArtifact(ctx, path, 'project', 'project',
+    (model.name || '未命名') + ' · ' + ((model.parts && model.parts.length) || 0) + ' 部件');
 }
 
 // 参数输入的两种写法都接受：[{id,value,min,max,name}] 或 {id: value}
@@ -5817,10 +5820,12 @@ function modelExport(args, unknown, ctx) {
       ctx.fs.writeFileBase64(target, b64EncodeBytes(r.bytes));
       products.push({ path: target, kind: r.kind, bytes: r.bytes, faces: r.faces });
       files.push({ path: target, format: fmt, bytes: r.bytes.length, faces: r.faces });
+      noteArtifact(ctx, target, artifactKindOf(target), 'export', fmt + ' · ' + r.faces + ' 面');
     } else {
       ctx.fs.writeFile(target, r.text);
       products.push({ path: target, kind: r.kind, text: r.text, faces: r.faces });
       files.push({ path: target, format: fmt, bytes: utf8Bytes(r.text).length, faces: r.faces });
+      noteArtifact(ctx, target, artifactKindOf(target), 'export', fmt + ' · ' + r.faces + ' 面');
     }
   }
   // 确定性：同一份工程渲染两次必须位级一致（M9 的证据）
@@ -5899,6 +5904,7 @@ function modelVerify(args, unknown, ctx) {
   };
   var reportPath = argStr(args, 'report', null) || outName(rm.path, '.verify.json');
   ctx.fs.writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+  noteArtifact(ctx, reportPath, 'verify', 'verify', res.fails + ' fail / ' + res.warns + ' warn');
   return {
     ok: res.ok, path: rm.path, report: reportPath,
     fails: res.fails, warns: res.warns,
@@ -5906,6 +5912,230 @@ function modelVerify(args, unknown, ctx) {
       return { id: c.id, ok: c.ok, level: c.level, title: c.title, detail: c.detail, items: c.items.slice(0, 6) };
     }),
     productNotes: coll.notes
+  };
+}
+
+// ══ 「识别到的文件」注册表 + 实时预览链路（2026-09-17：UI 与工具合并进同一插件）══
+// 用户口径：工具操作到**具体文件** → 面板里点这个文件 → 登记为「识别到的文件」→ **实时**预览。
+// host 半为此维护两件事：
+//   ① 登记表 ARTIFACTS：工具每次写文件（建/改工程、导出各格式产物、复验报告）立刻登记，并
+//      ctx.emit('ui:tool-model/artifacts') 广播 → 面板事件驱动刷新（不靠手点刷新，也不轮询竞争）。
+//   ② 工作区扫描：面板可让 host 递归识别工作区里**已存在**的可预览文件（扩展名识别 + 内容嗅探），
+//      历史产物 / 手工放进来的 STL·OBJ·glTF 同样点开即看 —— 登记表不是唯一真相源。
+// 解析与渲染全在前端（点开即画）：host 只回「内容 + 元信息」——文本原样，二进制 base64。
+var ARTIFACTS = [];        // [{path, kind, source, bytes, mtime, at, note}]（最新在前）
+var ARTIFACTS_MAX = 300;   // 登记表上限（防长会话无限增长）
+
+// 识别口径（扩展名 → kind）；未识别返回 ''（面板不列为「识别到的文件」）
+function artifactKindOf(path) {
+  var n = String(path || '').toLowerCase();
+  if (/\.preview\.html$/.test(n)) return 'preview-html';
+  if (/\.glb$/.test(n)) return 'glb';
+  if (/\.gltf$/.test(n)) return 'gltf';
+  if (/\.stl$/.test(n)) return 'stl';
+  if (/\.obj$/.test(n)) return 'obj';
+  if (/\.verify\.json$/.test(n)) return 'verify';
+  if (/\.json$/.test(n)) return 'json';
+  return '';
+}
+
+// 类型 → 人话标签（面板展示）
+function artifactKindLabel(kind) {
+  var m = {
+    'preview-html': '自包含 WebGL 预览（HTML）',
+    glb: 'GLB（单文件二进制 glTF）',
+    gltf: 'glTF 2.0（Khronos 标准）',
+    stl: 'STL（3D 打印；binary/ASCII 自动识别）',
+    obj: 'Wavefront OBJ',
+    verify: '复验报告（判据 M1–M9）',
+    json: 'JSON',
+    project: 'CAD 工程（paircode.model/1）'
+  };
+  return m[kind] || kind || '未知';
+}
+
+// 面板可见的条目（统一形状）
+function artifactEntry(ctx, path, kind, source, note) {
+  var st = null;
+  try { st = ctx.fs.stat(path); } catch (e) { st = null; }
+  if (!st || st.isDir) return null;
+  var k = kind || artifactKindOf(path);
+  return {
+    path: path, kind: k, label: artifactKindLabel(k),
+    source: source || 'claim', bytes: st.size, mtime: st.mtime,
+    note: note || null, at: Date.now()
+  };
+}
+
+// 广播：面板 ui.on('ui:tool-model/artifacts') 收到即刷新（事件驱动，实时）
+function emitArtifacts(ctx, what) {
+  try {
+    if (ctx && typeof ctx.emit === 'function') {
+      ctx.emit('ui:tool-model/artifacts', { at: Date.now(), what: what || '', count: ARTIFACTS.length });
+    }
+  } catch (e) { /* 旧宿主无事件桥：面板仍有定时复核兜底 */ }
+}
+
+// 登记一个文件为「识别到的文件」（工具写文件后立即调用；path = 工作区相对路径）
+function noteArtifact(ctx, path, kind, source, note) {
+  if (!path) return null;
+  var item = { path: path, kind: kind || artifactKindOf(path), source: source || 'claim', note: note || null, at: Date.now() };
+  for (var i = ARTIFACTS.length - 1; i >= 0; i--) if (ARTIFACTS[i].path === path) ARTIFACTS.splice(i, 1);
+  ARTIFACTS.unshift(item);
+  if (ARTIFACTS.length > ARTIFACTS_MAX) ARTIFACTS.length = ARTIFACTS_MAX;
+  emitArtifacts(ctx, path);
+  return item;
+}
+
+// 工作区扫描：递归找可预览文件（跳过依赖/构建产物/隐藏目录；深度与条数设上限保证响应速度）
+var SCAN_SKIP_DIRS = {
+  node_modules: 1, '.git': 1, '.svn': 1, '.idea': 1, '.vscode': 1,
+  dist: 1, build: 1, release: 1, obj: 1, gocache: 1, logs: 1, tmp: 1,
+  screenshots: 1, _temp: 1, '.pair': 1, '.agent-teams': 1, '.verify-tmp': 1
+};
+function scanWorkspaceArtifacts(ctx, opts) {
+  var o = opts || {};
+  var maxDepth = o.maxDepth === undefined ? 4 : toNumber(o.maxDepth, 'maxDepth');
+  var limit = o.limit === undefined ? 200 : toNumber(o.limit, 'limit');
+  var out = [];
+  var seen = {};
+  function walk(dir, depth) {
+    if (out.length >= limit || depth > maxDepth) return;
+    var names;
+    // ★ ctx.fs 的路径解析拒绝空串（"path 不能为空"）——工作区根用 '.' 表示
+    try { names = ctx.fs.readdir(dir === '' ? '.' : dir); } catch (e) { return; }
+    for (var i = 0; i < names.length; i++) {
+      if (out.length >= limit) return;
+      var name = names[i];
+      if (!name || name.charAt(0) === '.') continue;
+      var p = dir === '' ? name : (dir + '/' + name);
+      var st = null;
+      try { st = ctx.fs.stat(p); } catch (e) { continue; }
+      if (st.isDir) { if (SCAN_SKIP_DIRS[name]) continue; walk(p, depth + 1); continue; }
+      var k = artifactKindOf(p);
+      if (!k) continue;
+      if (seen[p]) continue;
+      seen[p] = 1;
+      var e = artifactEntry(ctx, p, k, 'scan', null);
+      if (e) out.push(e);
+    }
+  }
+  try { walk('', 0); } catch (e) { /* 扫描失败不致命：面板仍能看到登记表 */ }
+  return out;
+}
+
+// ── client 方法（浏览器面板 ui.invoke('tool-model', <名>, args)）──────────
+// listArtifacts：识别到的文件清单 = 登记表（工具产出，优先）+ 工作区扫描（历史/手工文件）
+function listArtifactsForUI(ctx, args) {
+  var a = args || {};
+  var items = [], seen = {}, i;
+  for (i = 0; i < ARTIFACTS.length; i++) {
+    var it = ARTIFACTS[i];
+    var e = artifactEntry(ctx, it.path, it.kind, it.source, it.note);
+    if (!e) continue;                 // 已被删除/消失 → 不进清单
+    if (seen[e.path]) continue;
+    seen[e.path] = 1;
+    items.push(e);
+  }
+  if (a.scan !== false) {
+    var found = scanWorkspaceArtifacts(ctx, a);
+    for (i = 0; i < found.length; i++) {
+      if (seen[found[i].path]) continue;
+      seen[found[i].path] = 1;
+      items.push(found[i]);
+    }
+  }
+  return { items: items, registered: ARTIFACTS.length, scanned: a.scan !== false, at: Date.now() };
+}
+
+// readArtifact：给面板内容（文本原样；二进制 base64）——渲染与解析在前端做
+function readArtifactForUI(ctx, args) {
+  var path = argStr(args || {}, 'path', '') || '';
+  if (!path) fail('readArtifact：缺 path');
+  var st;
+  try { st = ctx.fs.stat(path); } catch (e) { fail('文件不存在：' + path); }
+  if (!st || st.isDir) fail('不是文件：' + path);
+  var kind = artifactKindOf(path);
+  var out = { path: path, kind: kind, label: artifactKindLabel(kind), bytes: st.size, mtime: st.mtime };
+  // 文本类直接读文本；.json/.verify.json 再按 format 区分「工程」与「报告」
+  var textKinds = { gltf: 1, obj: 1, 'preview-html': 1, verify: 1, json: 1 };
+  if (textKinds[kind]) {
+    var txt;
+    try { txt = ctx.fs.readFile(path); } catch (e2) { fail('读取失败：' + path + ' — ' + ((e2 && e2.message) || e2)); }
+    if (kind === 'json' || kind === 'verify') {
+      try {
+        var doc = JSON.parse(txt);
+        if (doc && doc.format === FORMAT) { out.kind = 'project'; out.label = artifactKindLabel('project'); }
+      } catch (e3) { /* 非 JSON 就当纯文本展示 */ }
+    }
+    out.text = txt;
+    return out;
+  }
+  // 二进制（.glb / .stl——binary 与 ASCII 都可能）：base64 回前端解码后嗅探
+  out.base64 = ctx.fs.readFileBase64(path);
+  return out;
+}
+
+// claimArtifact：面板点选文件 = 「登记为识别到的文件」（进登记表 + 广播，其它面板/会话也看到）
+function claimArtifactForUI(ctx, args) {
+  var path = argStr(args || {}, 'path', '') || '';
+  if (!path) fail('claimArtifact：缺 path');
+  if (!ctx.fs.exists(path)) fail('文件不存在：' + path);
+  var item = noteArtifact(ctx, path, artifactKindOf(path), 'claim', '面板点选登记');
+  return { ok: true, item: item, count: ARTIFACTS.length };
+}
+
+// statArtifact：轻量状态查询（面板实时复核用——不读内容、不扫盘，只看 size/mtime）
+// ★ 为什么需要它：登记表只覆盖「本会话工具产出」，工作区扫描到的历史/手工文件不在表里，
+//   若面板只比对登记表就永远发现不了这些文件被改动 → 预览不刷新。故对**当前选中文件**
+//   一律走本方法取实时 size/mtime，变了就重读重绘。
+function statArtifactForUI(ctx, args) {
+  var path = argStr(args || {}, 'path', '') || '';
+  if (!path) fail('statArtifact：缺 path');
+  var st = null;
+  try { st = ctx.fs.stat(path); } catch (e) { st = null; }
+  if (!st || st.isDir) return { path: path, exists: false };
+  return { path: path, exists: true, bytes: st.size, mtime: st.mtime, kind: artifactKindOf(path) };
+}
+
+// buildProject：点选工程 JSON 即用插件**同一份内核**现场构建，把几何数据交给面板渲染
+// （工程即模型：改参数/加部件后重新调用即得到新几何 —— 面板侧无需内置内核）
+function buildProjectForUI(ctx, args) {
+  var path = argStr(args || {}, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var built = buildModelMeshes(rm.model, { skipInvisible: true });
+  var parts = [], i, j;
+  for (i = 0; i < built.parts.length; i++) {
+    var p = built.parts[i], m = p.mesh, pos = [], idx = [];
+    for (j = 0; j < m.positions.length; j++) {
+      pos.push(cleanNum(m.positions[j][0], 6), cleanNum(m.positions[j][1], 6), cleanNum(m.positions[j][2], 6));
+    }
+    for (j = 0; j < m.indices.length; j++) idx.push(m.indices[j][0], m.indices[j][1], m.indices[j][2]);
+    parts.push({
+      id: p.id, name: p.name,
+      color: (p.material && p.material.color) || DEFAULT_MATERIAL.color,
+      pos: pos, idx: idx, tris: p.tris, volume: cleanNum(p.volume, 3)
+    });
+  }
+  var bb = built.parts.length ? meshBbox(built.merged) : [[0, 0, 0], [0, 0, 0]];
+  var params = [];
+  for (i = 0; i < built.params.order.length; i++) {
+    var pid = built.params.order[i], pdef = built.params.known[pid];
+    params.push({
+      id: pid, name: pdef.name === undefined ? pid : pdef.name,
+      value: cleanNum(built.params.values[pid], 6),
+      range: (pdef.min === undefined && pdef.max === undefined) ? null : (pdef.min + '..' + pdef.max)
+    });
+  }
+  return {
+    path: path, name: rm.model.name || 'model', unit: rm.model.unit || 'mm', up: rm.model.up || 'z',
+    totalTris: built.totalTris,
+    totalVolume: cleanNum(built.parts.reduce(function (s, x) { return s + x.volume; }, 0), 3),
+    bbox: [
+      [cleanNum(bb[0][0], 6), cleanNum(bb[0][1], 6), cleanNum(bb[0][2], 6)],
+      [cleanNum(bb[1][0], 6), cleanNum(bb[1][1], 6), cleanNum(bb[1][2], 6)]
+    ],
+    parts: parts, params: params
   };
 }
 
@@ -6075,6 +6305,18 @@ var PLUGIN = {
         ctx.logger('tool-model').info('已注册 ' + TOOL_DEFS.length + ' 个工具（goja 轨 · 零依赖 · glTF 2.0 / STL 真相源）');
       }
     } catch (_) { /* ignore */ }
+    // ★ UI 半（client 半 + 面板 bundle 与本文件同包）：面板经 ui.invoke('tool-model', <名>, args)
+    //   调用下列 host 方法 —— 见上方「识别到的文件」注册表（工具写文件即登记并广播，
+    //   面板事件驱动实时刷新；点选文件即 claimArtifact 登记，点工程即 buildProject 现场构建）。
+    try {
+      ctx.registerClientMethod('listArtifacts', function (args) { return listArtifactsForUI(ctx, args || {}); });
+      ctx.registerClientMethod('readArtifact', function (args) { return readArtifactForUI(ctx, args || {}); });
+      ctx.registerClientMethod('claimArtifact', function (args) { return claimArtifactForUI(ctx, args || {}); });
+      ctx.registerClientMethod('statArtifact', function (args) { return statArtifactForUI(ctx, args || {}); });
+      ctx.registerClientMethod('buildProject', function (args) { return buildProjectForUI(ctx, args || {}); });
+    } catch (e2) {
+      try { ctx.logger('tool-model').warn('registerClientMethod 不可用（旧宿主）：面板退回 /api/fs/read 只读路径'); } catch (_) { /* ignore */ }
+    }
   }
 };
 

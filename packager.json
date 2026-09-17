@@ -145,8 +145,7 @@
           "ui-design",
           "tool-rig",
           "ui-rig",
-          "tool-model",
-          "ui-model"
+          "tool-model"
         ]
       },
       {
