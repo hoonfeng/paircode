@@ -1,5 +1,7 @@
 <template>
   <div class="ask-user-card">
+    <!-- ★ 2026-09-17：会话已结束（服务端不存在）失效提示——回答无法提交，可继续发新消息 -->
+    <div v-if="stale" class="ask-stale-hint">⚠ 该会话已结束（服务端不存在），回答无法提交；可直接在下方输入框发送新消息继续。</div>
     <!-- ★ Round3 ⑤ 多问题模式：questions 数组渲染列表，一次「提交」回灌 answers -->
     <div v-if="questions && questions.length" class="ask-multi-list">
       <div v-for="(q, qi) in questions" :key="q.id || qi" class="ask-multi-item">
@@ -19,12 +21,12 @@
         <!-- 无选项：文本输入 -->
         <div v-else class="ask-user-input-row">
           <input v-model="multiTexts[q.id]" class="ask-user-input" type="text"
-                 placeholder="输入回答..." @keydown.enter="submitMultiForm" :disabled="answered" />
+                 placeholder="输入回答..." @keydown.enter="submitMultiForm" :disabled="answered || stale" />
         </div>
       </div>
       <div class="ask-multi-actions">
-        <button class="ask-user-btn" @click="submitMultiForm" :disabled="answered || !multiFormValid">
-          {{ answered ? '已回答' : '提交回答' }}
+        <button class="ask-user-btn" @click="submitMultiForm" :disabled="answered || stale || !multiFormValid">
+          {{ stale ? '会话已结束' : (answered ? '已回答' : '提交回答') }}
         </button>
       </div>
     </div>
@@ -42,8 +44,8 @@
         <span class="ask-option-text">{{ opt }}</span>
       </label>
       <button class="ask-user-btn" @click="submitOption"
-              :disabled="answered || !selectedOpt">
-        {{ answered ? '已回答' : '提交选择' }}
+              :disabled="answered || stale || !selectedOpt">
+        {{ stale ? '会话已结束' : (answered ? '已回答' : '提交选择') }}
       </button>
     </div>
 
@@ -59,8 +61,8 @@
       </label>
       <div class="ask-multi-actions">
         <button class="ask-user-btn" @click="submitMulti"
-                :disabled="answered || selectedMulti.length === 0">
-          {{ answered ? '已回答' : '提交选择' }}
+                :disabled="answered || stale || selectedMulti.length === 0">
+          {{ stale ? '会话已结束' : (answered ? '已回答' : '提交选择') }}
         </button>
       </div>
     </div>
@@ -78,10 +80,10 @@
       <div class="ask-user-or-divider"><span>或自定义输入</span></div>
       <div class="ask-user-input-row">
         <input v-model="customInput" class="ask-user-input" type="text"
-               placeholder="输入自定义回答..." @keydown.enter="submitCustom" :disabled="answered" />
+               placeholder="输入自定义回答..." @keydown.enter="submitCustom" :disabled="answered || stale" />
         <button class="ask-user-btn" @click="submitCustom"
-                :disabled="answered || (!selectedOpt && !customInput.trim())">
-          {{ answered ? '已回答' : '发送' }}
+                :disabled="answered || stale || (!selectedOpt && !customInput.trim())">
+          {{ stale ? '会话已结束' : (answered ? '已回答' : '发送') }}
         </button>
       </div>
     </div>
@@ -91,10 +93,10 @@
          避免出现「只有提交按钮、点不了」的死卡片（模型漏填 options 的常见情况） -->
     <div v-else class="ask-user-input-row">
       <input v-model="textInput" class="ask-user-input" type="text"
-             :placeholder="noOptionsHint" @keydown.enter="submitText" :disabled="answered" />
+             :placeholder="noOptionsHint" @keydown.enter="submitText" :disabled="answered || stale" />
       <button class="ask-user-btn" @click="submitText"
-              :disabled="answered || !textInput.trim()">
-        {{ answered ? '已回答' : '发送' }}
+              :disabled="answered || stale || !textInput.trim()">
+        {{ stale ? '会话已结束' : (answered ? '已回答' : '发送') }}
       </button>
     </div>
     </div>
@@ -110,6 +112,8 @@ const props = defineProps({
   options: { type: Array, default: () => [] },
   callId: { type: String, default: '' },
   answered: { type: Boolean, default: false },
+  // ★ 2026-09-17：会话已结束（服务端不存在，提交必然失败）→ 卡片置失效态
+  stale: { type: Boolean, default: false },
   // ★ Round3 ⑤ 多问题：questions 数组 [{id, question, options?, multiSelect?}]
   questions: { type: Array, default: () => [] },
 })
@@ -207,6 +211,13 @@ function submitText() {
 
 <style scoped>
 .ask-user-card { padding: 0; }
+/* ★ 2026-09-17：会话已结束失效提示 */
+.ask-stale-hint {
+  margin-bottom: 8px; padding: 6px 10px; border-radius: 4px;
+  font-size: 12px; line-height: 1.5;
+  color: var(--warning, #e6a23c); background: rgba(230, 162, 60, 0.08);
+  border: 1px solid rgba(230, 162, 60, 0.3);
+}
 .ask-user-question {
   font-size: 14px; color: var(--text-primary); margin-bottom: 10px;
   line-height: 1.5; white-space: pre-wrap;

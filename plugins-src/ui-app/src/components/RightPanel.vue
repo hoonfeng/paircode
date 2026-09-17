@@ -132,7 +132,7 @@
                         </div>
                         <div v-else-if="seg.type === 'ask_user'" class="tl-item">
                           <span class="tl-dot tl-dot-ask"></span>
-                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :questions="seg.questions" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
+                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :questions="seg.questions" :call-id="seg.callId" :answered="seg._answered" :stale="seg._stale" @answer="onAskAnswer(seg, $event)" /></div>
                         </div>
                         <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
                           <span class="tl-dot tl-dot-content"></span>
@@ -1792,6 +1792,35 @@ const onAskAnswer = (seg, { callId, answer, answers }) => {
   submitAskAnswer(seg)
 }
 
+// ★ 2026-09-17 修复：「死会话」提交失败的恢复（用户报：已不存在会话中提交回答 400 后，
+//   发送按钮仍禁用、无法继续工作）。
+//   「会话不存在/未运行」= 服务端没有该运行时会话（agent 早已结束/等待回答超时/服务重启），
+//   而本地可能仍残留运行中标记（如等待回答期间 chatLoading=true）——输入区会被永久锁定：
+//   发送按钮被停止按钮替代、sendMessage 因 chatLoading 早退，用户无法发任何新消息。
+//   分级恢复：死会话 → 复位本地运行态并标记卡片失效，让用户可直接发新消息继续；
+//   其他错误（回答通道已满等）→ 保持运行态，仅提示重试。
+const recoverDeadAskSession = (convId, e, seg) => {
+  const msg = String((e && e.message) || e || '')
+  const dead = msg.includes('会话不存在') || msg.includes('未运行')
+  if (!dead) {
+    window.$toast && window.$toast('回答失败：' + msg + '（请重试）', 'error')
+    return
+  }
+  resetConvRuntime(convId)
+  state.agentRunningByConv[convId] = false
+  state.loadingByConv[convId] = false
+  if (state.currentConvId === convId) {
+    state.chatLoading = false
+    state.agentRunning = false
+  }
+  // 历史消息里残留的 loading 占位一并清理（防止转圈动画永久残留）
+  const msgs = state.messagesByConv[convId]
+  if (msgs) for (const m of msgs) { if (m._loading) m._loading = false }
+  // 卡片标记失效：会话已结束，反复提交必然失败
+  if (seg) seg._stale = true
+  window.$toast && window.$toast('该会话已结束（服务端不存在），回答无法提交。已恢复输入，可直接发送新消息继续。', 'error')
+}
+
 const submitAskAnswer = async (seg) => {
   // ★ 2026-09-17 修复：convId 为空时拦截提交（防后端 400「convId 必填」；同 sendFeedback 的判空约定）
   if (!state.currentConvId) {
@@ -1799,26 +1828,29 @@ const submitAskAnswer = async (seg) => {
     window.$toast && window.$toast('回答失败：当前没有选中会话，请刷新页面后重试', 'error')
     return
   }
+  const convId = state.currentConvId
+  // ★ 陈旧卡片防护：会话已结束的卡片不再重复提交（提交按钮此时也已禁用）
+  if (seg._stale) return
   // ★ Round3 ⑤：多问题 answers 数组优先，缺省回落单问题 answer（后端双兼容）
   if (seg.answers && seg.answers.length) {
     seg._answered = true
     try {
-      await api.apiPost('/chat/answer', { convId: state.currentConvId, callId: seg.callId, answers: seg.answers })
+      await api.apiPost('/chat/answer', { convId, callId: seg.callId, answers: seg.answers })
     } catch (e) {
       console.error('[RP] 回答提交失败（多问题）:', e)
       seg._answered = false
-      window.$toast && window.$toast('回答失败：' + ((e && e.message) || e) + '（可能任务已结束，请刷新后重试）', 'error')
+      recoverDeadAskSession(convId, e, seg)
     }
     return
   }
   const answer = (seg.answer || '').trim()
   if (!answer) return; seg._answered = true
   try {
-    await api.apiPost('/chat/answer', { convId: state.currentConvId, answer })
+    await api.apiPost('/chat/answer', { convId, answer })
   } catch (e) {
     console.error('[RP] 回答提交失败（单问题）:', e)
     seg._answered = false
-    window.$toast && window.$toast('回答失败：' + ((e && e.message) || e) + '（可能任务已结束，请刷新后重试）', 'error')
+    recoverDeadAskSession(convId, e, seg)
   }
 }
 
