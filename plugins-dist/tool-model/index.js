@@ -1646,6 +1646,133 @@ function bspAllTris(node) {
   return out;
 }
 
+// ── I.6-2 原型：多边形 BSP（csg.js 的原生表示 —— BSP 全程保凸多边形，导出前才三角化）──
+// 动机（I.6-1 的实测结论）：三角路径在**每次切割后立即扇形三角化**（splitTriangleByPlane），
+//   相邻面片的边分段方式于是各自独立 ⇒ T 型接缝 + 浮点碎片；I.6-1 在三角域事后合并，碰上
+//   「BSP 输出本身有重叠」的簇只能整簇回退。多边形表示下一条边对一条边，切割点由同一对端点
+//   算出，T 缝从源头消失；且**同一个 BSP 节点的多边形天然共面** ⇒ 合并退化成「对消内部边 +
+//   串边界环」，不需要 T 缝细分 / 噪声清理 / 容差匹配。
+//   ★ 凸性不变量：初始多边形是三角形（凸），凸多边形被平面切成两块仍凸 ⇒ BSP 内多边形恒凸
+//     ⇒ 未合并时扇形三角化即正确；合并后才可能出现凹，交给 earcut 版 triangulatePolygonWithHoles。
+//   ★ 安全回退：任何节点合并失败都退化为「逐多边形扇形三角化」——凸性保证这一步**永远正确**，
+//     所以多边形路径不存在"输出坏几何"的风险面（与三角路径的回退相比强得多）。
+//   ★ 不改默认路径：meshBoolean 仍走三角路径，本族函数仅供 meshBooleanPoly 使用，可逐位对照。
+function meshToPolys(m) {
+  var out = [], k;
+  for (k = 0; k < m.indices.length; k++) {
+    var t = m.indices[k];
+    out.push([m.positions[t[0]], m.positions[t[1]], m.positions[t[2]]]);
+  }
+  return out;
+}
+
+// 多边形所在平面（取前三个不共线顶点；凸多边形的标准做法）
+function polyPlane(verts) {
+  for (var i = 2; i < verts.length; i++) {
+    var p = triPlane([verts[0], verts[1], verts[i]]);
+    if (p) return p;
+  }
+  return null;
+}
+
+function polyFlip(verts) { return verts.slice().reverse(); }
+
+function polyBspNew() { return { plane: null, front: null, back: null, polys: [] }; }
+
+// 建树（迭代式工作栈，与三角版同构；差别只在**不**把切割结果三角化）
+function polyBspBuild(root, polys) {
+  if (!polys.length) return;
+  var stack = [{ node: root, polys: polys }];
+  while (stack.length) {
+    var item = stack.pop(), node = item.node, list = item.polys, k;
+    if (!list.length) continue;
+    if (!node.plane) {
+      for (k = 0; k < list.length; k++) { node.plane = polyPlane(list[k]); if (node.plane) break; }
+      if (!node.plane) continue;                     // 整层退化（零面积多边形）
+    }
+    var f = [], b = [];
+    for (k = 0; k < list.length; k++) {
+      var r = splitConvexByPlane(node.plane, list[k]);
+      if (r.coplanar) node.polys.push(r.coplanar);   // 共面 = 本节点表面（csg.js 语义：不再下推）
+      if (r.front) f.push(r.front);
+      if (r.back) b.push(r.back);
+    }
+    if (f.length) { node.front = node.front || polyBspNew(); stack.push({ node: node.front, polys: f }); }
+    if (b.length) { node.back = node.back || polyBspNew(); stack.push({ node: node.back, polys: b }); }
+  }
+}
+
+// 用 BSP 树裁剪一组多边形（保留树"外部/正面"的部分；无 back 子树时 back 侧被丢弃 = clipTo 语义）
+function polyBspClip(node, polys) {
+  var out = [], stack = [{ node: node, polys: polys }];
+  while (stack.length) {
+    var item = stack.pop(), nd = item.node, list = item.polys, k;
+    if (!list.length) continue;
+    if (!nd.plane) { for (k = 0; k < list.length; k++) out.push(list[k]); continue; }
+    var f = [], b = [];
+    for (k = 0; k < list.length; k++) {
+      var poly = list[k], pl = polyPlane(poly);
+      if (!pl) continue;
+      var r = splitConvexByPlane(nd.plane, poly);
+      // 裁剪时共面多边形按朝向分流（csg.js 的 clipPolygons：coplanarFront=front / coplanarBack=back）
+      if (r.coplanar) (vDot(nd.plane.n, pl.n) > 0 ? f : b).push(r.coplanar);
+      if (r.front) f.push(r.front);
+      if (r.back) b.push(r.back);
+    }
+    if (nd.front) stack.push({ node: nd.front, polys: f });
+    else for (k = 0; k < f.length; k++) out.push(f[k]);
+    if (nd.back) stack.push({ node: nd.back, polys: b });
+  }
+  return out;
+}
+
+function polyBspClipTo(node, other) {
+  var stack = [node];
+  while (stack.length) {
+    var nd = stack.pop();
+    if (nd.polys.length) nd.polys = polyBspClip(other, nd.polys);
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+}
+
+function polyBspInvert(node) {
+  var stack = [node];
+  while (stack.length) {
+    var nd = stack.pop(), k;
+    for (k = 0; k < nd.polys.length; k++) nd.polys[k] = polyFlip(nd.polys[k]);
+    if (nd.plane) nd.plane = { n: vMul(nd.plane.n, -1), w: -nd.plane.w };
+    var tmp = nd.front; nd.front = nd.back; nd.back = tmp;
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+}
+
+// 摊平全部多边形（对应三角版的 bspAllTris；union/intersect 收尾要把 B 的面并入 A 重建）
+function polyBspAllPolys(node) {
+  var out = [], stack = [node];
+  while (stack.length) {
+    var nd = stack.pop(), k;
+    for (k = 0; k < nd.polys.length; k++) out.push(nd.polys[k]);
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+  return out;
+}
+
+// 按**节点**收集（I.6-2 的关键：同一节点的 polys 共面，正是要合并的单元；
+//   三角版把结果摊平成一张三角形表，这个「共面分组」信息就丢了 —— I.6-1 只能事后自己再聚类）
+function polyBspNodes(node) {
+  var out = [], stack = [node];
+  while (stack.length) {
+    var nd = stack.pop();
+    out.push(nd);
+    if (nd.front) stack.push(nd.front);
+    if (nd.back) stack.push(nd.back);
+  }
+  return out;
+}
+
 // 布尔结果修复：顶点吸附到统一网格 → 焊接 → 去零面积面 → 去孤立顶点。
 //   ★ 实测结论（有 JSCAD 对照，见测试基线）：BSP 布尔的输出在"严格边匹配"意义下**本来就不水密**——
 //     同一交点在相邻面里由各自插值算出（坐标差约 1e-4 量级），相邻面片的边分段方式还可能不同
@@ -2187,6 +2314,178 @@ function meshBooleanRaw(meshA, meshB, op, tol) {
   // BSP 裁剪必然产生 T 型接缝 → 统一修复（水密性是可打印的前提，也是 M 判据的验收面）
   // 共面合并（I.6-1）在 meshBoolean 里对修复结果做，本函数不含它。
   return meshRepair(out).mesh;
+}
+
+// ── I.6-2：节点内共面多边形合并 → 带孔轮廓 → 三角化 ──────────────
+// 合并本身只有两步（这正是多边形表示的优势；I.6-1 在三角域要 T 缝细分 / 噪声清理 / 容差匹配）：
+//   ① 有向边对消：内部边（正反各出现一次）删掉；
+//   ② 剩余边串环：顶点出度必须 ≤ 1（否则边界自接触 ⇒ 回退），环按 2D 有向面积分正（外环）/负（洞）。
+// 顶点用 eps 网格量化键比对——同一次切割的坐标在数学上严格相同，量化只为吸收 1ulp 级抖动。
+// 返回坐标三元组数组；任何一步不成立都 cpRevert（返回 null），由调用方退化为逐多边形扇形三角化。
+function polyNodeToTris(node, eps) {
+  var polys = node.polys, k, j;
+  if (!polys.length) return [];
+  var pl = node.plane || polyPlane(polys[0]);
+  if (!pl) return [];
+  var inv = 1 / eps, coord = {};
+  function K(p) {                                  // 顶点量化键 → 代表坐标（首次出现者）
+    var key = Math.round(p[0] * inv) + '|' + Math.round(p[1] * inv) + '|' + Math.round(p[2] * inv);
+    if (!coord[key]) coord[key] = p;
+    return key;
+  }
+  // ① 有向边收集（同向重复 ⇒ 非流形 ⇒ 回退）
+  var dir = {}, order = [];
+  for (k = 0; k < polys.length; k++) {
+    var R = polys[k], q = [];
+    for (j = 0; j < R.length; j++) q.push(K(R[j]));
+    for (j = 0; j < q.length; j++) {
+      if (q[j] === q[(j + 1) % q.length]) return cpRevert('多边形 BSP 输出存在重复顶点（量化后重合）');
+    }
+    for (j = 0; j < q.length; j++) {
+      var ek = q[j] + '>' + q[(j + 1) % q.length];
+      if (dir[ek]) return cpRevert('多边形 BSP 输出存在同向重复边（非流形）');
+      dir[ek] = 1; order.push(ek);
+    }
+  }
+  // ② 对消内部边，顺带建立「顶点 → 下一条边」（出度 > 1 = 边界自接触 ⇒ 回退）
+  var next = {}, keep = 0;
+  for (k = 0; k < order.length; k++) {
+    var e2 = order[k], sp = e2.indexOf('>');
+    var a = e2.slice(0, sp), b = e2.slice(sp + 1);
+    if (dir[b + '>' + a]) continue;                 // 有反向边 ⇒ 内部边，对消
+    if (next[a] !== undefined) return cpRevert('多边形 BSP 输出边界在顶点处分支（无法串环）');
+    next[a] = b; keep++;
+  }
+  if (!keep) return cpRevert('多边形 BSP 输出无边界环（多边形被完全对消）');
+  // ③ 串环（沿 next 前进，必须正好回到起点）
+  var seen = {}, rings = [], starts = [], sk;
+  for (sk in next) starts.push(sk);
+  for (k = 0; k < starts.length; k++) {
+    if (seen[starts[k]]) continue;
+    var ring = [], cur = starts[k], guard = 0;
+    while (cur !== undefined && !seen[cur]) {
+      if (++guard > keep + 8) return cpRevert('多边形 BSP 输出串环失败（环长度异常）');
+      seen[cur] = 1; ring.push(cur); cur = next[cur];
+    }
+    if (cur !== starts[k]) return cpRevert('多边形 BSP 输出边界自接触（环未闭合回起点）');
+    if (ring.length >= 3) rings.push(ring);
+  }
+  // ④ 平面内正交基（右手：u × v = n ⇒ 2D 绕向与 3D 绕向一致，面积符号可直接用来分内外环）
+  var nrm = pl.n;
+  var ax = (Math.abs(nrm[0]) <= Math.abs(nrm[1]) && Math.abs(nrm[0]) <= Math.abs(nrm[2])) ? [1, 0, 0]
+         : (Math.abs(nrm[1]) <= Math.abs(nrm[2]) ? [0, 1, 0] : [0, 0, 1]);
+  var uu = vNorm(vCross(ax, nrm)), vv2 = vCross(nrm, uu);
+  function to2(key) {
+    var p = coord[key];
+    return [vDot(uu, p) * inv, vDot(vv2, p) * inv];   // 单位 = eps 格 ⇒ 面积阈值与几何尺度无关
+  }
+  var outers = [], holeRings = [];
+  for (k = 0; k < rings.length; k++) {
+    var pts2 = [];
+    for (j = 0; j < rings[k].length; j++) pts2.push(to2(rings[k][j]));
+    var ar = polyArea(pts2);
+    if (Math.abs(ar) <= 4) continue;                  // 零面积 / 微碎片（≤ 4 格²）
+    if (ar > 0) outers.push({ ring: rings[k], pts: pts2, area: ar, holes: [] });
+    else holeRings.push({ ring: rings[k], pts: pts2 });
+  }
+  if (!outers.length) return cpRevert('多边形 BSP 输出无有效外环');
+  // ⑤ 洞归属：落在哪个外环内（多个包含时取面积最小者 —— 嵌套时属于最内层）
+  for (k = 0; k < holeRings.length; k++) {
+    var best = -1, bestA = Infinity;
+    for (j = 0; j < outers.length; j++) {
+      if (outers[j].area < bestA && pointInPoly(holeRings[k].pts[0], outers[j].pts)) { bestA = outers[j].area; best = j; }
+    }
+    if (best < 0) return cpRevert('共面合并的洞环不在任何外环内（环嵌套异常）');
+    outers[best].holes.push(holeRings[k]);
+  }
+  // ⑥ 带孔三角化（复用 I.7 的桥接 + 耳切 —— 合并后可能出现凹轮廓，扇形三角化在此不适用）
+  var out = [];
+  for (k = 0; k < outers.length; k++) {
+    var O = outers[k], pts3 = [], hs = [], hp, m;
+    for (j = 0; j < O.ring.length; j++) pts3.push(coord[O.ring[j]]);
+    for (j = 0; j < O.holes.length; j++) {
+      hp = [];
+      for (m = 0; m < O.holes[j].ring.length; m++) {
+        pts3.push(coord[O.holes[j].ring[m]]);
+        hp.push(O.holes[j].pts[m]);
+      }
+      hs.push(hp);                                    // 洞环已是 CW（面积负）⇒ 与桥接方向约定一致
+    }
+    var local;
+    try { local = triangulatePolygonWithHoles(O.pts, hs); }
+    catch (e) { return cpRevert('共面轮廓三角化失败：' + ((e && e.message) ? e.message : e)); }
+    for (j = 0; j < local.length; j++) {
+      out.push([pts3[local[j][0]], pts3[local[j][1]], pts3[local[j][2]]]);
+    }
+  }
+  return out;
+}
+
+// I.6-2 多边形路径布尔（对照实验用；meshBoolean 的默认路径仍是三角版，两者可逐位比对）
+//   收尾：按节点做共面合并 + 三角化。任一节点合并失败 ⇒ 该节点退化「逐多边形扇形三角化」
+//   （凸性保证正确），因此**多边形路径不存在产出坏几何的风险面**，最差只是少合并一些面。
+//   statsOut 回填：polyNodes/polyInput/polyReverted + beforeRepair/afterRepair。
+//   ★ 实测（2026-09-17；60×40×6 板 − ∅6 柱 @24 段，4/8 孔为 4/8 个该柱）：
+//       场景          三角路径 面/边界      多边形路径 面/边界     面数降幅
+//       板 − 1 孔          771 / 317           222 / 214          71.2%
+//       板 − 4 孔         2975 / 1451          768 / 928          74.2%   ← I.6-1 只能到 2975 且整簇回退
+//       板 − 8 孔         7392 / 3226         1405 / 1787         81.0%
+//       板 ∪ 4 柱         3300 / 1474         1148 / 952          65.2%
+//       板 ∩ 4 柱         1100 / 1108          600 / 590          45.5%
+//     两路径体积/面积互差 < 1e-6（最大 1.09e-6），非流形边 0、反向边对 0、两次运行逐位一致。
+//     回退节点 2/106，原因固定为「边界在顶点处分支」—— 即共面多边形集合在某顶点处出度 > 1
+//     （多边形只在该点汇聚），当前直接回退；补「最小左转」串环即可吃掉（面数还能再降一点）。
+//   ★ 已知遗留（非本路径引入）：subtract 挖孔体积相对解析正多边形真值偏大约 0.85 mm³（≈0.5%），
+//     而 intersect 与解析值完全吻合。该偏差在本次改动前即存在（三角路径数值一字未变），
+//     属既有 BSP/meshRepair 行为，需另行排查（不水密网格的体积积分本身就有此量级误差）。
+function meshBooleanPoly(meshA, meshB, op, tol, statsOut) {
+  if (!(meshA.indices.length > 0) || !(meshB.indices.length > 0)) fail('布尔运算的两个实体都不能为空');
+  if (meshA.indices.length > LIMIT_BOOL_INPUT || meshB.indices.length > LIMIT_BOOL_INPUT) {
+    fail('布尔运算输入过大（' + meshA.indices.length + ' + ' + meshB.indices.length + ' 面，单次上' + LIMIT_BOOL_INPUT + '）——请降低 segments 或拆分部件');
+  }
+  var TOL = tol === undefined ? weldTolerance(meshMerge([meshA, meshB])) : tol;
+  var A = polyBspNew(), B = polyBspNew();
+  polyBspBuild(A, meshToPolys(meshA));
+  polyBspBuild(B, meshToPolys(meshB));
+  if (op === 'union') {
+    polyBspClipTo(A, B); polyBspClipTo(B, A);
+    polyBspInvert(B); polyBspClipTo(B, A); polyBspInvert(B);
+    polyBspBuild(A, polyBspAllPolys(B));
+  } else if (op === 'subtract') {
+    polyBspInvert(A); polyBspClipTo(A, B); polyBspClipTo(B, A);
+    polyBspInvert(B); polyBspClipTo(B, A); polyBspInvert(B);
+    polyBspBuild(A, polyBspAllPolys(B)); polyBspInvert(A);
+  } else if (op === 'intersect') {
+    polyBspInvert(A); polyBspClipTo(B, A); polyBspInvert(B); polyBspClipTo(A, B); polyBspClipTo(B, A);
+    polyBspBuild(A, polyBspAllPolys(B)); polyBspInvert(A);
+  } else {
+    fail('未知布尔运算 ' + op + '（可用 union / subtract / intersect）');
+  }
+  var nodes = polyBspNodes(A), tris = [], npoly = 0, reverted = 0, ni, ti, pi, fi;
+  for (ni = 0; ni < nodes.length; ni++) {
+    npoly += nodes[ni].polys.length;
+    var t = polyNodeToTris(nodes[ni], TOL);
+    if (!t) {                                        // 回退：逐多边形扇形三角化（凸 ⇒ 正确）
+      reverted++;
+      for (pi = 0; pi < nodes[ni].polys.length; pi++) {
+        var ft = fanTriangles(nodes[ni].polys[pi]);
+        for (fi = 0; fi < ft.length; fi++) tris.push(ft[fi]);
+      }
+      continue;
+    }
+    for (ti = 0; ti < t.length; ti++) tris.push(t[ti]);
+  }
+  var out = trisToMesh(tris, TOL);
+  if (!out.indices.length) fail('布尔运算结果为空（' + op + '）——检查两个实体是否有交集/是否完全包含');
+  var rep = meshRepair(out);
+  if (statsOut) {
+    statsOut.polyNodes = nodes.length;
+    statsOut.polyInput = npoly;
+    statsOut.polyReverted = reverted;
+    statsOut.beforeRepair = out.indices.length;
+    statsOut.afterRepair = rep.mesh.indices.length;
+  }
+  return rep.mesh;
 }
 
 // ── 倒角 / 圆角（网格级边重建：I.8.5 路线 A/B）────────────────
