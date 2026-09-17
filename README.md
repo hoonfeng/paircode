@@ -29,6 +29,10 @@ MCP 支持与 HTTP 接口插件化。
   事件流（`/ws`）由插件推送，Web 前端与外部客户端可订阅。
 - **UI 区域插件化**：`dsh.ui.slot` 槽位注册表（跨副本共享），壳 + 7 大区域包；
   client 半（浏览器端）与 host 半分离，`boot()` 单入口两源合并装载。
+- **创作域插件（独立发布）**：六大创作域——画板 / UI 设计 / 3D 模型 / 音乐 / 2D 角色 / 人声，
+  「一域一包」（工具面 + 面板同包，`@paircode/tool-*`）；真源在 `plugins-dist/`（与
+  `.pair/plugins` 同权扫描、开发期 junction 挂载、**不进 IDE 发布包**），随市场独立分发，
+  不随 IDE 发版；主内容区视图（`ui.registerView`）与「并排对话」布局由面板承载。
 - **工具体系**：内置工具（文件读写 / 内容搜索 / `apply_patch` 补丁编辑 / 命令执行 / 代码图谱 / 记忆 / 知识库）
   + 磁盘插件工具 + Node 桥插件（`@deepseek-ai/*` cordis 生态），同名工具并存可切换生效方。
 - **代码图谱**：结构化符号索引（function/struct/interface/call_site/import…），
@@ -67,6 +71,7 @@ go build -o companion.exe ./cmd/companion
 | 工具库 | `pkg/` | codegraph（tsit 语法树）、db（sqlite）、executil、memory、summary、verify |
 | Web 前端源 | `plugins-src/ui-app` | 壳（vite 构建）+ 各区域 Vue 组件源（`build-ui.mjs` 逐插件构建） |
 | 磁盘插件 | `<workspace>/.pair/plugins/<id>/` | 运行时插件（host 半 + client 半 + assets） |
+| 独立发布插件 | `plugins-dist/<id>/` | 创作域插件真源（同权扫描；不进 IDE 发布包，开发期 junction 挂载到 `.pair/plugins`） |
 | 运行时资源 | `.pair/assets/runtime/` | cordis bundle / bridge_node.js / web 前端产物（外部优先 + embed 兜底） |
 
 ## 开发
@@ -84,6 +89,11 @@ cd plugins-src/ui-app && npm install && npm run build:ui
 
 # 工具插件生成（幂等：已有插件不覆盖，Go 侧变更重跑同步）
 go run -tags toolsgen ./dev/tool_plugin_gen
+
+# 创作域插件（独立发布）打包 / 发布（真源 plugins-dist/，不进 IDE 发布包）
+node scripts/publish-official-plugins.mjs                                    # 打包 + 校验（默认不发布）
+node scripts/publish-official-plugins.mjs --publish --only tool-art          # 真实发布（2FA 时加 --otp）
+node scripts/verify-dist-isolation.mjs                                       # 护栏：独立发布包 ↔ 打包排除项一致
 
 # 三平台发布包
 go build -o packager.exe ./scripts/packager && ./packager.exe

@@ -471,7 +471,7 @@ GET /api/system/info
   "goos": "windows",
   "workspace": "F:/projects/my-app",
   "folders": ["F:/projects/my-app"],
-  "version": "v1.6.1"
+  "version": "v1.6.3"
 }
 ```
 
