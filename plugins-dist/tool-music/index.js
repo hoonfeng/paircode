@@ -1452,7 +1452,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '工程文件路径（默认 music.project.json；相对主项目根解析）' },
+        path: { type: 'string', description: '工程文件路径（默认 <主项目根>/music.project.json；相对主项目根解析，跨项目传绝对路径）' },
         mode: { type: 'string', description: 'create（新建）| show（默认，查看摘要）| update（改元信息）' },
         title: { type: 'string', description: '可选：乐曲标题' },
         tempo: { type: 'integer', description: '可选：速度 BPM（20..400，默认 120）' },
@@ -1472,7 +1472,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 music.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/music.project.json；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
         op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
         track: { type: 'string', description: '可选：目标轨道 id（或序号）' },
@@ -1488,9 +1488,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '要导入的源文件（相对主项目根或绝对路径）' },
+        path: { type: 'string', description: '要导入的源文件（相对主项目根解析，跨项目传绝对路径）' },
         format: { type: 'string', description: 'auto（默认）| midi | abc | musicxml' },
-        out: { type: 'string', description: '可选：输出的工程路径（默认 music.project.json）' },
+        out: { type: 'string', description: '可选：输出的工程路径（默认 <主项目根>/music.project.json；相对主项目根解析）' },
         ppq: { type: 'integer', description: '可选：ABC/MusicXML 导入时的 ppq（MIDI 以其自身 division 为准）' },
       },
       required: ['path'],
@@ -1504,9 +1504,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 music.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/music.project.json；相对主项目根解析）' },
         format: { type: 'string', description: 'midi（默认）| abc | musicxml | svg' },
-        out: { type: 'string', description: '可选：输出路径（默认 music.mid / music.abc / music.musicxml / music.score.svg）' },
+        out: { type: 'string', description: '可选：输出路径（默认 <主项目根>/music.mid / music.abc / music.musicxml / music.score.svg）' },
       },
     },
   },
@@ -1518,8 +1518,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 music.project.json）' },
-        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 music.verify.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/music.project.json；相对主项目根解析）' },
+        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 <主项目根>/music.verify.json）' },
       },
     },
   },

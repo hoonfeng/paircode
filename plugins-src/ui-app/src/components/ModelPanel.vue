@@ -1,96 +1,134 @@
 <template>
-  <div class="mp-panel" :class="{ 'mp-fill': fill }">
-    <div class="mp-bar">
-      <span class="mp-title">3D 模型</span>
-      <span class="mp-chip" :class="bridge.mode === 'invoke' ? 'mp-chip-ok' : 'mp-chip-warn'">
-        {{ bridge.mode === 'invoke' ? '工具+UI 同包直连' : '只读降级' }}
-      </span>
-      <span class="mp-spacer"></span>
-      <button class="mp-icon-btn" :disabled="loading" title="重载「识别到的文件」" @click="refresh(scanning)">
-        <SvgIcon name="refresh" :size="12" :class="{ spinning: loading }" />
+  <PanelShell
+    title="3D 模型"
+    icon="package"
+    :badge="modeBadge"
+    :badge-tone="bridge.mode === 'invoke' ? 'ok' : 'muted'"
+    :metrics="metrics"
+    :loading="loading"
+    :error="error"
+    :empty="!items.length"
+    reload-title="重载「识别到的文件」"
+    footnote="只读面板：几何/参数改动一律经 Agent 的 model_add / model_edit / model_doc；面板实时跟随文件变化。"
+    source="model.*"
+    @reload="refreshNow"
+  >
+    <template #head-actions>
+      <button class="pn-btn" :disabled="loading" title="在「仅工具产出」与「扫描工作区」之间切换" @click="scanNow">
+        {{ scanMode ? '扫描工作区：开' : '仅工具产出' }}
       </button>
-    </div>
+    </template>
 
-    <!-- ── 指引：这个面板是什么 / 怎么打开预览（用户第一眼就该看到）──────── -->
-    <section class="mp-sec mp-guide">
-      <div class="mp-row mp-guide-head" @click="guideOpen = !guideOpen">
-        <span class="mp-sec-title">这个面板是什么 · 怎么用</span>
-        <span class="mp-spacer"></span>
-        <span class="mp-dim">{{ guideOpen ? '收起' : '展开' }}</span>
+    <!-- 空态：把原来那个「这个面板是什么 · 怎么用」的指引放到这里，第一眼就有答案 -->
+    <template #empty>
+      <div class="pn-empty-title">还没有识别到 3D / CAD 文件</div>
+      <div class="pn-tip">
+        工具写出的<b>每一个文件</b>（工程 JSON / glTF / GLB / STL / OBJ / 自包含预览 HTML / 复验报告）
+        都会自动出现在左栏「文件」里 —— 点文件名即登记预览，页面<b>实时跟随文件变化重绘</b>。
       </div>
-      <template v-if="guideOpen">
-        <div class="mp-dim">
-          工具写出的**每一个文件**（工程 JSON / glTF / GLB / STL / OBJ / 自包含预览 HTML / 复验报告）
-          都会自动出现在下面「识别到的文件」里 —— 点文件名即登记预览，页面**实时跟随文件变化重绘**。
-        </div>
-        <div class="mp-steps">
-          <div class="mp-step"><b>1</b><span>让 Agent 产出文件：<code>model_export format=all</code> → <code>model_verify</code></span></div>
-          <div class="mp-step"><b>2</b><span>文件自动出现在「识别到的文件」（历史/手工文件点<code>扫描工作区</code>也能找到）</span></div>
-          <div class="mp-step"><b>3</b><span>点文件名 → 当场实时预览（改工程/重导出后无需手点刷新）</span></div>
-        </div>
-        <div class="mp-open">
-          <div class="mp-dim"><b>从工程里打开预览的三种入口：</b></div>
-          <div class="mp-dim">① 主内容区顶部 tab「<b>3D 模型</b>」（默认已后台打开，可与对话并排）</div>
-          <div class="mp-dim">② 插件面板里的「<b>3D 模型</b>」面板（本页）</div>
-          <div class="mp-dim">③ 直接双击导出的 <code>*.preview.html</code>（自包含，浏览器即可打开）</div>
-        </div>
-        <div class="mp-dim">{{ bridge.modeNote }}</div>
-      </template>
-    </section>
+      <div class="pn-card">
+        <div class="pn-card-title">三步开始</div>
+        <div class="pn-empty-step"><i>1</i><span>让 Agent 产出文件：<code>model_export format=all</code> → <code>model_verify</code>。</span></div>
+        <div class="pn-empty-step"><i>2</i><span>文件自动出现在左栏（历史/手工文件点顶部「仅工具产出」切到「扫描工作区」也能找到）。</span></div>
+        <div class="pn-empty-step"><i>3</i><span>点文件名 → 当场实时预览；改工程或重导出后无需手点刷新。</span></div>
+      </div>
+      <div class="pn-tip">
+        也可以直接双击导出的 <code>*.preview.html</code>（自包含，浏览器即可打开）。
+      </div>
+      <div class="pn-tip">{{ bridge.modeNote }}</div>
+    </template>
 
-    <div v-if="error" class="mp-msg mp-err">{{ error }}</div>
+    <template #segments>
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="pn-tab"
+        :class="{ 'pn-tab-on': tab === t.id }"
+        :title="t.title"
+        @click="tab = t.id"
+      >{{ t.name }}<span v-if="t.count" class="pn-dim"> {{ t.count }}</span></button>
+    </template>
 
-    <!-- ── 识别到的文件 ───────────────────────────────────────────── -->
-    <section class="mp-sec mp-sec-list">
-      <div class="mp-row">
-        <span class="mp-sec-title">识别到的文件 <span class="mp-dim">（{{ items.length }}）</span></span>
-        <span class="mp-spacer"></span>
-        <button class="mp-btn" :disabled="loading" @click="scanNow">
-          {{ scanning ? '扫描工作区：开' : '仅工具产出' }}
+    <!-- 左栏：文件 / 部件 / 参数 / 复验 -->
+    <template #side>
+      <div v-if="tab === 'files'" class="pn-list">
+        <button
+          v-for="it in items"
+          :key="it.path"
+          class="pn-item"
+          :class="{ 'pn-item-on': it.path === selected }"
+          :title="it.path"
+          @click="select(it.path)"
+        >
+          <span class="mp-kind" :class="'mp-kind-' + (it.kind || 'x')">{{ kindShort(it.kind) }}</span>
+          <span class="pn-item-k mp-path">{{ shortPath(it.path) }}</span>
+          <span class="mp-src">{{ srcLabel(it.source) }}</span>
+          <span class="pn-item-v">{{ fmtSize(it.bytes) }}</span>
         </button>
+        <div v-if="!items.length" class="pn-tip">没有识别到文件。</div>
+        <div v-else class="pn-tip mp-side-hint">点文件名即在此登记并实时预览。</div>
       </div>
-      <div v-if="!items.length" class="mp-dim mp-msg">
-        还没有识别到文件。让 Agent 执行 <code>model_export format=all</code>，或点上面的「仅工具产出/扫描工作区」切换扫描。
-      </div>
-      <div
-        v-for="it in items"
-        :key="it.path"
-        class="mp-item"
-        :class="{ 'mp-item-on': it.path === selected }"
-        @click="select(it.path)"
-      >
-        <span class="mp-kind" :class="'mp-kind-' + (it.kind || 'x')">{{ kindShort(it.kind) }}</span>
-        <span class="mp-mono mp-item-path" :title="it.path">{{ shortPath(it.path) }}</span>
-        <span class="mp-spacer"></span>
-        <span v-if="it.source === 'project'" class="mp-src">工具·工程</span>
-        <span v-else-if="it.source === 'export'" class="mp-src">工具·产物</span>
-        <span v-else-if="it.source === 'verify'" class="mp-src">工具·报告</span>
-        <span v-else-if="it.source === 'claim'" class="mp-src">已登记</span>
-        <span v-else class="mp-src mp-src-dim">扫描</span>
-        <span class="mp-dim mp-item-meta">{{ fmtSize(it.bytes) }}<span v-if="it.mtime"> · {{ fmtTime(it.mtime) }}</span></span>
-      </div>
-    </section>
 
-    <!-- ── 预览（点选即实时渲染）─────────────────────────────────── -->
-    <section class="mp-sec mp-sec-preview">
-      <div class="mp-row">
-        <span class="mp-sec-title">预览</span>
-        <span class="mp-spacer"></span>
-        <span class="mp-dim" v-if="selected">{{ metaLabel }}</span>
-      </div>
-      <div v-if="!selected" class="mp-dim mp-msg">点上面任一文件即在此实时预览。</div>
-      <template v-else>
-        <div class="mp-dim mp-fileline">
-          <span class="mp-mono">{{ selected }}</span>
-          <span v-if="meta.bytes"> · {{ fmtSize(meta.bytes) }}</span>
-          <span v-if="meta.mtime"> · 更新于 {{ fmtTime(meta.mtime) }}</span>
-          <span class="mp-live">实时</span>
+      <div v-else-if="tab === 'parts'" class="pn-list">
+        <template v-if="partRows.length">
+          <div v-for="p in partRows" :key="p.id" class="pn-kv">
+            <span class="pn-mono">{{ p.id }}</span>
+            <b class="pn-dim pn-mini">{{ p.type }}</b>
+            <span class="pn-spacer"></span>
+            <b>{{ p.tri }}</b>
+          </div>
+          <div class="pn-tip mp-side-hint">面数来自内核现场构建；体积见指标条与参数。</div>
+        </template>
+        <div v-else class="pn-tip">
+          当前文件没有部件几何。选中 <code>model.json</code>（CAD 工程）或 glTF/GLB/STL/OBJ 才会出现。
         </div>
-        <div v-if="preview.loading" class="mp-dim">读取中…</div>
-        <div v-else-if="preview.error" class="mp-msg mp-err">{{ preview.error }}</div>
-        <template v-else>
+      </div>
+
+      <div v-else-if="tab === 'params'" class="pn-list">
+        <template v-if="projInfo && projInfo.params.length">
+          <div v-for="p in projInfo.params" :key="p.id" class="pn-kv">
+            <span class="pn-mono">{{ p.name || p.id }}</span>
+            <span class="pn-spacer"></span>
+            <b>{{ p.value }}<span v-if="p.range" class="pn-dim"> ({{ p.range }})</span></b>
+          </div>
+          <div class="pn-tip mp-side-hint">参数改动经 Agent 的 <code>model_edit</code>；面板只读。</div>
+        </template>
+        <div v-else class="pn-tip">未声明参数（尺寸为字面量），或当前文件不是 CAD 工程。</div>
+      </div>
+
+      <div v-else class="pn-list">
+        <template v-if="verifyInfo">
+          <div v-for="c in (verifyInfo.checks || [])" :key="c.id" class="pn-check">
+            <span class="pn-dot" :class="{ 'pn-dot-ok': c.ok }"></span>
+            <b>{{ c.id }}</b>
+            <span class="pn-check-name">{{ c.title }}</span>
+            <span class="pn-check-metric" :title="c.detail">{{ c.detail }}</span>
+          </div>
+          <div class="pn-tip mp-side-hint">判据 M1–M9，来自 <code>model_verify</code> 的复验报告。</div>
+        </template>
+        <div v-else class="pn-tip">
+          当前文件不是复验报告。点左栏「文件」里的报告类文件（<code>*.verify.json</code>）即可看到 M1–M9。
+        </div>
+      </div>
+    </template>
+
+    <!-- 主区：预览 + 工程简介 + 指引 + 命令 -->
+    <template #main>
+      <div class="pn-scroll mp-main">
+        <div class="pn-row-gap">
+          <span class="pn-strong">{{ selected ? shortPath(selected) : '未选择文件' }}</span>
+          <span class="pn-dim pn-mini">{{ metaLabel }}</span>
+          <span class="pn-spacer"></span>
+          <span v-if="selected" class="pn-dim pn-mini pn-mono">{{ fmtSize(meta.bytes) }}<span v-if="meta.mtime"> · {{ fmtTime(meta.mtime) }}</span></span>
+          <span v-if="selected" class="pn-badge pn-badge-accent">实时</span>
+        </div>
+
+        <div class="mp-stage">
+          <div v-if="!selected" class="pn-tip">点左栏「文件」里任一文件，即在此实时预览。</div>
+          <div v-else-if="preview.loading" class="pn-tip">读取中…</div>
+          <div v-else-if="preview.error" class="pn-msg-inline">{{ preview.error }}</div>
           <ModelViewer
-            v-if="geo.length"
+            v-else-if="geo.length"
             :parts="geo"
             :fill="fill"
             :key="'geo:' + selected + ':' + renderStamp"
@@ -102,64 +140,56 @@
             sandbox="allow-scripts"
             referrerpolicy="no-referrer"
           ></iframe>
-          <template v-else-if="verifyInfo">
-            <div class="mp-row">
-              <span class="mp-dim">判据 M1–M9</span>
-              <span class="mp-spacer"></span>
-              <span class="mp-badge" :class="verifyInfo.ok ? 'mp-ok' : 'mp-bad'">{{ passedCount }}/9 通过</span>
+          <div v-else-if="verifyInfo" class="pn-tip">
+            这是复验报告（无几何可渲染）。判据 M1–M9 见左栏「复验」分段 —— 通过 {{ passedCount }}/{{ (verifyInfo.checks || []).length }}。
+          </div>
+          <pre v-else-if="rawText" class="pn-code mp-raw">{{ rawText }}</pre>
+          <div v-else class="pn-tip">该文件没有可渲染内容（可在文本编辑器中查看）。</div>
+        </div>
+        <div v-if="parseNote" class="pn-tip">{{ parseNote }}</div>
+
+        <template v-if="projInfo">
+          <div class="pn-card">
+            <div class="pn-card-title">
+              工程 {{ projInfo.name }}
+              <span class="pn-dim">{{ projInfo.unit }} · {{ projInfo.up }}-up</span>
+              <span class="pn-spacer"></span>
+              <span class="pn-dim pn-mini">{{ projInfo.parts.length }} 部件 · {{ (projInfo.totalTris || 0).toLocaleString() }} 面</span>
             </div>
-            <div v-for="c in (verifyInfo.checks || [])" :key="c.id" class="mp-check">
-              <span class="mp-dot" :class="c.ok ? 'mp-ok' : (c.level === 'fail' ? 'mp-bad' : 'mp-warn')"></span>
-              <b>{{ c.id }}</b>
-              <span class="mp-check-name">{{ c.title }}</span>
-              <span class="mp-check-metric mp-dim">{{ c.detail }}</span>
+            <div class="pn-kv"><span>体积合计</span><b>{{ projInfo.totalVolume }} mm³</b></div>
+            <div class="pn-kv"><span>包围盒</span><b class="pn-mono">{{ bboxText }}</b></div>
+            <div class="pn-tip">
+              几何由 host 半内核现场构建（同一份代码，与 Agent 看到的一致）；工程或参数一变，这里立即重绘。
             </div>
-            <div v-if="verifyInfo.parts && verifyInfo.parts.length" class="mp-kv mp-parthead">
-              <span>部件（{{ verifyInfo.parts.length }}）</span><b>面数 / 体积 mm³</b>
-            </div>
-            <div v-for="p in (verifyInfo.parts || [])" :key="p.id" class="mp-kv">
-              <span class="mp-mono">{{ p.id }} <span class="mp-dim">{{ p.type }}</span></span>
-              <b>{{ (p.triangles || 0).toLocaleString() }} / {{ p.volume }}</b>
-            </div>
-          </template>
-          <pre v-else-if="rawText" class="mp-code">{{ rawText }}</pre>
-          <div v-else class="mp-dim">该文件没有可渲染内容（可在文本编辑器中查看）。</div>
-          <div v-if="parseNote" class="mp-dim">{{ parseNote }}</div>
+          </div>
         </template>
-      </template>
-    </section>
 
-    <!-- ── 工程详情（选中工程 / 点击 model.json 时）────────────────── -->
-    <section v-if="projInfo" class="mp-sec">
-      <div class="mp-row">
-        <span class="mp-sec-title">工程 {{ projInfo.name }}</span>
-        <span class="mp-spacer"></span>
-        <span class="mp-dim">{{ projInfo.unit }} · {{ projInfo.up }}-up</span>
-      </div>
-      <div class="mp-kv"><span>部件 / 三角面</span><b>{{ projInfo.parts.length }} · {{ (projInfo.totalTris || 0).toLocaleString() }}</b></div>
-      <div class="mp-kv"><span>体积合计</span><b>{{ projInfo.totalVolume }} mm³</b></div>
-      <div class="mp-kv"><span>包围盒</span><b>{{ bboxText }}</b></div>
-      <div class="mp-sec-title mp-sub">参数（{{ projInfo.params.length }}）</div>
-      <div v-for="p in projInfo.params" :key="p.id" class="mp-kv">
-        <span class="mp-mono">{{ p.name || p.id }}</span>
-        <b>{{ p.value }}<span v-if="p.range" class="mp-dim"> ({{ p.range }})</span></b>
-      </div>
-      <div v-if="!projInfo.params.length" class="mp-dim">未声明参数（尺寸为字面量）。</div>
-      <div class="mp-dim mp-note">
-        几何由 host 半内核现场构建（同一份代码，与 Agent 看到的一致）；工程或参数一变，这里立即重绘。
-      </div>
-    </section>
+        <div class="pn-card">
+          <div class="pn-card-title">
+            这个面板是什么 · 怎么用
+            <span class="pn-spacer"></span>
+            <button class="pn-btn" @click="guideOpen = !guideOpen">{{ guideOpen ? '收起' : '展开' }}</button>
+          </div>
+          <template v-if="guideOpen">
+            <div class="pn-tip">
+              工具写出的每一个文件都会自动出现在左栏「文件」里；点文件名即登记预览，页面实时跟随文件变化重绘。
+              从工程里打开预览的三种入口：① 主内容区顶部 tab「3D 模型」；② 本面板；③ 直接双击导出的 <code>*.preview.html</code>。
+            </div>
+            <div class="pn-tip">{{ bridge.modeNote }}</div>
+          </template>
+        </div>
 
-    <!-- ── 命令样例（复制给 Agent 用）────────────────────────────── -->
-    <section class="mp-sec">
-      <div class="mp-row">
-        <span class="mp-sec-title">Agent 命令</span>
-        <span class="mp-spacer"></span>
-        <button class="mp-btn" @click="copyCmd">{{ copied ? '已复制' : '复制' }}</button>
+        <div class="pn-card">
+          <div class="pn-card-title">
+            Agent 命令
+            <span class="pn-spacer"></span>
+            <button class="pn-btn" @click="copyCmd">{{ copied ? '已复制 ✓' : '复制' }}</button>
+          </div>
+          <pre class="pn-code">{{ sampleCmd }}</pre>
+        </div>
       </div>
-      <pre class="mp-code">{{ sampleCmd }}</pre>
-    </section>
-  </div>
+    </template>
+  </PanelShell>
 </template>
 
 <script setup>
@@ -172,8 +202,9 @@
 //   ③ 自包含预览 HTML → iframe srcdoc；复验报告 → 判据列表。
 // 写路径纪律：面板不写工作区（几何/参数一律经 Agent 的 model_add / model_edit / model_doc），
 //   避免「工具写工程 / 面板写工程」两条写路径把真相源写分叉。
+// 布局（2026-09-18 改版）：套 PanelShell 统一外壳 —— 顶栏 / 指标条 / 左栏分段（文件·部件·参数·复验）+ 主区预览 / 底栏。
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import SvgIcon from './SvgIcon.vue'
+import PanelShell from './PanelShell.vue'
 import ModelViewer from './ModelViewer.vue'
 import { createBridge } from '../model-bridge.js'
 import { parseArtifact } from '../model-parsers.js'
@@ -198,6 +229,7 @@ const parseNote = ref('')
 const meta = ref({ kind: '', label: '', bytes: 0, mtime: '' })
 const preview = ref({ loading: false, error: '' })
 const renderStamp = ref(0)
+const tab = ref('files')
 
 // ── 显示辅助 ───────────────────────────────────────────────
 const KIND_SHORT = {
@@ -210,6 +242,13 @@ const KIND_LABEL = {
   obj: 'Wavefront OBJ', verify: '复验报告 M1–M9', json: 'JSON 文档',
 }
 function kindShort(k) { return KIND_SHORT[k] || (k || '?') }
+function srcLabel(s) {
+  if (s === 'project') return '工具·工程'
+  if (s === 'export') return '工具·产物'
+  if (s === 'verify') return '工具·报告'
+  if (s === 'claim') return '已登记'
+  return '扫描'
+}
 function shortPath(p) {
   const parts = String(p).split(/[\\/]/)
   return parts.length <= 2 ? String(p) : '…/' + parts.slice(-2).join('/')
@@ -225,11 +264,22 @@ function fmtTime(s) {
   const m = t.match(/T(\d{2}:\d{2}:\d{2})/)
   return m ? m[1] : t
 }
+const modeBadge = computed(() => (bridge.mode === 'invoke' ? '工具直连' : '只读降级'))
 const metaLabel = computed(() => {
   const k = meta.value.kind
   return (KIND_LABEL[k] || kindShort(k)) + (preview.value.loading ? ' · 读取中' : '')
 })
 const passedCount = computed(() => ((verifyInfo.value && verifyInfo.value.checks) || []).filter((c) => c.ok).length)
+const partRows = computed(() => {
+  // 复验报告里也带部件（面数/体积），优先用它；否则用内核构建的几何
+  const fromVerify = ((verifyInfo.value && verifyInfo.value.parts) || []).map((p) => ({
+    id: p.id, type: p.type, tri: (p.triangles || 0).toLocaleString() + ' 面',
+  }))
+  if (fromVerify.length) return fromVerify
+  return (projInfo.value && projInfo.value.parts || []).map((p) => ({
+    id: p.id, type: p.type || '', tri: (p.triangles || p.tris || 0).toLocaleString() + ' 面',
+  }))
+})
 const bboxText = computed(() => {
   const p = projInfo.value
   if (!p || !p.bbox) return '—'
@@ -242,6 +292,27 @@ const sampleCmd = computed(() => [
   'model_verify',
 ].join('\n'))
 
+// ── 指标条 ──
+const metrics = computed(() => {
+  const out = [{ k: '文件', v: String(items.value.length) }]
+  if (projInfo.value) {
+    out.push({ k: '部件', v: String(projInfo.value.parts.length) })
+    out.push({ k: '三角面', v: (projInfo.value.totalTris || 0).toLocaleString() })
+    out.push({ k: '体积', v: projInfo.value.totalVolume + ' mm³' })
+  }
+  if (verifyInfo.value) {
+    out.push({ k: '复验', v: passedCount.value + '/' + ((verifyInfo.value.checks || []).length) })
+  }
+  if (meta.value.kind) out.push({ k: '当前', v: kindShort(meta.value.kind) })
+  return out
+})
+const tabs = computed(() => [
+  { id: 'files', name: '文件', count: items.value.length, title: '识别到的文件（点选即预览）' },
+  { id: 'parts', name: '部件', count: partRows.value.length, title: '部件与面数' },
+  { id: 'params', name: '参数', count: (projInfo.value && projInfo.value.params || []).length, title: '工程参数' },
+  { id: 'verify', name: '复验', count: verifyInfo.value ? passedCount.value + '/' + ((verifyInfo.value.checks || []).length) : 0, title: '复验判据 M1–M9' },
+])
+
 // ── 数据流 ─────────────────────────────────────────────────
 let offEvent = null
 let timer = 0
@@ -249,6 +320,8 @@ let lastSig = ''
 let stopFlag = false
 
 function sigOf(it) { return String(it && (it.bytes + '|' + it.mtime)) }
+
+function refreshNow() { return refresh(scanMode.value) }
 
 async function refresh(scan = scanMode.value) {
   if (stopFlag) return
@@ -424,90 +497,24 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.mp-panel { padding: 8px 10px; font-size: 12px; color: var(--text-primary); overflow-y: auto; height: 100%; }
-/* ★ 主内容区视图（fill）：面板做成纵向 flex —— 指引/列表按内容高度（列表限高可滚动），
-   预览区吃掉剩余空间，模型始终占满可视区（此前预览被前面的内容挤出屏幕，要滚动才看得见）。 */
-.mp-fill { padding-bottom: 10px; display: flex; flex-direction: column; overflow-y: auto; }
-.mp-fill .mp-sec { flex: none; }
-.mp-fill .mp-sec-list { max-height: 30vh; overflow-y: auto; }
-.mp-fill .mp-sec-preview { flex: 1 1 auto; min-height: 420px; display: flex; flex-direction: column; }
-.mp-fill .mp-sec-preview .mp-fileline,
-.mp-fill .mp-sec-preview .mp-row { flex: none; }
-.mp-fill .mv-full { flex: 1 1 auto; height: auto; min-height: 320px; }
-.mp-fill .mp-frame { flex: 1 1 auto; height: auto; min-height: 320px; }
-.mp-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.mp-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); flex: none; }
-.mp-spacer { flex: 1; }
-.mp-chip { padding: 1px 6px; border-radius: 8px; font-size: 10px; border: 1px solid var(--border-color); color: var(--text-muted); }
-.mp-chip-ok { color: var(--text-secondary); }
-.mp-chip-warn { color: var(--text-muted); opacity: 0.85; }
-.mp-icon-btn {
-  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
-  color: var(--text-muted); background: transparent; border: 1px solid var(--border-color);
-  border-radius: 4px; cursor: pointer;
+/* 局部样式（其余复用 PanelShell 共享类） */
+.mp-main { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.mp-stage { min-height: 260px; display: flex; flex-direction: column; }
+.mp-stage > * { flex: 1; min-height: 0; }
+/* 预览缺产物时的提示居中显示（.mp-stage 是 flex 列，直接留白会贴在左上角） */
+.mp-stage > .pn-tip { flex: none; margin: auto; }
+.mp-frame {
+  display: block; width: 100%; min-height: 260px; background: #14161a;
+  border: 1px solid var(--border-color); border-radius: 4px;
 }
-.mp-icon-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.mp-icon-btn:disabled { cursor: default; opacity: 0.6; }
-.mp-sec { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
-.mp-sec:last-child { border-bottom: none; }
-.mp-sec-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
-.mp-sub { margin-top: 8px; }
-.mp-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 0; }
-.mp-kv > span { color: var(--text-muted); flex: none; }
-.mp-kv > b { color: var(--text-primary); font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; }
-.mp-mono { font-family: ui-monospace, Consolas, monospace; }
-.mp-dim { color: var(--text-muted); font-weight: 400; font-size: 11px; line-height: 1.6; }
-.mp-row { display: flex; align-items: center; gap: 6px; }
-.mp-btn {
-  padding: 3px 10px; font-size: 11px; color: var(--text-secondary);
-  background: transparent; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;
-}
-.mp-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.mp-frame { display: block; width: 100%; height: 420px; background: #14161a; border: 1px solid var(--border-color); border-radius: 4px; }
-.mp-code {
-  margin: 0; padding: 6px; font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px; line-height: 1.5; color: var(--text-secondary);
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 4px; overflow-x: auto; white-space: pre;
-}
-.mp-badge { padding: 1px 6px; border-radius: 8px; font-size: 11px; }
-.mp-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
-.mp-ok { background: var(--accent); color: var(--bg-primary); }
-.mp-bad { background: var(--text-muted); color: var(--bg-primary); }
-.mp-warn { background: var(--text-muted); opacity: 0.55; }
-.mp-check { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
-.mp-check > b { flex: none; color: var(--text-secondary); }
-.mp-check-name { flex: none; }
-.mp-check-metric { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-msg { padding: 4px 0; }
-.mp-err { color: var(--text-secondary); }
-.mp-guide { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 8px; }
-.mp-guide-head { cursor: pointer; }
-.mp-steps { margin: 4px 0; }
-.mp-step { display: flex; gap: 6px; padding: 1px 0; }
-.mp-step > b {
-  flex: none; width: 14px; height: 14px; margin-top: 2px; border-radius: 50%;
-  font-size: 10px; line-height: 14px; text-align: center;
-  color: var(--text-muted); border: 1px solid var(--border-color);
-}
-.mp-open { margin-top: 4px; }
-.mp-item {
-  display: flex; align-items: center; gap: 6px; padding: 3px 4px;
-  border: 1px solid transparent; border-radius: 4px; cursor: pointer;
-}
-.mp-item:hover { background: var(--bg-hover); }
-.mp-item-on { border-color: var(--text-muted); background: var(--bg-hover); }
-.mp-item-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-item-meta { flex: none; }
+.mp-raw { max-height: 420px; overflow: auto; }
 .mp-kind {
-  flex: none; min-width: 44px; padding: 0 4px; font-size: 10px; text-align: center;
+  flex: none; min-width: 42px; padding: 0 4px; font-size: 10px; text-align: center;
   color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 3px;
 }
 .mp-kind-project { color: var(--text-secondary); }
 .mp-src { flex: none; font-size: 10px; color: var(--text-muted); }
-.mp-src-dim { opacity: 0.6; }
-.mp-fileline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.mp-live { color: var(--text-secondary); font-size: 10px; border: 1px solid var(--border-color); border-radius: 3px; padding: 0 4px; }
-.mp-parthead { margin-top: 6px; }
-.mp-note { margin-top: 6px; }
+.mp-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-side-hint { margin-top: 6px; }
+.mp-msg-inline { color: var(--text-primary); border-left: 2px solid var(--accent); padding-left: 8px; }
 </style>

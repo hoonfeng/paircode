@@ -1,4 +1,4 @@
-// tool-voice — client 半：注册「人声」插件面板并注入 bundle
+// tool-voice — client 半：注册「人声」主内容区视图并注入 bundle
 //
 // ★ 2026-09-17 合并：本插件原本拆成 tool-voice（工具面，Node 桥）+ ui-voice（UI 面）
 //   两个独立发布包，同属一个创作域却分两处维护（版本/文档/发布各一份，且用户看不出
@@ -11,8 +11,12 @@
 // 区域发现对「同包同时含 dsh.ui + dsh.ui.build」的包生效，与工具面共存无冲突）。
 // external 共享核心（Vue/api 等）从 window.__PAIRCODE_CORE 取。
 //
-// 与其余五域（art/design/model/music/rig）同包面板同样走通用 ui.registerPanel
-// （不动壳、纯加法，卸载插件即消失）。
+// ★ 2026-09-18：不再注册进「插件面板」（ui.registerPanel）—— 那是壳级逃生口的
+//   管理/总览区（docs/plugin-development.md §12 分工表），六域是「编辑器式工作台」，
+//   主内容区视图（ui.registerView）才是它的位置。此前两处同时注册：插件面板里多一个
+//   重复入口，且两处各 mount 一份 Vue 实例（状态不同步）。现只保留 view。
+//
+// 与其余五域同构：只注册主内容区视图（不动壳、纯加法，卸载插件即消失）。
 (ui) => {
   const GLOBAL = 'VoicePanel'
   const JS = 'plugins-assets/tool-voice/assets/voice-panel.js'
@@ -27,18 +31,12 @@
     document.head.appendChild(link)
   }
 
-  // 注册面板（bundle 就绪时立即注册；否则先注入 script，onload 后注册）
+  // 注册视图（bundle 就绪时立即注册；否则先注入 script，onload 后注册）
   const register = () => {
     const bundle = window[GLOBAL]
     if (!bundle || typeof bundle.mount !== 'function') return false
-    ui.registerPanel({
-      id: 'voice-panel',
-      title: '人声',
-      icon: 'sparkles',
-      render: (el) => bundle.mount(el),
-    })
-    // ★ 中间区域视图（2026-09 ui.registerView）：主内容区 tab，默认后台打开（不抢对话
-    //   主视图），可与对话并排；与插件面板共用同一 bundle。
+    // ★ 主内容区视图（2026-09 ui.registerView）：主内容区 tab，默认后台打开（不抢对话
+    //   主视图），可与对话并排。
     ui.registerView({
       id: 'voice-view',
       title: '人声',

@@ -1,7 +1,7 @@
 {
   "name": "tool-design",
   "purpose": "UI 设计创作域插件（★ 工具 + UI 同包，2026-09-17 合并）：工具面（纯 goja 零依赖）设计令牌 design.tokens.json + 界面工程 design.project.json 双文本真相源，确定性布局引擎产出可截图 HTML 预览 / CSS 变量 / mermaid 图，9 项自检（对比度 / 4px 网格 / 字号阶梯 / 触达区 / 图标白名单 / 布局溢出 / 产物自包含）；UI 面（client 半 + assets/design-panel.js bundle）「设计」面板：HTML 预览（iframe sandbox，只读）/ 设计令牌与 WCAG 对比度 / 屏幕结构 / 9 项校验报告",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",

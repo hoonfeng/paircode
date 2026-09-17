@@ -348,8 +348,8 @@ const TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '源音频文件路径（WAV：PCM u8/i16/i24/i32 或 IEEE float32/64；相对主项目根或绝对路径）' },
-        project: { type: 'string', description: '可选：工程文件路径（默认 voice.project.json）' },
+        path: { type: 'string', description: '源音频文件路径（WAV：PCM u8/i16/i24/i32 或 IEEE float32/64；相对主项目根解析，跨项目传绝对路径）' },
+        project: { type: 'string', description: '可选：工程文件路径（默认 <主项目根>/voice.project.json；相对主项目根解析，跨项目传绝对路径）' },
         id: { type: 'string', description: '可选：源标识（默认 v1、v2…）' },
         analyze: { type: 'boolean', description: '可选：是否自动分析（默认 true）' },
         tasks: { type: 'array', description: '可选：分析项（默认 ["f0","notes","vad","slices","loudness"]）' },
@@ -367,7 +367,7 @@ const TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: '可选：工程路径（默认 voice.project.json）' },
+        project: { type: 'string', description: '可选：工程路径（默认 <主项目根>/voice.project.json；相对主项目根解析）' },
         source: { type: 'string', description: '可选：源 id（默认第一个源）' },
         tasks: { type: 'array', description: '可选：分析项子集' },
         hop: { type: 'integer', description: '可选：F0 帧移（默认 512）' },
@@ -386,7 +386,7 @@ const TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: '可选：工程路径（默认 voice.project.json）' },
+        project: { type: 'string', description: '可选：工程路径（默认 <主项目根>/voice.project.json；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用；也可直接传单个 op 对象的字段）' },
         op: { type: 'string', description: '可选：单个 op 名（与同层参数组成一条命令）' },
         mode: { type: 'string', description: '可选：append（默认，追加）| replace（替换整条编辑链）' },
@@ -403,9 +403,9 @@ const TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: '可选：工程路径（默认 voice.project.json）' },
+        project: { type: 'string', description: '可选：工程路径（默认 <主项目根>/voice.project.json；相对主项目根解析）' },
         source: { type: 'string', description: '可选：源 id（默认第一个源）' },
-        out: { type: 'string', description: '可选：输出 WAV 路径（默认 voice.render.wav）' },
+        out: { type: 'string', description: '可选：输出 WAV 路径（默认 <主项目根>/voice.render.wav；相对主项目根解析）' },
         bitDepth: { type: 'integer', description: '可选：位深 16/24/32（默认 24）' },
       },
     },
@@ -420,9 +420,9 @@ const TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: '可选：工程路径（默认 voice.project.json）' },
+        project: { type: 'string', description: '可选：工程路径（默认 <主项目根>/voice.project.json；相对主项目根解析）' },
         source: { type: 'string', description: '可选：源 id（默认第一个源）' },
-        output: { type: 'string', description: '可选：要审的渲染结果（默认现场渲染）' },
+        output: { type: 'string', description: '可选：要审的渲染结果（相对主项目根解析；默认现场渲染）' },
         auditWorkspace: { type: 'boolean', description: '可选：7.1 是否连工作区一起扫（默认 false——只审本插件自身依赖）' },
       },
     },

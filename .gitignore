@@ -119,3 +119,9 @@ _desktop-archive/
 /model.json
 /model.verify.json
 /model.preview.html
+
+# 设计工具本地产出（design_* 的工程文件与默认落盘目录，属本地工作产物而非发布资产）
+/design/
+/design-export/
+/design.project.json
+/design.verify.json

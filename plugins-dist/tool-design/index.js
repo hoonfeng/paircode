@@ -4846,7 +4846,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '令牌文件路径（默认 design.tokens.json；相对主项目根解析）' },
+        path: { type: 'string', description: '令牌文件路径（默认 <主项目根>/design.tokens.json；相对主项目根解析，跨项目传绝对路径）' },
         mode: { type: 'string', description: 'create（新建）| show（默认，查看 + 对比度矩阵）| update（改令牌）' },
         title: { type: 'string', description: '可选（仅 create）：令牌文件标题' },
         tokens: { type: 'object', description: '仅 update：要合并的令牌 {"组":{"名":值}}（值为 null 表示删除该令牌）' },
@@ -4862,12 +4862,12 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '工程文件路径（默认 design.project.json）' },
+        path: { type: 'string', description: '工程文件路径（默认 <主项目根>/design.project.json；相对主项目根解析，跨项目传绝对路径）' },
         mode: { type: 'string', description: 'create（新建）| show（默认，查看结构树）| update（改标题/令牌路径/产物路径）' },
         title: { type: 'string', description: '可选：标题' },
-        tokens: { type: 'string', description: '可选：令牌文件路径（默认 design.tokens.json）' },
+        tokens: { type: 'string', description: '可选：令牌文件路径（默认 <主项目根>/design.tokens.json）' },
         screens: { type: 'array', description: '可选（仅 create）：屏幕定义 [{id,name,width,height,template}]，template 取 mobile/panel/none' },
-        html: { type: 'string', description: '可选（仅 update）：HTML 产物路径（默认 design.html）' },
+        html: { type: 'string', description: '可选（仅 update）：HTML 产物路径（默认 <主项目根>/design.html）' },
         overwrite: { type: 'boolean', description: '可选（仅 create）：已存在时是否重建（默认 false）' },
       },
     },
@@ -4880,7 +4880,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 design.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/design.project.json；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
         op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
         ids: { type: 'array', description: '可选：目标节点 id 数组' },
@@ -4904,9 +4904,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 design.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/design.project.json；相对主项目根解析）' },
         format: { type: 'string', description: '产物格式：html（默认）| css | mermaid' },
-        out: { type: 'string', description: '可选：输出路径（默认取工程 artifacts 或 design.html / design.tokens.css / design.flow.mmd）' },
+        out: { type: 'string', description: '可选：输出路径（默认取工程 artifacts，或 <主项目根>/design.html / design.tokens.css / design.flow.mmd）' },
         screen: { type: 'string', description: '可选（format=html）：只导出指定屏幕' },
         overwrite: { type: 'boolean', description: '可选：产物已存在时是否覆盖（默认 false）' },
       },
@@ -4920,9 +4920,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 design.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/design.project.json；相对主项目根解析）' },
         targets: { type: 'array', description: '产物形态：html（默认，HTML + CSS 静态页）| vue（Vue 3 SFC，style scoped）| react（JSX + CSS Modules）| tailwind（HTML + Tailwind utility class：颜色/间距/圆角走令牌变量任意值）；可多选' },
-        targetDir: { type: 'string', description: '可选：落地目录（默认 design-export，相对主项目根解析；同时写 tokens.css 与 README.md）' },
+        targetDir: { type: 'string', description: '可选：落地目录（默认 <主项目根>/design-export；相对主项目根解析；同时写 tokens.css 与 README.md）' },
         screen: { type: 'string', description: '可选：只生成指定屏幕（默认全部屏幕）' },
         component: { type: 'array', description: '可选：把子树抽成独立组件并在屏幕产物里引用 —— 传 1..N 个节点 id / props.name（数组或逗号分隔），或传 "auto" 自动识别**同构重复区块**（结构 + 关键样式一致且出现 ≥2 次，跨屏也算；跳过屏幕根，大区块优先、被包含的碎片不再单独抽）→ 一个组件对应多个实例。组件名 PascalCase（取 props.name > 语义 id > 类型-序号），产物落 <targetDir>/{vue,react}/components/<组件名>.vue|.jsx(+.module.css) 与 html/components/<组件名>.html 片段：Vue 屏幕自动补 <script setup> import 并写 <组件名 />，React 屏幕 import 后写 <组件名 />，HTML 无组件机制故屏幕保持内联渲染（片段另出）。内容字段会被提升为 props（见 props 参数）' },
         props: { type: 'string', description: '可选：组件参数化模式 —— auto（默认）把抽出的组件里**内容字段**（text 的 text、button/badge/checkbox 的 label、input 的 value|placeholder、image 的 alt）提升为 props，默认值 = 设计原值，屏幕引用只在与原值不同时传参；none 表示内容写死（不生成 props）。单节点可用 node.set props={"prop":"名字"} 改名、props={"prop":false} 排除；props 超过 12 个时自动退化为不参数化并告警（大区块应拆小）' },
@@ -4940,8 +4940,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 design.project.json）' },
-        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 design.verify.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/design.project.json；相对主项目根解析）' },
+        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 <主项目根>/design.verify.json）' },
         minContrast: { type: 'number', description: '可选：文本对比度统一阈值（默认按 WCAG：4.5 / 大字 3.0）' },
       },
     },

@@ -1,6 +1,6 @@
 {
   "name": "tool-voice",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "人声创作（说话/歌声）工具面：导入 → 分析 → 编辑 → 渲染 → 六项「非换声 / 非生成式」自检。纯 DSP（@audio/* 原子，MIT），不含换声与生成式模型。",
   "purpose": "人声创作域插件（★ 工具 + UI 同包，2026-09-17 合并）：工具面（纯 DSP，Node 桥 + lib/）voice_import / voice_analyze / voice_edit / voice_render / voice_verify —— 音高修正、时值伸缩、停顿删减、确定性渲染与溯源审计；UI 面（client 半 + assets/voice-panel.js bundle）「人声」面板：源素材 / 波形 / F0 曲线 / 音符段 / 切片 / 编辑链 / 渲染产物 / 六项自检结果",
   "scope": "global",

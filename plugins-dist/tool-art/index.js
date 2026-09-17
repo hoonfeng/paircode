@@ -2009,7 +2009,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '工程文件路径（默认 art.project.json；相对主项目根解析）' },
+        path: { type: 'string', description: '工程文件路径（默认 <主项目根>/art.project.json；相对主项目根解析，跨项目传绝对路径）' },
         mode: { type: 'string', description: 'create（新建）| show（默认，查看摘要）| update（改画布属性）' },
         title: { type: 'string', description: '可选：画板标题' },
         width: { type: 'integer', description: '可选：画布宽（像素，1..8192，默认 800）' },
@@ -2029,7 +2029,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 art.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/art.project.json；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
         op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
         ids: { type: 'array', description: '可选：目标图元 id 数组' },
@@ -2048,8 +2048,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '要导入的 SVG 文件路径（相对主项目根解析）' },
-        out: { type: 'string', description: '可选：输出的工程路径（默认 art.project.json）' },
+        path: { type: 'string', description: '要导入的 SVG 文件路径（相对主项目根解析，跨项目传绝对路径）' },
+        out: { type: 'string', description: '可选：输出的工程路径（默认 <主项目根>/art.project.json；相对主项目根解析）' },
         title: { type: 'string', description: '可选：画板标题（默认取 SVG 的 <title>）' },
         overwrite: { type: 'boolean', description: '可选：目标工程已存在时是否覆盖（默认 false）' },
       },
@@ -2064,9 +2064,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 art.project.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/art.project.json；相对主项目根解析）' },
         format: { type: 'string', description: '产物格式：svg（默认，矢量文本产物）；png 会返回替代路径说明（沙箱无渲染器）' },
-        out: { type: 'string', description: '可选：输出路径（默认 art.svg）' },
+        out: { type: 'string', description: '可选：输出路径（默认 <主项目根>/art.svg；相对主项目根解析）' },
       },
     },
   },
@@ -2078,8 +2078,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 art.project.json）' },
-        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 art.verify.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/art.project.json；相对主项目根解析）' },
+        report: { type: 'string', description: '可选：旁挂校验报告路径（默认 <主项目根>/art.verify.json）' },
         minContrast: { type: 'number', description: '可选：文本对比度统一阈值（默认按 WCAG：4.5，大字 3.0）' },
       },
     },

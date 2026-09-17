@@ -1,94 +1,117 @@
 <template>
-  <div class="music-panel">
-    <div class="mp-bar">
-      <span class="mp-title">音乐工程</span>
-      <input v-model="projectPath" class="mp-input" placeholder="music.project.json" @keyup.enter="load" />
-      <button class="mp-icon-btn" :disabled="loading" title="重新载入工程与校验报告" @click="load">
-        <SvgIcon name="refresh" :size="12" :class="{ spinning: loading }" />
+  <PanelShell
+    v-model:file="projectPath"
+    title="音乐工程"
+    icon="list"
+    placeholder="music.project.json"
+    :badge="verifyBadge"
+    :badge-tone="verifyTone"
+    :metrics="metrics"
+    :loading="loading"
+    :error="proj ? error : ''"
+    :empty="!proj"
+    reload-title="重新载入工程与校验报告"
+    footnote="只读面板：音符编辑一律经 Agent 的 music_edit（命令式 op）；「播放」用原生 Web Audio 试听，不改动工程数据。"
+    :source="projectPath"
+    @reload="load"
+  >
+    <template #head-actions>
+      <button class="pn-btn" :disabled="!noteCount" :title="'用原生 Web Audio 试听（不写工作区）'" @click="playing ? stopPlay() : play()">
+        {{ playing ? '停止' : '播放' }}
       </button>
-    </div>
+    </template>
 
-    <div v-if="error" class="mp-msg mp-err">{{ error }}</div>
-    <div v-else-if="!proj" class="mp-msg">
-      未找到音乐工程。先让 Agent 执行 <code>music_project</code> 创建工程（生成 music.project.json）。
-    </div>
+    <template #empty>
+      <div class="pn-empty-title">还没有音乐工程</div>
+      <div class="pn-tip">
+        面板读工作区根目录的 <code>music.project.json</code>（与 Agent 共用同一份真相源），当前没有这个文件，所以没有可看的内容。
+      </div>
+      <div class="pn-card">
+        <div class="pn-card-title">三步开始</div>
+        <div class="pn-empty-step"><i>1</i><span>让 Agent 执行 <code>music_project</code> 创建工程（速度 / 拍号 / 调号 / 轨道）。</span></div>
+        <div class="pn-empty-step"><i>2</i><span>用 <code>music_edit</code> 写音符（note.add / track.add …）。</span></div>
+        <div class="pn-empty-step"><i>3</i><span><code>music_export</code> 出产物（MIDI / 谱面），<code>music_verify</code> 生成校验报告。</span></div>
+      </div>
+      <div v-if="error" class="pn-tip pn-mono">{{ error }}</div>
+    </template>
 
-    <template v-else>
-      <!-- 工程信息 -->
-      <section class="mp-sec">
-        <div class="mp-sec-title">{{ title }}</div>
-        <div class="mp-kv"><span>速度 / 拍号 / 调号</span><b>{{ tempo }} BPM · {{ meterText }} · {{ proj.key || 'C' }}</b></div>
-        <div class="mp-kv"><span>ppq / 轨道 / 音符</span><b>{{ ppq }} · {{ tracks.length }} · {{ noteCount }}</b></div>
-        <div class="mp-kv"><span>时长 / 音域</span><b>{{ durationText }} · {{ rangeText }}</b></div>
-        <div class="mp-kv"><span>文件</span><b class="mp-mono">{{ projectPath }}</b></div>
-      </section>
+    <template #segments>
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="pn-tab"
+        :class="{ 'pn-tab-on': tab === t.id }"
+        :title="t.title"
+        @click="tab = t.id"
+      >{{ t.name }}<span v-if="t.count" class="pn-dim"> {{ t.count }}</span></button>
+    </template>
 
-      <!-- 视图切换 + 播放 -->
-      <section class="mp-sec">
-        <div class="mp-row">
-          <button :class="['mp-tab', viewMode === 'staff' ? 'mp-tab-on' : '']" @click="switchView('staff')">五线谱</button>
-          <button :class="['mp-tab', viewMode === 'roll' ? 'mp-tab-on' : '']" @click="switchView('roll')">钢琴卷帘</button>
-          <span class="mp-spacer"></span>
-          <button class="mp-btn" :disabled="!noteCount" @click="playing ? stopPlay() : play()">
-            {{ playing ? '停止' : '播放' }}
-          </button>
+    <!-- 左栏：轨道 / 产物 / 校验 -->
+    <template #side>
+      <div v-if="tab === 'tracks'" class="pn-list">
+        <div v-for="tr in trackRows" :key="tr.id" class="mp-track">
+          <div class="mp-track-h">
+            <span class="pn-item-k">{{ tr.id }}</span>
+            <span class="pn-dim pn-mini">{{ tr.name }}</span>
+            <span class="pn-spacer"></span>
+            <span class="pn-dim pn-mini">{{ tr.count }} 音符</span>
+          </div>
+          <div class="pn-tip pn-mini mp-track-meta">
+            通道 <span class="pn-mono">{{ tr.channel }}</span> · 音色 <span class="pn-mono">{{ tr.program }}</span> · 音域 <span class="pn-mono">{{ tr.range }}</span>
+          </div>
+        </div>
+        <div v-if="!trackRows.length" class="pn-tip">工程里还没有轨道。</div>
+        <div v-else class="pn-tip mp-side-hint">音色为 MIDI program 号（0 起）；音域按实际音符算。</div>
+      </div>
+
+      <div v-else-if="tab === 'out'" class="pn-list">
+        <div v-for="a in artifacts" :key="a.kind" class="pn-kv">
+          <span>{{ a.kind }}</span>
+          <b class="pn-mono mp-wrap">{{ a.path }}</b>
+        </div>
+        <div v-if="!artifacts.length" class="pn-tip">
+          还没有产物。让 Agent 执行 <code>music_export</code>（默认出 MIDI / 谱面等）。
+        </div>
+        <div v-else class="pn-tip mp-side-hint">产物由 <code>music_export</code> 生成。</div>
+      </div>
+
+      <div v-else class="pn-list">
+        <template v-if="verify">
+          <div v-for="c in verify.checks || []" :key="c.id" class="pn-check">
+            <span class="pn-dot" :class="{ 'pn-dot-ok': c.pass }"></span>
+            <b>{{ c.id }}</b>
+            <span class="pn-check-name">{{ c.name }}</span>
+            <span class="pn-check-metric" :title="c.metric">{{ c.metric }}</span>
+          </div>
+          <div class="pn-tip mp-side-hint">报告时间：{{ verify.ts }}</div>
+        </template>
+        <div v-else class="pn-tip">
+          还没有校验报告。让 Agent 执行 <code>music_verify</code> 生成旁挂的 music.verify.json。
+        </div>
+      </div>
+    </template>
+
+    <!-- 主区：谱面 / 卷帘 -->
+    <template #main>
+      <div class="pn-scroll mp-main">
+        <div class="pn-row-gap">
+          <span class="pn-strong">{{ title }}</span>
+          <span class="pn-spacer"></span>
+          <button class="pn-btn" :class="{ 'pn-btn-on': viewMode === 'staff' }" @click="switchView('staff')">五线谱</button>
+          <button class="pn-btn" :class="{ 'pn-btn-on': viewMode === 'roll' }" @click="switchView('roll')">钢琴卷帘</button>
         </div>
         <canvas ref="scoreCanvas" class="mp-canvas"></canvas>
-        <div class="mp-dim">
+        <div class="pn-tip">
           {{ viewMode === 'staff'
-            ? '简易高音谱表（E4 为最下线）：符头位置 = 音高，横轴 = 小节网格'
-            : '钢琴卷帘：纵轴 = 音高，横轴 = 时间；用于快速核对音程与节奏密度' }}
+            ? '简易高音谱表（E4 为最下线）：符头位置 = 音高，横轴 = 小节网格；每轨一组五线。'
+            : '钢琴卷帘：纵轴 = 音高，横轴 = 时间；用于快速核对音程与节奏密度。' }}
         </div>
-      </section>
-
-      <!-- 轨道 -->
-      <section class="mp-sec">
-        <div class="mp-sec-title">轨道 <span class="mp-dim">（{{ tracks.length }}）</span></div>
-        <table class="mp-table">
-          <thead>
-            <tr><th>id</th><th>名称</th><th>通道</th><th>音色</th><th>音符</th><th>音域</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="tr in trackRows" :key="tr.id">
-              <td class="mp-mono">{{ tr.id }}</td>
-              <td>{{ tr.name }}</td>
-              <td>{{ tr.channel }}</td>
-              <td>{{ tr.program }}</td>
-              <td>{{ tr.count }}</td>
-              <td class="mp-mono">{{ tr.range }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- 校验报告（旁挂文件 music.verify.json，由 music_verify 写入） -->
-      <section class="mp-sec">
-        <div class="mp-sec-title">
-          工程校验
-          <span v-if="verify" :class="['mp-badge', verify.pass ? 'mp-ok' : 'mp-bad']">
-            {{ verifyPassed }}/{{ verifyTotal }}
-          </span>
-          <span v-else class="mp-dim">（未校验）</span>
+        <div class="pn-tip">
+          播放走原生 Web Audio（三角波 + 包络），只读工程数据；谱面与卷帘都是本地绘制的示意，不是排版级乐谱。
         </div>
-        <div v-if="!verify" class="mp-dim">让 Agent 执行 <code>music_verify</code> 生成校验报告（music.verify.json）。</div>
-        <div v-else v-for="c in verify.checks || []" :key="c.id" class="mp-check">
-          <span :class="['mp-dot', c.pass ? 'mp-ok' : 'mp-bad']"></span>
-          <b>{{ c.id }}</b>
-          <span class="mp-check-name">{{ c.name }}</span>
-          <span class="mp-dim mp-check-metric">{{ c.metric }}</span>
-        </div>
-        <div v-if="verify" class="mp-dim">报告时间：{{ verify.ts }}</div>
-      </section>
-
-      <!-- 产物 -->
-      <section v-if="artifacts.length" class="mp-sec">
-        <div class="mp-sec-title">产物 <span class="mp-dim">（由 music_export 生成）</span></div>
-        <div v-for="a in artifacts" :key="a.kind" class="mp-kv mp-kv-left">
-          <span>{{ a.kind }}</span><b class="mp-mono">{{ a.path }}</b>
-        </div>
-      </section>
+      </div>
     </template>
-  </div>
+  </PanelShell>
 </template>
 
 <script setup>
@@ -96,9 +119,10 @@
 // 设计取舍（与 tool-voice 一致）：面板不做写操作——音符编辑一律经 Agent 的 music_edit（命令式 op），
 // 避免出现「工具写工程 / 面板写工程」两条写路径导致真相源分叉。
 // 播放用原生 Web Audio（零第三方依赖），是「试听」能力，不改动任何工程数据。
+// 布局（2026-09-18 改版）：套 PanelShell 统一外壳 —— 顶栏 / 指标条 / 左栏分段（轨道·产物·校验）+ 主区谱面 / 底栏。
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import api from '../api.js'
-import SvgIcon from './SvgIcon.vue'
+import PanelShell from './PanelShell.vue'
 import { state } from '../ui-state.js'
 
 const projectPath = ref('music.project.json')
@@ -110,6 +134,7 @@ const verify = ref(null)
 const viewMode = ref('staff')
 const playing = ref(false)
 const scoreCanvas = ref(null)
+const tab = ref('tracks')
 
 const tracks = computed(() => (proj.value && proj.value.tracks) || [])
 const ppq = computed(() => (proj.value && proj.value.ppq) || 480)
@@ -150,10 +175,29 @@ const trackRows = computed(() => tracks.value.map((t) => {
 }))
 const verifyPassed = computed(() => ((verify.value && verify.value.checks) || []).filter((c) => c.pass).length)
 const verifyTotal = computed(() => ((verify.value && verify.value.checks) || []).length)
+const verifyBadge = computed(() => (verify.value ? '校验 ' + verifyPassed.value + '/' + verifyTotal.value : '未校验'))
+const verifyTone = computed(() => (!verify.value ? 'muted' : (verifyPassed.value === verifyTotal.value && verifyTotal.value > 0 ? 'ok' : 'bad')))
 const artifacts = computed(() => {
   const a = (proj.value && proj.value.artifacts) || {}
   return Object.keys(a).map((k) => ({ kind: k, path: a[k] }))
 })
+
+// ── 指标条 ──
+const metrics = computed(() => [
+  { k: '速度', v: tempo.value + ' BPM' },
+  { k: '拍号', v: meterText.value },
+  { k: '调号', v: (proj.value && proj.value.key) || 'C' },
+  { k: 'ppq', v: String(ppq.value) },
+  { k: '轨道', v: String(tracks.value.length) },
+  { k: '音符', v: String(noteCount.value) },
+  { k: '时长', v: durationText.value },
+  { k: '音域', v: rangeText.value, mono: true },
+])
+const tabs = computed(() => [
+  { id: 'tracks', name: '轨道', count: tracks.value.length, title: '轨道清单（通道 / 音色 / 音符 / 音域）' },
+  { id: 'out', name: '产物', count: artifacts.value.length, title: 'music_export 产出的文件' },
+  { id: 'checks', name: '校验', count: verify.value ? verifyPassed.value + '/' + verifyTotal.value : 0, title: '工程校验报告' },
+])
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 function pitchName(p) {
@@ -364,6 +408,8 @@ function drawRoll() {
     })
   })
   g.globalAlpha = 1
+  // cNote 目前未用于卷帘（音符块统一用 accent），保留取色以便后续区分声部
+  void cNote
 }
 
 // ── 播放（原生 Web Audio，零依赖；不改动工程数据）──
@@ -437,77 +483,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.music-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  font-size: 12px;
-  color: var(--text-primary);
-  overflow-y: auto;
-  height: 100%;
-}
-.mp-bar { display: flex; align-items: center; gap: 6px; }
-.mp-title { font-weight: 600; color: var(--text-secondary); }
-.mp-input {
-  flex: 1;
-  min-width: 0;
-  padding: 3px 6px;
-  font-size: 11px;
-  color: var(--text-primary);
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-.mp-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.mp-icon-btn:hover { background: var(--bg-hover); }
-.spinning { animation: mp-spin 1s linear infinite; }
-@keyframes mp-spin { to { transform: rotate(360deg); } }
-
-.mp-msg { padding: 8px; color: var(--text-muted); line-height: 1.6; }
-.mp-err { color: var(--text-primary); border-left: 2px solid var(--accent); background: var(--bg-tertiary); }
-.mp-sec { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--bg-tertiary); border-radius: 6px; }
-.mp-sec-title { font-weight: 600; color: var(--text-secondary); margin-bottom: 2px; }
-.mp-kv { display: flex; gap: 8px; justify-content: space-between; }
-.mp-kv > span { color: var(--text-muted); flex: none; }
-.mp-kv > b { font-weight: 500; text-align: right; word-break: break-all; }
-/* 产物路径：左对齐 + 允许任意位置换行（右对齐会被容器宽度截断，实测「music.mid」显示不全） */
-.mp-kv-left > b { text-align: left; overflow-wrap: anywhere; }
-.mp-mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text-secondary); }
-.mp-dim { color: var(--text-muted); font-weight: 400; }
-.mp-row { display: flex; align-items: center; gap: 6px; }
-.mp-spacer { flex: 1; }
-.mp-tab, .mp-btn {
-  padding: 3px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.mp-tab-on { color: var(--text-primary); background: var(--bg-hover); border-color: var(--accent); }
-.mp-btn:hover, .mp-tab:hover { background: var(--bg-hover); }
+/* 局部样式（其余复用 PanelShell 共享类；配色取设计系统变量） */
+.mp-main { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .mp-canvas { width: 100%; display: block; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; }
-.mp-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.mp-table th { color: var(--text-muted); font-weight: 500; text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--border-color); }
-.mp-table td { padding: 2px 4px; border-bottom: 1px solid var(--bg-hover); }
-.mp-badge { padding: 1px 6px; border-radius: 8px; font-size: 11px; }
-.mp-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
-.mp-ok { background: var(--accent); color: var(--bg-primary); }
-.mp-bad { background: var(--text-muted); color: var(--bg-primary); }
-.mp-check { display: flex; align-items: center; gap: 6px; }
-.mp-check > b { flex: none; color: var(--text-secondary); }
-.mp-check-name { flex: none; }
-.mp-check-metric { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-track { display: flex; flex-direction: column; gap: 1px; padding: 5px 6px; border-radius: 4px; }
+.mp-track:hover { background: var(--bg-hover); }
+.mp-track-h { display: flex; align-items: baseline; gap: 6px; font-size: 11px; }
+.mp-track-meta { line-height: 1.5; }
+.mp-side-hint { margin-top: 6px; }
+.mp-wrap { white-space: normal; overflow-wrap: anywhere; text-align: left; }
 </style>

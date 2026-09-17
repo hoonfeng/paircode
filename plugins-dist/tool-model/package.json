@@ -1,7 +1,7 @@
 {
   "name": "tool-model",
   "purpose": "3D/CAD 创作域插件（★ 工具 + UI 同包，2026-09-17 合并）：工具面（纯 goja 零依赖）参数化 CAD 工程（表达式驱动，改参数全模型重算）→ 三角网格内核 + BSP 实体布尔（union/subtract/intersect）→ 导出公开格式（glTF 2.0 自包含 / GLB / binary+ASCII STL / OBJ / 自包含 WebGL 预览 HTML）→ 9 项判据（M1 工程契约、M2 参数与表达式、M3 网格完整性、M4 水密性（0.1.1 起布尔输出经 T 缝消解达成严格水密：严格未配对 0 / 真缺口 0 / 缝总长 0，并按缝长口径报告余量）、M5 绕向与外向、M6 实体性、M7 尺度、M8 导出契约、M9 产物确定且自包含）；UI 面（client 半 + assets/model-panel.js bundle）「3D 模型」面板：识别到的文件（工具写文件即登记 + 工作区扫描）→ 点击即**实时预览**（STL/OBJ/glTF/GLB/工程 JSON/自包含预览 HTML）+ 部件表 + 参数与引用 + 判据 M1–M9 + 入口指引",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",

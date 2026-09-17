@@ -1,142 +1,152 @@
 <template>
-  <div class="art-panel">
-    <div class="ap-bar">
-      <span class="ap-title">画板</span>
-      <input v-model="projectPath" class="ap-input" placeholder="art.project.json" @keyup.enter="load" />
-      <button class="ap-icon-btn" :disabled="loading" title="重新载入工程、SVG 与校验报告" @click="load">
-        <SvgIcon name="refresh" :size="12" :class="{ spinning: loading }" />
+  <PanelShell
+    v-model:file="projectPath"
+    title="画板"
+    icon="grid"
+    placeholder="art.project.json"
+    :badge="verifyBadge"
+    :badge-tone="verifyTone"
+    :metrics="metrics"
+    :loading="loading"
+    :error="proj ? error : ''"
+    :notice="info"
+    :empty="!proj"
+    reload-title="重新载入工程、SVG 与校验报告"
+    footnote="只读面板：改动画板请让 Agent 执行 art_edit（命令式 op）—— 面板不写工作区，避免与工具形成两条写路径。"
+    :source="projectPath"
+    @reload="load"
+  >
+    <template #head-actions>
+      <button class="pn-btn" :disabled="!svgText || !imgReady" title="用浏览器 canvas 绘制已渲染的 SVG 并下载 PNG" @click="exportPng">
+        导出 PNG
       </button>
-    </div>
-
-    <div v-if="error" class="ap-msg ap-err">{{ error }}</div>
-    <div v-else-if="info" class="ap-msg ap-info">{{ info }}</div>
-    <div v-if="!proj && !error" class="ap-msg">
-      未找到画板工程。先让 Agent 执行 <code>art_project</code> 创建工程（生成 art.project.json）。
-    </div>
-
-    <template v-if="proj">
-      <!-- 画板信息 -->
-      <section class="ap-sec">
-        <div class="ap-sec-title">{{ title }}</div>
-        <div class="ap-kv"><span>画布 / 背景</span><b>{{ canvasW }}×{{ canvasH }} · {{ backgroundText }}</b></div>
-        <div class="ap-kv"><span>图层 / 图元 / 用色</span><b>{{ layers.length }} · {{ shapes.length }} · {{ colorList.length }}</b></div>
-        <div class="ap-kv"><span>覆盖范围</span><b class="ap-mono">{{ coverText }}</b></div>
-        <div class="ap-kv"><span>文件</span><b class="ap-mono">{{ projectPath }}</b></div>
-      </section>
-
-      <!-- 预览 + 导出 -->
-      <section class="ap-sec">
-        <div class="ap-row">
-          <span class="ap-sec-title">画布预览</span>
-          <span class="ap-spacer"></span>
-          <button class="ap-btn" :disabled="!svgText || !imgReady" title="用浏览器 canvas 绘制 SVG 并下载 PNG" @click="exportPng">
-            导出 PNG
-          </button>
-        </div>
-        <div ref="wrapEl" class="ap-canvas-wrap">
-          <img v-if="svgText" ref="imgEl" class="ap-canvas" :src="svgUrl" alt="画板预览" @load="onImgLoad" />
-          <div v-else class="ap-dim ap-msg">未找到 SVG 产物。让 Agent 执行 <code>art_export</code> 生成（默认 art.svg）。</div>
-          <div v-if="hlBox" class="ap-hl" :style="hlBox"></div>
-        </div>
-        <div class="ap-dim">
-          浏览器渲染 SVG（img + data URI，脚本不执行）；点下方图元行可高亮定位。导出的 PNG 尺寸 =
-          画布尺寸，由本地面板直接下载，不写回工作区。
-        </div>
-      </section>
-
-      <!-- 图元表 -->
-      <section class="ap-sec">
-        <div class="ap-sec-title">图元 <span class="ap-dim">（{{ shapes.length }}；点行选中）</span></div>
-        <table class="ap-table">
-          <thead>
-            <tr><th>id</th><th>类型</th><th>位置</th><th>尺寸</th><th>填充</th><th>层</th></tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="s in shapeRows"
-              :key="s.id"
-              :class="{ 'ap-row-sel': s.id === selectedId }"
-              @click="select(s.id)"
-            >
-              <td class="ap-mono">{{ s.id }}</td>
-              <td>{{ s.type }}</td>
-              <td class="ap-mono">{{ s.pos }}</td>
-              <td class="ap-mono">{{ s.size }}</td>
-              <td>
-                <span class="ap-swatch" :style="{ background: s.fillCss }"></span>
-                <span class="ap-mono ap-fill">{{ s.fill }}</span>
-              </td>
-              <td class="ap-mono">{{ s.layer }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- 选中详情 + op 片段 -->
-      <section v-if="selected" class="ap-sec">
-        <div class="ap-sec-title">
-          选中：<span class="ap-mono">{{ selected.id }}</span> <span class="ap-dim">{{ selected.type }}</span>
-          <span class="ap-spacer"></span>
-          <button class="ap-btn" @click="selectedId = ''">取消</button>
-        </div>
-        <div v-for="r in selectedRows" :key="r.k" class="ap-kv ap-kv-left">
-          <span>{{ r.k }}</span><b class="ap-mono">{{ r.v }}</b>
-        </div>
-        <div class="ap-dim">面板只读（不产生第二条写路径）——复制下面命令交给 Agent 执行即可改这份真相源：</div>
-        <pre class="ap-code">{{ selectedOp }}</pre>
-        <button class="ap-btn" @click="copyOp">{{ copied ? '已复制 ✓' : '复制 op' }}</button>
-      </section>
-
-      <!-- 图层 -->
-      <section class="ap-sec">
-        <div class="ap-sec-title">图层 <span class="ap-dim">（{{ layers.length }}；顺序 = 从下到上）</span></div>
-        <div v-for="l in layerRows" :key="l.id" class="ap-kv">
-          <span class="ap-mono">{{ l.id }}</span>
-          <b>{{ l.name }} <span class="ap-dim">{{ l.count }} 图元{{ l.visible ? '' : ' · 隐藏' }}</span></b>
-        </div>
-      </section>
-
-      <!-- 颜色 -->
-      <section class="ap-sec">
-        <div class="ap-sec-title">颜色 <span class="ap-dim">（{{ colorList.length }} 种，对比度按画板背景 {{ backgroundText }} 计算）</span></div>
-        <div v-for="c in colorList" :key="c.raw" class="ap-kv">
-          <span>
-            <span class="ap-swatch" :style="{ background: c.raw }"></span>
-            <b class="ap-mono">{{ c.raw }}</b>
-            <span class="ap-dim"> ×{{ c.count }}</span>
-          </span>
-          <b v-if="c.ratio !== null" :class="c.pass ? 'ap-pass' : 'ap-fail'">
-            {{ c.ratio.toFixed(2) }}:1 {{ c.pass ? 'AA' : '低于 4.5' }}
-          </b>
-          <b v-else class="ap-dim">描边/无填充</b>
-        </div>
-        <div class="ap-dim">此处按“色 vs 画板底色”估算；文字实际底色（可能是下层图形）由校验 V6 精确判定。</div>
-      </section>
-
-      <!-- 校验报告（旁挂 art.verify.json，由 art_verify 写入） -->
-      <section class="ap-sec">
-        <div class="ap-sec-title">
-          工程校验
-          <span v-if="verify" :class="['ap-badge', verify.pass ? 'ap-ok' : 'ap-bad']">
-            {{ verifyPassed }}/{{ verifyTotal }}
-          </span>
-          <span v-else class="ap-dim">（未校验）</span>
-        </div>
-        <div v-if="!verify" class="ap-dim">
-          让 Agent 执行 <code>art_verify</code> 生成校验报告（art.verify.json）。
-        </div>
-        <div v-else>
-          <div v-for="c in verify.checks || []" :key="c.id" class="ap-check">
-            <span :class="['ap-dot', c.pass ? 'ap-ok' : 'ap-bad']"></span>
-            <b>{{ c.id }}</b>
-            <span class="ap-check-name">{{ c.name }}</span>
-            <span class="ap-dim ap-check-metric" :title="c.metric">{{ c.metric }}</span>
-          </div>
-          <div class="ap-dim">报告时间：{{ verify.ts }}</div>
-        </div>
-      </section>
     </template>
-  </div>
+
+    <!-- 空态：说清为什么空 + 怎么做 -->
+    <template #empty>
+      <div class="pn-empty-title">还没有画板工程</div>
+      <div class="pn-tip">
+        面板读工作区根目录的 <code>art.project.json</code>（与 Agent 共用同一份真相源），当前没有这个文件，所以没有可看的内容。
+      </div>
+      <div v-if="error" class="pn-tip pn-mono">{{ error }}</div>
+      <div class="pn-card">
+        <div class="pn-card-title">三步开始</div>
+        <div class="pn-empty-step"><i>1</i><span>让 Agent 执行 <code>art_project</code> 创建工程（画布尺寸 + 图层）。</span></div>
+        <div class="pn-empty-step"><i>2</i><span>用 <code>art_edit</code> 添加图元（rect / circle / text / line …）。</span></div>
+        <div class="pn-empty-step"><i>3</i><span><code>art_export</code> 导出 SVG、<code>art_verify</code> 生成校验报告。</span></div>
+      </div>
+      <div class="pn-tip">做完第 1 步后点右上角刷新，即可看到画布。</div>
+    </template>
+
+    <template #segments>
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="pn-tab"
+        :class="{ 'pn-tab-on': tab === t.id }"
+        :title="t.title"
+        @click="tab = t.id"
+      >{{ t.name }}<span v-if="t.count" class="pn-dim"> {{ t.count }}</span></button>
+    </template>
+
+    <!-- 左栏：图元 / 图层 / 颜色 / 校验 -->
+    <template #side>
+      <div v-if="tab === 'shapes'" class="pn-list">
+        <button
+          v-for="s in shapeRows"
+          :key="s.id"
+          class="pn-item"
+          :class="{ 'pn-item-on': s.id === selectedId }"
+          @click="select(s.id)"
+        >
+          <span class="pn-swatch" :style="{ background: s.fillCss }"></span>
+          <span class="pn-item-k">{{ s.id }}</span>
+          <span class="pn-dim pn-mini">{{ s.type }} · {{ s.layer }}</span>
+          <span class="pn-item-v">{{ s.size }}</span>
+        </button>
+        <div v-if="!shapeRows.length" class="pn-tip">还没有图元。</div>
+        <div v-else class="pn-tip art-side-hint">点行可在右侧画布高亮定位。</div>
+      </div>
+
+      <div v-else-if="tab === 'layers'" class="pn-list">
+        <div v-for="l in layerRows" :key="l.id" class="pn-kv">
+          <span class="pn-mono">{{ l.id }}</span>
+          <b>{{ l.name }} <span class="pn-dim">{{ l.count }} 图元{{ l.visible ? '' : ' · 隐藏' }}</span></b>
+        </div>
+        <div class="pn-tip art-side-hint">顺序 = 从下到上（后画的在上）。</div>
+      </div>
+
+      <div v-else-if="tab === 'colors'" class="pn-list">
+        <div v-for="c in colorList" :key="c.raw" class="pn-kv">
+          <span class="pn-swatch" :style="{ background: c.raw }"></span>
+          <b class="pn-mono">{{ c.raw }}</b>
+          <span class="pn-dim">×{{ c.count }}</span>
+          <span class="pn-spacer"></span>
+          <b v-if="c.ratio !== null" :class="c.pass ? 'pn-pass' : 'pn-warn'">
+            {{ c.ratio.toFixed(2) }}:1{{ c.pass ? ' AA' : ' 低于 4.5' }}
+          </b>
+          <span v-else class="pn-dim">—</span>
+        </div>
+        <div class="pn-tip art-side-hint">按「色 vs 画板底色（{{ backgroundText }}）」估算；文字实际底色由校验 V6 精确判定。</div>
+      </div>
+
+      <div v-else class="pn-list">
+        <template v-if="verify">
+          <div v-for="c in verify.checks || []" :key="c.id" class="pn-check">
+            <span class="pn-dot" :class="{ 'pn-dot-ok': c.pass }"></span>
+            <b>{{ c.id }}</b>
+            <span class="pn-check-name">{{ c.name }}</span>
+            <span class="pn-check-metric" :title="c.metric">{{ c.metric }}</span>
+          </div>
+          <div class="pn-tip art-side-hint">报告时间：{{ verify.ts }}</div>
+        </template>
+        <div v-else class="pn-tip">
+          还没有校验报告。让 Agent 执行 <code>art_verify</code> 生成旁挂的 art.verify.json。
+        </div>
+      </div>
+    </template>
+
+    <!-- 主区：画布预览 + 选中详情 -->
+    <template #main>
+      <div class="pn-scroll art-main">
+        <div class="pn-row-gap">
+          <span class="pn-strong">{{ artTitle }}</span>
+          <span class="pn-dim pn-mini pn-mono">{{ canvasW }}×{{ canvasH }}</span>
+          <span class="pn-spacer"></span>
+          <span v-if="selected" class="pn-dim pn-mini">已选中 <span class="pn-mono">{{ selected.id }}</span></span>
+        </div>
+
+        <div ref="wrapEl" class="pn-preview">
+          <img v-if="svgText" ref="imgEl" class="art-canvas" :src="svgUrl" alt="画板预览" @load="onImgLoad" />
+          <div v-else class="pn-tip">
+            未找到 SVG 产物。让 Agent 执行 <code>art_export</code> 生成（默认 art.svg）。
+          </div>
+          <div v-if="hlBox" class="art-hl" :style="hlBox"></div>
+        </div>
+        <div class="pn-tip">
+          覆盖范围 <span class="pn-mono">{{ coverInfo.range }}</span>（占画布 {{ coverInfo.pct }}%）；浏览器用 img + data URI 渲染 SVG（脚本不执行）。
+        </div>
+
+        <div v-if="selected" class="pn-card">
+          <div class="pn-card-title">
+            选中 <span class="pn-mono">{{ selected.id }}</span>
+            <span class="pn-dim">{{ selected.type }}</span>
+            <span class="pn-spacer"></span>
+            <button class="pn-btn" @click="selectedId = ''">取消</button>
+          </div>
+          <div v-for="r in selectedRows" :key="r.k" class="pn-kv">
+            <span>{{ r.k }}</span><b class="pn-mono">{{ r.v }}</b>
+          </div>
+          <div class="pn-tip">面板只读 —— 复制下面命令交给 Agent 执行即可改这份真相源：</div>
+          <pre class="pn-code">{{ selectedOp }}</pre>
+          <div>
+            <button class="pn-btn" @click="copyOp">{{ copied ? '已复制 ✓' : '复制 op' }}</button>
+          </div>
+        </div>
+        <div v-else class="pn-tip">点左栏「图元」里的任意一行：画布上会高亮定位，这里会显示它的完整属性与可直接复制的 op 命令。</div>
+      </div>
+    </template>
+  </PanelShell>
 </template>
 
 <script setup>
@@ -144,9 +154,10 @@
 // 设计取舍（与 tool-music / tool-voice 一致）：面板不写工作区——图元编辑一律经 Agent 的 art_edit（命令式 op），
 // 避免「工具写工程 / 面板写工程」两条写路径导致真相源分叉；需要改动时面板给出可直接复制的 op 片段。
 // 唯一产出动作是浏览器侧 PNG 导出（canvas 绘制已渲染的 SVG → 本地下载），同样不写回工作区。
+// 布局（2026-09-18 改版）：统一外壳 PanelShell —— 顶栏 / 指标条 / 左栏分段 + 主区预览 / 底栏，去掉「一路往下铺」的长滚动。
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../api.js'
-import SvgIcon from './SvgIcon.vue'
+import PanelShell from './PanelShell.vue'
 import { state } from '../ui-state.js'
 
 const projectPath = ref('art.project.json')
@@ -161,6 +172,7 @@ const copied = ref(false)
 const svgText = ref('')
 const imgReady = ref(false)
 const dispWidth = ref(0)
+const tab = ref('shapes')
 
 const imgEl = ref(null)
 const wrapEl = ref(null)
@@ -169,14 +181,15 @@ const layers = computed(() => (proj.value && proj.value.layers) || [])
 const shapes = computed(() => (proj.value && proj.value.shapes) || [])
 const canvasW = computed(() => ((proj.value && proj.value.canvas) || {}).width || 0)
 const canvasH = computed(() => ((proj.value && proj.value.canvas) || {}).height || 0)
-const title = computed(() => ((proj.value && proj.value.meta && proj.value.meta.title) || '未命名画板'))
+const artTitle = computed(() => ((proj.value && proj.value.meta && proj.value.meta.title) || '未命名画板'))
 const backgroundText = computed(() => {
   const bg = (proj.value && proj.value.canvas && proj.value.canvas.background) || 'none'
   return bg
 })
-const verifiedAt = computed(() => (verify.value && verify.value.ts) || '')
 const verifyPassed = computed(() => ((verify.value && verify.value.checks) || []).filter((c) => c.pass).length)
 const verifyTotal = computed(() => ((verify.value && verify.value.checks) || []).length)
+const verifyBadge = computed(() => (verify.value ? '校验 ' + verifyPassed.value + '/' + verifyTotal.value : '未校验'))
+const verifyTone = computed(() => (!verify.value ? 'muted' : (verifyPassed.value === verifyTotal.value ? 'ok' : 'bad')))
 
 // SVG 预览：用 data URI 交给 <img> 渲染 —— SVG 内的脚本不会执行（面板不做信任假设）
 const svgUrl = computed(() => (svgText.value ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText.value) : ''))
@@ -232,17 +245,8 @@ function localBox(s) {
     const x1 = numOf(s.x1, 0); const y1 = numOf(s.y1, 0); const x2 = numOf(s.x2, 0); const y2 = numOf(s.y2, 0)
     return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) }
   }
-  if (t === 'polyline' || t === 'polygon') {
-    const pts = s.points || []
-    if (!pts.length) return { x: 0, y: 0, w: 0, h: 0 }
-    const xs = pts.map((p) => numOf(p[0], 0)); const ys = pts.map((p) => numOf(p[1], 0))
-    const mnx = Math.min(...xs); const mxx = Math.max(...xs); const mny = Math.min(...ys); const mxy = Math.max(...ys)
-    return { x: mnx, y: mny, w: mxx - mnx, h: mxy - mny }
-  }
   if (t === 'path') {
-    // 简化：用 d 中的数字对做保守包围盒（与工具侧同思路，不含相对命令推演）
-    const nums = String(s.d || '').match(/-?\d*\.?\d+/g) || []
-    const vals = nums.map(Number).filter((n) => isFinite(n))
+    const vals = String(s.d || '').match(/-?\d+(\.\d+)?/g) || []
     let mnx = Infinity; let mny = Infinity; let mxx = -Infinity; let mxy = -Infinity
     for (let i = 0; i + 1 < vals.length; i += 2) {
       mnx = Math.min(mnx, vals[i]); mxx = Math.max(mxx, vals[i])
@@ -320,8 +324,9 @@ const layerRows = computed(() => layers.value.map((l, i) => {
   return { id: l.id, name: l.name || '', index: i, count, visible: l.visible !== false }
 }))
 
-const coverText = computed(() => {
-  if (!shapes.value.length) return '（空）'
+// 覆盖范围：所有图元包围盒的并集（相对画布占比）
+const coverInfo = computed(() => {
+  if (!shapes.value.length) return { range: '（空）', pct: '0.0' }
   let union = null
   shapes.value.forEach((s) => {
     const b = shapeBox(s)
@@ -336,9 +341,28 @@ const coverText = computed(() => {
   const pct = canvasW.value && canvasH.value
     ? Math.min(100, (union.w * union.h) / (canvasW.value * canvasH.value) * 100)
     : 0
-  return 'x ' + fmt(union.x) + '..' + fmt(union.x + union.w) + '，y ' + fmt(union.y) + '..' + fmt(union.y + union.h) +
-    '（占 ' + pct.toFixed(1) + '%）'
+  return {
+    range: 'x ' + fmt(union.x) + '..' + fmt(union.x + union.w) + '，y ' + fmt(union.y) + '..' + fmt(union.y + union.h),
+    pct: pct.toFixed(1),
+  }
 })
+
+// ── 指标条（关键数字提到顶栏下方，不必滚动去找） ──
+const metrics = computed(() => [
+  { k: '画布', v: canvasW.value + '×' + canvasH.value, mono: true },
+  { k: '底色', v: backgroundText.value, mono: true },
+  { k: '图层', v: String(layers.value.length) },
+  { k: '图元', v: String(shapes.value.length) },
+  { k: '用色', v: String(colorList.value.length) },
+  { k: '覆盖', v: coverInfo.value.pct + '%' },
+])
+
+const tabs = computed(() => [
+  { id: 'shapes', name: '图元', count: shapes.value.length, title: '图元清单（点行高亮定位）' },
+  { id: 'layers', name: '图层', count: layers.value.length, title: '图层清单（从下到上）' },
+  { id: 'colors', name: '颜色', count: colorList.value.length, title: '用色与对比度' },
+  { id: 'checks', name: '校验', count: verify.value ? verifyPassed.value + '/' + verifyTotal.value : 0, title: '工程校验报告' },
+])
 
 // ── 颜色 + 对比度（面板侧估算：色 vs 画板底色） ──
 const NAMED = {
@@ -507,112 +531,11 @@ watch(selectedId, () => { updateDispWidth() })
 </script>
 
 <style scoped>
-/* 配色一律取自设计系统变量（不另起一套配色），与 tool-music / tool-voice 保持一致 */
-.art-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  font-size: 12px;
-  color: var(--text-primary);
-  height: 100%;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-.ap-bar { display: flex; align-items: center; gap: 6px; }
-.ap-title { font-weight: 600; color: var(--text-secondary); flex: none; }
-.ap-input {
-  flex: 1;
-  min-width: 0;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-family: ui-monospace, Consolas, monospace;
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-.ap-icon-btn {
-  display: flex;
-  align-items: center;
-  padding: 3px 6px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.ap-icon-btn:hover { background: var(--bg-hover); }
-.spinning { animation: ap-spin 1s linear infinite; }
-@keyframes ap-spin { to { transform: rotate(360deg); } }
-
-.ap-msg { padding: 8px; color: var(--text-muted); line-height: 1.6; }
-.ap-err { color: var(--text-primary); border-left: 2px solid var(--accent); background: var(--bg-tertiary); }
-.ap-info { color: var(--text-secondary); border-left: 2px solid var(--accent); background: var(--bg-tertiary); }
-.ap-sec { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--bg-tertiary); border-radius: 6px; }
-.ap-sec-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px; }
-.ap-kv { display: flex; gap: 8px; justify-content: space-between; }
-.ap-kv > span { color: var(--text-muted); flex: none; }
-.ap-kv > b { font-weight: 500; text-align: right; word-break: break-all; }
-.ap-kv-left > b { text-align: left; overflow-wrap: anywhere; }
-.ap-mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text-secondary); }
-.ap-dim { color: var(--text-muted); font-weight: 400; }
-.ap-pass { color: var(--text-secondary); }
-.ap-fail { color: var(--text-primary); }
-.ap-row { display: flex; align-items: center; gap: 6px; }
-.ap-spacer { flex: 1; }
-.ap-btn {
-  padding: 3px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.ap-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.ap-btn:disabled { opacity: 0.5; cursor: default; }
-
-.ap-canvas-wrap { position: relative; width: 100%; }
-.ap-canvas { display: block; width: 100%; height: auto; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; }
+/* 局部样式（其余一律复用 PanelShell 的共享类；配色取设计系统变量） */
+.art-main { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.art-canvas { display: block; width: 100%; height: auto; }
 /* 选中高亮框：覆盖在预览之上，不拦截鼠标事件 */
-.ap-hl { position: absolute; border: 1px dashed var(--accent); pointer-events: none; box-sizing: border-box; }
-
-.ap-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.ap-table th { color: var(--text-muted); font-weight: 500; text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--border-color); }
-.ap-table td { padding: 2px 4px; border-bottom: 1px solid var(--bg-hover); }
-.ap-table tbody tr { cursor: pointer; }
-.ap-table tbody tr:hover { background: var(--bg-hover); }
-.ap-row-sel { background: var(--bg-hover); }
-.ap-fill { margin-left: 4px; }
-.ap-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 2px;
-  vertical-align: middle;
-  margin-right: 4px;
-}
-.ap-code {
-  margin: 0;
-  padding: 6px;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow-x: auto;
-  white-space: pre;
-}
-.ap-badge { padding: 1px 6px; border-radius: 8px; font-size: 11px; }
-.ap-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
-.ap-ok { background: var(--accent); color: var(--bg-primary); }
-.ap-bad { background: var(--text-muted); color: var(--bg-primary); }
-.ap-check { display: flex; align-items: center; gap: 6px; }
-.ap-check > b { flex: none; color: var(--text-secondary); }
-.ap-check-name { flex: none; }
-.ap-check-metric { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.art-hl { position: absolute; border: 1px dashed var(--accent); pointer-events: none; box-sizing: border-box; }
+.art-side-hint { margin-top: 6px; }
+.pn-pass { color: var(--text-secondary); }
 </style>

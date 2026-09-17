@@ -6158,7 +6158,7 @@ var TOOL_DEFS = [
       type: 'object',
       properties: {
         action: { type: 'string', description: 'new（建工程）/ get（默认，看盘点）/ rename / param（改参数值）/ set（改 name/unit/up/note）/ reset（清空部件，需 force）' },
-        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
         name: { type: 'string', description: '可选：模型名（new / rename / set）' },
         params: { type: 'object', description: '可选（new）：参数定义 [{id,value,min,max,name}] 或 {id: value}；可选（param）：{id: 新值} 或 [{id,value}]' },
         id: { type: 'string', description: '可选（param）：单个参数 id' },
@@ -6180,7 +6180,7 @@ var TOOL_DEFS = [
       type: 'object',
       properties: {
         id: { type: 'string', description: '部件 id（必填、唯一；字母数字下划线连字符点）' },
-        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
         type: { type: 'string', description: '几何类型（默认 cuboid）' },
         size: { description: 'cuboid/cube 全尺寸（数字或 [x,y,z]）' },
         center: { description: '可选：几何中心（默认原点）' },
@@ -6222,7 +6222,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
         op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
         id: { type: 'string', description: '可选：目标部件 / 参数 id' },
@@ -6256,8 +6256,8 @@ var TOOL_DEFS = [
       type: 'object',
       properties: {
         format: { type: 'string', description: 'gltf（默认）/ glb / stl / stl-ascii / obj / html / json / all' },
-        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
-        out: { type: 'string', description: '可选：输出路径（默认按工程名派生：model.json → model.gltf / model.stl / model.preview.html …）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
+        out: { type: 'string', description: '可选：输出路径（默认按工程名派生：<主项目根>/model.gltf / model.stl / model.preview.html …）' },
         name: { type: 'string', description: '可选：导出模型名（写入 glTF node / STL 头）' },
         parts: { type: 'array', description: '可选：只导出指定部件 id' },
         withGlb: { type: 'boolean', description: '可选（format=all）：是否同时导出 .glb（默认 false）' }
@@ -6272,8 +6272,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 ' + PROJECT_NAME + '）' },
-        report: { type: 'string', description: '可选：报告输出路径（默认 <工程名>.verify.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
+        report: { type: 'string', description: '可选：报告输出路径（默认 <主项目根>/<工程名>.verify.json）' },
         determinism: { type: 'boolean', description: '可选：是否额外验证"两次构建产物位级一致"（默认 false）' }
       }
     }

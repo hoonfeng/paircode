@@ -2787,7 +2787,7 @@ var TOOL_DEFS = [
       type: 'object',
       properties: {
         action: { type: 'string', description: 'create（默认）/ get / rename / reset' },
-        path: { type: 'string', description: '可选：工程路径（默认 rig.model.iki.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
         name: { type: 'string', description: '可选：角色名（create/rename）' },
         width: { type: 'number', description: '可选：画布宽（默认 1000）' },
         height: { type: 'number', description: '可选：画布高（默认 1000）' },
@@ -2808,7 +2808,7 @@ var TOOL_DEFS = [
       properties: {
         source: { type: 'string', description: 'psd（默认）| manifest（图层清单 JSON）' },
         src: { type: 'string', description: '源文件路径（PSD 或清单 JSON）' },
-        path: { type: 'string', description: '可选：工程路径（默认 rig.model.iki.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
         mode: { type: 'string', description: '可选：replace（默认，清空后导入）| append（追加）' },
         name: { type: 'string', description: '可选：工程不存在时新建的角色名' },
         visibleOnly: { type: 'boolean', description: '可选：跳过隐藏图层（默认 true）' },
@@ -2829,7 +2829,7 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 rig.model.iki.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
         ops: { type: 'array', description: '编辑命令数组（按顺序应用）' },
         op: { type: 'string', description: '可选：单条 op 名（与同层参数合成为一条命令）' },
         ids: { type: 'array', description: '可选：目标部件 id 数组' },
@@ -2881,9 +2881,9 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 rig.model.iki.json）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
         format: { type: 'string', description: 'html（默认）| svg | parts | iki' },
-        out: { type: 'string', description: '可选：输出路径' },
+        out: { type: 'string', description: '可选：输出路径（默认按 format 派生：<主项目根>/rig.preview.html / rig.sprites.svg / rig.parts.json / rig.model.export.iki.json；相对主项目根解析）' },
         overwrite: { type: 'boolean', description: '可选：产物已存在是否覆盖（默认 false）' },
       },
     },
@@ -2896,8 +2896,8 @@ var TOOL_DEFS = [
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '可选：工程路径（默认 rig.model.iki.json）' },
-        report: { type: 'string', description: '可选：旁挂报告路径（默认 rig.verify.json；传空串则不写）' },
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
+        report: { type: 'string', description: '可选：旁挂报告路径（默认 <主项目根>/rig.verify.json；传空串则不写）' },
         overlapThreshold: { type: 'number', description: '可选：同部位部件重叠比阈值（默认 0.6）' },
       },
     },

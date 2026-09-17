@@ -1,128 +1,162 @@
 <template>
-  <div class="rp-panel">
-    <div class="rp-bar">
-      <span class="rp-title">角色</span>
-      <input v-model="projectPath" class="rp-input" placeholder="rig.model.iki.json" @keyup.enter="load" />
-      <button class="rp-icon-btn" :disabled="loading" title="重新载入工程、预览与校验报告" @click="load">
-        <SvgIcon name="refresh" :size="12" :class="{ spinning: loading }" />
-      </button>
-    </div>
+  <PanelShell
+    v-model:file="projectPath"
+    title="角色"
+    icon="user"
+    placeholder="rig.model.iki.json"
+    :badge="verifyBadge"
+    :badge-tone="verifyTone"
+    :metrics="metrics"
+    :loading="loading"
+    :error="model ? error : ''"
+    :empty="!model"
+    reload-title="重新载入工程、预览与校验报告"
+    footnote="只读面板：部件/骨骼/绑定编辑一律经 Agent 的 rig_edit（命令式 op）；预览 iframe 可拖参数滑块试效果，不写工作区。"
+    :source="projectPath"
+    @reload="load"
+  >
+    <template #empty>
+      <div class="pn-empty-title">还没有角色工程</div>
+      <div class="pn-tip">
+        面板读工作区里的 <code>rig.model.iki.json</code>（.iki 上游格式，与 Agent 共用同一份真相源），当前没有这个文件。
+      </div>
+      <div class="pn-card">
+        <div class="pn-card-title">三步开始</div>
+        <div class="pn-empty-step"><i>1</i><span>让 Agent 执行 <code>rig_model action=create</code> 建空工程，或 <code>rig_import source=psd src=角色.psd</code> 自动分层。</span></div>
+        <div class="pn-empty-step"><i>2</i><span>用 <code>rig_edit</code> 绑骨骼与参数（bind.auto / part.bind …）。</span></div>
+        <div class="pn-empty-step"><i>3</i><span><code>rig_export format=html</code> 出动态预览、<code>rig_verify</code> 生成校验报告。</span></div>
+      </div>
+      <div v-if="error" class="pn-tip pn-mono">{{ error }}</div>
+    </template>
 
-    <div v-if="error" class="rp-msg rp-err">{{ error }}</div>
-    <div v-if="!model && !error" class="rp-msg">
-      未找到角色工程。先让 Agent 执行 <code>rig_model action=create</code>，或直接
-      <code>rig_import source=psd src=角色.psd</code>（自动分层 + 按命名约定自动绑定）。
-    </div>
+    <template #segments>
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="pn-tab"
+        :class="{ 'pn-tab-on': tab === t.id }"
+        :title="t.title"
+        @click="tab = t.id"
+      >{{ t.name }}<span v-if="t.count" class="pn-dim"> {{ t.count }}</span></button>
+    </template>
 
-    <template v-if="model">
-      <!-- 概要 -->
-      <section class="rp-sec">
-        <div class="rp-sec-title">{{ model.name }}</div>
-        <div class="rp-kv"><span>画布</span><b>{{ canvasText }}</b></div>
-        <div class="rp-kv"><span>部件 / 骨骼</span><b>{{ model.parts.length }} · {{ deformers.length }}</b></div>
-        <div class="rp-kv"><span>参数 / 物理</span><b>{{ model.parameters.length }} · {{ physics.length }} 弹簧 + {{ chains.length }} 角链</b></div>
-        <div class="rp-dim">
-          .iki v{{ model.version }}（上游 @ikijs/format 契约）｜模型空间原点 = 画布中心、+y 向上｜拖右侧预览里的滑块即可试参数。
+    <!-- 左栏：参数 / 骨骼（含 warp 与物理）/ 部件 / 校验 -->
+    <template #side>
+      <div v-if="tab === 'params'" class="pn-list">
+        <div v-for="p in paramRows" :key="p.id" class="pn-kv">
+          <span class="pn-mono pn-mini">{{ p.name || p.id }}</span>
+          <span class="pn-spacer"></span>
+          <b class="pn-mini">{{ p.min }}..{{ p.max }}<span class="pn-dim"> 默认 {{ p.default }}</span></b>
         </div>
-      </section>
-
-      <!-- 预览：动态预览含参数滑块，必须允许脚本（sandbox=allow-scripts，无 same-origin） -->
-      <section class="rp-sec">
-        <div class="rp-row">
-          <span class="rp-sec-title">预览</span>
-          <span class="rp-spacer"></span>
-          <span class="rp-dim">{{ previewReady ? 'rig.preview.html' : '未导出' }}</span>
+        <div v-if="!paramRows.length" class="pn-tip">工程里还没有参数。</div>
+        <div v-else class="pn-tip mp-side-hint">
+          <span class="pn-tag">标准</span> = 上游标准参数；<span class="pn-tag">物理输出</span> = 由二级运动驱动（宿主不直接设）。
         </div>
-        <iframe v-if="previewHtml" class="rp-frame" :srcdoc="previewHtml" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-        <div v-else class="rp-dim rp-msg">
-          未找到预览产物。让 Agent 执行 <code>rig_export format=html</code> 生成（默认 rig.preview.html）。
+        <div class="mp-side-block">
+          <div class="pn-card-title">驱动来源</div>
+          <div class="pn-tip">{{ driverText }}</div>
         </div>
-        <div class="rp-dim">iframe 内可拖参数滑块、开关演示动画（呼吸/眨眼）；本面板只读，不写工作区。</div>
-      </section>
+      </div>
 
-      <!-- 参数：范围 + 驱动来源 -->
-      <section class="rp-sec">
-        <div class="rp-sec-title">参数 <span class="rp-dim">（{{ model.parameters.length }} 项；标注是否上游标准参数与被谁驱动）</span></div>
-        <div v-for="p in paramRows" :key="p.id" class="rp-kv">
-          <span class="rp-mono">{{ p.name || p.id }}</span>
-          <b>
-            {{ p.min }}..{{ p.max }} <span class="rp-dim">默认 {{ p.default }}</span>
-            <span v-if="p.standard" class="rp-tag">标准</span>
-            <span v-if="p.physicsOut" class="rp-tag">物理输出</span>
-          </b>
-        </div>
-        <div class="rp-dim">驱动来源：{{ driverText }}</div>
-      </section>
-
-      <!-- 骨骼树（= .iki 的 matrix deformer 树，转轴 pivot 决定旋转中心） -->
-      <section class="rp-sec">
-        <div class="rp-sec-title">骨骼树 <span class="rp-dim">（deformer；缩进 = 父子层级，括号内为转轴与参数绑定）</span></div>
+      <div v-else-if="tab === 'bones'" class="pn-list">
         <div v-for="b in boneRows" :key="b.id" class="rp-bone" :style="{ paddingLeft: (b.depth * 12) + 'px' }">
-          <span class="rp-mono">{{ b.id }}</span>
-          <span class="rp-dim"> pivot({{ b.pivot }}) {{ b.bindText }}</span>
+          <span class="pn-mono pn-mini">{{ b.id }}</span>
+          <span class="pn-dim pn-mini"> pivot({{ b.pivot }}) {{ b.bindText }}</span>
         </div>
-        <div class="rp-dim">warp 形变：{{ warpText }}</div>
-      </section>
+        <div v-if="!boneRows.length" class="pn-tip">工程里还没有骨骼（matrix deformer）。</div>
+        <div class="mp-side-block">
+          <div class="pn-card-title">warp 形变</div>
+          <div class="pn-tip">{{ warpText }}</div>
+        </div>
+        <div v-if="physics.length || chains.length" class="mp-side-block">
+          <div class="pn-card-title">二级运动</div>
+          <div v-for="s in physics" :key="s.id" class="pn-kv">
+            <span class="pn-mono pn-mini">{{ s.id }}</span>
+            <b class="pn-dim pn-mini mp-wrap">{{ s.text }}</b>
+          </div>
+          <div v-for="c in chains" :key="c.id" class="pn-kv">
+            <span class="pn-mono pn-mini">{{ c.id }}</span>
+            <b class="pn-dim pn-mini mp-wrap">{{ c.text }}</b>
+          </div>
+          <div class="pn-tip">输出参数由物理驱动，宿主不直接设。</div>
+        </div>
+      </div>
 
-      <!-- 部件（绘制顺序自后向前） -->
-      <section class="rp-sec">
-        <div class="rp-sec-title">部件 <span class="rp-dim">（{{ model.parts.length }} 个，绘制顺序自后向前）</span></div>
-        <div v-for="p in partRows" :key="p.id" class="rp-kv">
+      <div v-else-if="tab === 'parts'" class="pn-list">
+        <div v-for="p in partRows" :key="p.id" class="pn-kv">
           <span>
             <span class="rp-idx">{{ p.order }}</span>
-            <span class="rp-mono">{{ p.id }}</span>
-            <span class="rp-dim"> {{ p.role }}</span>
+            <span class="pn-mono pn-mini">{{ p.id }}</span>
+            <span class="pn-dim pn-mini"> {{ p.role }}</span>
           </span>
-          <b>
+          <span class="pn-spacer"></span>
+          <b class="pn-mini">
             {{ p.size }}
-            <span class="rp-dim">{{ p.deformer || '未挂骨骼' }}</span>
-            <span v-if="p.binds" class="rp-tag">{{ p.binds }}</span>
-            <span v-if="p.mesh" class="rp-tag">网格</span>
+            <span class="pn-dim">{{ p.deformer || '未挂骨骼' }}</span>
+            <span v-if="p.binds" class="pn-tag">{{ p.binds }}</span>
+            <span v-if="p.mesh" class="pn-tag">网格</span>
           </b>
         </div>
-      </section>
+        <div v-if="!partRows.length" class="pn-tip">工程里还没有部件。</div>
+        <div v-else class="pn-tip mp-side-hint">绘制顺序自后向前（数字小 = 更靠后）。</div>
+      </div>
 
-      <!-- 物理 -->
-      <section v-if="physics.length || chains.length" class="rp-sec">
-        <div class="rp-sec-title">二级运动 <span class="rp-dim">（弹簧 / 多段角链；输出参数由物理驱动，宿主不直接设）</span></div>
-        <div v-for="s in physics" :key="s.id" class="rp-kv">
-          <span class="rp-mono">{{ s.id }}</span>
-          <b class="rp-dim">{{ s.text }}</b>
+      <div v-else class="pn-list">
+        <template v-if="verify">
+          <div v-for="c in verify.checks" :key="c.id" class="pn-check">
+            <span class="pn-dot" :class="{ 'pn-dot-ok': c.pass }"></span>
+            <b>{{ c.id }}</b>
+            <span class="pn-check-name">{{ c.name }}</span>
+            <span class="pn-check-metric" :title="c.metric">{{ c.metric }}</span>
+          </div>
+          <div v-if="warnChecks.length" class="pn-tip pn-warn">警告：{{ warnChecks.join('；') }}</div>
+          <div class="pn-tip mp-side-hint">报告时间：{{ verify.ts }}</div>
+        </template>
+        <div v-else class="pn-tip">
+          还没有校验报告。让 Agent 执行 <code>rig_verify</code> 生成旁挂的 rig.verify.json。
         </div>
-        <div v-for="c in chains" :key="c.id" class="rp-kv">
-          <span class="rp-mono">{{ c.id }}</span>
-          <b class="rp-dim">{{ c.text }}</b>
-        </div>
-      </section>
-
-      <!-- 校验（旁挂报告） -->
-      <section v-if="verify" class="rp-sec">
-        <div class="rp-row">
-          <span class="rp-sec-title">校验</span>
-          <span class="rp-spacer"></span>
-          <span :class="['rp-badge', passedAll ? 'rp-ok' : 'rp-bad']">{{ passedCount }}/{{ verify.checks.length }}</span>
-        </div>
-        <div v-for="c in verify.checks" :key="c.id" class="rp-check">
-          <span :class="['rp-dot', c.pass ? 'rp-ok' : 'rp-bad']"></span>
-          <b>{{ c.id }}</b>
-          <span class="rp-check-name">{{ c.name }}</span>
-          <span class="rp-dim rp-check-metric" :title="c.metric">{{ c.metric }}</span>
-        </div>
-        <div v-if="warnChecks.length" class="rp-dim">
-          警告：{{ warnChecks.join('；') }}
-        </div>
-        <div class="rp-dim">报告时间：{{ verify.ts }}</div>
-      </section>
-
-      <!-- 面板只读：改动交 Agent -->
-      <section class="rp-sec">
-        <div class="rp-sec-title">交给 Agent 执行</div>
-        <div class="rp-dim">面板不写工作区（避免第二条写路径）；常用命令：</div>
-        <pre class="rp-code">{{ sampleCmd }}</pre>
-        <button class="rp-btn" @click="copyCmd">{{ copied ? '已复制' : '复制命令' }}</button>
-      </section>
+      </div>
     </template>
-  </div>
+
+    <!-- 主区：动态预览 + 命令 -->
+    <template #main>
+      <div class="pn-scroll rp-main">
+        <div class="pn-row-gap">
+          <span class="pn-strong">{{ model.name }}</span>
+          <span class="pn-dim pn-mini pn-mono">{{ canvasText }}</span>
+          <span class="pn-spacer"></span>
+          <span class="pn-dim pn-mini pn-mono">{{ previewReady ? 'rig.preview.html' : '未导出' }}</span>
+        </div>
+        <div class="rp-stage">
+          <iframe
+            v-if="previewHtml"
+            class="rp-frame"
+            :srcdoc="previewHtml"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"
+          ></iframe>
+          <div v-else class="pn-tip rp-stage-empty">
+            未找到预览产物。让 Agent 执行 <code>rig_export format=html</code> 生成（默认 rig.preview.html）。
+          </div>
+        </div>
+        <div class="pn-tip">
+          iframe 内可拖参数滑块、开关演示动画（呼吸/眨眼）—— 预览需要脚本，故 sandbox 给了 allow-scripts
+          （但无 allow-same-origin，它拿不到宿主 DOM）；本面板不写工作区。
+        </div>
+        <div class="pn-tip">
+          .iki v{{ model.version }}（上游 @ikijs/format 契约）｜模型空间原点 = 画布中心、+y 向上。
+        </div>
+        <div class="pn-card">
+          <div class="pn-card-title">
+            交给 Agent 执行
+            <span class="pn-spacer"></span>
+            <button class="pn-btn" @click="copyCmd">{{ copied ? '已复制 ✓' : '复制命令' }}</button>
+          </div>
+          <pre class="pn-code">{{ sampleCmd }}</pre>
+        </div>
+      </div>
+    </template>
+  </PanelShell>
 </template>
 
 <script setup>
@@ -131,9 +165,10 @@
 // rig_edit（命令式 op），避免"工具写工程 / 面板写工程"两条写路径导致真相源分叉。
 // 预览 iframe 用 sandbox="allow-scripts"（无 allow-same-origin）：预览内需要脚本才能拖参数滑块、
 // 跑弹簧/角链二级运动，但它拿不到宿主 DOM，且产物本身无外链。
+// 布局（2026-09-18 改版）：套 PanelShell 统一外壳 —— 顶栏 / 指标条 / 左栏分段（参数·骨骼·部件·校验）+ 主区预览 / 底栏。
 import { ref, computed, onMounted } from 'vue'
 import api from '../api.js'
-import SvgIcon from './SvgIcon.vue'
+import PanelShell from './PanelShell.vue'
 import { state } from '../ui-state.js'
 
 const STANDARD = ['ParamMouthOpenY', 'ParamMouthForm', 'ParamEyeLOpen', 'ParamEyeROpen', 'ParamEyeBallX', 'ParamEyeBallY',
@@ -150,6 +185,7 @@ const model = ref(null)
 const verify = ref(null)
 const previewHtml = ref('')
 const copied = ref(false)
+const tab = ref('params')
 
 const canvasText = computed(() => {
   const c = (model.value && model.value.canvas) || {}
@@ -170,6 +206,9 @@ const chains = computed(() => ((model.value && model.value.physicsChains) || [])
 const previewReady = computed(() => previewHtml.value.length > 0)
 const passedAll = computed(() => ((verify.value && verify.value.checks) || []).every((c) => c.pass))
 const passedCount = computed(() => ((verify.value && verify.value.checks) || []).filter((c) => c.pass).length)
+const verifyTotal = computed(() => ((verify.value && verify.value.checks) || []).length)
+const verifyBadge = computed(() => (verify.value ? '校验 ' + passedCount.value + '/' + verifyTotal.value : '未校验'))
+const verifyTone = computed(() => (!verify.value ? 'muted' : (passedAll.value && verifyTotal.value > 0 ? 'ok' : 'bad')))
 const warnChecks = computed(() => ((verify.value && verify.value.checks) || [])
   .filter((c) => c.warns > 0).map((c) => c.id + ' ' + c.name + '（' + c.warns + ' 条）'))
 
@@ -270,6 +309,26 @@ const partRows = computed(() => ((model.value && model.value.parts) || [])
     mesh: !!p.mesh,
   })))
 
+// ── 指标条 ──
+const metrics = computed(() => {
+  const m = model.value
+  if (!m) return []
+  return [
+    { k: '画布', v: canvasText.value, mono: true },
+    { k: '部件', v: String((m.parts || []).length) },
+    { k: '骨骼', v: String(deformers.value.length) },
+    { k: '参数', v: String((m.parameters || []).length) },
+    { k: '物理', v: physics.value.length + ' 弹簧 · ' + chains.value.length + ' 角链' },
+    { k: '格式', v: '.iki v' + m.version },
+  ]
+})
+const tabs = computed(() => [
+  { id: 'params', name: '参数', count: paramRows.value.length, title: '参数范围 / 默认值 / 是否标准参数 / 驱动来源' },
+  { id: 'bones', name: '骨骼', count: boneRows.value.length, title: '骨骼树（含 warp 形变与二级运动）' },
+  { id: 'parts', name: '部件', count: partRows.value.length, title: '部件与绘制顺序' },
+  { id: 'checks', name: '校验', count: verify.value ? passedCount.value + '/' + verifyTotal.value : 0, title: '工程校验报告' },
+])
+
 const sampleCmd = computed(() => {
   const first = (model.value && model.value.parts && model.value.parts[0]) || {}
   return JSON.stringify({ op: 'bind.auto' }) + '\n'
@@ -325,63 +384,26 @@ onMounted(load)
 </script>
 
 <style scoped>
-.rp-panel { padding: 8px 10px; font-size: 12px; color: var(--text-primary); overflow-y: auto; height: 100%; }
-.rp-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.rp-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); flex: none; }
-.rp-input {
-  flex: 1; min-width: 0; padding: 2px 6px; font-size: 11px; color: var(--text-primary);
-  background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px;
-  font-family: ui-monospace, Consolas, monospace;
-}
-.rp-icon-btn {
-  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
-  color: var(--text-muted); background: transparent; border: 1px solid var(--border-color);
-  border-radius: 4px; cursor: pointer;
-}
-.rp-icon-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.rp-icon-btn:disabled { cursor: default; opacity: 0.6; }
-.rp-msg { color: var(--text-muted); padding: 6px 2px; line-height: 1.6; }
-.rp-err { color: var(--text-primary); }
-.rp-sec { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
-.rp-sec:last-child { border-bottom: none; }
-.rp-sec-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
-.rp-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 0; }
-.rp-kv > span { color: var(--text-muted); flex: none; }
-.rp-kv > b { color: var(--text-primary); font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; }
-.rp-mono { font-family: ui-monospace, Consolas, monospace; }
-.rp-dim { color: var(--text-muted); font-weight: 400; font-size: 11px; line-height: 1.6; }
-.rp-row { display: flex; align-items: center; gap: 6px; }
-.rp-spacer { flex: 1; }
-.rp-btn {
-  padding: 3px 10px; font-size: 11px; color: var(--text-secondary);
-  background: transparent; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;
-}
-.rp-btn:hover { background: var(--bg-hover); }
+/* 局部样式（其余复用 PanelShell 共享类；配色取设计系统变量） */
+.rp-main { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.rp-stage { flex: 1; min-height: 300px; display: flex; flex-direction: column; }
+.rp-stage > * { flex: 1; min-height: 0; }
 .rp-frame {
-  display: block; width: 100%; height: 520px; background: #fff;
+  display: block; width: 100%; min-height: 300px; background: #fff;
   border: 1px solid var(--border-color); border-radius: 4px;
 }
-.rp-bone { padding: 1px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-stage-empty { margin: auto; }
+.rp-bone { padding: 1px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.7; }
 .rp-idx {
   display: inline-block; min-width: 16px; margin-right: 4px; text-align: right;
-  color: var(--text-muted); font-variant-numeric: tabular-nums;
+  color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 11px;
 }
-.rp-tag {
+.pn-tag {
   margin-left: 4px; padding: 0 4px; font-size: 10px; color: var(--text-muted);
   border: 1px solid var(--border-color); border-radius: 3px;
 }
-.rp-code {
-  margin: 0 0 6px; padding: 6px; font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px; line-height: 1.5; color: var(--text-secondary);
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 4px; overflow-x: auto; white-space: pre;
-}
-.rp-badge { padding: 1px 6px; border-radius: 8px; font-size: 11px; }
-.rp-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
-.rp-ok { background: var(--accent); color: var(--bg-primary); }
-.rp-bad { background: var(--text-muted); color: var(--bg-primary); }
-.rp-check { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
-.rp-check > b { flex: none; color: var(--text-secondary); }
-.rp-check-name { flex: none; }
-.rp-check-metric { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-wrap { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.mp-side-hint { margin-top: 6px; }
+.mp-side-block { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.pn-warn { color: var(--text-primary); }
 </style>
