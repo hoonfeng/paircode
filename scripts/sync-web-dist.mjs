@@ -8,7 +8,7 @@
 //
 // 运行：node scripts/sync-web-dist.mjs（cwd=仓库根）
 // ═══════════════════════════════════════════════════════════════
-import { cpSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs'
+import { copyFileSync, mkdirSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,8 +20,31 @@ if (!existsSync(src)) {
   console.error(`[sync-web-dist] 源不存在: ${src}（请先运行 plugins-src/ui-app 的 vite build）`)
   process.exit(1)
 }
+// ★ 2026-09-17：不用 fs.cpSync(recursive)——本机 Node v24.14.0 + Windows 下触发 native 层静默
+//   崩溃（exit 127：无异常可捕获、无 exit 事件，进程直接被终止；连两个小文件的目录递归拷也崩，
+//   已实测复现）。改为逐文件递归拷贝（copyFileSync/mkdirSync 实测稳定）。
+//   dst 为 repoRoot 派生常量；先校验未越过仓库根（防误删）再 rmSync。
+if (path.relative(repoRoot, dst).startsWith('..')) {
+  console.error(`[sync-web-dist] 非法 dst（在仓库外）: ${dst}`)
+  process.exit(1)
+}
 rmSync(dst, { recursive: true, force: true })
-cpSync(src, dst, { recursive: true })
+function copyTree(from, to) {
+  try {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const sp = path.join(from, entry.name)
+      const dp = path.join(to, entry.name)
+      if (entry.isSymbolicLink()) { console.warn(`[sync-web-dist] 跳过符号链接: ${sp}`); continue }
+      if (entry.isDirectory()) copyTree(sp, dp)
+      else copyFileSync(sp, dp)
+    }
+  } catch (e) {
+    console.error(`[sync-web-dist] 拷贝失败 ${from} → ${to}: ${e.message}`)
+    process.exit(1)
+  }
+}
+copyTree(src, dst)
 
 // 清理未被引用的历史 bundle
 const indexPath = path.join(dst, 'index.html')

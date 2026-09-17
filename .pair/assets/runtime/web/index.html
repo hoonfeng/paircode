@@ -2,6 +2,60 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <!-- ★ structuredClone polyfill（2026-09-17）：旧内核（Chromium<98 / 360ChromeX 等）无此全局，
+       壳与区域包（ui-right-panel / ui-editor 内 mermaid 的 pie/radar 模块在初始化时即调用）会直接抛错。
+       此同步内联脚本先于一切模块脚本执行；现代浏览器自动跳过（保留原生实现）。
+       支持：普通对象/数组（含循环引用）、Date、RegExp、Map、Set、ArrayBuffer/TypedArray/DataView、Blob、Error；
+       宽松策略：函数/Symbol/DOM 节点/WeakMap 等不可克隆类型返回原引用而非抛错（页面可用性优先）。 -->
+  <script>
+    (function () {
+      if (typeof window.structuredClone === 'function') return;
+      try {
+        function scClone(value, seen) {
+          if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value; /* 原始值/Symbol 原样返回 */
+          if (typeof value === 'function') return value; /* 函数宽松共享引用 */
+          if (seen.has(value)) return seen.get(value); /* 循环引用：返回已克隆副本 */
+          try {
+            if (typeof Node !== 'undefined' && value instanceof Node) return value; /* DOM 节点宽松共享 */
+            if (typeof Blob !== 'undefined' && value instanceof Blob) return new Blob([value], { type: value.type });
+            if (value instanceof Date) return new Date(value.getTime());
+            if (value instanceof RegExp) { var r = new RegExp(value.source, value.flags); r.lastIndex = value.lastIndex; return r; }
+            if (typeof Map !== 'undefined' && value instanceof Map) { var m = new Map(); seen.set(value, m); value.forEach(function (x, k) { m.set(scClone(k, seen), scClone(x, seen)); }); return m; }
+            if (typeof Set !== 'undefined' && value instanceof Set) { var s = new Set(); seen.set(value, s); value.forEach(function (x) { s.add(scClone(x, seen)); }); return s; }
+            if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) return value.slice(0);
+            if (typeof DataView !== 'undefined' && value instanceof DataView) return new DataView(value.buffer.slice(0), value.byteOffset, value.byteLength);
+            if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(value)) return new value.constructor(value.buffer.slice(0), value.byteOffset, value.length);
+            if (value instanceof Error) {
+              var e = (typeof DOMException !== 'undefined' && value.name === 'DOMException') ? new DOMException(value.message, value.name) : new value.constructor(value.message);
+              seen.set(value, e);
+              if (value.stack) e.stack = value.stack;
+              if ('cause' in value) e.cause = scClone(value.cause, seen);
+              for (var ek in value) { /* 可枚举自有属性（code 等）；原生结构化克隆同样保留 */
+                if (Object.prototype.hasOwnProperty.call(value, ek)) {
+                  try { e[ek] = scClone(value[ek], seen); } catch (_) { /* 属性不可读则跳过 */ }
+                }
+              }
+              return e;
+            }
+            var tag = Object.prototype.toString.call(value);
+            if (tag === '[object WeakMap]' || tag === '[object WeakSet]' || tag === '[object Promise]') return value; /* 内部槽类型宽松共享 */
+          } catch (_) { return value; } /* 不可克隆类型宽松降级（原生会抛 DataCloneError） */
+          var out = Array.isArray(value) ? [] : {};
+          seen.set(value, out);
+          for (var k in value) {
+            if (Object.prototype.hasOwnProperty.call(value, k)) {
+              try { out[k] = scClone(value[k], seen); } catch (_) { /* 属性不可读则跳过 */ }
+            }
+          }
+          return out;
+        }
+        window.structuredClone = function (value) { try { return scClone(value, new WeakMap()); } catch (_) { return value; } };
+      } catch (_) {
+        /* 极端兜底：JSON 深克隆，polyfill 本体失败也绝不阻断页面 */
+        try { window.structuredClone = function (value) { try { return JSON.parse(JSON.stringify(value)); } catch (e) { return value; } }; } catch (__) {}
+      }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <title>PairCode IDE</title>
