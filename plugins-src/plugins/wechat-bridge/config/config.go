@@ -24,7 +24,7 @@ type Config struct {
 	Port int
 
 	// ── 回复等待（JSONL 兜底路）──
-	ReplyPollMs    int // 会话 JSONL 轮询间隔
+	ReplyPollMs    int // 会话 JSONL 轮询间隔（2026-09-17：1500→800 提速；done 即发快路径后仅兜底用）
 	ReplyQuietMs   int // 静默期：候选回复出现后无新行多久判定完成
 	ReplyTimeoutMs int // 单轮等待上限
 
@@ -79,7 +79,7 @@ func Default() Config {
 		PairCodeURL: "http://127.0.0.1:9090",
 		Port:        9097,
 
-		ReplyPollMs:    1500,
+		ReplyPollMs:    800,
 		ReplyQuietMs:   15000,
 		ReplyTimeoutMs: 30 * 60 * 1000,
 

@@ -76,8 +76,9 @@ type Bridge struct {
 	ctxTokens     map[string]string
 	typingTickets map[string]string
 	activeSession *stream.Session
-	draining      bool          // ★ 忙对齐：drain 相位（等待前序任务结束，丢弃其输出）
-	drainDone     chan struct{} // drain 结束信号（endDrain 关闭；幂等）
+	draining      bool              // ★ 忙对齐：drain 相位（等待前序任务结束，丢弃其输出）
+	drainDone     chan struct{}     // drain 结束信号（endDrain 关闭；幂等）
+	replyDoneCh   chan stream.Event // ★ done 快路径：非流式等待期间 done 事件直达（awaitReply 登记）
 
 	queue    chan pendingMsg
 	stopCh   chan struct{}
@@ -492,6 +493,24 @@ func (b *Bridge) handleOne(item pendingMsg) {
 		}()
 	}
 
+	// 2.5) ★ done 即发快路径登记（2026-09-17）：非流式模式下 done 事件自带最终
+	//      文本（自然终止时 loop 发射 Content=assistant.Content，与 JSONL 候选
+	//      同源、条件等价），收到即可直接发送，省去 JSONL 路的轮询发现 +
+	//      静默确认（实测 ~16s）。必须在投喂之前登记：回合极快结束时 done 也
+	//      不会错过；handleOne 退出兜底清理（覆盖投喂失败/超时等全部出口）。
+	//      流式模式不参与：onStreamEvent 对 activeSession!=nil 不分发快路径。
+	doneFastCh := make(chan stream.Event, 1)
+	b.mu.Lock()
+	b.replyDoneCh = doneFastCh
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		if b.replyDoneCh == doneFastCh {
+			b.replyDoneCh = nil
+		}
+		b.mu.Unlock()
+	}()
+
 	// 3) 投喂 PairCode
 	if err := paircode.Send(b.cfg.PairCodeURL, b.info.ConvID, b.resolveWorkspace(),
 		item.text, sendTimeoutSec*time.Second); err != nil {
@@ -505,7 +524,7 @@ func (b *Bridge) handleOne(item pendingMsg) {
 	b.log("已投喂 PairCode（baseline idx=%d，流式=%v）", baseline, session != nil)
 
 	// 4) 双路等待（WS 流式主路 + JSONL 兜底）
-	b.awaitReply(item, baseline, session, notifyAskUser, drainCh)
+	b.awaitReply(item, baseline, session, notifyAskUser, drainCh, doneFastCh)
 }
 
 // onStreamEvent 事件流分发（按 convId 路由后进入活动会话）。
@@ -515,6 +534,7 @@ func (b *Bridge) onStreamEvent(ev stream.Event) {
 	b.mu.Lock()
 	draining := b.draining
 	s := b.activeSession
+	doneCh := b.replyDoneCh
 	b.mu.Unlock()
 	if draining {
 		if ev.Type == "done" {
@@ -523,7 +543,18 @@ func (b *Bridge) onStreamEvent(ev stream.Event) {
 		return
 	}
 	if s != nil {
+		// 流式模式：done 交由流式会话收尾（其内容已由 OnFlush 逐片发出，快路径不参与防重复）
 		s.Feed(ev)
+		return
+	}
+	// ★ done 即发快路径（2026-09-17）：非流式模式下 done 事件自带最终文本——
+	// 直达等待者即刻发送，省去 JSONL 路的轮询发现 + 静默确认（实测 ~16s）。
+	// 无等待者（未登记/已消耗）时忽略：常规 JSONL 兜底路仍会送达。
+	if ev.Type == "done" && doneCh != nil {
+		select {
+		case doneCh <- ev:
+		default:
+		}
 	}
 }
 
@@ -579,11 +610,12 @@ func (b *Bridge) waitDrain(item pendingMsg, drainCh chan struct{}, deadline time
 
 // awaitReply 双路等待：
 //   - WS 流式 done 先到：内容已由 OnFlush 全部发出 → 直接完成（JSONL 路后台校验一致性）；
+//   - done 即发（非流式快路径）：done 事件自带最终文本 → 直接发送，省轮询+静默；
 //   - JSONL 先到（WS 半死/断流）：中止流式，按前缀比对补发未发出的部分；
 //   - 超时：提示用户到界面查看。
 //   - ★ 忙对齐（2026-09-17）：drainCh 非 nil（投喂时会话忙）时，先等前序任务
 //     结束并重锚基线，再做正式双路等待——前序任务的输出不会进入本消息回复。
-func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Session, notifyAskUser func(string), drainCh chan struct{}) {
+func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Session, notifyAskUser func(string), drainCh chan struct{}, doneFastCh chan stream.Event) {
 	timeout := time.Duration(b.cfg.ReplyTimeoutMs) * time.Millisecond
 
 	// ★ 忙对齐：先等前序任务结束（drain），再重锚基线、进入正式双路等待。
@@ -601,6 +633,13 @@ func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Ses
 		time.Sleep(500 * time.Millisecond)
 		baseline = (&paircode.Waiter{WorkspaceRoot: b.resolveWorkspace(), ConvID: b.info.ConvID}).BaselineIdx()
 		b.log("[stream] 前序任务已结束，重锚基线 idx=%d（其输出不会进入回复）", baseline)
+	}
+
+	// ★ 快路径窗开启：清掉此前（drain / 投喂前）可能误入的陈旧 done 事件——
+	//   只接受本回合的 done（本回合的 done 只能在其运行结束后到达）。
+	select {
+	case <-doneFastCh:
+	default:
 	}
 
 	ch := make(chan waitResult, 3)
@@ -642,6 +681,18 @@ func (b *Bridge) awaitReply(item pendingMsg, baseline int64, session *stream.Ses
 					continue
 				}
 				w = waitResult{src: "timeout"}
+			}
+		case ev := <-doneFastCh:
+			// ★ done 即发（2026-09-17）：done 事件自带最终文本 → 直接发送，
+			//   省去 JSONL 路的轮询发现 + 15s 静默确认（实测 ~16s）。
+			//   Content 为空（tool_budget/blocked 等）不发送，转常规兜底路。
+			if txt := strings.TrimSpace(ev.Content); txt != "" {
+				b.log("[stream] done 即发快路径触发（%d 字符）", runeLen(txt))
+				if b.sendToWeixin(item.from, txt) {
+					b.log("↩ 回复已发送（done 即发），共 %d 字符", runeLen(txt))
+					return
+				}
+				b.log("[stream] done 即发发送失败，转常规兜底路")
 			}
 		case <-time.After(timeout - time.Since(waitStart)):
 			w = waitResult{src: "timeout"}
