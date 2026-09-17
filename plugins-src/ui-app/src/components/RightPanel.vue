@@ -1793,17 +1793,33 @@ const onAskAnswer = (seg, { callId, answer, answers }) => {
 }
 
 const submitAskAnswer = async (seg) => {
+  // ★ 2026-09-17 修复：convId 为空时拦截提交（防后端 400「convId 必填」；同 sendFeedback 的判空约定）
+  if (!state.currentConvId) {
+    console.error('[RP] 回答提交被拦截：currentConvId 为空')
+    window.$toast && window.$toast('回答失败：当前没有选中会话，请刷新页面后重试', 'error')
+    return
+  }
   // ★ Round3 ⑤：多问题 answers 数组优先，缺省回落单问题 answer（后端双兼容）
   if (seg.answers && seg.answers.length) {
     seg._answered = true
     try {
       await api.apiPost('/chat/answer', { convId: state.currentConvId, callId: seg.callId, answers: seg.answers })
-    } catch {}
+    } catch (e) {
+      console.error('[RP] 回答提交失败（多问题）:', e)
+      seg._answered = false
+      window.$toast && window.$toast('回答失败：' + ((e && e.message) || e) + '（可能任务已结束，请刷新后重试）', 'error')
+    }
     return
   }
   const answer = (seg.answer || '').trim()
   if (!answer) return; seg._answered = true
-  try { await api.apiPost('/chat/answer', { convId: state.currentConvId, answer }) } catch {}
+  try {
+    await api.apiPost('/chat/answer', { convId: state.currentConvId, answer })
+  } catch (e) {
+    console.error('[RP] 回答提交失败（单问题）:', e)
+    seg._answered = false
+    window.$toast && window.$toast('回答失败：' + ((e && e.message) || e) + '（可能任务已结束，请刷新后重试）', 'error')
+  }
 }
 
 const resolveApproval = async (approved) => {
@@ -1814,7 +1830,13 @@ const resolveApproval = async (approved) => {
   const a = state.approvalByConv[convId]
   if (!a || !a.callId || !a.waiting) return
   a.waiting = false
-  try { await api.apiPost('/chat/approve', { convId, approved: isApproved, reply }) } catch { a.waiting = true }
+  try {
+    await api.apiPost('/chat/approve', { convId, approved: isApproved, reply })
+  } catch (e) {
+    console.error('[RP] 审批提交失败:', e)
+    a.waiting = true
+    window.$toast && window.$toast('审批失败：' + ((e && e.message) || e) + '（可能任务已结束，请刷新后重试）', 'error')
+  }
 }
 
 // ── 回退按钮 ──
