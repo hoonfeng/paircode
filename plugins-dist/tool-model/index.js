@@ -2272,9 +2272,30 @@ function meshSnap(m, eps) {
 function weldTolerance(m) { return meshEpsilon(m) * 0.5; }
 function tjTolerance(m) { return meshEpsilon(m); }
 
-// 布尔运算（union / subtract / intersect），输入输出都是索引网格
-// statsOut 可选：传入对象则回填共面合并的诊断（before/after 面数 + merge 统计），供测试与诊断用
+// ── 布尔运算默认入口（union / subtract / intersect），输入输出都是索引网格 ──────
+//   默认走 **多边形 BSP 路径**（I.6-2）：BSP 全程保多边形，只在节点收尾时三角化。
+//   为什么默认切它（实测 2026-09-17，60×40×6 板 @24 段；详见 §I.6-2 与 meshBooleanPoly 注释）：
+//     · 面数 −65~81%、边界边 −36~56%（4 孔：2975→768 面、1451→928 边界边）；
+//     · 更快 3~6×（板 − 24 孔：9962 面/350ms → 2887 面/59ms）；
+//     · 与三角路径几何守恒（体积/面积互差 < 1e-6）、非流形 0、反向边对 0、两次运行逐位一致；
+//     · 边界场景（不相交 / 完全包含 / 完全重合 / 同尺寸 intersect）两路径结果逐位一致。
+//     · 输出已是**合并饱和**态：再跑 meshMergeCoplanar 仅 ∩ 场景 −6 面（1%）、其余 merged=0。
+//   回退：setMeshBooleanLegacy(true)，或插件 config 给 legacyMeshBoolean=true → 走 meshBooleanTrig。
+//   ★ 已知差异（仅 1 处，判为可接受）：两实体**仅共面接触**时 poly 50 面/22 边界边 vs 三角 46 面/18 边界边
+//     （面 +4、边界 +4）；两者都不水密（退化输入），体积一致、非流形 0。
+//   statsOut 可选：传入则回填所走路径的诊断，并置 statsOut.path = 'poly' | 'trig' 便于区分。
+var meshBoolLegacy = false;
+function setMeshBooleanLegacy(on) { meshBoolLegacy = !!on; return meshBoolLegacy; }
+function meshBooleanPath() { return meshBoolLegacy ? 'trig' : 'poly'; }
 function meshBoolean(meshA, meshB, op, tol, statsOut) {
+  if (statsOut) statsOut.path = meshBooleanPath();
+  if (meshBoolLegacy) return meshBooleanTrig(meshA, meshB, op, tol, statsOut);
+  return meshBooleanPoly(meshA, meshB, op, tol, statsOut);
+}
+
+// 三角路径布尔（I.6-1 及以前的生产路径）：BSP 只吃三角形 ⇒ 共面合并只能**事后按簇聚类**，回退严重
+//   （4 孔场景整簇回退，面数停在 2975）。保留为 **meshBoolean 的 legacy 分支 + 测试基线**，不在默认链路上。
+function meshBooleanTrig(meshA, meshB, op, tol, statsOut) {
   var repaired = meshBooleanRaw(meshA, meshB, op, tol);
   var mg = meshMergeCoplanar(repaired);
   if (statsOut) {
@@ -2312,7 +2333,7 @@ function meshBooleanRaw(meshA, meshB, op, tol) {
   var out = trisToMesh(bspAllTris(A), TOL);
   if (!out.indices.length) fail('布尔运算结果为空（' + op + '）——检查两个实体是否有交集/是否完全包含');
   // BSP 裁剪必然产生 T 型接缝 → 统一修复（水密性是可打印的前提，也是 M 判据的验收面）
-  // 共面合并（I.6-1）在 meshBoolean 里对修复结果做，本函数不含它。
+  // 共面合并（I.6-1）在 meshBooleanTrig 里对修复结果做，本函数不含它。
   return meshRepair(out).mesh;
 }
 
@@ -2421,7 +2442,7 @@ function polyNodeToTris(node, eps) {
   return out;
 }
 
-// I.6-2 多边形路径布尔（对照实验用；meshBoolean 的默认路径仍是三角版，两者可逐位比对）
+// I.6-2 多边形路径布尔 —— **meshBoolean 的默认路径**（三角版保留为 meshBooleanTrig 供回退/对照）
 //   收尾：按节点做共面合并 + 三角化。任一节点合并失败 ⇒ 该节点退化「逐多边形扇形三角化」
 //   （凸性保证正确），因此**多边形路径不存在产出坏几何的风险面**，最差只是少合并一些面。
 //   statsOut 回填：polyNodes/polyInput/polyReverted + beforeRepair/afterRepair。
@@ -5366,7 +5387,9 @@ var PLUGIN = {
   name: 'tool-model',
   purpose: '3D/CAD 创作域工具面（纯 goja 零依赖）：参数化 CAD 工程（表达式驱动）→ BSP 实体布尔（union/subtract/intersect）→ 导出公开格式（glTF 2.0 / GLB / binary+ASCII STL / OBJ / 自包含 WebGL 预览 HTML）→ 9 项判据（含分级的水密性报告）',
   inject: ['fs', 'logger'],
-  apply: function (ctx) {
+  apply: function (ctx, config) {
+    // 可选回退：config.legacyMeshBoolean = true → 布尔走三角路径（I.6-1 及以前）；默认走多边形路径（I.6-2）
+    if (config && config.legacyMeshBoolean) setMeshBooleanLegacy(true);
     for (var i = 0; i < TOOL_DEFS.length; i++) {
       (function (t) {
         ctx.tools.register({
