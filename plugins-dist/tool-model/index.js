@@ -33,6 +33,13 @@ var TWIST_LAYERS_DEFAULT = 12;  // 扭转挤出的默认分层数（口径同 JS
 var LIMIT_ARRAY = 256;          // 阵列数量上限
 var LIMIT_OBJ_BYTES = 64 << 20; // 导入 STL/OBJ 上限（64MB）
 var LIMIT_EXPR_DEPTH = 32;      // 表达式括号/递归深度上限
+var LIMIT_EDGE_OPS = 64;        // 单次倒角/圆角处理的边数上限（裁剪体顶点枚举为 O(n³)）
+var EDGE_ANGLE_DEFAULT = 30;    // 认定为"棱"的最小折角（度）：更平的相邻面视为同一曲面
+var ARC_SEG_DEFAULT = 8;        // 圆角弧面的离散段数（每段一个切平面）
+var EDGE_NEIGHBOR_HOPS = 6;     // 边的"邻域"跳数（判定斜面只切到边附近，见 edgeCutSafety）
+var LIMIT_CONVEX_FACES = 4000;  // 走"H-rep 直接构造"的凸体面数上限（面平面去重是 O(F²)）
+var LIMIT_CONVEX_PLANES = 140;  // H-rep 直接构造的平面数上限（顶点枚举 O(n³)）
+var LIMIT_FILLET_EDGES = 8;     // 单次圆角的边数上限（圆角要布尔，见 meshFillet 的成本说明）
 
 var EPS = 1e-9;
 var EPS_AREA = 1e-10;           // 退化三角面面积阈值
@@ -1738,6 +1745,519 @@ function meshBoolean(meshA, meshB, op, tol) {
   return meshRepair(out).mesh;
 }
 
+// ── 倒角 / 圆角（网格级边重建：I.8.5 路线 A/B）────────────────
+// 口径与理由：
+//   · 圆角/倒角不是参数化特征，而是**网格级边重建** —— 这里实现可解析验证的那一半：
+//       ① 边识别：焊接顶点 → 每条边的两个邻面 → 外法线夹角（折角）→ 凸边 / 凹边；
+//       ② 倒角：每条凸边一个**斜面半空间**，结果 = 实体 ∩ 所有斜面内半空间。
+//          半空间集合本身是凸的 ⇒ 用 H-rep → V-rep 直接构造裁剪体（精确、不靠布尔求交），
+//          再由**一次**布尔得到结果（避免逐边布尔造成的面数爆炸）；
+//       ③ 圆角：先按半径 r 倒角切掉棱部楔块，再把「圆柱片段」拼回去（路线 B 的布尔近似）。
+//   · 斜面平移量为什么是 d·cos(θ/2)：要求斜面恰好经过「两个邻面内距棱 d」的那两点 ——
+//     d 就是用户直觉的"倒角量"（面内距离），θ 是内二面角（凸边 θ < 180°）。
+//   · 顶点混合（三条以上棱交会处的球面过渡）**不做**：凸体由半空间求交自然得到正确的小平面，
+//     边端为近似 —— 文档如实标注，不静默降级。
+//   · 凹边（内二面角 > 180°）不支持：凹边倒角要「填」材料而非「切」（另一套 union 逻辑）——
+//     默认跳过并在诊断里报告条数，用户显式指定凹边时明确报错。
+
+// 三角形里"不在边 a-b 上"的那个顶点
+function triThirdVertex(tri, a, b) {
+  for (var k = 0; k < 3; k++) { if (tri[k] !== a && tri[k] !== b) return tri[k]; }
+  return null;
+}
+
+function fmtVec3(v) { return '(' + fmtNum(v[0], 2) + ',' + fmtNum(v[1], 2) + ',' + fmtNum(v[2], 2) + ')'; }
+
+function meshDiagonal(m) {
+  var bb = meshBbox(m);
+  return vLen(vSub(bb[1], bb[0]));
+}
+
+// 点到线段的最短距离
+function distPointSeg(p, a, b) {
+  var ab = vSub(b, a), L2 = vDot(ab, ab);
+  if (L2 <= EPS) return vDist(p, a);
+  var t = vDot(vSub(p, a), ab) / L2;
+  if (t < 0) t = 0; else if (t > 1) t = 1;
+  return vDist(p, [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]);
+}
+
+// 边表：每条内部边的两个邻面、外向法线、折角与凸凹。
+//   ★ 凸凹判据（对任意闭合网格成立）：取本面「不在边上」的第三顶点 c，
+//     看它相对**另一个邻面**平面的符号（面法线外向为正）：在内侧 ⇒ 凸边；在外侧 ⇒ 凹边。
+//     两个邻面各算一次互为印证（网格已外向化；不一致时取绝对值大者以抗退化面）。
+function meshEdgeTable(m, weldTol) {
+  var welded = meshWeld(m, weldTol === undefined ? WELD_TOL : weldTol).mesh;
+  var pos = welded.positions, tris = welded.indices, i, e, k;
+  var nrm = [];
+  for (i = 0; i < tris.length; i++) {
+    var t3 = tris[i];   // ★ 注意：triPlane 收的是**坐标**三元组，不是索引三元组
+    var tpl = triPlane([pos[t3[0]], pos[t3[1]], pos[t3[2]]]);
+    nrm.push(tpl ? tpl.n : null);
+  }
+  var map = {}, order = [];
+  for (i = 0; i < tris.length; i++) {
+    for (e = 0; e < 3; e++) {
+      var a = tris[i][e], b = tris[i][(e + 1) % 3];
+      var lo = a < b ? a : b, hi = a < b ? b : a;
+      var key = lo + '_' + hi;
+      var rec = map[key];
+      if (!rec) { rec = map[key] = { a: lo, b: hi, faces: [] }; order.push(key); }
+      rec.faces.push(i);
+    }
+  }
+  var out = [], skipped = { open: 0, nonManifold: 0, degenerate: 0 };
+  for (k = 0; k < order.length; k++) {
+    var r = map[order[k]];
+    if (r.faces.length === 1) { skipped.open++; continue; }
+    if (r.faces.length > 2) { skipped.nonManifold++; continue; }
+    var f1 = r.faces[0], f2 = r.faces[1];
+    var n1 = nrm[f1], n2 = nrm[f2];
+    var c1 = triThirdVertex(tris[f1], r.a, r.b), c2 = triThirdVertex(tris[f2], r.a, r.b);
+    if (!n1 || !n2 || c1 === null || c2 === null) { skipped.degenerate++; continue; }
+    var pa = pos[r.a], pb = pos[r.b], len = vDist(pa, pb);
+    if (len <= EPS) { skipped.degenerate++; continue; }
+    var s1 = vDot(n2, vSub(pos[c1], pa));
+    var s2 = vDot(n1, vSub(pos[c2], pa));
+    var sgn = Math.abs(s1) >= Math.abs(s2) ? s1 : s2;
+    var cosPhi = vDot(n1, n2);
+    if (cosPhi > 1) cosPhi = 1; else if (cosPhi < -1) cosPhi = -1;
+    var phi = Math.acos(cosPhi);
+    // 凸凹判定要带相对容差：共面的相邻面（同一平面被切成多个三角形的对角线）sgn 理论上是 0，
+    //   浮点误差会让它变成 +1e-16 —— 若严格按 sgn > 0 判凹，圆柱侧面的 6 条对角线会被误判成凹边，
+    //   进而让 meshConvexPlanes 把**凸体**圆柱判成非凸（白走布尔路径，面数从百级涨到千级且不水密）。
+    var convTol = Math.max(1e-12, 1e-9 * len);
+    var convex = sgn <= convTol;
+    out.push({
+      a: r.a, b: r.b, pa: pa, pb: pb, len: len,
+      dir: vMul(vSub(pb, pa), 1 / len),
+      mid: [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2],
+      n1: n1, n2: n2,
+      convex: convex,
+      angleDeg: phi * 180 / Math.PI,                                        // 折角（相邻面外法线夹角）：平面 = 0
+      dihedralDeg: (convex ? Math.PI - phi : Math.PI + phi) * 180 / Math.PI  // 内二面角（凸 < 180，凹 > 180）
+    });
+  }
+  return { mesh: welded, edges: out, skipped: skipped };
+}
+
+// 挑出要处理的棱：
+//   edges 缺省 'convex'（折角 ≥ minAngle 的凸边）/ 坐标对数组 [[[x,y,z],[x,y,z]], …]
+//   （按端点匹配，与顶点编号顺序无关 ⇒ 可复现、可精确指定单条棱）
+function selectBevelEdges(tab, spec, E, what) {
+  var minAngle = spec.minAngle === undefined ? EDGE_ANGLE_DEFAULT : evalNum(spec.minAngle, E, 'minAngle');
+  if (!(minAngle >= 0) || minAngle > 179.9) fail(what + ' 的 minAngle 必须在 0~180 度之间（收到 ' + minAngle + '）');
+  var want = spec.edges === undefined ? 'convex' : spec.edges;
+  var tol = meshEpsilon(tab.mesh) * 2;
+  var list = [], flat = 0, concave = 0, k, i, ed;
+  if (isArr(want)) {
+    var pairs = [], hitConcave = 0, hitFlat = 0;
+    for (k = 0; k < want.length; k++) {
+      var it = want[k];
+      if (!isArr(it) || it.length !== 2) fail(what + ' 的 edges[] 必须是 [[x,y,z],[x,y,z]] 形式的坐标对（第 ' + k + ' 项不是）');
+      pairs.push([evalVec3(it[0], E, 'edges[' + k + '][0]'), evalVec3(it[1], E, 'edges[' + k + '][1]')]);
+    }
+    if (!pairs.length) fail(what + ' 的 edges 数组不能为空');
+    for (k = 0; k < tab.edges.length; k++) {
+      ed = tab.edges[k];
+      var hit = -1;
+      for (i = 0; i < pairs.length; i++) {
+        if ((vEq(ed.pa, pairs[i][0], tol) && vEq(ed.pb, pairs[i][1], tol)) ||
+            (vEq(ed.pa, pairs[i][1], tol) && vEq(ed.pb, pairs[i][0], tol))) { hit = i; break; }
+      }
+      if (hit < 0) continue;
+      pairs.splice(hit, 1);
+      if (ed.angleDeg < minAngle - 1e-9) { hitFlat++; continue; }
+      if (!ed.convex) { hitConcave++; continue; }
+      list.push(ed);
+    }
+    if (hitConcave) fail(what + '：指定的 ' + hitConcave + ' 条边是**凹边**（内二面角 > 180°）—— 凹边的圆角/倒角要在凹处填材料，当前只支持凸边（切除）');
+    if (hitFlat) fail(what + '：指定的 ' + hitFlat + ' 条边折角小于 minAngle=' + minAngle + '°（不属于棱；如确需处理请调小 minAngle）');
+    if (pairs.length) fail(what + '：有 ' + pairs.length + ' 条指定边在网格里找不到（网格共 ' + tab.edges.length + ' 条内部边；端点须是焊接后的顶点坐标，可用 model_doc 的几何摘要核对）');
+  } else {
+    if (want !== 'convex') fail(what + ' 的 edges 只能是 "convex"（默认）或坐标对数组（收到 ' + JSON.stringify(want) + '；凹边未支持，故无 "all"）');
+    for (k = 0; k < tab.edges.length; k++) {
+      ed = tab.edges[k];
+      if (ed.angleDeg < minAngle - 1e-9) { flat++; continue; }
+      if (!ed.convex) { concave++; continue; }
+      list.push(ed);
+    }
+  }
+  if (!list.length) {
+    fail(what + '：没有可处理的凸边（折角 ≥ ' + minAngle + '°；网格 ' + tab.edges.length + ' 条内部边，其中 ' + flat +
+      ' 条折角过小、' + concave + ' 条为凹边）。曲面体（球/光滑回转体）属正常；要放宽请调小 minAngle');
+  }
+  if (list.length > LIMIT_EDGE_OPS) {
+    fail(what + '：选中 ' + list.length + ' 条边，超过单次上限 ' + LIMIT_EDGE_OPS + ' 条（裁剪体顶点枚举 O(n³)）。' +
+      '请用 edges 数组分批指定，或调大 minAngle 减少参与边数');
+  }
+  return { list: list, flat: flat, concave: concave, minAngle: minAngle };
+}
+
+// 一条凸边的倒角斜面（内半空间 n·x ≤ w）：
+//   m = normalize(n1+n2)（两邻面外法线的角平分线），平移量 t = d·cos(θ/2)
+//   ⇒ 斜面恰好经过「两个邻面内距棱 d」的点（d = 面内倒角量，θ = 内二面角）
+function chamferPlaneOfEdge(edge, d) {
+  var sum = vAdd(edge.n1, edge.n2), ln = vLen(sum);
+  if (ln < 1e-9) return null;
+  var m = vMul(sum, 1 / ln);
+  var t = d * Math.cos(edge.dihedralDeg * Math.PI / 360);
+  return { n: m, w: vDot(m, edge.mid) - t, t: t };
+}
+
+// 顶点 → 相邻面（边的邻域 BFS 用）
+function vertexFaceAdjacency(nv, tris) {
+  var adj = [], i, k, e;
+  for (i = 0; i < nv; i++) adj.push([]);
+  for (k = 0; k < tris.length; k++) for (e = 0; e < 3; e++) adj[tris[k][e]].push(k);
+  return adj;
+}
+
+// 边的邻域顶点集（沿面邻接 BFS hops 跳）
+function edgeNeighborhoodVertices(tris, adj, a, b, hops) {
+  var vset = {}, seenF = {}, frontier = [a, b], h, k, kk, e;
+  vset[a] = 1; vset[b] = 1;
+  for (h = 0; h < hops; h++) {
+    var next = [];
+    for (k = 0; k < frontier.length; k++) {
+      var faces = adj[frontier[k]];
+      for (kk = 0; kk < faces.length; kk++) {
+        var f = faces[kk];
+        if (seenF[f]) continue;
+        seenF[f] = 1;
+        for (e = 0; e < 3; e++) {
+          var v = tris[f][e];
+          if (!vset[v]) { vset[v] = 1; next.push(v); }
+        }
+      }
+    }
+    frontier = next;
+    if (!frontier.length) break;
+  }
+  return vset;
+}
+
+// 斜面是否只切到「这条边附近」—— 非凸实体（L 形、带孔件、镂空）的远处材料若落在切除侧，
+//   说明这个无限延伸的半空间会误伤，必须拦下（否则静默产出错误几何）。两个判据：
+//     ① 切除侧的顶点必须属于边的 N 跳邻域（"完全不相邻的特征被切"必然违规）；
+//     ② 切除侧顶点到边的距离不超过 K = max(4d, 0.05·模型对角线)（邻域内但穿透薄壁等）。
+function edgeCutSafety(tab, adj, edge, plane, d, diag) {
+  var pos = tab.mesh.positions, i;
+  var slack = Math.max(EPS_PLANE, diag * 1e-7);
+  var neigh = adj ? edgeNeighborhoodVertices(tab.mesh.indices, adj, edge.a, edge.b, EDGE_NEIGHBOR_HOPS) : null;
+  var farDist = 0, farAt = null;
+  for (i = 0; i < pos.length; i++) {
+    var v = pos[i];
+    if (vDot(plane.n, v) <= plane.w + slack) continue;
+    if (neigh && !neigh[i]) return { ok: false, reason: 'far', at: v, dist: distPointSeg(v, edge.pa, edge.pb) };
+    var dist = distPointSeg(v, edge.pa, edge.pb);
+    if (dist > farDist) { farDist = dist; farAt = v; }
+  }
+  var K = Math.max(4 * d, 0.05 * diag);
+  if (farDist > K) return { ok: false, reason: 'dist', at: farAt, dist: farDist, limit: K };
+  return { ok: true };
+}
+
+// 三平面交点（Cramer 法则）；近共面退化 ⇒ null
+function planesIntersect(p1, p2, p3) {
+  var bc = vCross(p2.n, p3.n);
+  var den = vDot(p1.n, bc);
+  if (Math.abs(den) < 1e-9) return null;
+  var s = vAdd(vMul(bc, p1.w), vAdd(vMul(vCross(p3.n, p1.n), p2.w), vMul(vCross(p1.n, p2.n), p3.w)));
+  var p = vMul(s, 1 / den);
+  return vFinite(p) ? p : null;
+}
+
+// 半空间集合（n·x ≤ w，n 单位外向）→ 凸多面体网格：
+//   顶点枚举（三平面交点 → 校验落在所有半空间内 → 去重）→ 逐平面收集共面顶点 → 面内角度排序 → 扇形三角化。
+//   ★ 纯几何、不经布尔 ⇒ 对凸约束**解析精确**，且面数最少（无 BSP 碎片）—— 倒角的正确性正建立在此。
+function halfspacesMesh(planes, eps) {
+  var n = planes.length, i, j, k;
+  if (n < 4) return null;
+  var verts = [], seen = {};
+  for (i = 0; i < n; i++) {
+    for (j = i + 1; j < n; j++) {
+      for (k = j + 1; k < n; k++) {
+        var p = planesIntersect(planes[i], planes[j], planes[k]);
+        if (!p) continue;
+        var inside = true;
+        for (var q = 0; q < n; q++) {
+          if (vDot(planes[q].n, p) > planes[q].w + eps) { inside = false; break; }
+        }
+        if (!inside) continue;
+        var key = Math.round(p[0] / eps) + '_' + Math.round(p[1] / eps) + '_' + Math.round(p[2] / eps);
+        if (seen[key]) continue;
+        seen[key] = 1;
+        verts.push(p);
+      }
+    }
+  }
+  if (verts.length < 4) return null;
+  var tris = [];
+  for (i = 0; i < n; i++) {
+    var nv = planes[i].n, w = planes[i].w, face = [];
+    for (j = 0; j < verts.length; j++) if (Math.abs(vDot(nv, verts[j]) - w) <= eps) face.push(verts[j]);
+    if (face.length < 3) continue;
+    var helper = Math.abs(nv[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    var u = vNorm(vCross(nv, helper)), vv = vNorm(vCross(nv, u));
+    var cx = 0, cy = 0, cz = 0;
+    for (j = 0; j < face.length; j++) { cx += face[j][0]; cy += face[j][1]; cz += face[j][2]; }
+    var ctr = [cx / face.length, cy / face.length, cz / face.length];
+    var ring = [];
+    for (j = 0; j < face.length; j++) {
+      var rel = vSub(face[j], ctr);
+      ring.push([Math.atan2(vDot(rel, vv), vDot(rel, u)), face[j]]);
+    }
+    ring.sort(function (A, B) { return A[0] - B[0]; });
+    for (j = 1; j + 1 < ring.length; j++) tris.push([ring[0][1], ring[j][1], ring[j + 1][1]]);
+  }
+  if (!tris.length) return null;
+  var mesh = trisToMesh(tris, eps);
+  if (!mesh.indices.length) return null;
+  return meshOrientOutward(mesh);
+}
+
+// 把模型包住的 6 个半空间（给无限半空间集合一个有限边界）
+function boxHalfspaces(mesh, margin) {
+  var bb = meshBbox(mesh);
+  var lo = vSub(bb[0], [margin, margin, margin]), hi = vAdd(bb[1], [margin, margin, margin]);
+  return [
+    { n: [1, 0, 0], w: hi[0] }, { n: [-1, 0, 0], w: -lo[0] },
+    { n: [0, 1, 0], w: hi[1] }, { n: [0, -1, 0], w: -lo[1] },
+    { n: [0, 0, 1], w: hi[2] }, { n: [0, 0, -1], w: -lo[2] }
+  ];
+}
+
+// 顶点枚举/共面判定容差（与模型尺度相关：数值误差 ~1e-13 相对，留 3 个量级余量）
+function halfspaceEps(m) { return Math.max(1e-7, meshDiagonal(m) * 1e-9); }
+
+function bboxOverlap(a, b) {
+  for (var i = 0; i < 3; i++) if (a[1][i] < b[0][i] || b[1][i] < a[0][i]) return false;
+  return true;
+}
+
+// 凸块分组：组内两两**包围盒不相交** ⇒ 可安全 meshMerge 成一个多体网格（免布尔）。
+//   ★ 逐块布尔会让 BSP 把网格反复切碎（实测 12 个弧块逐块 union 把 12 面的立方体顶到 6 万面）；
+//   分组后只需"组数"次布尔，组内直接拼接。包围盒相交但几何不相交的保守分到不同组（只多付一次布尔）。
+function groupBlocksByBBox(blocks) {
+  var groups = [], i, g, k;
+  for (i = 0; i < blocks.length; i++) {
+    var bb = meshBbox(blocks[i]);
+    var placed = false;
+    for (g = 0; g < groups.length && !placed; g++) {
+      var ok = true;
+      for (k = 0; k < groups[g].bbs.length; k++) {
+        if (bboxOverlap(bb, groups[g].bbs[k])) { ok = false; break; }
+      }
+      if (ok) { groups[g].items.push(blocks[i]); groups[g].bbs.push(bb); placed = true; }
+    }
+    if (!placed) groups.push({ items: [blocks[i]], bbs: [bb] });
+  }
+  return groups;
+}
+
+// 倒角裁剪：把一组斜面半空间应用到实体上。凸实体走 H-rep 直接构造（精确 + 水密 + 无碎片），
+//   非凸走布尔（盒子 ∩ 斜面 = 裁剪体，与实体求交）。圆角复用本函数做"先切棱部楔块"这一步。
+function chamferCut(mesh, tab, cutPlanes, d, what) {
+  var eps = halfspaceEps(tab.mesh), diag = meshDiagonal(tab.mesh);
+  // 盒子只是给"无限半空间集合"一个有限边界，宜远大于实体：盒子平面若贴近实体表面，
+  //   布尔路径会平白多切出大量碎片（非凸体实测 boundary 178 → 拉开后显著减少）。
+  var box = boxHalfspaces(tab.mesh, Math.max(2 * d, 2 * diag));
+  var convexPlanes = meshConvexPlanes(tab, eps);
+  if (convexPlanes && convexPlanes.length + box.length + cutPlanes.length <= LIMIT_CONVEX_PLANES) {
+    return { mesh: halfspacesMesh(convexPlanes.concat(box).concat(cutPlanes), eps), mode: 'direct' };
+  }
+  var cutter = halfspacesMesh(box.concat(cutPlanes), eps);
+  if (!cutter) return { mesh: null, mode: 'boolean' };
+  return { mesh: meshBoolean(mesh, cutter, 'intersect'), mode: 'boolean' };
+}
+
+// 凸实体的面平面集合（去重）；非凸 / 含开边界 / 面数过大 ⇒ null。
+//   ★ 凸体倒角可以完全绕开 BSP 布尔：结果 = 面平面 ∩ 斜面，直接 H-rep 精确构造 ——
+//     与布尔相比：解析精确、**天然水密**（布尔会把共面/近共面输入切出 T 缝）、面数最少。
+//   凸性判据用"所有内部边都是凸边"（对闭合网格与凸多面体等价），复用边表 ⇒ O(E)，不需要 O(V·F)。
+function meshConvexPlanes(tab, eps) {
+  if (tab.skipped.open || tab.skipped.nonManifold || tab.skipped.degenerate) return null;
+  var i, k, j;
+  for (i = 0; i < tab.edges.length; i++) if (!tab.edges[i].convex) return null;
+  var pos = tab.mesh.positions, tris = tab.mesh.indices;
+  if (!tris.length || tris.length > LIMIT_CONVEX_FACES) return null;
+  var planes = [];
+  for (k = 0; k < tris.length; k++) {
+    var t = tris[k];
+    var pl = triPlane([pos[t[0]], pos[t[1]], pos[t[2]]]);
+    if (!pl) continue;
+    var dup = false;
+    for (j = 0; j < planes.length; j++) {
+      if (vDot(planes[j].n, pl.n) > 1 - 1e-9 && Math.abs(planes[j].w - pl.w) <= eps) { dup = true; break; }
+    }
+    if (!dup) planes.push(pl);
+  }
+  return planes.length >= 4 ? planes : null;
+}
+
+// 倒角：裁剪体 = 大盒子 ∩ 所有选中凸边的斜面内半空间（凸 ⇒ H-rep 精确构造）→ 与实体**一次**求交。
+function meshChamfer(mesh, op, E, stats) {
+  var what = (stats && stats.label) ? stats.label : '倒角';
+  if (op.distance === undefined) fail(what + '（chamfer）需要 distance（面内倒角量）');
+  var d = evalNum(op.distance, E, 'distance');
+  if (!(d > 0)) fail(what + '（chamfer）的 distance 必须为正（收到 ' + d + '）');
+  var tab = meshEdgeTable(mesh);
+  var sel = selectBevelEdges(tab, op, E, what + '（chamfer）');
+  var eps = halfspaceEps(tab.mesh), diag = meshDiagonal(tab.mesh);
+  if (!(diag > 0)) fail(what + '：网格尺度为 0，无法倒角');
+  var adj = vertexFaceAdjacency(tab.mesh.positions.length, tab.mesh.indices);
+  var cutPlanes = [];
+  var used = 0, bad = [], k;
+  for (k = 0; k < sel.list.length; k++) {
+    var ed = sel.list[k], pl = chamferPlaneOfEdge(ed, d);
+    if (!pl) { bad.push(fmtVec3(ed.mid) + '（两邻面法线退化）'); continue; }
+    var sf = edgeCutSafety(tab, adj, ed, pl, d, diag);
+    if (!sf.ok) {
+      bad.push(fmtVec3(ed.mid) + '（' + (sf.reason === 'far'
+        ? '切到 ' + fmtNum(sf.dist, 3) + ' 外的非邻接特征'
+        : '切除范围 ' + fmtNum(sf.dist, 3) + ' 超过边邻域上限 ' + fmtNum(sf.limit, 3)) + '）');
+      continue;
+    }
+    cutPlanes.push({ n: pl.n, w: pl.w });
+    used++;
+  }
+  if (bad.length) {
+    fail(what + '：' + bad.length + ' 条边不能安全倒角 —— ' + bad.slice(0, 3).join('；') +
+      '。原因：斜面是**无限延伸**的半空间，而这些边附近实体不是凸的（凹腔、镂空、薄壁或相邻特征过近），' +
+      '继续切会误伤远处材料。可用 edges 数组只指定安全的棱，或让这些边远离其他特征');
+  }
+  var cut = chamferCut(mesh, tab, cutPlanes, d, what);
+  var out = cut.mesh, mode = cut.mode;
+  if (!out) fail(what + '：distance=' + d + ' 过大（斜面把整个实体切光了）——请减小 distance');
+  var v0 = Math.abs(meshVolume(mesh)), v1 = Math.abs(meshVolume(out));
+  if (v1 > v0 * (1 + 1e-9)) fail(what + '：结果体积反而变大（' + fmtNum(v1, 3) + ' > ' + fmtNum(v0, 3) + '），几何异常');
+  if (v1 < v0 * 1e-6) fail(what + '：distance=' + d + ' 过大，几乎切光实体（剩余体积 ' + fmtNum(v1, 3) + '）');
+  if (stats) {
+    stats.edges = used;
+    stats.skippedFlat = sel.flat;
+    stats.skippedConcave = sel.concave;
+    stats.cutRatio = (v0 - v1) / v0;
+    stats.mode = mode;
+  }
+  return out;
+}
+
+// 圆角弧块的半空间表示（凸 = 扇形柱）：轴 = 距两邻面各 r 的直线（在实体内部），半径 r，
+//   角度范围 = 内二面角 θ，沿边范围 = 边本身；弧面用 segs 个切平面离散（顶点落在半径 r 的圆上）。
+function filletArcHalfspaces(edge, r, segs) {
+  var c = vDot(edge.n1, edge.n2);
+  if (c <= -1 + 1e-9) return null;
+  var o = vSub(edge.mid, vMul(vAdd(edge.n1, edge.n2), r / (1 + c)));   // 距两面各 r 的轴点
+  var s = edge.dir, half = edge.len / 2;
+  var nMid = vNorm(vAdd(edge.n1, edge.n2));
+  var vv = vNorm(vCross(s, edge.n1));
+  if (vDot(vv, nMid) < 0) vv = vMul(vv, -1);
+  var w2 = vNorm(vCross(s, edge.n2));
+  if (vDot(w2, nMid) < 0) w2 = vMul(w2, -1);
+  var theta = edge.dihedralDeg * Math.PI / 180;
+  var planes = [
+    { n: vMul(s, -1), w: -(vDot(s, o) - half) },
+    { n: s, w: vDot(s, o) + half },
+    { n: vMul(vv, -1), w: -vDot(vv, o) },     // 过轴与切点的径向平面（n1 侧）
+    { n: vMul(w2, -1), w: -vDot(w2, o) }      // 过轴与切点的径向平面（n2 侧）
+  ];
+  // ★ 再加一道「斜面内侧」的反向约束，把加回块从整个四分之一圆柱切成**弓形**（圆 ∩ 斜面外侧）：
+  //   完整圆柱块与「已倒角的实体」只沿两条切点**线**相切（零体积接触）——BSP union 处理这种退化
+  //   接触会留下大量未配对边；换成弓形后二者沿**斜面片**相碰（面接触），拓扑干净得多。
+  //   几何等价性：结果 = 实体 ∩ ({斜面内侧} ∪ 弓形) = 实体 ∩ ({斜面内侧} ∪ 四分之一圆柱) —— 与直接
+  //   union 整个圆柱块完全一致，只是接触方式从"线"变成"面"。
+  var cp = chamferPlaneOfEdge(edge, r);
+  if (cp) planes.push({ n: vMul(cp.n, -1), w: -cp.w });
+  for (var i = 0; i < segs; i++) {
+    var a0 = theta * i / segs, a1 = theta * (i + 1) / segs, am = (a0 + a1) / 2;
+    var nr = vNorm(vAdd(vMul(edge.n1, Math.cos(am)), vMul(vv, Math.sin(am))));
+    planes.push({ n: nr, w: vDot(nr, o) + r * Math.cos((a1 - a0) / 2) });
+  }
+  return { o: o, planes: planes };
+}
+
+// 圆角：先按 r 倒角切掉棱部楔块（复用 chamferCut），再把「圆柱片段（弧块）」拼回去 —— 路线 B 的布尔近似。
+//   · 弧块**先合并成一个网格、再整体 union 一次**：逐块 union 会让 BSP 把整个网格反复切碎
+//     （实测 12 条棱逐块 union 把 12 面的立方体顶到 5.4 万面）。合并时各弧块都是十几面的小体，
+//     相邻棱的弧块在顶点处相交也由 BSP union 正确处理。
+//   · 顶点处（三条以上棱交会）是多个弧块的交集，不是解析过渡面 —— 近似，文档如实标注。
+function meshFillet(mesh, op, E, stats) {
+  var what = (stats && stats.label) ? stats.label : '圆角';
+  if (op.radius === undefined && op.distance === undefined) fail(what + '（fillet）需要 radius');
+  var r = evalNum(op.radius === undefined ? op.distance : op.radius, E, 'radius');
+  if (!(r > 0)) fail(what + '（fillet）的 radius 必须为正（收到 ' + r + '）');
+  var segs = op.segments === undefined ? ARC_SEG_DEFAULT : clampInt(evalNum(op.segments, E, 'segments'), 2, 64, what + ' 的 segments');
+  var tab = meshEdgeTable(mesh);
+  var sel = selectBevelEdges(tab, op, E, what + '（fillet）');
+  if (sel.list.length > LIMIT_FILLET_EDGES) {
+    fail(what + '：选中 ' + sel.list.length + ' 条边，超过单次圆角上限 ' + LIMIT_FILLET_EDGES + ' 条。' +
+      '原因：圆角要「切棱部料 + 拼回圆柱片段」，走布尔；多条棱在顶点交会时相邻弧块彼此相交，' +
+      'BSP 的三角形数会超线性膨胀（实测 12 条棱的立方体要 76 s / 5.2 万面，且水密性明显变差）。' +
+      '请用 edges 数组分批处理（每批 ≤ ' + LIMIT_FILLET_EDGES + ' 条），或改用 chamfer（倒角走 H-rep，一次可处理 64 条且精确水密）');
+  }
+  // 相邻棱（共享顶点）的圆角需要「顶点混合」（三条棱交会处的球面过渡面），本实现不做：
+  //   两条相邻棱的加回块在角部相交，BSP 会留下大量未配对边（实测 2 条相邻棱 boundary=206、
+  //   「4 竖 + 1 横」boundary=554，而互不相邻的棱是 boundary=0）。这里明确拒绝，不静默产出坏网格。
+  //   chamfer 没有这个限制：它只做半空间求交，顶点处天然正确（12 条棱 boundary=0、精确）。
+  var useCount = {}, shared = 0, kk;
+  for (kk = 0; kk < sel.list.length; kk++) {
+    useCount[sel.list[kk].a] = (useCount[sel.list[kk].a] || 0) + 1;
+    useCount[sel.list[kk].b] = (useCount[sel.list[kk].b] || 0) + 1;
+  }
+  for (kk in useCount) if (useCount.hasOwnProperty(kk) && useCount[kk] > 1) shared++;
+  if (shared) {
+    fail(what + '：选中的棱里有 ' + shared + ' 个顶点被两条以上棱共用（相邻棱交会）。' +
+      '圆角的顶点过渡面（rolling-ball 顶点混合）未实现，硬做会产出不水密网格（实测 2 条相邻棱即 206 条开边界）——' +
+      '请只选**互不相邻**的棱（如同方向的 4 条竖棱、异面棱），或改用 chamfer（半空间求交，顶点处天然正确且精确水密）');
+  }
+  var eps = halfspaceEps(tab.mesh), diag = meshDiagonal(tab.mesh);
+  if (!(diag > 0)) fail(what + '：网格尺度为 0，无法圆角');
+  var adj = vertexFaceAdjacency(tab.mesh.positions.length, tab.mesh.indices);
+  var cutPlanes = [], arcMeshes = [], used = 0, bad = [], k;
+  for (k = 0; k < sel.list.length; k++) {
+    var ed = sel.list[k];
+    var cp = chamferPlaneOfEdge(ed, r);
+    var arcSpec = filletArcHalfspaces(ed, r, segs);
+    if (!cp || !arcSpec) { bad.push(fmtVec3(ed.mid) + '（两邻面法线退化）'); continue; }
+    var sf = edgeCutSafety(tab, adj, ed, cp, r, diag);
+    if (!sf.ok) {
+      bad.push(fmtVec3(ed.mid) + '（' + (sf.reason === 'far'
+        ? '切到 ' + fmtNum(sf.dist, 3) + ' 外的非邻接特征'
+        : '切除范围 ' + fmtNum(sf.dist, 3) + ' 超过边邻域上限 ' + fmtNum(sf.limit, 3)) + '）');
+      continue;
+    }
+    var arc = halfspacesMesh(arcSpec.planes, eps);
+    if (!arc) { bad.push(fmtVec3(ed.mid) + '（半径 ' + r + ' 过大，弧块退化）'); continue; }
+    cutPlanes.push({ n: cp.n, w: cp.w });
+    arcMeshes.push(arc);
+    used++;
+  }
+  if (bad.length) {
+    fail(what + '：' + bad.length + ' 条边不能安全圆角 —— ' + bad.slice(0, 3).join('；') + '。原因同 chamfer（见其报错说明）');
+  }
+  var cut = chamferCut(mesh, tab, cutPlanes, r, what);
+  if (!cut.mesh) fail(what + '：radius=' + r + ' 过大（把整个实体切光了）——请减小 radius');
+  var cur = cut.mesh;
+  // 弧块分组：组内不相交 ⇒ 直接拼接，只有跨组才付布尔代价（见 groupBlocksByBBox 的实测说明）
+  var groups = groupBlocksByBBox(arcMeshes);
+  for (k = 0; k < groups.length; k++) {
+    var gm = groups[k].items.length > 1 ? meshMerge(groups[k].items) : groups[k].items[0];
+    cur = meshBoolean(cur, gm, 'union');
+  }
+  var v0 = Math.abs(meshVolume(mesh)), v1 = Math.abs(meshVolume(cur));
+  if (v1 > v0 * (1 + 1e-6)) fail(what + '：结果体积反而变大（' + fmtNum(v1, 3) + ' > ' + fmtNum(v0, 3) + '），几何异常');
+  if (v1 < v0 * 1e-6) fail(what + '：radius=' + r + ' 过大，几乎切光实体（剩余体积 ' + fmtNum(v1, 3) + '）');
+  if (stats) {
+    stats.edges = used;
+    stats.skippedFlat = sel.flat;
+    stats.skippedConcave = sel.concave;
+    stats.cutRatio = (v0 - v1) / v0;
+    stats.mode = cut.mode;
+  }
+  return cur;
+}
+
 // 镜像矩阵（沿过原点的法向轴镜像；det = -1，meshTransform 会自动翻转绕向保持外向）
 function m4mirror(axis) {
   var a = vNorm(axis);
@@ -2184,7 +2704,7 @@ function applyRepeat(mesh, rep, E, what) {
 }
 
 // 部件 → 网格（几何 + 布尔 ops + 变换 + 阵列）
-function buildPartMesh(part, E) {
+function buildPartMesh(part, E, diag) {
   if (!isObj(part)) fail('部件必须是对象');
   var mesh = buildShape(part.shape, E, 0);
   var ops = part.ops === undefined ? [] : part.ops;
@@ -2208,8 +2728,20 @@ function buildPartMesh(part, E) {
       mesh = meshSnap(mesh, evalNum(op.grid === undefined ? meshEpsilon(mesh) : op.grid, E, 'grid'));
     } else if (name === 'repair') {
       mesh = meshRepair(mesh).mesh;
+    } else if (name === 'chamfer' || name === 'fillet') {
+      // 圆角/倒角 = 网格级边重建（处理了几条凸边、跳过几条凹边，经 diag 如实上报）
+      var st = null;
+      if (diag) {
+        st = {
+          part: part.id === undefined ? '?' : part.id,
+          kind: name,
+          label: '部件 ' + (part.id === undefined ? '?' : part.id) + ' 的' + (name === 'chamfer' ? '倒角' : '圆角')
+        };
+        diag.push(st);
+      }
+      mesh = name === 'chamfer' ? meshChamfer(mesh, op, E, st) : meshFillet(mesh, op, E, st);
     } else {
-      fail('未知 op ' + name + '（可用 union/subtract/intersect/translate/rotate/scale/mirror/align/snap/repair）');
+      fail('未知 op ' + name + '（可用 union/subtract/intersect/translate/rotate/scale/mirror/align/snap/repair/chamfer/fillet）');
     }
   }
   if (part.transform) mesh = meshTransform(mesh, m4fromTRS(evalTRS(part.transform, E)));
@@ -2582,7 +3114,7 @@ function buildModelMeshes(model, opts) {
     if (ids[p.id]) fail('部件 id 重复：' + p.id);
     ids[p.id] = 1;
     if (o.skipInvisible !== false && p.visible === false) continue;
-    var mesh = buildPartMesh(p, E);
+    var mesh = buildPartMesh(p, E, o.diag);
     if (mesh.indices.length > LIMIT_TRIS_PART) {
       fail('部件 ' + p.id + ' 三角面数 ' + mesh.indices.length + ' 超过单部件上限 ' + LIMIT_TRIS_PART + '（降低 segments 或拆部件）');
     }
@@ -3466,6 +3998,26 @@ function applyOp(model, op, index) {
     p8.ops.push({ op: 'repair' });
     return '对部件 ' + id + ' 追加几何修复（吸附 + 焊接 + 去退化面）';
   }
+  if (name === 'mesh.chamfer' || name === 'mesh.fillet') {
+    var isFillet = (name === 'mesh.fillet');
+    var pBevel = findPart(model, id, name);
+    if (op.distance === undefined && !(isFillet && op.radius !== undefined)) {
+      fail(name + ' 需要 ' + (isFillet ? 'radius（或 distance）' : 'distance') + '（面内尺寸，可写表达式）');
+    }
+    var bevel = { op: isFillet ? 'fillet' : 'chamfer' };
+    if (isFillet) bevel.radius = op.radius === undefined ? op.distance : op.radius;
+    else bevel.distance = op.distance;
+    if (op.edges !== undefined) bevel.edges = op.edges;
+    if (op.minAngle !== undefined) bevel.minAngle = op.minAngle;
+    if (isFillet && op.segments !== undefined) bevel.segments = op.segments;
+    pBevel.ops = pBevel.ops || [];
+    pBevel.ops.push(bevel);
+    return '对部件 ' + id + ' 追加' + (isFillet ? '圆角' : '倒角') + '（' +
+      (isFillet ? 'radius=' : 'distance=') + JSON.stringify(isFillet ? bevel.radius : bevel.distance) + '，' +
+      (isArr(op.edges) ? '指定 ' + op.edges.length + ' 条棱' : '全部凸边（折角 ≥ ' +
+        (op.minAngle === undefined ? EDGE_ANGLE_DEFAULT : op.minAngle) + '°）') +
+      (isFillet ? '，弧面离散 ' + (op.segments === undefined ? ARC_SEG_DEFAULT : op.segments) + ' 段' : '') + '）';
+  }
   if (name === 'part.reorder') {
     var ids = argArr(op, 'ids', []);
     if (!ids.length) fail('part.reorder 需要 ids 数组');
@@ -3476,7 +4028,7 @@ function applyOp(model, op, index) {
     return '调整部件顺序：' + ids.join(', ') + ' 置前';
   }
   fail('未知 op ' + name + '（可用 part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder、' +
-    'op.add/remove/clear、param.add/set/remove、mesh.align/snap/repair）');
+    'op.add/remove/clear、param.add/set/remove、mesh.align/snap/repair/chamfer/fillet）');
 }
 
 function modelEdit(args, unknown, ctx) {
@@ -3493,9 +4045,13 @@ function modelEdit(args, unknown, ctx) {
   }
   // 事务性：整批应用成功后才做"可解析 + 可构建"校验，然后落盘
   resolveParams(model);
-  var built = buildModelMeshes(model, { skipInvisible: false });
+  var diag = [];
+  var built = buildModelMeshes(model, { skipInvisible: false, diag: diag });
   writeModelFile(ctx, path, model);
-  return { ok: true, path: path, applied: applied, parts: built.parts.length, summary: modelSummary(model, built) };
+  var res = { ok: true, path: path, applied: applied, parts: built.parts.length, summary: modelSummary(model, built) };
+  // 圆角/倒角是网格级操作，实际处理了几条棱（以及跳过的凹边/平边）在这里如实回报
+  if (diag.length) res.meshOps = diag;
+  return res;
 }
 
 // ── 导出产物渲染（同一函数既写文件，也用于确定性比对）──────────
@@ -3711,7 +4267,7 @@ var TOOL_DEFS = [
   },
   {
     name: 'model_add',
-    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/sweep/mesh；extrude 可带 holes 打孔、带 twist 做扭转挤出；sweep 让轮廓沿任意 3D 路径扫掠，可配 holes/twist/scale/closed/up），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
+    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/sweep/mesh；extrude 可带 holes 打孔、带 twist 做扭转挤出；sweep 让轮廓沿任意 3D 路径扫掠，可配 holes/twist/scale/closed/up），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect，或网格级的 chamfer 倒角 / fillet 圆角 / repair / snap / align）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
     usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；扭转挤出（绞龙/麻花柱/螺旋齿轮坯）：{id:"auger", type:"extrude", profile:{type:"circle", radius:8, segments:24}, height:40, twist:180, segments:24}；带孔扭转（内螺旋槽）：在上面加 holes:[{type:"circle", radius:3, segments:16}]；扫掠弯管（轮廓沿 3D 路径走，可带孔做空心管；扫掠路径字段叫 along）：{id:"elbow", type:"sweep", profile:{type:"circle", radius:4, segments:24}, holes:[{type:"circle", radius:2.5, segments:16}], along:[[0,0,0],[0,0,20],[0,8,30],[0,24,36]]}；扫掠圆环（闭合路径无端盖）：{id:"ring", type:"sweep", profile:{type:"circle", radius:3, segments:24}, along:[[20,0,0],[0,20,0],[-20,0,0],[0,-20,0]], closed:true}；锥形扫掠：直线 along + scale:[1,2]（每站缩放，也可给标量）；扭转扫掠：along + twist:360（沿路径总扭转角）；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。',
     category: '创作',
     parameters: {
@@ -3742,7 +4298,7 @@ var TOOL_DEFS = [
         faces: { description: 'polyhedron 面（顶点下标）' },
         shape: { type: 'object', description: '可选：完整几何表达式（优先）；布尔树 {type:"boolean", op:"subtract", a:{...}, b:{...}}' },
         transform: { type: 'object', description: '可选：{translate:[x,y,z], rotate:[rx,ry,rz]（度，先 X 后 Y 后 Z）, scale:[sx,sy,sz]}' },
-        ops: { type: 'array', description: '可选：[{op:"subtract"|"union"|"intersect", shape:{...}, transform:{...}}]' },
+        ops: { type: 'array', description: '可选：[{op:"subtract"|"union"|"intersect", shape:{...}, transform:{...}}]；也支持网格级后处理 {op:"chamfer", distance}（倒角）/ {op:"fillet", radius, edges?, minAngle?, segments?}（圆角）/ {op:"repair"} / {op:"snap", grid} / {op:"align", to}' },
         repeat: { type: 'object', description: '可选：{mode:"linear",count,delta} / {mode:"circular",count,axis,radius} / {mode:"mirror",axis}' },
         material: { type: 'object', description: '可选：{color:"#88aadd", metallic:0..1, roughness:0..1}' },
         name: { type: 'string', description: '可选：显示名' },
@@ -3754,8 +4310,8 @@ var TOOL_DEFS = [
   },
   {
     name: 'model_edit',
-    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair）。',
-    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]。改完跑 model_verify 复验。',
+    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair/chamfer 倒角/fillet 圆角）。倒角与圆角作用在**网格级**（不是参数化特征）：按相邻面折角识别棱，默认处理全部凸棱、也可用坐标对数组精确指定；凹边（内二面角 > 180°）需填材料、暂不支持，指定时会明确报错。',
+    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]；倒角：[{op:"mesh.chamfer", id:"base", distance:1.5}]（全部凸棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]）—— 尺寸大或棱多时用倒角（一次构造、精确且水密）；圆角：[{op:"mesh.fillet", id:"base", radius:2, edges:[[[20,15,-3],[20,15,3]]]}]（半径内尺寸，可传 segments 控制弧面离散）—— 圆角要布尔运算，单次只支持**互不相邻**的棱（相邻棱交会需顶点过渡面，会明确报错），棱多时改用 chamfer。改完跑 model_verify 复验。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -3776,7 +4332,12 @@ var TOOL_DEFS = [
         value: { description: '可选（param.add/set）：参数值' },
         min: { description: '可选（param.add）：下限' },
         max: { description: '可选（param.add）：上限' },
-        grid: { description: '可选（mesh.snap）：吸附网格（默认按模型尺度）' }
+        grid: { description: '可选（mesh.snap）：吸附网格（默认按模型尺度）' },
+        distance: { description: '可选（mesh.chamfer）：倒角量（面内尺寸，必须为正；可写表达式）。check：具体值须小于相邻面尺寸，过大（把实体切光）会报错' },
+        radius: { description: '可选（mesh.fillet）：圆角半径（必须为正；可写表达式）。须小于相邻面尺寸，且同一顶点处的半径不能相互重叠' },
+        edges: { description: '可选（mesh.chamfer / mesh.fillet）：只处理指定棱，传坐标对数组 [[[x,y,z],[x,y,z]],…]（端点须是焊接后的顶点坐标；与顶点编号顺序无关，可复现）。缺省 = 全部折角 ≥ minAngle 的凸棱' },
+        minAngle: { description: '可选（mesh.chamfer / mesh.fillet）：认定"棱"的最小折角（度，默认 30）——相邻面外法线夹角小于它的边视为同一曲面（如圆柱侧面的分段边）不处理' },
+        segments: { description: '可选（mesh.fillet）：弧面离散段数（默认 8，2~64）。越大越接近真圆、面数越多' }
       }
     }
   },
