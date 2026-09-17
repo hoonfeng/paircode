@@ -83,7 +83,12 @@ func Default() Config {
 		ReplyQuietMs:   15000,
 		ReplyTimeoutMs: 30 * 60 * 1000,
 
-		StreamEnabled: true,
+		// 2026-09-17 默认关闭流式转发：流式会把运行的全部「过程文本」（中间轮/
+		// 工具轮碎碎念）实时分片发到微信——过程与最终回复无法实时区分，已发片
+		// 收不回，实测造成「电脑上显示的信息全被发到微信」的串内容投诉。
+		// 关闭后回复统一走 JSONL 最终回复 + 静默期确认，只发最终结果；
+		// 「实时感」由 typing 指示承担。置 true 可恢复流式（不推荐）。
+		StreamEnabled: false,
 
 		StreamFirstMinChars:  20,
 		StreamFirstMaxWaitMs: 1000,
