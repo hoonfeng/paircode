@@ -234,6 +234,13 @@ const ORPHAN_HINTS = {
   'tool-codegraph-extra': '已并入 @paircode/tool-codegraph',
   'host-capability-probe': '已移除（宿主能力探针，验证完成后删除）',
   'web-api': '已移除（/api/ext 示例插件，能力由 ext_routes + 插件生态覆盖）',
+  // ★ 2026-09-17「UI 与工具同包」六域合并：独立 UI 包停更，功能已并入对应 tool-* 包
+  'ui-art': '已并入 @paircode/tool-art（UI 与工具同包，2026-09-17）',
+  'ui-design': '已并入 @paircode/tool-design（UI 与工具同包，2026-09-17）',
+  'ui-model': '已并入 @paircode/tool-model（UI 与工具同包，2026-09-17）',
+  'ui-music': '已并入 @paircode/tool-music（UI 与工具同包，2026-09-17）',
+  'ui-rig': '已并入 @paircode/tool-rig（UI 与工具同包，2026-09-17）',
+  'ui-voice': '已并入 @paircode/tool-voice（UI 与工具同包，2026-09-17）',
 }
 
 // registry 上全部官方包（keywords:paircode 全集；search 索引可能滞后于新发布，
