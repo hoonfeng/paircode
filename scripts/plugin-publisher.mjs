@@ -84,8 +84,13 @@ function listPlugins() {
   if (!fs.existsSync(pluginsDir)) return []
   const out = []
   for (const ent of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
-    if (!ent.isDirectory()) continue
     const dir = path.join(pluginsDir, ent.name)
+    // ★ Windows junction 兼容（2026-09-19）：开发态常把 .pair/plugins/<name> 以 junction 挂到
+    //   plugins-dist/<name>，而 Dirent.isDirectory() 对 junction 返回 false（既非目录也非 symlink）
+    //   ⇒ 必须用 statSync（跟随重解析点）复核，否则这类插件被整包跳过（六创作域就因此从列表里消失）。
+    let isDir = ent.isDirectory()
+    if (!isDir) { try { isDir = fs.statSync(dir).isDirectory() } catch { isDir = false } }
+    if (!isDir) continue
     const pkgPath = path.join(dir, 'package.json')
     if (!fs.existsSync(path.join(dir, 'index.js')) && !fs.existsSync(pkgPath)) continue
     let pkg = {}
