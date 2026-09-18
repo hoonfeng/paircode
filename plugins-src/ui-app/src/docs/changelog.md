@@ -4,11 +4,12 @@
 
 ---
 
-## 1.6.3 — 2026-09-17
+## 1.6.3 — 2026-09-19
 
 > 本版为创作域插件体系落地：六大创作域（画板 / UI 设计 / 3D 建模 / 音乐 / 2D 角色 / 人声）以
 > 「一域一包」形态上线，新增独立发布插件渠道 `plugins-dist/`，建模内核补齐带孔挤出 / 倒角 /
-> 圆角 / 扭转 / 扫掠与多边形 BSP 布尔路径（严格水密）。
+> 圆角 / 扭转 / 扫掠与多边形 BSP 布尔路径（严格水密）；插件工作区根解析统一，市场恢复版本号与
+> 更新提示，已安装页支持按类型筛选。
 
 ### 新增
 
@@ -22,6 +23,9 @@
   - **圆角顶点混合（rolling-ball）** — 关键认识是换表示而非补面：圆角的几何本质是**形态学开运算**（先按球磨小再滚回），凸体可解析构造，于是立方体 12 棱全圆角不再依赖「逐边补面 + 顶点补片」（该路线实测开边界 206~554，顶点相交是死结）。
   - **多边形 BSP 布尔路径（I.6-2）并接线为默认** — BSP 全程保留凸多边形、导出前才三角化，共面分组天然免费（节点平面即其平面）。默认路径切换后**面数 −71%、M4 真缺口 −52.5%**；三角路径保留为回退 / 对照（`setMeshBooleanLegacy(true)` 或插件 `config.legacyMeshBoolean=true`），`statsOut.path` 回填实际所走路径。
   - **文件注册式实时预览** — 工具写出模型文件即登记并广播，面板列出工作区识别到的文件、点击当场预览（STL bin/ascii、OBJ、glTF、GLB），外部改动自动重绘（事件 + 定时复核）。
+- **五域批量方法与「建工程即带内容」（`*_add`）** — 新增 `art_add(shapes)` / `design_add(nodes)` / `music_add(notes)` / `rig_add(parts)` / `voice_add(edits)`，统一形态：单件写法兼容（同层参数）+ 数组批量 + **整批校验通过才落盘**（复用各域既有 op 引擎，与 `*_edit` 同源）；建工程可一次带内容（`art_project` shapes、`design_project` screens[].root、`music_project` tracks[].notes、`rig_model` parts、`voice_import` paths/ids/edits）。`art` / `design` / `music` 的 `*_edit` 改为返回结构化 JSON（`ok` / `applied` / `log` / `summary`[/`tokensChanged`]），失败定位到具体条目（「第 N 条 op（名）失败，整批未写入任何改动」）。验证：Node 层每域 6~7 项（批量 / 事务性 / 单件兼容 / 失败定位）+ goja 宿主探针 + `voice` Node 侧 7 项 + `/api/tools` 可见 `*_add`。
+- **建模面板「登记并预览」（登记表驱动）** — 面板不再扫描工作区（旧口径会把工作区里任意 `*.json` 也列进来）：host 半删除 `scanWorkspaceArtifacts` 与 `SCAN_SKIP_DIRS`，`listArtifacts` 只列**登记表**（工具产出 + 面板手动登记，最新在前），返回 `scanned:false` / `scanRemoved:true`；顶栏路径框改为「登记并预览」（走 `claimArtifact`），移除「扫描工作区：开/关」切换与扫描来源合并逻辑，空态与帮助文案同步。
+- **市场显示版本号与更新提示、已安装页类型筛选** — 市场列表条目在类型标签旁显示 `v{latest}`，已安装插件条目补一行「有更新：vX → vY」或「已装 vX · 已是最新」，可更新时右侧出现「更新到 vY」（复用 `updatePlugin`）；已安装页插件条目显示**本地版本**（不再依赖 `config.npm` 是否存在）、可更新时给「有新版 vY」徽标 + 更新按钮；已安装页新增一排类型筛选 tag（**全部 / 插件 / MCP / 技能** + 计数，计数为 0 也可点击 → 显示空态提示，故不禁用）。版本对照由 `ensureUpdates()` 静默拉取 `/marketplace/check-update` 并 60s 复用，市场与已安装页共用同一份；宿主 `searchNpmMCP` 的 MCP 条目补 `version`（市场里 MCP 也显示版本号）。验证：CDP 端到端两脚本 PASS（市场 57 条中 37 条带版本号；搜 `tool-bug` → `v1.0.3` / 「有更新：v1.0.2 → v1.0.3」；已安装 tag 全部 52 / 插件 35 / MCP 0 / 技能 17），控制台 0 错误。
 
 ### 修复
 
@@ -31,16 +35,23 @@
 - **Node 桥轨插件的面板在装载后被静默清掉** — 前端 `plugin-runtime.js` 的 `syncClientHalves` 在清理孤儿 client 半时会连带卸载由 boot 图（`dsh.ui` 区域包）装载的实例；声明了运行期 npm 依赖的 Node 桥轨插件（如 `tool-voice`）不出现在 `/api/plugins` 清单里，其 client 半只经 `/api/ui-boot` 下发，于是「人声」面板 / 视图在 boot 之后被静默移除。现按来源区分卸载对象。
 - **多工作区 / 新会话下截图等产物落错盘** — 内嵌工具注册表原为「首次 root 永久缓存」的单例，第二个工作区或新会话仍复用第一个 root，导致 `screenshot_stage` / `web_debug` 等落盘工具的产物写进**旧工作区**（新工作区里找不到文件，被误判为「截图不落盘」）。现改为按 root 键控缓存（互斥保护），截图目录兜底绝对化。
 
+- **更新检查对「手动放置的插件包」恒为空（市场永远不提示更新）** — 根因：更新检查只认磁盘插件包 `package.json` 里的 `config.npm`，而**只有市场安装链路会写该字段**，本仓库 36 个插件包全部是手动放置 / 同步的，于是 `/api/marketplace/check-update` **恒返回 `[]`**，已安装面板永远显示「无 npm 来源插件」、市场也永远不提示更新。现按官方约定**推断** `@paircode/<磁盘插件名>`（`manifest.name` 含 `/` 时直接作包名），registry 校验存在才判为 npm 来源、`current` 取包内 `version`，校验失败静默跳过（只回本地版本，不误报更新）；新增 `fetchNPMInfoChecked` 区分「包不存在（404）」与瞬时网络错误，**只对确定的 404 做 10 分钟负缓存**（否则每次「检查更新」都要对几十个非官方包打无用往返），成功结果不缓存以保证 latest 实时；`checkUpdates` 改为返回**全部磁盘插件包**（含非 npm 来源，供前端显示本地版本）+ 6 路并发 + 按名排序，`metaByPkg` 补推断使「更新」动作对这类包同样生效（否则 `/marketplace/update` 报「非 npm 来源」）。实测：`check-update` 由 `[]` → 36 条（36/36 识别为 npm 来源）；`tool-bug` 本地版本临时改 1.0.2 → 立即 `updateable:true`（latest 1.0.3），改回 → 可更新数归 0。测试：`internal/agent/npm_plugin_update_test.go`（3 例，httptest 桩 registry）。
+- **动态插件 `ctx.fs` 写错工作区（切工作区后仍写旧根）** — 根因：动态插件在 define 阶段把宿主根固化为闭包 / 上下文快照，装载期又拿不到触发者会话根，于是 `define` 探针写进了上一个工作区目录。新增 `PluginHost.SetWorkspaceRoot` / `WorkspaceRoot`（同步 `h.root`、根上下文、`workspaceRoot` 服务值与各已注册插件上下文），主工作区变更时由 `OnSyncWorkspace` 调用（主工作区被移除 → 同步空串，插件内解析**显式报错**而非静默写回旧根）；`ctxServiceRoot` 收敛为单一真相源五档（工具调用会话根 > UI invoke 根 > 装载期会话根 > 插件上下文根（实时）> 全局主根，全空报错），`buildFSService` 删除手写根解析副本与闭包快照，并顺带修复 `fs.roots` 把根写回闭包污染后续调用的问题。回归测试 `internal/agent/wsroot_probe_test.go` 3 项 PASS；端到端（独立实例 9098）：wsA 生成探针文件 → 切 wsB 再 define → wsB 落盘且 wsA 不再被写。
+- **`plugin-publisher` 扫不到 junction 插件** — `Dirent.isDirectory()` 对 Windows junction 返回 `false`（既非目录也非 symlink），改用 `statSync` 跟随重解析点复核；现象是开发态把 `.pair/plugins/tool-<x>` 以 junction 挂到 `plugins-dist/tool-<x>` 后，`--list`、交互式菜单与 Web UI 的插件列表里都看不到六个创作域插件（发布工具漏扫，不是插件本身问题）。与 Go 端 `isPluginDirEntry` 同口径。
+- **`tool-voice` 发布包缺实现模块（装上即报错）** — `tool-voice@0.3.2` 的 tarball 里没有 `lib/`，而 `index.js` 有 8 处 `require('./lib/...')`；双保险都漏了 `lib`：`PUBLISH_FILES`（拷贝白名单）与 `buildPackage` 覆写的 `pkg.files`（`npm publish <dir>` 仍按 `files` 字段过滤）。修复后重发 0.3.3（含 `lib`，15 个文件）已进 registry。教训：判定发布结果不能只看 `npm publish` 退出码，须等 registry 版本端点 200 / dist-tags 落实（本次因读取端传播延迟 + 409 `previously staged version` 语义误判，另 bump 出内容相同的 0.3.4）。
+
 ### 变更 / 改进
 
 - **插件版本与分发收口** — 六个创作域包统一 `0.2.0`；IDE 发布包的插件排除项由 11 项收敛为 6（独立发布包 = `tool-{art,design,model,music,rig,voice}`）；`tool-voice` 包名规范化为 `tool-voice`（原名带 scope 会让 `/api/ui-boot` 的入口 URL 带 `@`，导致 `/plugins-assets` 静态路由 404）。
 - **旧 `ui-*` 引用清理** — 清除代码注释、工具提示、CI 示例、文档中残留的 `ui-*` 包引用（面板名改以 `client.js` 注册标题为准，如「ui-art 面板」→「**画板**」面板）；发布脚本的孤儿包废弃文案（`ORPHAN_HINTS`）补上六域映射，`--deprecate-orphans` 会给出「已并入 `@paircode/tool-<x>`（UI 与工具同包）」的准确说明。
 - **建模面数口径更正** — 上一轮报告的面数对比取自不同焊接 eps 的诊断网格，两者不可比；同口径实测为 4416 → 4536 面（**+2.7%**，表面积变化 −4.7e-6%）。并给出结论：对已水密的网格再做共面合并是**以水密换面数**（4536 → 1187 面，但非流形 1 / 缝长 7.86，再修也回不来），两者同时追求必然振荡，故默认布尔路径不做共面合并（共面合并只保留在 legacy 对照分支）。
+- **六域移除插件面板注册，统一面板外壳** — 六域 `client.js` 移除 `ui.registerPanel`，只保留 `ui.registerView`（主内容区 tab；`assets` bundle 与 `dsh.ui` / `client` 字段保留——`registerView` 共用同一 bundle、`/api/ui-boot` 靠它算 rev、npm 安装需保整包）；面板统一外壳新增 `PanelShell.vue`，六个 `Panel.vue` 改用它并重建 `assets/*-panel.{js,css}`；六个 `index.js` 共 49 处工具参数描述补「相对主项目根解析」基准；新增审计脚本 `scripts/audit-plugin-ui-register.cjs`（客户端注册面，6/6 通过）与 `scripts/audit-plugin-tool-desc.cjs`（工具参数描述基准）。线上 tarball 核验 `registerPanel` 调用为 0。
+- **六创作域包版本对齐 registry** — `plugins-dist` 六包（`@paircode/tool-{art,design,model,music,rig,voice}`）发布时由 `plugin-publisher` 按内容指纹自动升 patch，本版把提升后的版本号回写仓库：统一 `0.3.2`（`tool-voice` 另含 `lib`）。
 
 ### 文档
-
 - `docs/creative-domain-landing-plan.md`：落地形态改为「一域一包」，补五域推广与两条踩坑（scope 包名导致静态路由 404、boot 图与孤儿卸载冲突）；`.pair/project.md` 同步创作域插件目录关系。
 - 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.3`。
+- `docs/plugin-development.md` 新增 §5.1「相对路径的根从哪来」五档优先级表；`config/skills/cordis-plugin-development/SKILL.md` 新增 §0 铁律（仅用户明确要求才 `define`、优先复用磁盘插件、临时插件用完清理）与 §2.5 工作区根解析纪律，并修正过时描述「插件只存在于内存不落盘」（`define` 实际会固化到安装目录）。
 
 ---
 
