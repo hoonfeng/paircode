@@ -4,6 +4,31 @@
 
 ---
 
+## 1.6.4 — 2026-09-19
+
+> 本版新增**应用内在线更新**：直接对接 GitHub Releases，一键完成「检查 → 下载 → 校验 → 替换 →
+> 重启」，用户不再需要手动下载整包。更新源为 `releases/latest`（stable）或 prerelease 频道，
+> 用 release 元数据自带的 `digest` 做 SHA-256 校验，替换时**用户数据与配置永不被覆盖**。
+
+### 新增
+
+- **在线更新（GitHub Releases 直连）** — 新增引擎 `internal/update`（可脱离宿主单测）：清单解析支持三条通道（GitHub `/releases/latest` stable、`/releases` 列表 prerelease、自定义 feed 的 http/file 路径），按平台匹配资产（`PairCode-<版本>.zip` / `-linux-` / `-darwin-`）；校验优先用 release 元数据 `assets[].digest`（`sha256:…`），无需额外校验资产。下载走**镜像 → `api.github.com` 资产端点 → 直链**三级降级（`github.com` 直连常超时：实测 HEAD 21s 无响应而 API 资产端点 206 正常），支持 `.part` 断点续传、流式 sha256 与停滞看门狗；解压带 zip-slip / zip bomb 防护，并做包结构冒烟（主程序必须存在）。替换按**保护名单**过滤（`config/**`、`.pair` 用户数据、`logs` / `screenshots` / `_temp` / `release` 一律不覆盖）；Windows 上先用同卷 `rename` 在线替换运行中的 exe（失败降级为写 `.new`，退出后由脚本 `move`），保留 `.old` 备份并落盘 `last-apply.json`；重启脚本（`restart-<ts>.bat` / `.sh`）以脱离进程方式等待退出 → 清备份 → 启动新程序 → 自删。
+- **更新接口与设置项** — 宿主新增 `cmd/companion/update_api.go`（引擎单例 + 配置装配 + 6 个 handler）与内核路由 `update.check` / `update.download` / `update.apply` / `update.status` / `update.cancel` / `update.config`；设置段插件 `.pair/plugins/app-update` 提供更新源（github/custom）、仓库、频道（stable/prerelease）、自定义清单地址、镜像前缀、自动检查与间隔、强制校验、保留备份等开关。
+- **「关于」弹窗更新卡片** — 前端 `UpdateCard.vue` 接入关于弹窗：显示当前/最新版本与检查按钮，下载阶段展示进度（速率/总量/阶段），就绪态展示包内文件数并支持「安装并重启」；可**预览替换清单**（将写 N 个文件 / 保护名单跳过 M 个）。就绪态复用已下载缓存，不重复下载。
+
+### 文档
+
+- `docs/online-update-design.md`（新增）：完整设计（分发端点、清单与校验、下载降级链、解压与替换安全、重启机制、API 契约、配置项、UI 形态、失败路径），含 §10 验证方案与 §11 **真实 GitHub 源端到端验证记录**。
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.4`。
+
+### 验证
+
+- 单测 `go test ./internal/update`：11 项（版本比较 / 资产匹配 / digest 比对 / 保护名单 / zip-slip / 解压冒烟 / 端到端下载校验 / 断点续传 / 篡改拒绝 / 替换与备份 / 取消）。
+- **真实 GitHub 源端到端**（临时 `v9.9.9` prerelease + 真实资产，测毕已删除并确认 `releases/latest` 回到 v1.6.3）：检查 0.83s 发现新版本 → 下载 86 MB（峰值 10.3 MB/s）且 sha256 落盘/远端/本地**三方一致** → 解压 243 文件 → 预演 240 写 / 3 跳过 / 0 失败 → 真实替换成功且进程存活 → `restart=true` 自重启接管（新进程约 2s 起来，接口随二进制切换）→ 保护名单强证明（篡改包内同名的受保护文件后重跑 apply，用户内容原样保留）。
+- CDP 浏览器端到端：关于弹窗 → 更新卡片 → 预览替换清单，控制台 0 错误（`screenshots/update-*.png`）。
+
+---
+
 ## 1.6.3 — 2026-09-19
 
 > 本版为创作域插件体系落地：六大创作域（画板 / UI 设计 / 3D 建模 / 音乐 / 2D 角色 / 人声）以
