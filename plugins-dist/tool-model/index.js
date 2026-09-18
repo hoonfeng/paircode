@@ -5410,12 +5410,28 @@ function modelDoc(args, unknown, ctx) {
     if (args.params) doc.params = normalizeParamInput(args.params);
     if (args.note) doc.note = argStr(args, 'note');
     var rp = resolveParams(doc);
+    // ★ 支持 parts：一次调用直接「建工程 + 全部部件」（每项与 model_add 单件同构），
+    //   省掉「先 new 再逐件 model_add」的往返；构造/试建失败则整批不落盘。
+    var added0 = [];
+    if (isArr(args.parts) && args.parts.length) {
+      var E0 = { params: rp.values, known: rp.known };
+      for (var q0 = 0; q0 < args.parts.length; q0++) {
+        if (!isObj(args.parts[q0])) fail('parts[' + q0 + '] 必须是对象');
+        var p0 = buildPartDef(args.parts[q0], doc);
+        var m0 = buildPartMesh(p0, E0);
+        doc.parts.push(p0);
+        added0.push(partAddedBrief(p0, m0));
+      }
+    }
     writeModelFile(ctx, path, doc);
-    return {
+    var resNew = {
       ok: true, action: 'created', path: path, name: doc.name,
       params: paramTable(doc),
-      hint: '接着用 model_add 加几何（如 {id:"base", type:"cuboid", size:[20,20,10]}），再用 model_export / model_verify'
+      parts: doc.parts.length,
+      hint: '接着用 model_add（单件或 parts=[…] 批量）/ model_edit op=part.add 加几何，再用 model_export / model_verify'
     };
+    if (added0.length) resNew.added = added0;
+    return resNew;
   }
   var rm = readModelFile(ctx, path);
   var model = rm.model;
@@ -5493,59 +5509,86 @@ function setParamValue(model, id, value) {
 }
 
 // ── model_add：新增部件 ─────────────────────────────────────
-function modelAdd(args, unknown, ctx) {
-  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
-  var rm = readModelFile(ctx, path);
-  var model = rm.model;
-  var id = argStr(args, 'id');
+// 一处「部件定义」→ part 对象。四条新增路径共用同一套构造口径，避免「批量走的是另一套构造」分叉：
+//   ① model_add 单件（同层 id/type/size/…）    ② model_add parts=[{…},…] 批量项
+//   ③ model_doc action=new 的 parts 项          ④ model_edit 的 {op:"part.add", …} 命令
+// ★ id 唯一性校验基于 model.parts 当前内容 —— 批量时逐件入列后再构造下一件，同批内的重复 id 也能抓到；
+//   失败一律抛错 → 调用方不落盘（事务性），工程保持原样。
+function buildPartDef(defArgs, model) {
+  var id = argStr(defArgs, 'id');
   if (!id) fail('新增部件必须提供 id');
   for (var k = 0; k < model.parts.length; k++) {
     if (model.parts[k].id === id) fail('部件 id 已存在：' + id + '（改名或先 part.remove）');
   }
   var part = { id: id };
-  if (args.from) { // 从已有部件复制几何与设置
+  if (defArgs.from) { // 从已有部件复制几何与设置
     var src = null;
-    for (var m = 0; m < model.parts.length; m++) if (model.parts[m].id === argStr(args, 'from')) src = model.parts[m];
-    if (!src) fail('from 指向的部件不存在：' + argStr(args, 'from'));
+    for (var m = 0; m < model.parts.length; m++) if (model.parts[m].id === argStr(defArgs, 'from')) src = model.parts[m];
+    if (!src) fail('from 指向的部件不存在：' + argStr(defArgs, 'from'));
     part = JSON.parse(JSON.stringify(src));
     part.id = id;
-    if (args.name !== undefined) part.name = argStr(args, 'name');
-    if (args.transform) part.transform = args.transform;
-    if (args.repeat) part.repeat = args.repeat;
-    if (args.material) part.material = args.material;
+    if (defArgs.name !== undefined) part.name = argStr(defArgs, 'name');
+    if (defArgs.transform) part.transform = defArgs.transform;
+    if (defArgs.repeat) part.repeat = defArgs.repeat;
+    if (defArgs.material) part.material = defArgs.material;
   } else {
-    var shape = args.shape;
+    var shape = defArgs.shape;
     if (!shape) {
-      var t = argStr(args, 'type', 'cuboid');
+      var t = argStr(defArgs, 'type', 'cuboid');
       shape = { type: t };
       var keys = ['size', 'center', 'radius', 'radiusTop', 'radiusBottom', 'height', 'innerRadius', 'outerRadius',
         'segments', 'rings', 'profile', 'holes', 'twist', 'along', 'closed', 'scale', 'up', 'points', 'faces', 'angle', 'sides', 'op', 'of', 'a', 'b', 'shapes', 'positions', 'indices'];
       for (var i = 0; i < keys.length; i++) {
-        if (args[keys[i]] !== undefined) shape[keys[i]] = args[keys[i]];
+        if (defArgs[keys[i]] !== undefined) shape[keys[i]] = defArgs[keys[i]];
       }
     }
     part.shape = shape;
-    if (args.name !== undefined) part.name = argStr(args, 'name');
-    if (args.transform) part.transform = args.transform;
-    if (args.repeat) part.repeat = args.repeat;
-    if (args.material) part.material = args.material;
-    if (args.ops) part.ops = args.ops;
+    if (defArgs.name !== undefined) part.name = argStr(defArgs, 'name');
+    if (defArgs.transform) part.transform = defArgs.transform;
+    if (defArgs.repeat) part.repeat = defArgs.repeat;
+    if (defArgs.material) part.material = defArgs.material;
+    if (defArgs.ops) part.ops = defArgs.ops;
   }
-  if (args.visible === false) part.visible = false;
-  if (args.ops && args.from) {
-    part.ops = (part.ops || []).concat(args.ops);
+  if (defArgs.visible === false) part.visible = false;
+  if (defArgs.ops && defArgs.from) {
+    part.ops = (part.ops || []).concat(defArgs.ops);
   }
+  return part;
+}
+
+// 新增部件的回报摘要（model_add 批量件 / model_doc new 共用；口径与旧单件返回一致）
+function partAddedBrief(part, mesh) {
+  return {
+    id: part.id, type: part.shape ? part.shape.type : null,
+    triangles: mesh.indices.length, volume: cleanNum(meshVolume(mesh), 4),
+    size: meshSize(mesh).map(function (x) { return cleanNum(x, 3); })
+  };
+}
+
+function modelAdd(args, unknown, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME) || PROJECT_NAME;
+  var rm = readModelFile(ctx, path);
+  var model = rm.model;
+  // ★ 批量：parts=[{…},{…}] 一次加任意多个部件（每项与单件同构：id/from/type/…/transform/repeat/material/ops）。
+  //   单件写法（id/type/size/… 写在同层）保持兼容 —— 传了 parts 就用 parts，忽略同层单件字段。
+  //   事务性：全部构造 + 试建通过才落盘一次；任一项失败整批不写（工程保持原样）。
+  var defs = isArr(args.parts) ? args.parts : [args];
+  if (!defs.length) fail('parts 数组为空（传 parts=[{…}] 批量，或直接给单件的 id/type/… 参数）');
   // 先试建（参数上下文用当前工程）——保证写进去的几何一定是能算出来的
   var rp = resolveParams(model);
   var E = { params: rp.values, known: rp.known };
-  var mesh = buildPartMesh(part, E);
-  model.parts.push(part);
+  var added = [];
+  for (var i = 0; i < defs.length; i++) {
+    if (!isObj(defs[i])) fail('parts[' + i + '] 必须是对象');
+    var part = buildPartDef(defs[i], model);
+    var mesh = buildPartMesh(part, E);
+    model.parts.push(part);   // 逐件入列：下一件的 id 唯一性校验才看得见（失败则整体不落盘）
+    added.push(partAddedBrief(part, mesh));
+  }
   writeModelFile(ctx, path, model);
-  return {
-    ok: true, action: 'added', path: path, id: id,
-    part: { id: id, type: part.shape ? part.shape.type : null, triangles: mesh.indices.length, volume: cleanNum(meshVolume(mesh), 4), size: meshSize(mesh).map(function (x) { return cleanNum(x, 3); }) },
-    parts: model.parts.length
-  };
+  var res = { ok: true, action: 'added', path: path, added: added, parts: model.parts.length };
+  if (added.length === 1) { res.id = added[0].id; res.part = added[0]; }  // 单件写法兼容旧返回体
+  return res;
 }
 
 // ── model_edit：命令式编辑（一次一批，任一 op 失败则整批不落盘）──────
@@ -5563,6 +5606,15 @@ function applyOp(model, op, index) {
   if (!name) fail('ops[' + index + '] 缺少 op');
   var id = argStr(op, 'id');
   var k;
+  if (name === 'part.add') {
+    // 批量加部件：与 model_add 同一套构造口径（from 复制 / 表达式尺寸 / 阵列 / 材质 / ops）——
+    // 复杂模型可以在**一次 model_edit 调用**里用 N 条 part.add 成型，不必一件一次 model_add。
+    // 部件定义推荐写在 part:{…}（与 model_add 的 parts 项同构）；也支持直接平铺在同一层。
+    var defAdd = isObj(op.part) ? op.part : op;
+    var pNew = buildPartDef(defAdd, model);
+    model.parts.push(pNew);
+    return '新增部件 ' + pNew.id + '（' + ((pNew.shape && pNew.shape.type) || 'cuboid') + '）';
+  }
   if (name === 'part.remove' || name === 'part.delete') {
     var idx = findPartIndex(model, id);
     if (idx < 0) fail('部件不存在：' + id);
@@ -5706,7 +5758,7 @@ function applyOp(model, op, index) {
     model.parts = ordered.concat(rest);
     return '调整部件顺序：' + ids.join(', ') + ' 置前';
   }
-  fail('未知 op ' + name + '（可用 part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder、' +
+  fail('未知 op ' + name + '（可用 part.add/remove/rename/set/shape/transform/repeat/material/hide/show/reorder、' +
     'op.add/remove/clear、param.add/set/remove、mesh.align/snap/repair/chamfer/fillet）');
 }
 
@@ -5918,10 +5970,15 @@ function modelVerify(args, unknown, ctx) {
 // ══ 「识别到的文件」注册表 + 实时预览链路（2026-09-17：UI 与工具合并进同一插件）══
 // 用户口径：工具操作到**具体文件** → 面板里点这个文件 → 登记为「识别到的文件」→ **实时**预览。
 // host 半为此维护两件事：
-//   ① 登记表 ARTIFACTS：工具每次写文件（建/改工程、导出各格式产物、复验报告）立刻登记，并
-//      ctx.emit('ui:tool-model/artifacts') 广播 → 面板事件驱动刷新（不靠手点刷新，也不轮询竞争）。
-//   ② 工作区扫描：面板可让 host 递归识别工作区里**已存在**的可预览文件（扩展名识别 + 内容嗅探），
-//      历史产物 / 手工放进来的 STL·OBJ·glTF 同样点开即看 —— 登记表不是唯一真相源。
+//   登记表 ARTIFACTS：工具每次写文件（建/改工程、导出各格式产物、复验报告）立刻登记，并
+//   ctx.emit('ui:tool-model/artifacts') 广播 → 面板事件驱动刷新（不靠手点刷新，也不轮询竞争）。
+// ★ 2026-09-18：**不再扫描工作区**（原 scanWorkspaceArtifacts 已删）。旧口径是「登记表 + 全工作区
+//   递归扫描（深度 4 / 上限 200 条）」，后果是工作区里任意 *.json（package.json / 别的域的工程
+//   JSON / 任意配置）都被列进 3D 面板的「文件」栏 —— 用户口径：这个列表只该有**本插件产物**。
+//   现在列表只有两条来源：
+//     ① 工具产出：写盘即登记（工程 / 各格式产物 / 复验报告）；
+//     ② 面板手动登记：顶部路径框输入文件 → claimArtifact 登记 → 当场预览。
+//   外部/历史文件一律不自动出现（要看就在面板里手动登记，或直接在编辑器里打开）。
 // 解析与渲染全在前端（点开即画）：host 只回「内容 + 元信息」——文本原样，二进制 base64。
 var ARTIFACTS = [];        // [{path, kind, source, bytes, mtime, at, note}]（最新在前）
 var ARTIFACTS_MAX = 300;   // 登记表上限（防长会话无限增长）
@@ -5987,47 +6044,11 @@ function noteArtifact(ctx, path, kind, source, note) {
   return item;
 }
 
-// 工作区扫描：递归找可预览文件（跳过依赖/构建产物/隐藏目录；深度与条数设上限保证响应速度）
-var SCAN_SKIP_DIRS = {
-  node_modules: 1, '.git': 1, '.svn': 1, '.idea': 1, '.vscode': 1,
-  dist: 1, build: 1, release: 1, obj: 1, gocache: 1, logs: 1, tmp: 1,
-  screenshots: 1, _temp: 1, '.pair': 1, '.agent-teams': 1, '.verify-tmp': 1
-};
-function scanWorkspaceArtifacts(ctx, opts) {
-  var o = opts || {};
-  var maxDepth = o.maxDepth === undefined ? 4 : toNumber(o.maxDepth, 'maxDepth');
-  var limit = o.limit === undefined ? 200 : toNumber(o.limit, 'limit');
-  var out = [];
-  var seen = {};
-  function walk(dir, depth) {
-    if (out.length >= limit || depth > maxDepth) return;
-    var names;
-    // ★ ctx.fs 的路径解析拒绝空串（"path 不能为空"）——工作区根用 '.' 表示
-    try { names = ctx.fs.readdir(dir === '' ? '.' : dir); } catch (e) { return; }
-    for (var i = 0; i < names.length; i++) {
-      if (out.length >= limit) return;
-      var name = names[i];
-      if (!name || name.charAt(0) === '.') continue;
-      var p = dir === '' ? name : (dir + '/' + name);
-      var st = null;
-      try { st = ctx.fs.stat(p); } catch (e) { continue; }
-      if (st.isDir) { if (SCAN_SKIP_DIRS[name]) continue; walk(p, depth + 1); continue; }
-      var k = artifactKindOf(p);
-      if (!k) continue;
-      if (seen[p]) continue;
-      seen[p] = 1;
-      var e = artifactEntry(ctx, p, k, 'scan', null);
-      if (e) out.push(e);
-    }
-  }
-  try { walk('', 0); } catch (e) { /* 扫描失败不致命：面板仍能看到登记表 */ }
-  return out;
-}
-
 // ── client 方法（浏览器面板 ui.invoke('tool-model', <名>, args)）──────────
-// listArtifacts：识别到的文件清单 = 登记表（工具产出，优先）+ 工作区扫描（历史/手工文件）
+// listArtifacts：识别到的文件清单 = 登记表（工具产出 + 面板手动登记，最新在前）
+// ★ 2026-09-18 去扫描：不再递归工作区。args.scan 已废弃（传了也忽略），返回里 scanned 恒 false
+//   （老面板靠它决定是否本地合并扫描结果，恒 false 即不再合并），scanRemoved 供面板识别新口径。
 function listArtifactsForUI(ctx, args) {
-  var a = args || {};
   var items = [], seen = {}, i;
   for (i = 0; i < ARTIFACTS.length; i++) {
     var it = ARTIFACTS[i];
@@ -6037,15 +6058,7 @@ function listArtifactsForUI(ctx, args) {
     seen[e.path] = 1;
     items.push(e);
   }
-  if (a.scan !== false) {
-    var found = scanWorkspaceArtifacts(ctx, a);
-    for (i = 0; i < found.length; i++) {
-      if (seen[found[i].path]) continue;
-      seen[found[i].path] = 1;
-      items.push(found[i]);
-    }
-  }
-  return { items: items, registered: ARTIFACTS.length, scanned: a.scan !== false, at: Date.now() };
+  return { items: items, registered: ARTIFACTS.length, scanned: false, scanRemoved: true, at: Date.now() };
 }
 
 // readArtifact：给面板内容（文本原样；二进制 base64）——渲染与解析在前端做
@@ -6086,9 +6099,9 @@ function claimArtifactForUI(ctx, args) {
 }
 
 // statArtifact：轻量状态查询（面板实时复核用——不读内容、不扫盘，只看 size/mtime）
-// ★ 为什么需要它：登记表只覆盖「本会话工具产出」，工作区扫描到的历史/手工文件不在表里，
-//   若面板只比对登记表就永远发现不了这些文件被改动 → 预览不刷新。故对**当前选中文件**
-//   一律走本方法取实时 size/mtime，变了就重读重绘。
+// ★ 为什么需要它：登记表只记「工具写过的路径」，「文件内容」随时可能被 Agent / 外部编辑器改掉，
+//   表里的 bytes/mtime 就过期了；若面板只比对登记表条目，就永远发现不了内容变化 → 预览不刷新。
+//   故对**当前选中文件**一律走本方法取实时 size/mtime，变了就重读重绘。
 function statArtifactForUI(ctx, args) {
   var path = argStr(args || {}, 'path', '') || '';
   if (!path) fail('statArtifact：缺 path');
@@ -6151,8 +6164,8 @@ var IMPLS = {
 var TOOL_DEFS = [
   {
     name: 'model_doc',
-    description: '参数化 CAD 工程的创建与查看（真相源 = 工程 JSON，默认 ' + PROJECT_NAME + '）。工程坐标照 CAD 惯例：右手系、+z 向上、单位 mm；几何字段可用表达式引用参数（如 "wall*2"）。action=new 建空工程（可带 params）/ get 看盘点（部件、参数、体积、包围盒）/ rename / param 改参数值（改完全模型自动重算）/ set 改元信息 / reset 清空部件。',
-    usageGuide: '起步：model_doc action=new name=bracket params={wall:3, holes:2} → model_add id=base type=cuboid size=["wall*10","wall*10",5] → model_edit op.add 挖孔 → model_export format=all → model_verify。已有工程先 action=get 看盘点（会顺带报"几何能否构建"）。',
+    description: '参数化 CAD 工程的创建与查看（真相源 = 工程 JSON，默认 ' + PROJECT_NAME + '）。工程坐标照 CAD 惯例：右手系、+z 向上、单位 mm；几何字段可用表达式引用参数（如 "wall*2"）。action=new 建工程（可带 params + parts：一次把参数与全部部件都建好）/ get 看盘点（部件、参数、体积、包围盒）/ rename / param 改参数值（改完全模型自动重算）/ set 改元信息 / reset 清空部件。',
+    usageGuide: '起步：model_doc action=new name=bracket params={wall:3, holes:2} → model_add id=base type=cuboid size=["wall*10","wall*10",5] → model_edit op.add 挖孔 → model_export format=all → model_verify。★ 部件多时走批量：action=new parts=[{id:"base", type:"cuboid", size:[40,30,6]}, {id:"boss", type:"cylinder", radius:5, height:10}] 一次建好工程 + 全部部件（不必 new 完再逐件 add）。已有工程先 action=get 看盘点（会顺带报"几何能否构建"）。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -6161,6 +6174,7 @@ var TOOL_DEFS = [
         path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
         name: { type: 'string', description: '可选：模型名（new / rename / set）' },
         params: { type: 'object', description: '可选（new）：参数定义 [{id,value,min,max,name}] 或 {id: value}；可选（param）：{id: 新值} 或 [{id,value}]' },
+        parts: { type: 'array', description: '可选（new）：部件定义数组——每项与 model_add 单件同构（id/from/type/size/shape/transform/repeat/material/ops/visible），一次调用把工程与全部部件一起建好；任一项构造或试建失败则整批不落盘' },
         id: { type: 'string', description: '可选（param）：单个参数 id' },
         value: { description: '可选（param）：该参数的新值（数字或表达式字符串）' },
         note: { type: 'string', description: '可选：备注（new / set）' },
@@ -6173,13 +6187,14 @@ var TOOL_DEFS = [
   },
   {
     name: 'model_add',
-    description: '新增部件。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/sweep/mesh；extrude 可带 holes 打孔、带 twist 做扭转挤出；sweep 让轮廓沿任意 3D 路径扫掠，可配 holes/twist/scale/closed/up），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect，或网格级的 chamfer 倒角 / fillet 圆角 / repair / snap / align）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
-    usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；扭转挤出（绞龙/麻花柱/螺旋齿轮坯）：{id:"auger", type:"extrude", profile:{type:"circle", radius:8, segments:24}, height:40, twist:180, segments:24}；带孔扭转（内螺旋槽）：在上面加 holes:[{type:"circle", radius:3, segments:16}]；扫掠弯管（轮廓沿 3D 路径走，可带孔做空心管；扫掠路径字段叫 along）：{id:"elbow", type:"sweep", profile:{type:"circle", radius:4, segments:24}, holes:[{type:"circle", radius:2.5, segments:16}], along:[[0,0,0],[0,0,20],[0,8,30],[0,24,36]]}；扫掠圆环（闭合路径无端盖）：{id:"ring", type:"sweep", profile:{type:"circle", radius:3, segments:24}, along:[[20,0,0],[0,20,0],[-20,0,0],[0,-20,0]], closed:true}；锥形扫掠：直线 along + scale:[1,2]（每站缩放，也可给标量）；扭转扫掠：along + twist:360（沿路径总扭转角）；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。',
+    description: '新增部件。★ 支持批量：parts=[{…},{…}] 一次调用加任意多个部件（比逐件调用少几十倍往返；事务性：任一项失败整批不落盘），单件则用同层字段。几何可用 type + 字段快捷构造（cuboid/cube/sphere/ellipsoid/cylinder/cone/frustum/torus/polyhedron/extrude/revolve/sweep/mesh；extrude 可带 holes 打孔、带 twist 做扭转挤出；sweep 让轮廓沿任意 3D 路径扫掠，可配 holes/twist/scale/closed/up），也可传完整 shape（含布尔树 boolean/group）。可选 transform（translate/rotate/scale）、ops（对本体做 subtract/union/intersect，或网格级的 chamfer 倒角 / fillet 圆角 / repair / snap / align）、repeat（linear/circular/mirror 阵列）、material（color/metallic/roughness）。所有数值字段都能写表达式。新增时立即试算几何，算不出来不会写入。',
+    usageGuide: '例：{id:"base", type:"cuboid", size:[40,30,6]}；带挖孔：{id:"base", type:"cuboid", size:[40,30,6], ops:[{op:"subtract", shape:{type:"cylinder", radius:3, height:20}}]}；带孔挤出板（更少三角形、更精确）：{id:"plate", type:"extrude", profile:{type:"rect", size:[40,30]}, holes:[{type:"circle", radius:3, center:[12,0]},{type:"circle", radius:3, center:[-12,0]}], height:6}；扭转挤出（绞龙/麻花柱/螺旋齿轮坯）：{id:"auger", type:"extrude", profile:{type:"circle", radius:8, segments:24}, height:40, twist:180, segments:24}；带孔扭转（内螺旋槽）：在上面加 holes:[{type:"circle", radius:3, segments:16}]；扫掠弯管（轮廓沿 3D 路径走，可带孔做空心管；扫掠路径字段叫 along）：{id:"elbow", type:"sweep", profile:{type:"circle", radius:4, segments:24}, holes:[{type:"circle", radius:2.5, segments:16}], along:[[0,0,0],[0,0,20],[0,8,30],[0,24,36]]}；扫掠圆环（闭合路径无端盖）：{id:"ring", type:"sweep", profile:{type:"circle", radius:3, segments:24}, along:[[20,0,0],[0,20,0],[-20,0,0],[0,-20,0]], closed:true}；锥形扫掠：直线 along + scale:[1,2]（每站缩放，也可给标量）；扭转扫掠：along + twist:360（沿路径总扭转角）；直线阵列：{id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}；圆周阵列：{repeat:{mode:"circular", count:8, axis:"z", radius:15}}；表达式尺寸：{size:["wall*10","wall*10","thk"]}。★ 批量（复杂模型一次成型 —— 别一件一次调用）：parts=[{id:"base", type:"cuboid", size:[40,30,6]}, {id:"boss", type:"cylinder", radius:5, height:10, transform:{translate:[0,0,8]}}, {id:"rib", type:"cuboid", size:[2,30,8], repeat:{mode:"linear", count:6, delta:[6,0,0]}}]。',
     category: '创作',
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: '部件 id（必填、唯一；字母数字下划线连字符点）' },
+        parts: { type: 'array', description: '★ 批量：部件定义数组——每项与单件同构（id/from/type/size/shape/transform/repeat/material/ops/visible），一次调用加任意多个部件；任一项构造或试建失败则整批不落盘。传了 parts 就不用传同层单件字段（也不用传 id）' },
+        id: { type: 'string', description: '部件 id（单件时必填、唯一；字母数字下划线连字符点。批量时写在 parts 各项里）' },
         path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/' + PROJECT_NAME + '；相对主项目根解析）' },
         type: { type: 'string', description: '几何类型（默认 cuboid）' },
         size: { description: 'cuboid/cube 全尺寸（数字或 [x,y,z]）' },
@@ -6210,14 +6225,13 @@ var TOOL_DEFS = [
         name: { type: 'string', description: '可选：显示名' },
         from: { type: 'string', description: '可选：从已有部件复制（id 换成新 id）' },
         visible: { type: 'boolean', description: '可选：false 则不参与导出' }
-      },
-      required: ['id']
+      }
     }
   },
   {
     name: 'model_edit',
-    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair/chamfer 倒角/fillet 圆角）。倒角与圆角作用在**网格级**（不是参数化特征）：按相邻面折角识别棱，默认处理全部凸棱、也可用坐标对数组精确指定；凹边（内二面角 > 180°）需填材料、暂不支持，指定时会明确报错。圆角对**凸体**默认（不指定 edges = 全部棱）走 rolling-ball 开运算解析路径 —— 相邻棱、多棱交会的顶点同样严格水密；只选部分棱或非凸体才走布尔近似路径。',
-    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]；倒角：[{op:"mesh.chamfer", id:"base", distance:1.5}]（全部凸棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]）—— 尺寸大或棱多时用倒角（一次构造、精确且水密）；圆角：[{op:"mesh.fillet", id:"base", radius:2}]（全部棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]，可传 segments 控制弧面离散）—— **凸体全棱（含相邻棱，如立方体 12 棱）走 rolling-ball 解析路径，严格水密**；只选部分棱或非凸体则走布尔近似，那时单次只支持**互不相邻**的棱（相邻棱交会会明确报错）。改完跑 model_verify 复验。',
+    description: '命令式编辑工程（一次 ops 批量应用；任一 op 失败则整批不落盘，工程保持原样）。支持：部件（part.add 新增 / part.remove/rename/set/shape/transform/repeat/material/hide/show/reorder）、几何运算（op.add/remove/clear）、参数（param.add/set/remove）、网格处理（mesh.align/snap/repair/chamfer 倒角/fillet 圆角）。倒角与圆角作用在**网格级**（不是参数化特征）：按相邻面折角识别棱，默认处理全部凸棱、也可用坐标对数组精确指定；凹边（内二面角 > 180°）需填材料、暂不支持，指定时会明确报错。圆角对**凸体**默认（不指定 edges = 全部棱）走 rolling-ball 开运算解析路径 —— 相邻棱、多棱交会的顶点同样严格水密；只选部分棱或非凸体才走布尔近似路径。',
+    usageGuide: '例：[{op:"op.add", id:"base", do:"subtract", shape:{type:"cylinder", radius:3, height:20}}] / [{op:"part.transform", id:"base", transform:{translate:[0,0,10]}}] / [{op:"param.set", id:"wall", value:4}]（全模型自动重算）/ [{op:"part.rename", id:"base", to:"plate"}] / [{op:"mesh.repair", id:"base"}]；倒角：[{op:"mesh.chamfer", id:"base", distance:1.5}]（全部凸棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]）—— 尺寸大或棱多时用倒角（一次构造、精确且水密）；圆角：[{op:"mesh.fillet", id:"base", radius:2}]（全部棱；只做几条棱传 edges:[[[x,y,z],[x,y,z]],…]，可传 segments 控制弧面离散）—— **凸体全棱（含相邻棱，如立方体 12 棱）走 rolling-ball 解析路径，严格水密**；只选部分棱或非凸体则走布尔近似，那时单次只支持**互不相邻**的棱（相邻棱交会会明确报错）。★ 批量：一次调用可传任意多条 op —— 复杂模型用 N 条 part.add 一次成型。例：[{op:"part.add", part:{id:"base", type:"cuboid", size:[40,30,6]}}, {op:"part.add", part:{id:"boss", type:"cylinder", radius:5, height:10, transform:{translate:[0,0,8]}}}, {op:"param.set", id:"wall", value:4}]。改完跑 model_verify 复验。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -6228,7 +6242,8 @@ var TOOL_DEFS = [
         id: { type: 'string', description: '可选：目标部件 / 参数 id' },
         to: { type: 'string', description: '可选：part.rename 的新 id，或 mesh.align 的方位（min/center/max）' },
         props: { type: 'object', description: '可选（part.set）：要合并的属性' },
-        shape: { type: 'object', description: '可选（part.shape / op.add）：几何' },
+        part: { type: 'object', description: '可选（part.add）：部件定义对象，与 model_add 的 parts 项同构（id/from/type/size/shape/transform/repeat/material/ops/visible）——一次调用可用多条 part.add 批量建部件' },
+        shape: { type: 'object', description: '可选（part.shape / op.add / part.add 平铺写法）：几何' },
         do: { type: 'string', description: '可选（op.add）：subtract（默认）/ union / intersect' },
         transform: { type: 'object', description: '可选（part.transform / op.add）' },
         repeat: { type: 'object', description: '可选（part.repeat；传 null 清除阵列）' },

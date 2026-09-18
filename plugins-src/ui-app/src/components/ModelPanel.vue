@@ -8,14 +8,17 @@
     :loading="loading"
     :error="error"
     :empty="!items.length"
+    :file="entryPath"
+    placeholder="登记文件路径（如 model.glb）"
     reload-title="重载「识别到的文件」"
     footnote="只读面板：几何/参数改动一律经 Agent 的 model_add / model_edit / model_doc；面板实时跟随文件变化。"
     source="model.*"
+    @update:file="entryPath = $event"
     @reload="refreshNow"
   >
     <template #head-actions>
-      <button class="pn-btn" :disabled="loading" title="在「仅工具产出」与「扫描工作区」之间切换" @click="scanNow">
-        {{ scanMode ? '扫描工作区：开' : '仅工具产出' }}
+      <button class="pn-btn" :disabled="loading || !entryPath.trim()" title="把顶部路径框里的文件登记为「识别到的文件」并立即预览（本面板不扫描工作区）" @click="enterEntry">
+        登记并预览
       </button>
     </template>
 
@@ -29,7 +32,7 @@
       <div class="pn-card">
         <div class="pn-card-title">三步开始</div>
         <div class="pn-empty-step"><i>1</i><span>让 Agent 产出文件：<code>model_export format=all</code> → <code>model_verify</code>。</span></div>
-        <div class="pn-empty-step"><i>2</i><span>文件自动出现在左栏（历史/手工文件点顶部「仅工具产出」切到「扫描工作区」也能找到）。</span></div>
+        <div class="pn-empty-step"><i>2</i><span>文件自动出现在左栏 —— 这个列表<b>只列本插件产物</b>（不扫描工作区）；工作区里已有的历史/手工文件用顶部路径框输入后点「登记并预览」加进来。</span></div>
         <div class="pn-empty-step"><i>3</i><span>点文件名 → 当场实时预览；改工程或重导出后无需手点刷新。</span></div>
       </div>
       <div class="pn-tip">
@@ -65,7 +68,7 @@
           <span class="mp-src">{{ srcLabel(it.source) }}</span>
           <span class="pn-item-v">{{ fmtSize(it.bytes) }}</span>
         </button>
-        <div v-if="!items.length" class="pn-tip">没有识别到文件。</div>
+        <div v-if="!items.length" class="pn-tip">还没有识别到的文件：工具产出会自动出现，其他文件用顶部路径框「登记并预览」加入。</div>
         <div v-else class="pn-tip mp-side-hint">点文件名即在此登记并实时预览。</div>
       </div>
 
@@ -172,7 +175,8 @@
           </div>
           <template v-if="guideOpen">
             <div class="pn-tip">
-              工具写出的每一个文件都会自动出现在左栏「文件」里；点文件名即登记预览，页面实时跟随文件变化重绘。
+              工具写出的每一个文件都会自动出现在左栏「文件」里（列表只列<b>本插件产物</b>，不扫描工作区；要放别的文件进来看，用顶部路径框登记）；
+              点文件名即登记预览，页面实时跟随文件变化重绘。
               从工程里打开预览的三种入口：① 主内容区顶部 tab「3D 模型」；② 本面板；③ 直接双击导出的 <code>*.preview.html</code>。
             </div>
             <div class="pn-tip">{{ bridge.modeNote }}</div>
@@ -197,6 +201,8 @@
 //
 // 口径：工具操作到**具体文件** → 每次写盘 host 半立即登记并广播 →
 //   本面板列出「识别到的文件」→ 点击即登记（claimArtifact）+ 当场预览 + **实时**跟随变化。
+//   ★ 2026-09-18：列表**只列本插件产物**（工具写盘即登记）+ 面板手动登记的文件 ——
+//   host 半已删除「扫描整个工作区」行为（旧口径会把工作区里任意 *.json 也列进来）。
 //   预览渲染有三条路：① 工程 JSON → host 内核现场构建几何 → ModelViewer；
 //   ② glTF/GLB/STL/OBJ → 前端解析（model-parsers）→ ModelViewer；
 //   ③ 自包含预览 HTML → iframe srcdoc；复验报告 → 判据列表。
@@ -214,7 +220,7 @@ const props = defineProps({ fill: { type: Boolean, default: false } })
 const bridge = createBridge()
 const items = ref([])
 const selected = ref('')
-const scanMode = ref(true)
+const entryPath = ref('')        // 顶部路径框：手动登记任意文件（替代已移除的工作区扫描）
 const loading = ref(false)
 const error = ref('')
 // 主内容区（fill）里重点是预览：指引默认收起（侧栏面板空间宽裕，默认展开）
@@ -247,7 +253,8 @@ function srcLabel(s) {
   if (s === 'export') return '工具·产物'
   if (s === 'verify') return '工具·报告'
   if (s === 'claim') return '已登记'
-  return '扫描'
+  if (s === 'http') return '只读'
+  return '工具'
 }
 function shortPath(p) {
   const parts = String(p).split(/[\\/]/)
@@ -321,18 +328,17 @@ let stopFlag = false
 
 function sigOf(it) { return String(it && (it.bytes + '|' + it.mtime)) }
 
-function refreshNow() { return refresh(scanMode.value) }
+function refreshNow() { return refresh() }
 
-async function refresh(scan = scanMode.value) {
+// 列表 = 登记表（工具产出 + 面板手动登记）。host 半 2026-09-18 起**不再扫描工作区**，
+// 面板侧原先「合并 source==='scan' 条目」的逻辑随之删除（新产物里不再有该来源）。
+async function refresh() {
   if (stopFlag) return
   loading.value = true
   error.value = ''
   try {
-    const r = await bridge.listArtifacts({ scan })
-    const scanned = (items.value || []).filter((x) => x.source === 'scan')
-    const reg = (r && r.items) || []
-    const seen = new Set(reg.map((x) => x.path))
-    items.value = reg.concat(scan ? scanned.filter((x) => !seen.has(x.path)) : [])
+    const r = await bridge.listArtifacts()
+    items.value = (r && r.items) || []
   } catch (e) {
     error.value = '读取识别到的文件失败：' + ((e && e.message) || e)
   } finally {
@@ -340,10 +346,19 @@ async function refresh(scan = scanMode.value) {
   }
 }
 
-async function scanNow() {
-  scanMode.value = !scanMode.value
-  await refresh(scanMode.value)
-  if (!selected.value) autoPick()
+// 手动登记：顶部路径框输入 → 登记为「识别到的文件」（claimArtifact）+ 当场预览 ——
+// 这是「不再扫工作区」之后把工作区里已有文件拿进来看的唯一入口。
+async function enterEntry() {
+  const p = String(entryPath.value || '').trim()
+  if (!p) return
+  await select(p)
+  if (preview.value.error) return          // 路径不存在 / 读失败：保留错误提示，不刷新列表
+  await refresh()
+  if (!(items.value || []).some((x) => x.path === p)) {
+    // 兜底：host 侧登记成功但 stat 拿不到（极端情况）→ 本地补一条，避免用户看不到刚登记的文件
+    items.value = [{ path: p, kind: meta.value.kind, label: meta.value.label, source: 'claim', bytes: meta.value.bytes, mtime: meta.value.mtime, note: null }].concat(items.value || [])
+  }
+  tab.value = 'files'
 }
 
 function autoPick() {
@@ -424,12 +439,12 @@ async function select(path) {
   }
 }
 
-// 登记表刷新（工具产出条目；工作区扫描条目保留）
+// 登记表刷新（工具产出 + 手动登记；降级模式的 http 三件套条目保留）
 async function refreshRegistry() {
-  const r = await bridge.listArtifacts({ scan: false })
+  const r = await bridge.listArtifacts()
   const reg = (r && r.items) || []
   const seen = new Set(reg.map((x) => x.path))
-  items.value = reg.concat((items.value || []).filter((x) => (x.source === 'scan' || x.source === 'http') && !seen.has(x.path)))
+  items.value = reg.concat((items.value || []).filter((x) => x.source === 'http' && !seen.has(x.path)))
   if (!selected.value && items.value.length) autoPick()
 }
 
@@ -459,7 +474,7 @@ function scheduleRefresh() {
   scheduleTimer = setTimeout(async () => {
     scheduleTimer = 0
     if (stopFlag) return
-    await refresh(scanMode.value)
+    await refresh()
     // 选中文件内容变了 → 立即重绘（实时）
     const it = (items.value || []).find((x) => x.path === selected.value)
     if (it && sigOf(it) !== lastSig) await select(selected.value)
@@ -484,7 +499,7 @@ function copyCmd() {
 onMounted(async () => {
   offEvent = bridge.onArtifacts(() => scheduleRefresh())
   timer = setInterval(pollTick, 2000)
-  await refresh(true)
+  await refresh()
   autoPick()
 })
 
