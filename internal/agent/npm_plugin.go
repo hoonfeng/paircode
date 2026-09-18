@@ -18,7 +18,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -75,23 +77,41 @@ type npmPackageInfo struct {
 
 // fetchNPMInfo 查询 npm registry 获取包 latest 信息。
 func fetchNPMInfo(pkg string) (*npmPackageInfo, error) {
+	info, missing, err := fetchNPMInfoChecked(pkg)
+	if err != nil {
+		return nil, err
+	}
+	if missing {
+		return nil, fmt.Errorf("npm %s 不存在或不可达（HTTP %d）", pkg, http.StatusNotFound)
+	}
+	return info, nil
+}
+
+// fetchNPMInfoChecked 查询 npm registry latest，并区分「包不存在」（missing=true，
+// HTTP 404）与「瞬时网络错误」——推断官方包名（无 config.npm 元数据）时，
+// 只有"确定不存在"才判为非 npm 来源，并可安全负缓存。
+// ★ 2026-09-19 新增（市场更新提示：手动放置/复制的官方插件包没有安装元数据）。
+func fetchNPMInfoChecked(pkg string) (*npmPackageInfo, bool, error) {
 	url := npmRegistryBase + "/" + strings.ReplaceAll(pkg, "/", "%2F") + "/latest"
 	resp, err := npmHTTPGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("查询 npm %s 失败: %v", pkg, err)
+		return nil, false, fmt.Errorf("查询 npm %s 失败: %v", pkg, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, true, nil
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("npm %s 不存在或不可达（HTTP %d）", pkg, resp.StatusCode)
+		return nil, false, fmt.Errorf("npm %s 不存在或不可达（HTTP %d）", pkg, resp.StatusCode)
 	}
 	var info npmPackageInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return nil, fmt.Errorf("解析 npm 响应失败: %v", err)
+		return nil, false, fmt.Errorf("解析 npm 响应失败: %v", err)
 	}
 	if info.Dist.Tarball == "" {
-		return nil, fmt.Errorf("npm %s 无 tarball 地址", pkg)
+		return nil, false, fmt.Errorf("npm %s 无 tarball 地址", pkg)
 	}
-	return &info, nil
+	return &info, false, nil
 }
 
 // fetchNPMPackage 下载 npm 包 tarball 并解压到临时目录，返回：
@@ -503,9 +523,11 @@ func npmPluginDiskName(pkg string) string {
 
 // npmPluginMeta 单个磁盘插件的 npm 来源元数据。
 type npmPluginMeta struct {
-	Name    string `json:"name"`    // 磁盘插件名（.pair/plugins/<name>/）
-	Pkg     string `json:"pkg"`     // npm 包名（@scope/pkg 或裸名）
-	Version string `json:"version"` // 已安装的 npm 版本
+	Name         string `json:"name"`    // 磁盘插件名（.pair/plugins/<name>/）
+	Pkg          string `json:"pkg"`     // npm 包名（@scope/pkg 或裸名）
+	Version      string `json:"version"` // 已安装的 npm 版本（config.npm.version）
+	ManifestName string `json:"-"`       // ★ package.json 的 name 字段（推断包名用：scoped 名直接可作包名）
+	LocalVersion string `json:"-"`       // ★ package.json 的 version 字段（无安装元数据时的本地版本）
 }
 
 // npmPluginMetaPath 读磁盘插件包的 config.npm 元数据；无则返回零值。
@@ -518,7 +540,7 @@ func npmPluginMetaPath(pkgDir string) (npmPluginMeta, error) {
 	if err := json.Unmarshal(data, &pkg); err != nil {
 		return npmPluginMeta{}, err
 	}
-	meta := npmPluginMeta{Name: pkg.Name}
+	meta := npmPluginMeta{Name: pkg.Name, ManifestName: pkg.Name, LocalVersion: pkg.Version}
 	if cfg, ok := pkg.Config["npm"].(map[string]any); ok {
 		meta.Pkg, _ = cfg["pkg"].(string)
 		meta.Version, _ = cfg["version"].(string)
@@ -528,21 +550,31 @@ func npmPluginMetaPath(pkgDir string) (npmPluginMeta, error) {
 
 // npmPluginMetaByPkg 按 npm 包名（或磁盘插件名）查已装元数据。
 // 返回零值 meta 表示未安装/无 npm 来源。
+// ★ 2026-09-19：手动放置的官方插件包（无 config.npm）也按目录名命中，并补上
+// 推断包名 + 本地版本——否则市场对这些包的「更新」动作会判为「非 npm 来源」。
 func npmPluginMetaByPkg(pkg string) npmPluginMeta {
-	dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
-	if meta, err := npmPluginMetaPath(filepath.Join(dir)); err == nil && meta.Pkg != "" {
+	base := globalPluginsDir()
+	diskName := npmPluginDiskName(pkg)
+	if meta, err := npmPluginMetaPath(filepath.Join(base, diskName)); err == nil && (meta.Pkg != "" || meta.LocalVersion != "") {
+		if meta.Pkg == "" {
+			cand := inferOfficialPkg(diskName, meta.ManifestName)
+			if cand == "" {
+				cand = pkg
+			}
+			meta.Pkg, meta.Version = cand, meta.LocalVersion
+		}
 		return meta
 	}
 	// 入参可能是磁盘插件名而非 npm 全名：扫描全部目录匹配 config.npm.pkg
-	entries, err := os.ReadDir(globalPluginsDir())
+	entries, err := os.ReadDir(base)
 	if err != nil {
 		return npmPluginMeta{}
 	}
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !isPluginDirEntry(base, e) {
 			continue
 		}
-		meta, err := npmPluginMetaPath(filepath.Join(globalPluginsDir(), e.Name()))
+		meta, err := npmPluginMetaPath(filepath.Join(base, e.Name()))
 		if err != nil || meta.Pkg == "" {
 			continue
 		}
@@ -553,46 +585,152 @@ func npmPluginMetaByPkg(pkg string) npmPluginMeta {
 	return npmPluginMeta{}
 }
 
-// npmPluginCheckUpdates 扫描全部磁盘插件的 config.npm 元数据，
-// 逐个查询 npm registry latest 对比，返回可更新清单。
-// 单个查询失败不阻塞整体（error 字段记录，方便前端提示网络问题）。
+// ─── 更新检查：安装元数据 + 官方约定推断 ────────────────────────────
+// npmOfficialPkgPrefix 官方插件 npm scope 前缀（推断依据：磁盘插件名 → @paircode/<name>）。
+const npmOfficialPkgPrefix = "@paircode/"
+
+// npmPkgMissingTTL 推断包「确定不存在」（404）结论的负缓存时长。非 npm 来源的
+// 磁盘插件包（内置包/UI 包）在 registry 上查不到，缓存可避免每次点「检查更新」
+// 都对几十个包打一轮无用网络往返；只缓存 404，网络抖动不入缓存。
+const npmPkgMissingTTL = 10 * time.Minute
+
+var (
+	npmPkgMissingMu    sync.Mutex
+	npmPkgMissingCache = map[string]time.Time{} // pkg → 判定 404 的时间
+)
+
+// inferOfficialPkg 推断磁盘插件包的候选 npm 包名（未校验存在性）：
+//   - manifest name 含 "/"（scoped 包名，如 @scope/pkg）→ 直接作包名
+//   - 否则按官方命名约定 @paircode/<磁盘插件名>
+func inferOfficialPkg(dirName, manifestName string) string {
+	if name := strings.TrimSpace(manifestName); strings.Contains(name, "/") {
+		return name
+	}
+	d := strings.TrimSpace(dirName)
+	if d == "" {
+		return ""
+	}
+	return npmOfficialPkgPrefix + d
+}
+
+// npmProbeLatestCached 查包 latest（带 404 负缓存）：
+// 返回 ok=false 表示「非 npm 包或查询失败」——不误报更新。
+// 成功与瞬时错误都不缓存（保证点「检查更新」拿到的是实时 latest）。
+func npmProbeLatestCached(pkg string) (*npmPackageInfo, bool) {
+	npmPkgMissingMu.Lock()
+	at, cached := npmPkgMissingCache[pkg]
+	npmPkgMissingMu.Unlock()
+	if cached && time.Since(at) < npmPkgMissingTTL {
+		return nil, false
+	}
+	info, missing, err := fetchNPMInfoChecked(pkg)
+	if err != nil {
+		return nil, false
+	}
+	if missing {
+		npmPkgMissingMu.Lock()
+		npmPkgMissingCache[pkg] = time.Now()
+		npmPkgMissingMu.Unlock()
+		return nil, false
+	}
+	return info, true
+}
+
+// npmPluginUpdateProbe 单插件版本对比：（name, pkg, current, latest, updateable, error）
+//   - pkg 为空 = 非 npm 来源（内置/工具集插件）→ 前端只显示本地版本，不提示更新
+//   - error 仅对「已声明 npm 来源」的失败填写；推断失败的静默（避免满屏网络噪音）
+func npmPluginUpdateProbe(dirName string, meta npmPluginMeta) map[string]any {
+	info := map[string]any{
+		"name": dirName, "pkg": "", "current": meta.LocalVersion,
+		"latest": "", "updateable": false, "error": "",
+	}
+	if meta.Pkg == "" {
+		// ★ 无安装元数据（手动放置/复制到磁盘的官方插件包）：约定推断 + registry 校验
+		cand := inferOfficialPkg(dirName, meta.ManifestName)
+		if cand == "" {
+			return info
+		}
+		remote, ok := npmProbeLatestCached(cand)
+		if !ok {
+			return info // 非 npm 来源 / 查询失败：仅回本地版本
+		}
+		info["pkg"] = cand
+		info["latest"] = remote.Version
+		if meta.LocalVersion == "" {
+			return info
+		}
+		info["updateable"] = remote.Version != meta.LocalVersion
+		return info
+	}
+	info["pkg"] = meta.Pkg
+	info["current"] = meta.Version
+	if meta.Version == "" {
+		info["error"] = "本地无版本记录（旧安装，重新安装一次即可支持更新）"
+		return info
+	}
+	remote, err := fetchNPMInfo(meta.Pkg)
+	if err != nil {
+		info["error"] = "查询 registry 失败: " + err.Error()
+		return info
+	}
+	info["latest"] = remote.Version
+	info["updateable"] = remote.Version != meta.Version
+	return info
+}
+
+// npmPluginCheckUpdates 扫描全部磁盘插件包，逐个与 npm registry latest 对比，
+// 返回版本对照清单（**含非 npm 来源条目**——前端据此显示本地版本）。
+// ★ 2026-09-19：除 config.npm 声明的安装元数据外，按官方约定推断包名并 registry
+// 校验——手动放置/复制的官方插件包此前完全不参与检查（已安装面板永远显示
+// "无 npm 来源插件"、市场也永远不提示更新）。
+// 单个查询失败不阻塞整体（error 字段记录，方便前端提示网络问题）；6 路并发。
 // ★ 返回 []map[string]any（小写 key）：goja 转 JS 对象时用字段名而非 json tag，
 //
 //	结构体字段名大写会导致前端/agent 取不到（2026-08-20 实测修正）。
 func npmPluginCheckUpdates() []map[string]any {
-	entries, err := os.ReadDir(globalPluginsDir())
+	base := globalPluginsDir()
+	entries, err := os.ReadDir(base)
 	if err != nil {
 		return nil
 	}
-	updates := make([]map[string]any, 0)
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		meta, err := npmPluginMetaPath(filepath.Join(globalPluginsDir(), e.Name()))
-		if err != nil || meta.Pkg == "" {
-			continue // 非 npm 来源（内置/工具集插件）跳过
-		}
-		info := map[string]any{
-			"name": meta.Name, "pkg": meta.Pkg, "current": meta.Version,
-			"latest": "", "updateable": false, "error": "",
-		}
-		if meta.Version == "" {
-			info["error"] = "本地无版本记录（旧安装，重新安装一次即可支持更新）"
-			updates = append(updates, info)
-			continue
-		}
-		remote, err := fetchNPMInfo(meta.Pkg)
-		if err != nil {
-			info["error"] = "查询 registry 失败: " + err.Error()
-			updates = append(updates, info)
-			continue
-		}
-		info["latest"] = remote.Version
-		info["updateable"] = remote.Version != meta.Version
-		updates = append(updates, info)
+	type probeTarget struct {
+		name string
+		meta npmPluginMeta
 	}
-	return updates
+	targets := make([]probeTarget, 0, len(entries))
+	for _, e := range entries {
+		if !isPluginDirEntry(base, e) {
+			continue
+		}
+		meta, err := npmPluginMetaPath(filepath.Join(base, e.Name()))
+		if err != nil {
+			continue // 无 package.json / 解析失败 → 不是插件包目录
+		}
+		targets = append(targets, probeTarget{name: e.Name(), meta: meta})
+	}
+	out := make([]map[string]any, 0, len(targets))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 6) // 并发上限：几十个包串行查询太慢
+	for _, t := range targets {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(t probeTarget) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			info := npmPluginUpdateProbe(t.name, t.meta)
+			mu.Lock()
+			out = append(out, info)
+			mu.Unlock()
+		}(t)
+	}
+	wg.Wait()
+	sort.Slice(out, func(i, j int) bool {
+		ni, _ := out[i]["name"].(string)
+		nj, _ := out[j]["name"].(string)
+		return ni < nj
+	})
+	return out
 }
 
 // npmPluginUpdateInfo 单个插件的更新检查结果。
