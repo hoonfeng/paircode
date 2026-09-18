@@ -271,3 +271,46 @@ _temp/** release/**          构建/验证产物
 4. **prerelease 频道是发布前演练的正确姿势**：`channel=prerelease` 走 `/releases` 列表 → 能发现测试包，
    且**不污染 `releases/latest`**（stable 用户完全无感）。
 5. 下载速率受网络波动影响明显（实测 1.7 → 10.3 MB/s），进度/速率/续传字段刷新正常。
+
+---
+
+## 12. v1.6.4 发布记录（2026-09-19，本功能首次随正式版发布）
+
+**产物**：轻量 tag `v1.6.4` → `d49f87a2`（与 `origin/master` 一致）；正式 Release
+`releases/tag/v1.6.4`（id 391793325，`prerelease=false`、`draft=false`）→ `releases/latest` 指向本版。
+
+| 资产 | 大小 | sha256（GitHub `digest` 与本地 `sha256sum` 一致） |
+|------|------|---------------------------------------------------|
+| `PairCode-1.6.4.zip`（windows/amd64） | 86,272,956 B | `fa4ecfcf0395a2c996b4aa1c5fa59ae3f450855e4fa470fc6d6f7b4f42845221` |
+| `PairCode-linux-1.6.4.zip`（linux/amd64） | 89,800,009 B | `d92812f002688338b69c3fdd0b3665f0e86137866740fada56ad1ddb875e2591` |
+| `PairCode-darwin-1.6.4.zip`（darwin/arm64） | 91,334,551 B | `2c8432c604ee455798a4921db84231df19dd71e5424ae0c917fb5b61af216041` |
+
+**构建**：`./packager.exe` 全流程（verify-dist-isolation → build-ui → sync-plugins-to-bin →
+vite build → sync-embed-shell → verify-release → 三平台编译 → 打包）。版本唯一源是
+`packager.json.version`，编译时经 `-ldflags "-X main.version=1.6.4"` 注入三平台二进制。
+
+**发布后验收（真实发布包 `PairCode-1.6.4.zip` 解压启动，端口 9098）**：
+- `/api/system/info` → `"version":"1.6.4"`；启动日志 `PairCode IDE 1.6.4 启动中`。
+- `core-api 已装配内置接口 61/61（内核表共 61，缺失 0）` → 6 条 `update.*` 路由在**发布包形态**下可用。
+- 启动 20s 后自动检查（真实 GitHub，无任何环境变量覆盖）→ `[update] 自动检查：已是最新（1.6.4）`；
+  `/api/update/status` → `stage=up-to-date`、`source=github:hoonfeng/paircode`、
+  `asset.url = https://github.com/hoonfeng/paircode/releases/download/v1.6.4/PairCode-1.6.4.zip`，
+  `asset.sha256` 与上表一致。
+- 前端：状态栏**不显示**更新徽标（已最新），控制台 0 错误。
+
+**升级路径验收（1.6.3 实例 = 发布形态 + 新 UI/插件面，端口 9099，真实 GitHub）**：
+- 启动 20s 后自动检查 → `[update] 发现新版本 1.6.4（当前 1.6.3）`。
+- 状态栏徽标「新版本 v1.6.4 可用」（title「…— 点击打开软件更新」）；点击 → 「软件更新」弹窗显示
+  「当前 v1.6.3 → 新版本 v1.6.4」「发现新版本 1.6.4（当前 1.6.3）」+「重新检查 / 下载并安装」，
+  「更新说明」即本 release 的 body；控制台 0 错误（截图 `screenshots/webdebug_*.png`）。
+
+**★ 用户升级路径的关键事实（对外必须说明）**：
+`/api/update/*` 需要**新版 `core-api` 插件**声明 ROUTES。1.6.3 及更早的发布包里没有这 6 条——
+实测旧包实例启动时打印「内核表有 6 个接口未在清单中（未挂载）: update.apply, update.cancel,
+update.check, update.config, update.download, update.status」，此时接口 404。
+**因此「应用内在线更新」自 1.6.4 起才可用：1.6.3 及更早用户需手动下载一次 1.6.4**，
+此后即可用应用内更新升到 1.6.5+（这也是本版把 `app-update` 设置段随包发布的意义所在）。
+
+**v1.6.4 附带的功能增量**（同版发布，非更新引擎改动）：状态栏「新版本可用」全局提示 +
+「软件更新」弹窗（`update-state.js` / `UpdateModal.vue` / `StatusBar` 徽标），使新版本在界面上直接可见、
+点击即进更新流程。
