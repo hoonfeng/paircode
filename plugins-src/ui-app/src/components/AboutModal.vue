@@ -78,6 +78,11 @@
         </div>
       </div>
 
+      <!-- ★ 软件更新（在线更新：检查 → 下载 → 校验 → 安装重启；数据源 /api/update/*）-->
+      <div class="about-update">
+        <UpdateCard :current-version="version" />
+      </div>
+
       <!-- 底部 -->
       <div class="modal-footer">
         <button class="btn-primary" @click="$emit('openHelp')" v-if="showHelpBtn">
@@ -92,6 +97,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import SvgIcon from './SvgIcon.vue'
+import UpdateCard from './UpdateCard.vue'
 import api from '../api.js'
 import logoUrl from '../assets/logo.svg'
 
@@ -166,6 +172,10 @@ onMounted(async () => {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.about-update {
+  padding: 0 20px 12px;
   flex-shrink: 0;
 }
 

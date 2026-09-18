@@ -23,6 +23,13 @@ const ROUTES = [
   { key: 'health' },
   { key: 'system.info' },
   { key: 'system.exec' },
+  // 在线更新（GitHub Releases 分发）
+  { key: 'update.check' },
+  { key: 'update.status' },
+  { key: 'update.download' },
+  { key: 'update.apply' },
+  { key: 'update.cancel' },
+  { key: 'update.config' },
   // 文件系统
   { key: 'fs.image' },
   // 工作区 / 设置

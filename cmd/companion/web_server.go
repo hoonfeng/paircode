@@ -313,6 +313,12 @@ func startWebUI(port int) {
 	//   之前调用——core-api apply 时经 ctx.kernel.install 挂载这些接口。
 	registerKernelAPIs(ws)
 
+	// ★ 在线更新引擎（2026-09-19）：装配配置（安装目录 / config 目录 / 更新源）
+	//   并启动后台自动检查（GitHub Releases 分发；实现见 internal/update，
+	//   接口见 cmd/companion/update_api.go，设置项由 .pair/plugins/app-update 注册）。
+	refreshUpdateEngine()
+	startUpdateAutoCheck()
+
 	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
 	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
 	//   （框架能力 workspaceRoot 服务 + 内置工具集模板已内联 NewPluginHost，不占插件位）
