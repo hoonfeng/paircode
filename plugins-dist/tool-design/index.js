@@ -2199,11 +2199,23 @@ function designProject(args, exec, ctx) {
           sc.root = TEMPLATES[tpl]();
           prefixIds(sc.root, sid);
         }
+        // ★ 自定义节点树：create 时可一次把整屏搭出来（sd.root / sd.children 与 design_add、node.add 同构，
+        //   走同一套 buildNode 类型与容器校验）；给了 root 就覆盖 template 的结果。
+        if (sd.root !== undefined && sd.root !== null) {
+          sc.root = buildNode(sd.root, proj, {});
+          prefixIds(sc.root, sid);
+        }
         proj.screens.push(sc);
       }
     }
     saveProject(ctx, path, proj);
-    return '✓ 已创建设计工程: ' + path + '\n\n' + projectSummary(proj, path);
+    var resNew = {
+      ok: true, action: 'created', path: path,
+      screens: proj.screens.length, nodes: countNodes(proj),
+      summary: projectSummary(proj, path),
+      next: 'design_add 批量加节点 / design_edit 改样式与令牌（node.set / token.set）/ design_export 出预览 / design_verify 校验',
+    };
+    return JSON.stringify(resNew, null, 2);
   }
   if (mode === 'show') {
     return projectSummary(loadProject(ctx, path), path);
@@ -2234,13 +2246,83 @@ function designEdit(args, exec, ctx) {
   }
   if (!ops.length) throw new Error('未提供任何编辑命令（ops 数组或 op + 参数）');
   var before = JSON.stringify(tokens);
-  var log = applyOps(proj, tokens, ops);
+  // ★ 逐条应用 = 一次 load / 一次 save：批量语义不变（同一内存工程与令牌按序改），
+  //   但能精确报出是哪一条失败，并保证「任一 op 失败整批不落盘」（save 都在循环之后）。
+  var log = [];
+  for (var i = 0; i < ops.length; i++) {
+    var one;
+    try {
+      one = applyOps(proj, tokens, [ops[i]]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 条 op（' + ((ops[i] && ops[i].op) || '?') + '）失败，整批未写入任何改动：' +
+        ((e && e.message) || e));
+    }
+    log = log.concat(one);
+  }
   var tokensChanged = JSON.stringify(tokens) !== before;
   if (tokensChanged) saveTokens(ctx, str(proj.tokens, 'design.tokens.json'), tokens);
   saveProject(ctx, path, proj);
-  return '✓ 已应用 ' + ops.length + ' 条命令\n\n' + log.join('\n') + '\n\n屏幕 ' + proj.screens.length +
-    ' 个｜节点 ' + countNodes(proj) + ' 个' + (tokensChanged ? '｜令牌已更新' : '') +
-    '\n下一步：design_verify 校验 → design_export format=html 出预览。';
+  return JSON.stringify({
+    ok: true, action: 'edited', path: path, applied: ops.length, log: log,
+    tokensChanged: tokensChanged, screens: proj.screens.length, nodes: countNodes(proj),
+    next: 'design_verify 校验 / design_export format=html 出预览 / design_codegen 落地代码',
+  }, null, 2);
+}
+
+// ── design_add：批量新增节点（一次调用 N 个，事务式）────────────────
+// 与 tool-model 的 model_add（parts=[…]）同一形态：单件写法兼容 + 数组批量 + 整批不落盘。
+// 节点定义与 design_edit 的 node.add 同构（type/props/children + 平铺字段走同一个 buildNode）。
+var ADD_RESERVED = ['path', 'nodes', 'screen', 'parent', 'index'];
+
+// 单件写法：除保留键（path/nodes/screen/parent/index）外全部当作节点定义字段透传
+function nodeDefFromArgs(args) {
+  var def = {};
+  for (var k in args) {
+    if (!Object.prototype.hasOwnProperty.call(args, k)) continue;
+    if (ADD_RESERVED.indexOf(k) >= 0) continue;
+    def[k] = args[k];
+  }
+  return def;
+}
+
+function designAdd(args, exec, ctx) {
+  var path = argStr(args, 'path', 'design.project.json');
+  var proj = loadProject(ctx, path);
+  var tokens = loadTokensFor(ctx, proj);
+  var defs;
+  if (args.nodes !== undefined) {
+    defs = args.nodes;                                  // 批量写法：以 nodes 为准
+  } else {
+    if (!args.type) throw new Error('design_add 需要 nodes 数组（批量）；或给 type 等字段（单件）');
+    defs = [nodeDefFromArgs(args)];                     // 单件写法
+  }
+  if (!(defs instanceof Array)) throw new Error('nodes 必须是数组');
+  if (!defs.length) throw new Error('nodes 是空数组（要么不传，要么至少给一个节点）');
+  var added = [];
+  for (var i = 0; i < defs.length; i++) {
+    if (!defs[i] || typeof defs[i] !== 'object' || (defs[i] instanceof Array)) {
+      throw new Error('nodes[' + i + '] 必须是对象');
+    }
+    var op = { op: 'node.add', nodes: [defs[i]] };
+    if (args.screen !== undefined) op.screen = args.screen;
+    if (args.parent !== undefined) op.parent = args.parent;
+    if (args.index !== undefined) op.index = num(args.index, 0) + i;   // 保序：第 i 个插到 index+i
+    var log;
+    try {
+      log = applyOps(proj, tokens, [op]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 个节点' + (defs[i].id ? '（' + defs[i].id + '）' : '') +
+        '新增失败，整批未写入任何改动：' + ((e && e.message) || e));
+    }
+    added.push({ index: i, detail: log.join('；') });
+  }
+  saveProject(ctx, path, proj);
+  var res = {
+    ok: true, action: 'added', path: path, added: added,
+    screens: proj.screens.length, nodes: countNodes(proj),
+    next: 'design_edit 改样式与令牌（node.set / token.set）/ design_export 出预览 / design_verify 校验',
+  };
+  return JSON.stringify(res, null, 2);
 }
 
 function designExport(args, exec, ctx) {
@@ -4857,7 +4939,7 @@ var TOOL_DEFS = [
   {
     name: 'design_project',
     description: '界面工程（真相源 ②）的创建/查看/更新：屏幕（screen，含尺寸与背景）+ 节点树（node）。节点 13 类：容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox。节点样式一律引用令牌。内置模板 mobile（移动端任务卡）与 panel（插件面板式），可快速产出可看的设计。',
-    usageGuide: '首次：design_project mode=create title=任务应用 screens=[{"id":"home","name":"首页","width":360,"height":640,"template":"mobile"}]（令牌文件不存在会自动创建）。之后用 design_edit 加/改节点，design_verify 校验，design_export format=html 出预览。',
+    usageGuide: '首次：design_project mode=create title=任务应用 screens=[{"id":"home","name":"首页","width":360,"height":640,"template":"mobile"}]（令牌文件不存在会自动创建）；也可不带 template 而直接给 root 节点树一次把整屏搭好（{"id":"home","root":{"type":"col","children":[…]}}）。之后用 design_add 批量加节点、design_edit 改节点，design_verify 校验，design_export format=html 出预览。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -4866,16 +4948,35 @@ var TOOL_DEFS = [
         mode: { type: 'string', description: 'create（新建）| show（默认，查看结构树）| update（改标题/令牌路径/产物路径）' },
         title: { type: 'string', description: '可选：标题' },
         tokens: { type: 'string', description: '可选：令牌文件路径（默认 <主项目根>/design.tokens.json）' },
-        screens: { type: 'array', description: '可选（仅 create）：屏幕定义 [{id,name,width,height,template}]，template 取 mobile/panel/none' },
+        screens: { type: 'array', description: '可选（仅 create）：屏幕定义 [{id,name,width,height,template?,root?}]；template 取 mobile/panel/none，root 为自定义节点树（{type,props?,children?}，与 design_add / node.add 同构，给了 root 则覆盖 template）' },
         html: { type: 'string', description: '可选（仅 update）：HTML 产物路径（默认 <主项目根>/design.html）' },
         overwrite: { type: 'boolean', description: '可选（仅 create）：已存在时是否重建（默认 false）' },
       },
     },
   },
   {
+    name: 'design_add',
+    description: '批量新增节点到界面工程（一次调用任意多个，事务式）。nodes=[{type:"text",text:"…",color:"$color.muted"},{type:"button",label:"…"}] —— 每项与 design_edit 的 node.add 同构（容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox；字段可平铺或写 props）。落点用 screen（默认第一屏）+ parent（默认屏幕根）+ index（可选，多节点时按序依次插入）。全部校验通过才落盘一次，任一项失败整批不写入（工程保持原样）。',
+    usageGuide: '一次把一屏搭出来：design_add screen=home parent=n6 nodes=[{"type":"text","text":"标题","color":"$color.fg","size":"$fontSize.lg"},{"type":"button","label":"开始","variant":"primary"}]。样式一律引用令牌（$color.* / $spacing.* / $fontSize.*）—— 写死颜色会被 design_verify 判失败。新增后改属性用 design_edit（node.set / node.text），出预览用 design_export。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/design.project.json；相对主项目根解析）' },
+        nodes: { type: 'array', description: '节点定义数组（每项 {id?,type,props?,children?} 或平铺字段；批量写法）' },
+        screen: { type: 'string', description: '可选：落点屏幕 id（默认第一屏）' },
+        parent: { type: 'string', description: '可选：父容器 id（默认 root 屏幕根；屏幕已有根时追加为其子节点）' },
+        index: { type: 'integer', description: '可选：插入位置（多节点时从该位置起按序插入）' },
+        type: { type: 'string', description: '可选（单件写法）：节点类型 frame/row/col/card/list/text/button/input/badge/icon/image/divider/spacer/checkbox' },
+        id: { type: 'string', description: '可选（单件写法）：节点 id（默认自动分配）' },
+        props: { type: 'object', description: '可选（单件写法）：节点属性对象' },
+      },
+    },
+  },
+  {
     name: 'design_edit',
-    description: '向界面工程追加编辑命令（命令式 op，与面板操作同源）。支持：令牌（token.set / token.remove）、屏幕（screen.add/remove/set，可套模板）、节点（node.add/set/text/remove/duplicate/move）、导航（flow.add / flow.remove / flow.sync）、标题（project.rename）。目标选择支持 ids / id / type / name + screen 过滤（不指定目标直接报错，避免误改全部）。flow.sync 按节点 props.action=link:#屏幕 自动补齐导航边（只增不删、可反复执行；prune=true 才一并删掉无交互支撑的边）。',
-    usageGuide: '示例：{"op":"node.add","screen":"home","parent":"n6","node":{"type":"text","text":"新增一行","color":"$color.muted","size":"$fontSize.sm"}} / {"op":"node.set","ids":["n7"],"props":{"weight":"$fontWeight.semibold"}} / {"op":"node.text","id":"n3","text":"本周任务"} / {"op":"token.set","group":"color","name":"accent","value":"#1D4ED8"} / {"op":"screen.add","id":"detail","name":"详情","width":360,"height":640,"template":"panel"} / {"op":"flow.add","from":"home","to":"detail","label":"点击卡片"}。交互（写在 props.action）：{"op":"node.set","ids":["btn1"],"props":{"action":"link:#detail"}}（跳转）/ {"action":"emit:save"}（交给宿主）/ {"action":"toggle"}（仅 checkbox）。改完用 design_verify 校验、design_export format=html 出预览。导航图跟不上交互（D11 报缺边）：{"op":"flow.sync"} 按 action:link 补齐导航边，幂等可重复执行。',
+    description: '向界面工程追加编辑命令（命令式 op，与面板操作同源）。支持：令牌（token.set / token.remove）、屏幕（screen.add/remove/set，可套模板）、节点（node.add/set/text/remove/duplicate/move）、导航（flow.add / flow.remove / flow.sync）、标题（project.rename）。目标选择支持 ids / id / type / name + screen 过滤（不指定目标直接报错，避免误改全部）。flow.sync 按节点 props.action=link:#屏幕 自动补齐导航边（只增不删、可反复执行；prune=true 才一并删掉无交互支撑的边）。纯新增节点用 design_add（nodes 数组一次成型）更省。返回结构化结果（ok/applied/log/tokensChanged）。',
+    usageGuide: '示例：{"op":"node.add","screen":"home","parent":"n6","node":{"type":"text","text":"新增一行","color":"$color.muted","size":"$fontSize.sm"}} / {"op":"node.set","ids":["n7"],"props":{"weight":"$fontWeight.semibold"}} / {"op":"node.text","id":"n3","text":"本周任务"} / {"op":"token.set","group":"color","name":"accent","value":"#1D4ED8"} / {"op":"screen.add","id":"detail","name":"详情","width":360,"height":640,"template":"panel"} / {"op":"flow.add","from":"home","to":"detail","label":"点击卡片"}。交互（写在 props.action）：{"op":"node.set","ids":["btn1"],"props":{"action":"link:#detail"}}（跳转）/ {"action":"emit:save"}（交给宿主）/ {"action":"toggle"}（仅 checkbox）。改完用 design_verify 校验、design_export format=html 出预览。导航图跟不上交互（D11 报缺边）：{"op":"flow.sync"} 按 action:link 补齐导航边，幂等可重复执行。 ★ 批量：一次调用可传任意多条 op（按顺序应用；任一 op 失败整批不落盘）—— 界面节点多时一次调用成型（如 [{op:"node.add",...},{op:"node.add",...},{op:"node.set",...}]），别一条一条调。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -4951,6 +5052,7 @@ var TOOL_DEFS = [
 var IMPLS = {
   design_tokens: designTokens,
   design_project: designProject,
+  design_add: designAdd,
   design_edit: designEdit,
   design_export: designExport,
   design_codegen: designCodegen,

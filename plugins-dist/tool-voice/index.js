@@ -55,66 +55,125 @@ function pickSource(proj, id) {
   return s;
 }
 
+// 编辑命令批量预检（voice_edit / voice_add / voice_import 的 edits 共用）：
+// 一条非法即抛出 —— 调用方据此保证「整批不写入」，错误信息点明第几条。
+const VOICE_OPS = ['pitch.snap', 'time.warp', 'speech.removeSilence'];
+function checkEdits(ops, what) {
+  const label = what || 'ops';
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    if (!op || typeof op !== 'object' || Array.isArray(op)) throw new Error(`${label}[${i}] 必须是对象`);
+    if (!op.op) throw new Error(`${label}[${i}] 缺 op 字段`);
+    if (VOICE_OPS.indexOf(op.op) < 0) {
+      throw new Error(`${label}[${i}] 未知 op：${op.op}（当前支持 ${VOICE_OPS.join(' / ')}）`);
+    }
+  }
+}
+
+// 分析结果摘要（只留计数与关键指标，F0 轨迹在旁挂 JSON 里）
+function analysisBrief(a) {
+  if (!a) return null;
+  return {
+    f0: a.f0 || null,
+    notes: (a.notes || []).length,
+    vad: (a.vad || []).length,
+    slices: (a.slices || []).length,
+    sliceCandidates: a.sliceCandidates || 0,
+    loudness: a.loudness || null,
+  };
+}
+
+// 单件写法：除保留键外全部透传（pitch.snap 的 scale/root/strength/tolerance、time.warp 的 factor、…）
+function composeEditFromArgs(args) {
+  const o = {};
+  for (const k of Object.keys(args)) {
+    if (k === 'project' || k === 'edits' || k === 'ops' || k === 'mode' || k === 'path' || k === 'paths') continue;
+    o[k] = args[k];
+  }
+  return o;
+}
+
 // ── 工具实现 ───────────────────────────────────────────────
 
 // voice_import
 async function voiceImport(args, exec, ctx, lib) {
   const ws = wsRootOf(exec, ctx);
-  if (!args.path) throw new Error('voice_import 需要 path（源音频路径，相对工作区根或绝对路径）');
-  const abs = lib.project.resolveFrom(ws, args.path);
-  if (!lib.fs.existsSync(abs)) throw new Error(`源文件不存在：${abs}`);
-  const src = lib.project.readSource(abs);
-  const rel = nodeRel(ws, abs);
+  // ★ 批量：path（单个源）或 paths=[…]（一次导入多个源），可选 ids=[…] 逐个指定源标识。
+  //   建工程 + 全部源 + 可选预置编辑链（edits=[…]）一次完成 —— 事务性：任一源缺失/非法即整批不做。
+  const reqPaths = Array.isArray(args.paths) && args.paths.length
+    ? args.paths.slice()
+    : (args.path ? [args.path] : []);
+  if (!reqPaths.length) throw new Error('voice_import 需要 path（单个源）或 paths（数组，一次导入多个源）');
+  for (let i = 0; i < reqPaths.length; i++) {
+    if (typeof reqPaths[i] !== 'string' || !reqPaths[i]) throw new Error(`paths[${i}] 必须是非空字符串`);
+  }
+  const presetEdits = Array.isArray(args.edits) ? args.edits : [];
+  if (presetEdits.length) checkEdits(presetEdits, 'edits');
+  const absList = reqPaths.map((p) => lib.project.resolveFrom(ws, p));
+  for (let i = 0; i < absList.length; i++) {
+    if (!lib.fs.existsSync(absList[i])) throw new Error(`源文件不存在：${absList[i]}（第 ${i + 1} 个；整批未导入）`);
+  }
   const projPath = lib.project.resolveFrom(ws, args.project || DEFAULT_PROJECT);
   const proj = lib.project.loadProject(projPath) || lib.project.emptyProject();
-  const entry = lib.project.registerSource(proj, rel, src.stat);
-  if (args.id) entry.id = String(args.id);
-  // 波形峰值缓存（UI 供数；与是否做分析无关）
-  try {
-    entry.wave = writeWaveCache(lib, src.mono, src.fs, projPath, entry.id);
-  } catch (e) {
-    /* 缓存失败不影响导入主流程 */
-  }
 
   const warnings = [];
-  if (src.stat.peak >= 0.999) warnings.push('源素材已削波（峰值 ≥ 0.999）——建议先用 declip/降级修复再处理');
-  if (Math.abs(src.stat.dc) > 0.01) warnings.push(`源素材含直流偏移（DC=${src.stat.dc}）——建议加 DC 阻断`);
-  if (src.stat.channels > 1) warnings.push(`源为 ${src.stat.channels} 声道，已按算术平均下混为单声道（人声轨）`);
-  if (src.stat.seconds < 0.2) warnings.push('素材过短（<0.2s）——音高/切片分析可能不可靠');
-
-  let analysis = null;
-  if (args.analyze !== false) {
-    const tasks = Array.isArray(args.tasks) && args.tasks.length ? args.tasks : DEFAULT_TASKS;
-    const a = await lib.analyze.analyzeAll(src.mono, { fs: src.fs, tasks });
-    const track = a.track;
-    delete a.track;
-    if (track) {
-      // F0 轨迹旁挂（保持工程 JSON 可 diff）
-      const f0Rel = projPath.replace(/\.json$/i, '') + '.' + entry.id + '.f0.json';
-      lib.fs.writeFileSync(f0Rel, JSON.stringify(Array.from(track.hz, (v) => (Number.isFinite(v) ? +v.toFixed(3) : null))));
-      a.f0 = Object.assign({}, a.f0, { file: nodeBase(f0Rel), hop: track.hop, frameSize: track.frameSize, frames: track.frames });
+  const results = [];
+  for (let i = 0; i < absList.length; i++) {
+    const abs = absList[i];
+    const src = lib.project.readSource(abs);
+    const rel = nodeRel(ws, abs);
+    const entry = lib.project.registerSource(proj, rel, src.stat);
+    const idOpt = Array.isArray(args.ids) && args.ids.length ? args.ids[i] : (i === 0 ? args.id : undefined);
+    if (idOpt) entry.id = String(idOpt);
+    // 波形峰值缓存（UI 供数；与是否做分析无关）
+    try {
+      entry.wave = writeWaveCache(lib, src.mono, src.fs, projPath, entry.id);
+    } catch (e) {
+      /* 缓存失败不影响导入主流程 */
     }
-    a.analyzedAt = new Date().toISOString();
-    proj.analysis[entry.id] = a;
-    analysis = a;
+
+    if (src.stat.peak >= 0.999) warnings.push(`[${entry.id}] 源素材已削波（峰值 ≥ 0.999）——建议先用 declip/降级修复再处理`);
+    if (Math.abs(src.stat.dc) > 0.01) warnings.push(`[${entry.id}] 源素材含直流偏移（DC=${src.stat.dc}）——建议加 DC 阻断`);
+    if (src.stat.channels > 1) warnings.push(`[${entry.id}] 源为 ${src.stat.channels} 声道，已按算术平均下混为单声道（人声轨）`);
+    if (src.stat.seconds < 0.2) warnings.push(`[${entry.id}] 素材过短（<0.2s）——音高/切片分析可能不可靠`);
+
+    let analysis = null;
+    if (args.analyze !== false) {
+      const tasks = Array.isArray(args.tasks) && args.tasks.length ? args.tasks : DEFAULT_TASKS;
+      const a = await lib.analyze.analyzeAll(src.mono, { fs: src.fs, tasks });
+      const track = a.track;
+      delete a.track;
+      if (track) {
+        // F0 轨迹旁挂（保持工程 JSON 可 diff）
+        const f0Rel = projPath.replace(/\.json$/i, '') + '.' + entry.id + '.f0.json';
+        lib.fs.writeFileSync(f0Rel, JSON.stringify(Array.from(track.hz, (v) => (Number.isFinite(v) ? +v.toFixed(3) : null))));
+        a.f0 = Object.assign({}, a.f0, { file: nodeBase(f0Rel), hop: track.hop, frameSize: track.frameSize, frames: track.frames });
+      }
+      a.analyzedAt = new Date().toISOString();
+      proj.analysis[entry.id] = a;
+      analysis = a;
+    }
+    results.push({ source: entry, analysis: analysisBrief(analysis) });
   }
+  // ★ 建工程时预置编辑链（与 voice_add 同构）：省掉「导入后再逐条 voice_edit」
+  if (presetEdits.length) proj.edits = (proj.edits || []).concat(presetEdits);
   lib.project.saveProject(projPath, proj);
-  return {
+
+  const base = {
     ok: true,
     project: projPath,
-    source: entry,
-    analysis: analysis
-      ? {
-        f0: analysis.f0 || null,
-        notes: (analysis.notes || []).length,
-        vad: (analysis.vad || []).length,
-        slices: (analysis.slices || []).length,
-        sliceCandidates: analysis.sliceCandidates || 0,
-        loudness: analysis.loudness || null,
-      }
-      : null,
+    count: results.length,
+    edits: (proj.edits || []).length,
     warnings,
   };
+  if (results.length === 1) {
+    base.source = results[0].source;
+    base.analysis = results[0].analysis;
+    return base;
+  }
+  base.sources = results.map((r) => r.source);
+  base.analyses = results.map((r) => r.analysis);
+  return base;
 }
 
 // voice_analyze
@@ -171,17 +230,33 @@ async function voiceEdit(args, exec, ctx, lib) {
   const ops = Array.isArray(args.ops) ? args.ops : args.op ? [args] : [];
   if (ops.length === 0) throw new Error('voice_edit 需要 ops 数组（或单个 op 对象）');
   // 合法性预检：真正应用由 voice_render 执行（这里只挡明显非法参数，避免工程被写脏）
-  for (let i = 0; i < ops.length; i++) {
-    const op = ops[i];
-    if (!op || !op.op) throw new Error(`ops[${i}] 缺 op 字段`);
-    if (['pitch.snap', 'time.warp', 'speech.removeSilence'].indexOf(op.op) < 0) {
-      throw new Error(`ops[${i}] 未知 op：${op.op}（当前支持 pitch.snap / time.warp / speech.removeSilence）`);
-    }
-  }
+  // ★ 整批预检 = 批量事务语义：任一条非法则整批不写入（错误信息点明第几条）
+  checkEdits(ops, 'ops');
   const mode = args.mode === 'replace' ? 'replace' : 'append';
   proj.edits = mode === 'replace' ? ops.slice() : (proj.edits || []).concat(ops);
   lib.project.saveProject(projPath, proj);
-  return { ok: true, project: projPath, mode, edits: proj.edits, count: proj.edits.length, next: 'voice_render 渲染 / voice_verify 自检' };
+  return { ok: true, action: 'edited', project: projPath, mode, applied: ops.length, edits: proj.edits, count: proj.edits.length, next: 'voice_render 渲染 / voice_verify 自检' };
+}
+
+// voice_add
+// 批量追加编辑命令（一次调用 N 条，事务式：先整批预检、任一条非法即整批拒）——
+// 与 tool-model 的 model_add（parts=[…]）同一形态：单件写法兼容 + 数组批量 + 整批不落盘。
+async function voiceAdd(args, exec, ctx, lib) {
+  const ws = wsRootOf(exec, ctx);
+  const projPath = lib.project.resolveFrom(ws, args.project || DEFAULT_PROJECT);
+  const proj = lib.project.loadProject(projPath);
+  if (!proj) throw new Error(`工程不存在：${projPath}（先 voice_import）`);
+  const ops = Array.isArray(args.edits) ? args.edits : (args.op ? [composeEditFromArgs(args)] : []);
+  if (!ops.length) throw new Error('voice_add 需要 edits 数组（批量）；或给 op + 同层参数（单件）');
+  checkEdits(ops, 'edits');
+  const mode = args.mode === 'replace' ? 'replace' : 'append';
+  proj.edits = mode === 'replace' ? ops.slice() : (proj.edits || []).concat(ops);
+  lib.project.saveProject(projPath, proj);
+  return {
+    ok: true, action: 'added', project: projPath, mode,
+    applied: ops.length, edits: proj.edits, count: proj.edits.length,
+    next: 'voice_render 渲染（源 + edits 纯函数）/ voice_verify 自检',
+  };
 }
 
 // voice_render
@@ -342,19 +417,21 @@ function nodeRel(from, to) {
 const TOOL_DEFS = [
   {
     name: 'voice_import',
-    description: '导入人声素材（WAV）到人声工程：解析头信息、算 sha256/峰值/RMS/DC，登记到 voice.project.json，并可选自动分析（f0/notes/vad/slices/loudness）。纯 DSP 链路，不含任何换声/生成式模型。',
-    usageGuide: '人声创作第一步。path 相对主项目根解析（跨项目传绝对路径）。默认工程 voice.project.json、默认自动分析。导入后即可 voice_edit 追加编辑命令，再 voice_render 渲染、voice_verify 自检。',
+    description: '导入人声素材（WAV）到人声工程：解析头信息、算 sha256/峰值/RMS/DC，登记到 voice.project.json，并可选自动分析（f0/notes/vad/slices/loudness）。支持一次导入多个源（paths=[…]）并在建工程时预置编辑链（edits=[…]）。纯 DSP 链路，不含任何换声/生成式模型。',
+    usageGuide: '人声创作第一步。path / paths 相对主项目根解析（跨项目传绝对路径）。默认工程 voice.project.json、默认自动分析。一次导入多段素材用 paths=[…]（可选 ids=[…] 逐个指定源标识）；要顺带配好处理链就带 edits=[…]（与 voice_add 同构）。导入后即可 voice_add / voice_edit 追加编辑命令，再 voice_render 渲染、voice_verify 自检。',
     category: '创作',
     parameters: {
       type: 'object',
       properties: {
         path: { type: 'string', description: '源音频文件路径（WAV：PCM u8/i16/i24/i32 或 IEEE float32/64；相对主项目根解析，跨项目传绝对路径）' },
+        paths: { type: 'array', description: '可选：一次导入多个源（字符串数组；与 path 二选一。任一源不存在则整批不导入）' },
+        ids: { type: 'array', description: '可选：与 paths 对应的源标识数组（不传则自动 v1、v2…）' },
         project: { type: 'string', description: '可选：工程文件路径（默认 <主项目根>/voice.project.json；相对主项目根解析，跨项目传绝对路径）' },
         id: { type: 'string', description: '可选：源标识（默认 v1、v2…）' },
         analyze: { type: 'boolean', description: '可选：是否自动分析（默认 true）' },
         tasks: { type: 'array', description: '可选：分析项（默认 ["f0","notes","vad","slices","loudness"]）' },
+        edits: { type: 'array', description: '可选：导入时预置的编辑链（每项与 voice_add 的 edits 项 / voice_edit 的 op 同构）；任一条非法则整批不导入' },
       },
-      required: ['path'],
     },
     impl: voiceImport,
   },
@@ -379,9 +456,25 @@ const TOOL_DEFS = [
     impl: voiceAnalyze,
   },
   {
+    name: 'voice_add',
+    description: '批量追加编辑命令到人声工程（一次调用任意多条，事务式）。edits=[{op:"pitch.snap",scale:"minor",root:0,strength:1},{op:"time.warp",factor:0.85},{op:"speech.removeSilence",minGap:0.35}] —— 每项与 voice_edit 的 ops 项同构（支持 pitch.snap / time.warp / speech.removeSilence）；也支持单件写法（op + 同层参数）。先整批预检，任一条非法即整批不写入（工程保持原样）。mode=replace 可整体替换编辑链。',
+    usageGuide: '一次把整条链配好：voice_add edits=[{"op":"pitch.snap","scale":"minor","root":0},{"op":"speech.removeSilence","minGap":0.35,"keep":0.08},{"op":"time.warp","factor":0.9}]。渲染是「源 + edits」的纯函数，链上每条都会被 recipe 记录（voice_verify 的 7.5 链可见判据）。写完用 voice_render 渲染、voice_verify 自检；微调单条用 voice_edit。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: '可选：工程路径（默认 <主项目根>/voice.project.json；相对主项目根解析）' },
+        edits: { type: 'array', description: '编辑命令数组（每项 {op:"pitch.snap"|"time.warp"|"speech.removeSilence", …参数}；批量写法）' },
+        op: { type: 'string', description: '可选（单件写法）：单条 op 名（与同层参数组成一条命令）' },
+        mode: { type: 'string', description: '可选：append（默认，追加）| replace（替换整条编辑链）' },
+      },
+    },
+    impl: voiceAdd,
+  },
+  {
     name: 'voice_edit',
-    description: '向人声工程追加编辑命令（命令模型，与 UI 拖拽写的是同一种 op）。支持：pitch.snap（音阶吸附，Auto-Tune 类，PSOLA 只改音高不改音色）、time.warp（WSOLA 时值伸缩/语速）、speech.removeSilence（删停顿，保留呼吸边距）。',
-    usageGuide: 'op 示例：{"op":"pitch.snap","scale":"minor","root":0,"strength":1,"tolerance":12} / {"op":"time.warp","factor":0.85} / {"op":"speech.removeSilence","minGap":0.35,"keep":0.08}。tolerance 默认 12 音分（大于 YIN 的系统性偏差，避免把准的音修坏）。mode=replace 可整体替换编辑链。写完后用 voice_render 渲染。',
+    description: '向人声工程追加编辑命令（命令模型，与 UI 拖拽写的是同一种 op）。支持：pitch.snap（音阶吸附，Auto-Tune 类，PSOLA 只改音高不改音色）、time.warp（WSOLA 时值伸缩/语速）、speech.removeSilence（删停顿，保留呼吸边距）。批量追加整条链用 voice_add（edits 数组一次成型）更省。返回结构化结果（ok/applied/count）。',
+    usageGuide: 'op 示例：{"op":"pitch.snap","scale":"minor","root":0,"strength":1,"tolerance":12} / {"op":"time.warp","factor":0.85} / {"op":"speech.removeSilence","minGap":0.35,"keep":0.08}。tolerance 默认 12 音分（大于 YIN 的系统性偏差，避免把准的音修坏）。mode=replace 可整体替换编辑链。写完后用 voice_render 渲染。 ★ 批量：一次调用可传任意多条 op（先整批预检、非法即整批拒，再统一写入编辑链）—— 多段处理一次传完，别一条一条调。',
     category: '创作',
     parameters: {
       type: 'object',

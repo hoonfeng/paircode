@@ -906,6 +906,52 @@ function sortNotes(track) {
   track.notes.sort(function (a, b) { return a.start - b.start || a.pitch - b.pitch; });
 }
 
+// ── 批量新增音符（music_add 与 music_project create 的 tracks[].notes 共用）────
+// 与 note.add 同一套校验（都走 applyOps → checkNote），差别只在「N 个音符一次调用」。
+// 事务性：逐项入列（后一项才看得见前一项的排序结果），全部通过后由调用方落盘一次；
+// 任一项失败直接抛出 → 调用方走不到 saveProject，工程保持原样。
+var NOTE_SPEC_FIELDS = ['track', 'start', 'dur', 'pitch', 'vel'];
+
+// 单件写法：把同层参数收拢成一个音符描述
+function noteSpecFromArgs(args) {
+  var spec = {};
+  for (var i = 0; i < NOTE_SPEC_FIELDS.length; i++) {
+    if (args[NOTE_SPEC_FIELDS[i]] !== undefined) spec[NOTE_SPEC_FIELDS[i]] = args[NOTE_SPEC_FIELDS[i]];
+  }
+  return spec;
+}
+
+function totalNotes(proj) {
+  var n = 0;
+  for (var i = 0; i < proj.tracks.length; i++) n += (proj.tracks[i].notes || []).length;
+  return n;
+}
+
+// 批量入列；specs 为 undefined/null 视为「没传」（返回空数组，供 create 复用）
+function applyNoteSpecs(proj, specs, trackId, what) {
+  if (specs === undefined || specs === null) return [];
+  if (!(specs instanceof Array)) throw new Error((what || 'notes') + ' 必须是数组');
+  if (!specs.length) throw new Error((what || 'notes') + ' 是空数组（要么不传，要么至少给一个音符）');
+  var added = [];
+  for (var i = 0; i < specs.length; i++) {
+    var sp = specs[i];
+    if (!sp || typeof sp !== 'object' || (sp instanceof Array)) throw new Error((what || 'notes') + '[' + i + '] 必须是对象');
+    var op = { op: 'note.add' };
+    for (var k in sp) {
+      if (Object.prototype.hasOwnProperty.call(sp, k)) op[k] = sp[k];
+    }
+    if (trackId !== undefined && op.track === undefined) op.track = trackId;
+    var log;
+    try {
+      log = applyOps(proj, [op]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 个音符新增失败，整批未写入任何改动：' + ((e && e.message) || e));
+    }
+    added.push(log[0]);
+  }
+  return added;
+}
+
 function applyOps(proj, ops) {
   var log = [];
   for (var i = 0; i < ops.length; i++) {
@@ -1285,20 +1331,33 @@ function musicProject(args, exec, ctx) {
     if (args.meter) proj.meter = args.meter;
     if (args.key) proj.key = keyToString(parseKey(args.key));
     if (args.ppq) proj.ppq = args.ppq;
-    // 便捷：创建时可直接给轨道定义（数组 of {id,name,program,channel}）
+    // 便捷：创建时可直接给轨道定义（数组 of {id,name,program,channel,notes?}）
+    var createdNotes = [];
     if (args.tracks && args.tracks.length) {
       for (var i = 0; i < args.tracks.length; i++) {
         var t = args.tracks[i] || {};
+        var tid = t.id || ('t' + (i + 1));
         proj.tracks.push({
-          id: t.id || ('t' + (i + 1)), name: t.name || ('轨道 ' + (i + 1)),
+          id: tid, name: t.name || ('轨道 ' + (i + 1)),
           channel: isInt(t.channel) ? clamp(t.channel, 0, 15) : clamp(i, 0, 15),
           program: isInt(t.program) ? clamp(t.program, 0, 127) : 0,
           notes: [],
         });
+        // ★ 轨道内可直接带 notes=[…]（每项与 note.add 同构）—— 一次调用把曲子写出来；
+        //   任一项非法整批不落盘（saveProject 在本循环之后）。
+        createdNotes = createdNotes.concat(applyNoteSpecs(proj, t.notes, tid, 'tracks[' + i + '].notes'));
       }
     }
     saveProject(ctx, path, proj);
-    return '✅ 已创建音乐工程: ' + path + '\n\n' + projectSummary(proj, path);
+    var resNew = {
+      ok: true, action: 'created', path: path,
+      tempo: proj.tempo, meter: proj.meter, key: proj.key, ppq: proj.ppq,
+      tracks: proj.tracks.length, notes: totalNotes(proj),
+      summary: projectSummary(proj, path),
+      next: 'music_add 批量加音符 / music_edit 和弦与音阶（chord.add / scale.add）/ music_export 出 MIDI 与乐谱 / music_verify 校验',
+    };
+    if (createdNotes.length) resNew.added = createdNotes;
+    return JSON.stringify(resNew, null, 2);
   }
   if (mode === 'show') {
     var p1 = loadProject(ctx, path);
@@ -1329,9 +1388,48 @@ function musicEdit(args, exec, ctx) {
     // 只重置元信息，不动音符（音符合并语义见文档）
     throw new Error('mode=replace 暂不支持（编辑链是命令式的，直接追加即可）');
   }
-  var log = applyOps(proj, ops);
+  // ★ 逐条应用 = 一次 load / 一次 save：批量语义不变（同一内存工程按序改），
+  //   但能精确报出是哪一条失败，并保证「任一 op 失败整批不落盘」（saveProject 在循环之后）。
+  var log = [];
+  for (var i = 0; i < ops.length; i++) {
+    var one;
+    try {
+      one = applyOps(proj, [ops[i]]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 条 op（' + ((ops[i] && ops[i].op) || '?') + '）失败，整批未写入任何改动：' +
+        ((e && e.message) || e));
+    }
+    log = log.concat(one);
+  }
   saveProject(ctx, path, proj);
-  return '✅ 已应用 ' + ops.length + ' 条编辑命令到 ' + path + '\n\n' + log.join('\n') + '\n\n' + projectSummary(proj, path);
+  return JSON.stringify({
+    ok: true, action: 'edited', path: path, applied: ops.length, log: log,
+    tracks: proj.tracks.length, notes: totalNotes(proj),
+    summary: projectSummary(proj, path),
+    next: 'music_add 批量加音符 / music_export 出 MIDI 与乐谱 / music_verify 校验',
+  }, null, 2);
+}
+
+// ── music_add：批量新增音符（一次调用 N 个，事务式）────────────────
+// 与 tool-model 的 model_add（parts=[…]）同一形态：单件写法兼容 + 数组批量 + 整批不落盘。
+function musicAdd(args, exec, ctx) {
+  var path = argStr(args, 'path', 'music.project.json');
+  var proj = loadProject(ctx, path);
+  var specs;
+  if (args.notes !== undefined) {
+    specs = args.notes;                                  // 批量写法：以 notes 为准
+  } else {
+    if (args.pitch === undefined) throw new Error('music_add 需要 notes 数组（批量）；或给 track/start/dur/pitch（单件）');
+    specs = [noteSpecFromArgs(args)];                    // 单件写法
+  }
+  var added = applyNoteSpecs(proj, specs, args.track, 'notes');
+  saveProject(ctx, path, proj);
+  var res = {
+    ok: true, action: 'added', path: path, added: added,
+    tracks: proj.tracks.length, notes: totalNotes(proj),
+    next: 'music_add 继续 / music_edit 调整（note.transpose / note.quantize / note.velocity）/ music_export 出产物 / music_verify 校验',
+  };
+  return JSON.stringify(res, null, 2);
 }
 
 function musicImport(args, exec, ctx) {
@@ -1446,8 +1544,8 @@ function musicVerify(args, exec, ctx) {
 var TOOL_DEFS = [
   {
     name: 'music_project',
-    description: '音乐工程管理（文本真相源 music.project.json）：创建/查看/更新标题、速度、拍号、调号、轨道定义。音符时间一律用整数 tick（ppq 默认 480），保证可 diff 与位级确定性；MIDI/乐谱都只是由工程生成的产物。',
-    usageGuide: '创作第一步：mode=create 建工程（可带 tracks=[{id,name,program,channel}]）→ music_edit 加音符/和弦/音阶 → music_export 导出 MIDI/ABC/MusicXML/SVG 乐谱 → music_verify 校验。mode=show 只看摘要，mode=update 改元信息。',
+    description: '音乐工程管理（文本真相源 music.project.json）：创建/查看/更新标题、速度、拍号、调号、轨道定义，并可在创建时连同整批音符一次写入（tracks[].notes=[…]）。音符时间一律用整数 tick（ppq 默认 480），保证可 diff 与位级确定性；MIDI/乐谱都只是由工程生成的产物。',
+    usageGuide: '创作第一步：mode=create 建工程（可带 tracks=[{id,name,program,channel}]，轨道内还可带 notes=[{start,dur,pitch,vel}] 一次把曲子写出来）→ music_add 批量加音符 / music_edit 加和弦与音阶 → music_export 导出 MIDI/ABC/MusicXML/SVG 乐谱 → music_verify 校验。mode=show 只看摘要，mode=update 改元信息。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -1459,15 +1557,33 @@ var TOOL_DEFS = [
         meter: { type: 'array', description: '可选：拍号 [分子, 分母]，默认 [4,4]' },
         key: { type: 'string', description: '可选：调号（C / Am / F# minor）' },
         ppq: { type: 'integer', description: '可选：每四分音符 tick 数（默认 480）' },
-        tracks: { type: 'array', description: '可选（仅 create）：轨道定义 [{id,name,program,channel}]' },
+        tracks: { type: 'array', description: '可选（仅 create）：轨道定义 [{id,name,program,channel,notes?}]；notes 为音符数组（每项与 music_add 的 notes 项 / note.add 同构），任一项非法则整批不落盘' },
         overwrite: { type: 'boolean', description: '可选（仅 create）：工程已存在时是否重建（默认 false）' },
       },
     },
   },
   {
+    name: 'music_add',
+    description: '批量新增音符到音乐工程（一次调用任意多个，事务式）。notes=[{track:"t1",start:0,dur:480,pitch:60,vel:90},{track:"t1",start:480,dur:480,pitch:64}] —— 每项与 music_edit 的 note.add 同构（start/dur 为整数 tick ≥0/>0，pitch ∈ [0,127]，vel 可选默认 90）；也支持单件写法（track + start/dur/pitch 写在同一层）。全部校验通过才落盘一次，任一项失败整批不写入（工程保持原样）。写好后按 (start, pitch) 自动排序。',
+    usageGuide: '一次把旋律写出来：music_add notes=[{"track":"t1","start":0,"dur":480,"pitch":60},{"track":"t1","start":480,"dur":480,"pitch":62},{"track":"t1","start":960,"dur":960,"pitch":64,"vel":100}]（tick 单位，ppq 默认 480 = 四分音符）。要成组写和弦/音阶用 music_edit 的 chord.add / scale.add；要改已有音符用 music_edit（note.transpose / note.quantize / note.velocity）；出谱用 music_export。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/music.project.json；相对主项目根解析）' },
+        notes: { type: 'array', description: '音符描述数组（每项 {track,start,dur,pitch,vel?}；批量写法）' },
+        track: { type: 'string', description: '可选：目标轨道 id（批量时作为各项的默认轨道；单件写法必填）' },
+        start: { type: 'integer', description: '可选（单件写法）：起始 tick' },
+        dur: { type: 'integer', description: '可选（单件写法）：时长 tick' },
+        pitch: { type: 'integer', description: '可选（单件写法）：音高 MIDI 0..127' },
+        vel: { type: 'integer', description: '可选（单件写法）：力度 1..127（默认 90）' },
+      },
+    },
+  },
+  {
     name: 'music_edit',
-    description: '向音乐工程追加编辑命令（命令式 op，与 UI 操作同源）。支持：音符（note.add/remove/move/transpose/quantize/velocity/set）、和弦（chord.add，14 种性质）、音阶跑动（scale.add，13 种音阶）、轨道（track.add/remove/rename/instrument/repeat）、全局（set.tempo/set.meter/set.key/project.rename）。所有 op 幂等可重放，作用对象是 ticket 级精确的工程 JSON。',
-    usageGuide: 'op 示例：{"op":"note.add","track":"t1","start":0,"dur":480,"pitch":60} / {"op":"chord.add","track":"t1","start":0,"dur":1920,"root":"C4","quality":"maj7"} / {"op":"note.quantize","grid":120} / {"op":"track.repeat","id":"t1","times":2}。filter 选择器支持 index/pitch/pitchMin/pitchMax/startFrom/startTo。改完用 music_verify 校验、music_export 出产物。',
+    description: '向音乐工程追加编辑命令（命令式 op，与 UI 操作同源）。支持：音符（note.add/remove/move/transpose/quantize/velocity/set）、和弦（chord.add，14 种性质）、音阶跑动（scale.add，13 种音阶）、轨道（track.add/remove/rename/instrument/repeat）、全局（set.tempo/set.meter/set.key/project.rename）。所有 op 幂等可重放，作用对象是 ticket 级精确的工程 JSON。纯新增音符用 music_add（notes 数组一次成型）更省。返回结构化结果（ok/applied/log）。',
+    usageGuide: 'op 示例：{"op":"note.add","track":"t1","start":0,"dur":480,"pitch":60} / {"op":"chord.add","track":"t1","start":0,"dur":1920,"root":"C4","quality":"maj7"} / {"op":"note.quantize","grid":120} / {"op":"track.repeat","id":"t1","times":2}。filter 选择器支持 index/pitch/pitchMin/pitchMax/startFrom/startTo。改完用 music_verify 校验、music_export 出产物。 ★ 批量：一次调用可传任意多条 op（按顺序应用；任一 op 失败整批不落盘）—— 音符/和弦多时一次调用成型（如 [{op:"track.add",...},{op:"note.add",...},{op:"chord.add",...}]），别一条一条调。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -1527,6 +1643,7 @@ var TOOL_DEFS = [
 
 var IMPLS = {
   music_project: musicProject,
+  music_add: musicAdd,
   music_edit: musicEdit,
   music_import: musicImport,
   music_export: musicExport,

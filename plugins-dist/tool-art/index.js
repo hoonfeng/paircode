@@ -1257,6 +1257,50 @@ function makeShape(proj, spec) {
   return sh;
 }
 
+// ── 批量新增图元（art_add 与 art_project create 的 shapes 共用）────
+// 与 art_edit 的 shape.add 同一套构造/校验（都走 makeShape），差别只在「N 个图元一次调用」：
+// 省掉手写 N 条 op 的样板。事务性：逐项入列（后一项才看得见前一项占用的 id/z），
+// 全部通过后由调用方落盘一次；任一项失败直接抛出 → 调用方走不到 saveProject，工程保持原样。
+var SHAPE_SPEC_FIELDS = ['id', 'name', 'type', 'layer', 'x', 'y', 'w', 'h', 'r', 'rx', 'ry',
+  'cx', 'cy', 'x1', 'y1', 'x2', 'y2', 'points', 'd', 'text', 'fontSize', 'fontWeight',
+  'anchor', 'fill', 'stroke', 'strokeWidth', 'opacity'];
+
+function isPlainObj(v) { return !!v && typeof v === 'object' && !(v instanceof Array); }
+
+// 单件写法：把同层参数收拢成一个图元描述（与 art_edit op=shape.add 的同层参数一致）
+function shapeSpecFromArgs(args) {
+  var spec = {};
+  for (var i = 0; i < SHAPE_SPEC_FIELDS.length; i++) {
+    if (args[SHAPE_SPEC_FIELDS[i]] !== undefined) spec[SHAPE_SPEC_FIELDS[i]] = args[SHAPE_SPEC_FIELDS[i]];
+  }
+  return spec;
+}
+
+// 批量入列；specs 为 undefined/null 视为「没传」（返回空数组，供 create 复用）
+function applyShapeSpecs(proj, specs, what) {
+  if (specs === undefined || specs === null) return [];
+  if (!(specs instanceof Array)) throw new Error((what || 'shapes') + ' 必须是数组');
+  if (!specs.length) throw new Error((what || 'shapes') + ' 是空数组（要么不传，要么至少给一个图元）');
+  var added = [];
+  for (var i = 0; i < specs.length; i++) {
+    if (!isPlainObj(specs[i])) throw new Error((what || 'shapes') + '[' + i + '] 必须是对象');
+    var op = { op: 'shape.add' };
+    for (var k in specs[i]) {
+      if (Object.prototype.hasOwnProperty.call(specs[i], k)) op[k] = specs[i][k];
+    }
+    var log;
+    try {
+      log = applyOps(proj, [op]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 个图元' + (specs[i].id ? '（' + specs[i].id + '）' : '') +
+        '新增失败，整批未写入任何改动：' + ((e && e.message) || e));
+    }
+    var sh = proj.shapes[proj.shapes.length - 1];
+    added.push({ id: sh.id, type: sh.type, layer: sh.layer, z: sh.z, detail: log[0] });
+  }
+  return added;
+}
+
 // ── op 引擎（命令式编辑链，与 UI 操作同源） ────────────────
 function applyOps(proj, ops) {
   var log = [];
@@ -1892,8 +1936,18 @@ function artProject(args, exec, ctx) {
       }
       proj.layers = lys;
     }
+    // ★ 一次调用成型：create 时可带 shapes=[…]（每项与 shape.add 同构）——
+    //   省掉「先 create 再逐条 art_edit」的往返；任一项校验失败整批不落盘（不留半成品工程）。
+    var created = applyShapeSpecs(proj, args.shapes, 'shapes');
     saveProject(ctx, path, proj);
-    return '✅ 已创建画板工程: ' + path + '\n\n' + projectSummary(proj, path);
+    var resNew = {
+      ok: true, action: 'created', path: path,
+      layers: proj.layers.length, shapes: proj.shapes.length,
+      summary: projectSummary(proj, path),
+      next: 'art_add 批量加图元 / art_edit 调整（align/distribute/set）/ art_export 出 SVG / art_verify 校验',
+    };
+    if (created.length) resNew.added = created;
+    return JSON.stringify(resNew, null, 2);
   }
   if (mode === 'show') {
     var p1 = loadProject(ctx, path);
@@ -1933,10 +1987,50 @@ function artEdit(args, exec, ctx) {
     }];
   }
   if (!ops || !ops.length) throw new Error('需要 ops 数组（或 op + 同层参数）');
-  var log = applyOps(proj, ops);
+  // ★ 逐条应用 = 一次 load / 一次 save：批量语义不变（同一内存工程按序改），
+  //   但能精确报出是哪一条失败，并保证「任一 op 失败整批不落盘」（saveProject 在循环之后）。
+  var log = [];
+  for (var i = 0; i < ops.length; i++) {
+    var one;
+    try {
+      one = applyOps(proj, [ops[i]]);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 条 op（' + ((ops[i] && ops[i].op) || '?') + '）失败，整批未写入任何改动：' +
+        ((e && e.message) || e));
+    }
+    log = log.concat(one);
+  }
   saveProject(ctx, path, proj);
-  return '✅ 已应用 ' + ops.length + ' 条编辑命令到 ' + path + '\n\n' + log.join('\n') +
-    '\n\n' + projectSummary(proj, path);
+  // 结构化返回（与 tool-model / tool-rig 同一口径）：ok/applied/log 供程序化消费，
+  // summary 保留人类可读摘要 —— 信息量不比旧的纯文本少。
+  return JSON.stringify({
+    ok: true, action: 'edited', path: path, applied: ops.length, log: log,
+    shapes: proj.shapes.length, layers: proj.layers.length,
+    summary: projectSummary(proj, path),
+    next: 'art_add 批量加图元 / art_edit 继续调整 / art_export 出 SVG / art_verify 校验',
+  }, null, 2);
+}
+
+// ── art_add：批量新增图元（一次调用 N 个，事务式）────────────────
+// 与 tool-model 的 model_add（parts=[…]）同一形态：单件写法兼容 + 数组批量 + 整批不落盘。
+function artAdd(args, exec, ctx) {
+  var path = argStr(args, 'path', 'art.project.json');
+  var proj = loadProject(ctx, path);
+  var specs;
+  if (args.shapes !== undefined) {
+    specs = args.shapes;                       // 批量写法：以 shapes 为准（忽略同层单件字段）
+  } else {
+    if (!args.type) throw new Error('art_add 需要 shapes 数组（批量）；或给 type 等几何参数（单件）');
+    specs = [shapeSpecFromArgs(args)];         // 单件写法：同层参数收拢成一个图元
+  }
+  var added = applyShapeSpecs(proj, specs, 'shapes');
+  saveProject(ctx, path, proj);
+  var res = {
+    ok: true, action: 'added', path: path, added: added, shapes: proj.shapes.length,
+    next: 'art_edit 调整（align/distribute/set/move）/ art_export 出 SVG / art_verify 校验',
+  };
+  if (added.length === 1) { res.id = added[0].id; res.shape = added[0]; }   // 单件写法兼容旧返回体
+  return JSON.stringify(res, null, 2);
 }
 
 function artImport(args, exec, ctx) {
@@ -2003,8 +2097,8 @@ function artVerify(args, exec, ctx) {
 var TOOL_DEFS = [
   {
     name: 'art_project',
-    description: '矢量画板工程管理（文本真相源 art.project.json）：创建/查看/更新画布尺寸、背景色、色板、图层。图元几何用绝对坐标 + 可选 2D 仿射矩阵 transform；SVG 是唯一文本产物（零依赖生成、可回读）。PNG 光栅化不在沙箱内（见 art_export）。',
-    usageGuide: '创作第一步：mode=create 建画板（width/height/background，可带 layers=[{id,name}]）→ art_edit 加图元（shape.add）与调整（move/resize/set/align/distribute/z）→ art_export 出 SVG → art_verify 校验。mode=show 只看摘要，mode=update 改画布属性。已有 SVG 素材请用 art_import 导入。',
+    description: '矢量画板工程管理（文本真相源 art.project.json）：创建/查看/更新画布尺寸、背景色、色板、图层，并可在创建时一次带入整批图元（shapes=[…]）。图元几何用绝对坐标 + 可选 2D 仿射矩阵 transform；SVG 是唯一文本产物（零依赖生成、可回读）。PNG 光栅化不在沙箱内（见 art_export）。',
+    usageGuide: '创作第一步：mode=create 建画板（width/height/background，可带 layers=[{id,name}]，也可带 shapes=[{type:"rect",…},{type:"text",…}] 一次把画面画好）→ art_add 批量加图元 / art_edit 调整（move/resize/set/align/distribute/z）→ art_export 出 SVG → art_verify 校验。mode=show 只看摘要，mode=update 改画布属性。已有 SVG 素材请用 art_import 导入。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -2017,14 +2111,38 @@ var TOOL_DEFS = [
         background: { type: 'string', description: '可选：背景色（#RRGGBB / rgb() / 命名色 / none）' },
         palette: { type: 'array', description: '可选：色板（颜色字符串数组，默认 Tailwind 标准 10 色）' },
         layers: { type: 'array', description: '可选（仅 create）：图层定义 [{id,name,visible}]' },
+        shapes: { type: 'array', description: '可选（仅 create）：一次带入的图元数组（每项与 art_add 的 shapes 项 / art_edit 的 shape.add 同构）；任一项非法则整批不落盘' },
         overwrite: { type: 'boolean', description: '可选（仅 create）：已存在时是否重建（默认 false）' },
       },
     },
   },
   {
+    name: 'art_add',
+    description: '批量新增图元到画板工程（一次调用任意多个，事务式）。shapes=[{type:"rect",x:…,y:…,w:…,h:…,fill:…},{type:"text",x:…,y:…,text:…}] —— 每项与 art_edit 的 shape.add 同构（rect/circle/ellipse/line/polyline/polygon/path/text；字段 x/y/w/h/rx/cx/cy/r/points/d/text/fontSize/fontWeight/anchor/fill/stroke/strokeWidth/opacity/layer/id/name）。也支持单件写法（type + 同层参数）。全部校验通过才落盘一次，任一项失败整批不写入（工程保持原样）。',
+    usageGuide: '一次把画面画出来：art_add shapes=[{"type":"rect","x":40,"y":40,"w":320,"h":180,"fill":"#2563EB","rx":8},{"type":"text","x":40,"y":80,"text":"标题","fontSize":24,"fontWeight":"600","fill":"#111827"}]。id 不传自动分配（s1、s2…），z 按图层内顺序自动排。新增后要调位置/样式用 art_edit（shape.move/resize/set/align/distribute），出图用 art_export，交付前 art_verify。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/art.project.json；相对主项目根解析）' },
+        shapes: { type: 'array', description: '图元描述数组（每项与 art_edit 的 shape.add 同构；批量写法）' },
+        type: { type: 'string', description: '可选（单件写法）：图元类型 rect/circle/ellipse/line/polyline/polygon/path/text' },
+        id: { type: 'string', description: '可选（单件写法）：图元 id（默认自动分配）' },
+        layer: { type: 'string', description: '可选（单件写法）：目标图层 id（默认第一个图层）' },
+        x: { type: 'number', description: '可选（单件写法）：x（rect/text 用；其余几何字段建议走 shapes）' },
+        y: { type: 'number', description: '可选（单件写法）：y' },
+        w: { type: 'number', description: '可选（单件写法）：宽' },
+        h: { type: 'number', description: '可选（单件写法）：高' },
+        text: { type: 'string', description: '可选（单件写法）：文本内容（type=text 必填）' },
+        fill: { type: 'string', description: '可选（单件写法）：填充色（none 表示不填充）' },
+        stroke: { type: 'string', description: '可选（单件写法）：描边色' },
+      },
+    },
+  },
+  {
     name: 'art_edit',
-    description: '向画板工程追加编辑命令（命令式 op，与面板操作同源）。支持：图元（shape.add/remove/duplicate/move/resize/set/text/z）、排版（shape.align 六向对齐 + shape.distribute 等距分布）、图层（layer.add/remove/rename/visible/reorder）、画布与色板（set.canvas/set.palette）、标题（project.rename）。图元类型：rect/circle/ellipse/line/polyline/polygon/path/text。目标选择支持 ids / id / type / layer / name / all 过滤（不指定目标直接报错，避免误改全部）。',
-    usageGuide: '示例：{"op":"shape.add","type":"rect","x":40,"y":40,"w":320,"h":180,"fill":"#2563EB","rx":8} / {"op":"shape.add","type":"text","x":40,"y":80,"text":"标题","fontSize":24,"fontWeight":"600","fill":"#111827"} / {"op":"shape.align","type":"rect","to":"hcenter"} / {"op":"shape.distribute","ids":["s1","s2","s3"],"axis":"h"} / move：{"op":"shape.move","ids":["s1"],"to":{"x":100,"y":60}} 或 dx/dy 相对偏移。改完用 art_verify 校验、art_export 出 SVG。',
+    description: '向画板工程追加编辑命令（命令式 op，与面板操作同源）。支持：图元（shape.add/remove/duplicate/move/resize/set/text/z）、排版（shape.align 六向对齐 + shape.distribute 等距分布）、图层（layer.add/remove/rename/visible/reorder）、画布与色板（set.canvas/set.palette）、标题（project.rename）。图元类型：rect/circle/ellipse/line/polyline/polygon/path/text。目标选择支持 ids / id / type / layer / name / all 过滤（不指定目标直接报错，避免误改全部）。纯新增图元用 art_add（shapes 数组一次成型）更省。返回结构化结果（ok/applied/log/summary）。',
+    usageGuide: '示例：{"op":"shape.add","type":"rect","x":40,"y":40,"w":320,"h":180,"fill":"#2563EB","rx":8} / {"op":"shape.add","type":"text","x":40,"y":80,"text":"标题","fontSize":24,"fontWeight":"600","fill":"#111827"} / {"op":"shape.align","type":"rect","to":"hcenter"} / {"op":"shape.distribute","ids":["s1","s2","s3"],"axis":"h"} / move：{"op":"shape.move","ids":["s1"],"to":{"x":100,"y":60}} 或 dx/dy 相对偏移。改完用 art_verify 校验、art_export 出 SVG。 ★ 批量：一次调用可传任意多条 op（按顺序应用；任一 op 失败整批不落盘）—— 图元多时一次调用成型（如 [{op:"shape.add",...},{op:"shape.add",...},{op:"shape.align",...}]），别一条一条调。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -2088,6 +2206,7 @@ var TOOL_DEFS = [
 
 var IMPLS = {
   art_project: artProject,
+  art_add: artAdd,
   art_edit: artEdit,
   art_import: artImport,
   art_export: artExport,

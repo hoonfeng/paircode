@@ -1382,11 +1382,20 @@ function rigModel(args, opts, ctx) {
       return '工程已存在: ' + path + '（重建请 overwrite=true，查看请 action=get）';
     }
     var model = emptyModel(name, cw, ch, argBool(args, 'stdParams', true));
-    saveModel(ctx, path, normalizeModel(model));
-    return '已创建角色工程 ' + path + '\n'
-      + '画布: ' + cw + 'x' + ch + '（模型空间原点 = 画布中心，+y 向上）\n'
-      + '标准参数: ' + model.parameters.length + ' 个（ParamMouthOpenY / ParamEyeLOpen / ParamAngleX…）\n'
-      + '下一步: rig_import source=psd src=<角色.psd>（自动分层 + 自动绑定），或 rig_edit op=part.add 手搭。';
+    // ★ 一次调用成型：create 时可带 parts=[…]（每项与 rig_add / rig_edit 的 part.add 同构）——
+    //   手搭小部件集合时不必「先 create 再 N 次 rig_edit」；任一项非法整批不落盘。
+    var added0 = applyPartSpecs(model, args.parts, 'parts');
+    var out0 = normalizeModel(model);
+    saveModel(ctx, path, out0);
+    var resNew = {
+      ok: true, action: 'created', path: path, name: out0.name,
+      canvas: { width: cw, height: ch },
+      params: out0.parameters.length, parts: out0.parts.length,
+      summary: modelSummary(out0),
+      next: 'rig_import source=psd src=<角色.psd>（自动分层 + 自动绑定），或 rig_add 批量加部件 / rig_edit 绑骨骼与参数（bind.auto / part.bind）',
+    };
+    if (added0.length) resNew.added = added0;
+    return JSON.stringify(resNew, null, 2);
   }
   if (!ctx.fs.exists(path)) throw new Error('工程不存在: ' + path + '（先 action=create 或 rig_import）');
   var m = loadModel(ctx, path);
@@ -2105,6 +2114,40 @@ function composeOpFromArgs(args) {
   return o;
 }
 
+// ── 批量新增部件（rig_add 与 rig_model create 的 parts 共用）────
+// 与 part.add 同一套构造/校验（都走 applyOp），差别只在「N 个部件一次调用」：
+// 省掉手写 N 条 op 的样板。事务性：逐件入列（后一件才看得见前一件占用的 id），
+// 全部通过后由调用方落盘一次；任一项失败直接抛出 → 调用方走不到 saveModel，工程保持原样。
+function applyPartSpecs(model, specs, what) {
+  if (specs === undefined || specs === null) return [];
+  if (!isArr(specs)) throw new Error((what || 'parts') + ' 必须是数组');
+  if (!specs.length) throw new Error((what || 'parts') + ' 是空数组（要么不传，要么至少给一个部件）');
+  var added = [];
+  for (var i = 0; i < specs.length; i++) {
+    if (!isObj(specs[i])) throw new Error((what || 'parts') + '[' + i + '] 必须是对象');
+    var r;
+    try {
+      r = applyOp(model, { op: 'part.add', part: specs[i] }, i);
+    } catch (e) {
+      throw new Error('第 ' + (i + 1) + ' 个部件' + (specs[i].id ? '（' + specs[i].id + '）' : '') +
+        '新增失败，整批未写入任何改动：' + ((e && e.message) || e));
+    }
+    added.push(r && r.detail ? r.detail : ('新增部件 ' + specs[i].id));
+  }
+  return added;
+}
+
+// 单件写法：除 path/parts 外全部透传给 part.add（与 rig_edit op=part.add 的平铺写法一致）
+function partDefFromArgs(args) {
+  var def = {};
+  for (var k in args) {
+    if (!Object.prototype.hasOwnProperty.call(args, k)) continue;
+    if (k === 'path' || k === 'parts') continue;
+    def[k] = args[k];
+  }
+  return def;
+}
+
 function rigEdit(args, opts, ctx) {
   var path = argStr(args, 'path', PROJECT_NAME);
   if (!ctx.fs.exists(path)) throw new Error('角色工程不存在: ' + path + '（先 rig_model action=create，或 rig_import 从 PSD/清单导入）');
@@ -2127,9 +2170,35 @@ function rigEdit(args, opts, ctx) {
   var out = normalizeModel(model);
   saveModel(ctx, path, out);
   return JSON.stringify({
+    ok: true, action: 'edited', path: path,
     applied: log.length,
     log: log,
     summary: modelSummary(out),
+    next: 'rig_verify 校验 / rig_export format=html 出预览 / rig_add 批量加部件',
+  }, null, 2);
+}
+
+// ── rig_add：批量新增部件（一次调用 N 个，事务式）────────────────
+// 与 tool-model 的 model_add（parts=[…]）同一形态：单件写法兼容 + 数组批量 + 整批不落盘。
+function rigAdd(args, opts, ctx) {
+  var path = argStr(args, 'path', PROJECT_NAME);
+  if (!ctx.fs.exists(path)) throw new Error('角色工程不存在: ' + path + '（先 rig_model action=create，或 rig_import 从 PSD/清单导入）');
+  var model = loadModel(ctx, path);
+  var specs;
+  if (args.parts !== undefined) {
+    specs = args.parts;                              // 批量写法：以 parts 为准
+  } else {
+    if (!argStr(args, 'id', '')) throw new Error('rig_add 需要 parts 数组（批量）；或给 id/width/height（单件）');
+    specs = [partDefFromArgs(args)];                 // 单件写法
+  }
+  var added = applyPartSpecs(model, specs, 'parts');
+  var out = normalizeModel(model);
+  saveModel(ctx, path, out);
+  return JSON.stringify({
+    ok: true, action: 'added', path: path, added: added,
+    parts: out.parts.length,
+    summary: modelSummary(out),
+    next: 'rig_edit 绑骨骼与参数（deformer.add / part.bind / bind.auto）/ rig_export 出预览 / rig_verify 校验',
   }, null, 2);
 }
 // ── 产物①：自包含可交互预览 HTML ───────────────────────────
@@ -2780,8 +2849,8 @@ function rigVerify(args, opts, ctx) {
 var TOOL_DEFS = [
   {
     name: 'rig_model',
-    description: '角色工程（.iki 文档）的创建与查看。真相源就是上游 .iki v1 格式（version/name/canvas/parameters/parts/deformers/physics/physicsChains），坐标口径照上游：模型空间原点 = 画布中心、+y 向上、rotation 逆时针为正。action=create 建空工程（默认带 16 个上游标准参数）/ get 看概要 / rename / reset（清空结构、保留参数与画布）。',
-    usageGuide: '起步：rig_model action=create name=char canvas={width:1024,height:1024} → rig_import source=psd src=角色.psd → rig_verify → rig_export format=html。已有工程先 action=get 看盘点（部件/deformer/参数/物理数量、按部位分布）。',
+    description: '角色工程（.iki 文档）的创建与查看。真相源就是上游 .iki v1 格式（version/name/canvas/parameters/parts/deformers/physics/physicsChains），坐标口径照上游：模型空间原点 = 画布中心、+y 向上、rotation 逆时针为正。action=create 建工程（默认带 16 个上游标准参数；可一次带入整批部件 parts=[…]）/ get 看概要 / rename / reset（清空结构、保留参数与画布）。',
+    usageGuide: '起步：rig_model action=create name=char canvas={width:1024,height:1024}（可带 parts=[{id:"body",width:400,height:600,order:0}] 一次把部件搭好）→ rig_import source=psd src=角色.psd（有分层素材时）→ rig_verify → rig_export format=html。已有工程先 action=get 看盘点（部件/deformer/参数/物理数量、按部位分布）；手搭/补部件用 rig_add。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -2793,6 +2862,7 @@ var TOOL_DEFS = [
         height: { type: 'number', description: '可选：画布高（默认 1000）' },
         canvas: { type: 'object', description: '可选：{width,height}（等价于 width/height）' },
         stdParams: { type: 'boolean', description: '可选（create）：是否写入 16 个上游标准参数（默认 true）' },
+        parts: { type: 'array', description: '可选（create）：一次带入的部件数组（每项与 rig_add 的 parts 项 / rig_edit 的 part.add 同构：{id,width,height,x,y,order?,color?,deformer?}）；任一项非法则整批不落盘' },
         overwrite: { type: 'boolean', description: '可选（create）：已存在时是否重建（默认 false）' },
         force: { type: 'boolean', description: '可选（reset）：确认清空结构' },
       },
@@ -2822,9 +2892,29 @@ var TOOL_DEFS = [
     },
   },
   {
+    name: 'rig_add',
+    description: '批量新增部件到角色工程（一次调用任意多个，事务式）。parts=[{id:"hair_front",width:180,height:120,x:0,y:210,order:8},{id:"face",width:300,height:340,order:2}] —— 每项与 rig_edit 的 part.add 同构（id 必填、width/height > 0；可带 x/y/rotation/scaleX/scaleY/opacity/order/color[4]/deformer）。也支持单件写法（id/width/height 写在同一层）。全部校验通过才落盘一次，任一项失败整批不写入（工程保持原样）。',
+    usageGuide: '手搭/补部件：rig_add parts=[{"id":"body","width":400,"height":600,"order":0},{"id":"face","width":300,"height":340,"x":0,"y":140,"order":2}]。id 会被 slug 规范化（小写 + _L/_R 侧别），重复 id 直接报错；order 不传自动排在最后。部件建好后用 rig_edit 绑骨骼与参数（deformer.add → part.assign / part.bind，或一键 bind.auto），再 rig_export 出预览、rig_verify 自检。有分层素材时优先 rig_import（自动分层 + 自动绑定）。',
+    category: '创作',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '可选：工程路径（默认 <主项目根>/rig.model.iki.json；相对主项目根解析）' },
+        parts: { type: 'array', description: '部件定义数组（每项 {id,width,height,x?,y?,order?,color?,deformer?}；批量写法）' },
+        id: { type: 'string', description: '可选（单件写法）：部件 id（必填；会自动 slug：小写 + _L/_R）' },
+        width: { type: 'number', description: '可选（单件写法）：部件宽（模型空间单位，> 0）' },
+        height: { type: 'number', description: '可选（单件写法）：部件高（> 0）' },
+        x: { type: 'number', description: '可选（单件写法）：x（模型空间，原点 = 画布中心）' },
+        y: { type: 'number', description: '可选（单件写法）：y（模型空间，+y 向上）' },
+        order: { type: 'number', description: '可选（单件写法）：绘制顺序（不传自动排最后）' },
+        deformer: { type: 'string', description: '可选（单件写法）：所属 deformer id（须已存在）' },
+      },
+    },
+  },
+  {
     name: 'rig_edit',
-    description: '角色工程命令式编辑（一次 ops 批量应用，任一 op 失败则整批不落盘）。支持：部件（part.add/set/rename/remove/order/bind/unbind/assign/mesh/clip）、deformer（deformer.add/set/remove/bind/unbind、warp.add）、参数（param.add/set/remove）、物理（physics.add/remove、chain.add/remove）、自动绑定（bind.auto）、纹理（texture.set）。',
-    usageGuide: '示例：{"op":"deformer.add","id":"head","parent":"body","pivot":{"x":0,"y":180}} / {"op":"part.assign","ids":["hair_front"],"deformer":"hair"} / {"op":"part.bind","id":"eye_white_L","parameter":"ParamEyeLOpen","channel":"scaleY","from":0.1,"to":1} / {"op":"warp.add","id":"warp_hair","parent":"head","parts":["hair_front"],"parameter":"ParamAngleZ","preset":"sway","amount":10} / {"op":"physics.add","id":"ph_skirt","input":"ParamAngleZ","output":"ParamClothSwayX","stiffness":18,"damping":0.35,"mass":1} / {"op":"bind.auto"}。参数引用必须先声明（param.add）；改完跑 rig_verify。',
+    description: '角色工程命令式编辑（一次 ops 批量应用，任一 op 失败则整批不落盘）。支持：部件（part.add/set/rename/remove/order/bind/unbind/assign/mesh/clip）、deformer（deformer.add/set/remove/bind/unbind、warp.add）、参数（param.add/set/remove）、物理（physics.add/remove、chain.add/remove）、自动绑定（bind.auto）、纹理（texture.set）。纯新增部件用 rig_add（parts 数组一次成型）更省。返回结构化结果（ok/applied/log/summary）。',
+    usageGuide: '示例：{"op":"deformer.add","id":"head","parent":"body","pivot":{"x":0,"y":180}} / {"op":"part.assign","ids":["hair_front"],"deformer":"hair"} / {"op":"part.bind","id":"eye_white_L","parameter":"ParamEyeLOpen","channel":"scaleY","from":0.1,"to":1} / {"op":"warp.add","id":"warp_hair","parent":"head","parts":["hair_front"],"parameter":"ParamAngleZ","preset":"sway","amount":10} / {"op":"physics.add","id":"ph_skirt","input":"ParamAngleZ","output":"ParamClothSwayX","stiffness":18,"damping":0.35,"mass":1} / {"op":"bind.auto"}。参数引用必须先声明（param.add）；改完跑 rig_verify。 ★ 批量：一次调用可传任意多条 op（按顺序应用；任一 op 失败整批不落盘，错误信息里会点明第几条）—— 部件/骨骼多时一次调用成型（如 [{op:"part.add",...},{op:"part.add",...},{op:"chain.add",...}]），别一条一条调。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -2907,6 +2997,7 @@ var TOOL_DEFS = [
 var IMPLS = {
   rig_model: rigModel,
   rig_import: rigImport,
+  rig_add: rigAdd,
   rig_edit: rigEdit,
   rig_export: rigExport,
   rig_verify: rigVerify,
