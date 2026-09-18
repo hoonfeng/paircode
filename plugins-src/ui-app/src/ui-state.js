@@ -188,6 +188,8 @@ export const showSettings = ref(false)
 export const showSystem = ref(false)
 export const showSource = ref(false)
 export const showAbout = ref(false)
+// 软件更新弹窗（状态栏「新版本可用」徽标 / 菜单打开 → UpdateModal 消费）
+export const showUpdate = ref(false)
 export const showQuickSwitcher = ref(false)
 export const helpDocTarget = ref('features')
 export const showHelp = ref(false)
