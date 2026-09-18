@@ -32,7 +32,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 	//   （各实现逻辑与原 handler 一致）。
 	registry.Register(&Tool{
 		Name:        "cordis",
-		Description: "cordis 动态插件管理（单工具 op 分派）：inspect 查看插件运行时（三层自检：无 id 摘要/版本链/源码诊断）；define 登记 JS/TS 插件定义（预检不运行；code 为 async 函数体，pluginId 非空=追加版本）；run 装载（goja 求值并 apply，可传 config）；stop 停止并回收；undefine 删定义；services 列宿主服务与方法签名；query 按协议精确查询（platform/provider/method/input）。写插件前先 services/query 查精确签名，勿臆测。",
+		Description: "cordis 动态插件管理（单工具 op 分派）：inspect 查看插件运行时（三层自检：无 id 摘要/版本链/源码诊断）；define 登记 JS/TS 插件定义（预检不运行；code 为 async 函数体，pluginId 非空=追加版本）；run 装载（goja 求值并 apply，可传 config）；stop 停止并回收；undefine 删定义；services 列宿主服务与方法签名；query 按协议精确查询（platform/provider/method/input）。写插件前先 services/query 查精确签名，勿臆测。★ 自建插件（define）会把代码固化到程序安装目录的插件包（跨工作区生效、重启自动装载）——属用户资产的持久变更：仅在用户明确要求/同意后 define，禁止为「一次性任务图省事」自建插件；已有磁盘插件/宿主工具能完成时一律复用（先 inspect 查看现有插件）。临时用途用完请 stop/undefine 并清理插件面板条目。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
 			"op":       strProp("操作：inspect 查看 / define 登记 / run 装载 / stop 停止 / undefine 删定义 / services 列服务 / query 协议查询"),
@@ -58,7 +58,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			case "define":
 				return cordisOpDefine(registry, host, root, args)
 			case "run":
-				return cordisOpRun(host, args)
+				return cordisOpRun(ctx, host, args)
 			case "stop":
 				return cordisOpStop(host, args)
 			case "undefine":
@@ -169,7 +169,12 @@ func cordisOpDefine(registry *Registry, host *PluginHost, root string, args map[
 }
 
 // cordisOpRun op=run：装载已登记插件（goja 求值并 apply(ctx, config)；restart 语义）。
-func cordisOpRun(host *PluginHost, args map[string]any) (string, error) {
+//
+// ★ 2026-09-20 会话根透传（修「动态插件产物写进别的工作区」）：ctx 取发起本次
+//   run 的会话工作区根，经 LoadJSDynamicRoot 绑定到插件适配器——apply 期间
+//   （以及之后无更精确绑定的回调）插件 ctx 基础服务按会话工作区解析路径，
+//   而不是宿主创建时那个工作区（长期运行 IDE 里 = 最早打开的工作区）。
+func cordisOpRun(ctx context.Context, host *PluginHost, args map[string]any) (string, error) {
 	id := argStr(args, "id")
 	def, err := host.resolveJSDef(id)
 	if err != nil {
@@ -182,7 +187,8 @@ func cordisOpRun(host *PluginHost, args map[string]any) (string, error) {
 		}
 		def.config = cfg
 	}
-	if err := host.LoadJSDynamic(def); err != nil {
+	wsRoot := SessionWorkspaceRoot(ctx)
+	if err := host.LoadJSDynamicRoot(def, wsRoot); err != nil {
 		return "", err
 	}
 	// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
@@ -195,6 +201,9 @@ func cordisOpRun(host *PluginHost, args map[string]any) (string, error) {
 		return msg, nil
 	}
 	msg := fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis(op=inspect) id=%s 查看。", def.name, def.id, def.version, def.pluginId)
+	if wsRoot != "" {
+		msg += fmt.Sprintf("\n装载期工作区根绑定：%s（apply 与无会话绑定的回调按此解析路径）。", wsRoot)
+	}
 	if c := def.ConsoleText(); c != "" {
 		msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
 	}
@@ -1016,5 +1025,5 @@ func syncDynamicPluginToToolset(root string, def *jsPluginDef, name, scope strin
 	}); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("已同步到全局插件包（程序目录 %s/%s/——package.json + index.js[+client.js]，重启自动装配，cordis_inspect 查看。★ 插件一律以插件包形式装在程序所在目录，不属于工作区；scope=%s）", GlobalPluginsPath(), entryName, s), nil
+	return fmt.Sprintf("⚠️ 已写入全局插件包（程序安装目录 %s/%s/——package.json + index.js[+client.js]，重启自动装配，cordis(op=inspect) 查看）。★ 该插件是「程序的扩展」不是工作区资产：对所有工作区生效、会出现在插件面板、重启自动装载；scope=%s。若这是临时需求，请 cordis(op=undefine) 撤销定义并在插件面板删除该条目，避免长期污染全局插件面。", GlobalPluginsPath(), entryName, s), nil
 }

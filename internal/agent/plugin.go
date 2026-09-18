@@ -666,7 +666,8 @@ func (h *PluginHost) InvokeClientMethod(plugin, method string, args any) (any, e
 	adapter.mu.Lock()
 	// ★ 2026-08-27 双上下文：先查 UI handler 存储（client 半 invoke 专用，
 	//   执行期间绑定当前主根）；未注册则回退通用 handlers（向后兼容早期用
-	//   harness.handle 暴露的 UI 方法——无 UI 根绑定，遵循装载根语义）。
+	//   harness.handle 暴露的 UI 方法——无 UI 根绑定，根由 ctxServiceRoot 兜底
+	//   决定，2026-09-20 起 = 实时主工作区，不再沿用宿主装载快照）。
 	fn, ok := adapter.handlersUI[method]
 	if !ok {
 		fn, ok = adapter.handlers[method]
@@ -788,6 +789,58 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	//   不注册进 Registry，agent 可见面由插件决定）。
 	ArchiveHostLegacyTools(root)
 	return h
+}
+
+// WorkspaceRoot 返回插件宿主当前的工作区根（实时；未设置返回空串）。
+func (h *PluginHost) WorkspaceRoot() string {
+	if h == nil {
+		return ""
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.root
+}
+
+// SetWorkspaceRoot 更新插件宿主的工作区根（主工作区切换时由 OnSyncWorkspace 调用）。
+//
+// ★ 2026-09-20 修复（「插件不按工作区切路径 / 文件写进别的工作区」根因之一）：
+// 宿主 root、根上下文 WorkspaceRoot、workspaceRoot 服务值、各已注册插件上下文
+// WorkspaceRoot 原先只在 NewPluginHost 时快照一次——主工作区切换后不再更新，
+// 于是插件 ctx 基础服务（fs/binary/bash/…，经 ctxServiceRoot 兜底）与宿主能力
+// 仍按「宿主创建时那个工作区」解析路径（长期运行的 IDE 里就是最早打开/启动工作
+// 区），把产物写进了用户当前没在用的工作区。此处统一同步四处来源，使无会话绑定
+// 的插件调用回落到「当前主工作区」。
+//
+// 语义：root 为空 = 当前无主工作区（插件内的路径解析将显式报错，而不是静默沿用
+// 旧工作区）——显式失败优于写错工作区。
+func (h *PluginHost) SetWorkspaceRoot(root string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	changed := h.root != root
+	h.root = root
+	if h.ctx != nil {
+		h.ctx.WorkspaceRoot = root
+	}
+	for _, pc := range h.contexts {
+		if pc != nil {
+			pc.WorkspaceRoot = root
+		}
+	}
+	ctx := h.ctx
+	h.mu.Unlock()
+	// workspaceRoot 服务值同步（services 为跨插件共享的同一 map，改一处即全插件可见）
+	if ctx != nil {
+		ctx.servicesMu.Lock()
+		if ctx.services != nil {
+			ctx.services["workspaceRoot"] = root
+		}
+		ctx.servicesMu.Unlock()
+	}
+	if changed {
+		log.Printf("[plugin] 插件宿主工作区根已同步: %q", root)
+	}
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────

@@ -244,8 +244,9 @@ type jsPluginAdapter struct {
 	mu       sync.Mutex
 	handlers map[string]func(args any) (any, error) // harness.handle 注册（Agent 侧调用）
 	// ★ 2026-08-27 handlersUI：ctx.registerClientMethod 注册（浏览器 client 半
-	//   invoke 专用）。与 handlers 分离——invoke 执行绑定 uiWsRoot（当前主根），
-	//   harness/Agent 侧调用不绑定（保持会话上下文语义）。
+	//   invoke 专用）。与 handlers 分离——invoke 执行绑定 uiWsRoot（当前主根）；
+	//   handlers（harness.handle）不设绑定，根由 ctxServiceRoot 兜底决定
+	//   （2026-09-20 起 = 实时主工作区；宿主若带会话调用应用 Invoke + 工具根绑定）。
 	handlersUI map[string]func(args any) (any, error)
 
 	// ★ 2026-08-23 工具调用工作区绑定（重大 BUG：切换工作区使运行中对话工具串台）：
@@ -262,6 +263,15 @@ type jsPluginAdapter struct {
 	//   绑定的 callWsRoot 互斥分层：工具执行永远走对话自己的根，UI 操作永远走
 	//   用户当前主根。VM 锁串行化保证同时只有一个绑定。
 	uiWsRoot string
+
+	// ★ 2026-09-20 装载上下文工作区绑定（第三档，修「动态插件产物写进别的工作区」）：
+	//   LoadJSDynamicRoot(def, wsRoot) 传入「发起装载的会话根」——插件 apply 期间
+	//   （含 apply 内触发的 ctx 服务调用）以及装载后无其它绑定的事件/timer 回调，
+	//   ctx 基础服务按它解析路径。此前无此档：apply 期间直接静默回落到宿主装载
+	//   快照（= IDE 创建宿主时的工作区），cordis(op=run) 装载的插件随即把文件写进
+	//   了用户没在用的工作区（真实会话实证：会话在 A 工作区，产物落到启动工作区 B）。
+	//   优先级低于工具调用/ UI invoke 绑定（后两者是更精确的当次上下文）。
+	loadWsRoot string
 
 	timersMu   sync.Mutex
 	timers     []func() // 活动 timer 的取消函数（Unload 时统一清理）
@@ -287,12 +297,20 @@ func (p *jsPluginAdapter) setToolCallRoot(root string) { p.callWsRoot = root }
 // uiWsRootValue 返回当前 UI invoke 绑定的主根（无绑定返回空串）。
 func (p *jsPluginAdapter) uiWsRootValue() string { return p.uiWsRoot }
 
+// loadWsRootValue 返回装载期绑定的会话根（无绑定返回空串）。
+func (p *jsPluginAdapter) loadWsRootValue() string { return p.loadWsRoot }
+
 // ctxServiceRoot 返回插件 ctx 服务解析路径的首选根（2026-08-27 双上下文）：
-// 当前工具调用会话根（会话上下文，2026-08-23 工作区隔离）＞ UI invoke 绑定
-// 主根（UI 上下文，client 半操作跟随用户当前所见工作区）＞ 插件装载时工作区根。
-// ★ 不再回落到全局主根 primaryWorkspaceRoot：正在执行的对话（Loop/agentloop
-//
-//	prompt 组装等非工具 JS 调用）必须保持自己的根，切换全局工作区不得带偏。
+//   - 当前工具调用会话根（会话上下文，2026-08-23 工作区隔离）
+//   - ＞ UI invoke 绑定主根（UI 上下文，client 半操作跟随用户当前所见工作区）
+//   - ＞ 装载期会话根 loadWsRoot（2026-09-20 新增：cordis(op=run) 装载的插件在
+//     apply 期间及之后的无绑定回调，跟随「发起装载的会话的工作区」）
+//   - ＞ 插件上下文 WorkspaceRoot（随宿主主工作区实时更新，见
+//     PluginHost.SetWorkspaceRoot；不再是启动时快照）
+//   - ＞ 全局主根 primaryWorkspaceRoot（仅在插件上下文根为空时兜底；仍取不到
+//     则返回空，由调用方显式报错——不静默写错工作区）。
+// ★ 注意与 2026-08-23 的语义差别：正在执行的对话（Loop/agentloop 非工具 JS
+// 调用）始终由第 1 档工具调用会话根保持自己的根，切换全局工作区不会带偏。
 //
 // 必须在 withLock 内调用（JS 原生函数回调天然在 VM 锁内）。
 func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
@@ -302,7 +320,13 @@ func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
 	if r := p.uiWsRootValue(); r != "" {
 		return r
 	}
-	return pc.WorkspaceRoot
+	if r := p.loadWsRootValue(); r != "" {
+		return r
+	}
+	if pc != nil && pc.WorkspaceRoot != "" {
+		return pc.WorkspaceRoot
+	}
+	return primaryWorkspaceRoot()
 }
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
@@ -1889,21 +1913,20 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 //	探测）——目录浏览器/添加工作区需全盘浏览；只读无写入，2026-09-09 新增。
 func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
-	root := pc.WorkspaceRoot
+	// svcRoot 每次调用实时解析工作区根（★ 2026-09-20）：原实现把 pc.WorkspaceRoot
+	// 拷进闭包变量，宿主切工作区后（PluginHost.SetWorkspaceRoot）这个拷贝不会更新，
+	// 插件继续往旧工作区写文件。统一走 ctxServiceRoot，与 binary/bash 等服务同源。
+	svcRoot := func() string { return p.ctxServiceRoot(pc) }
 	resolve := func(path string) (string, error) {
-		// ★ 工作区根优先级（2026-08-27 双上下文）：当前工具调用会话根 ＞ UI
-		//   invoke 绑定主根 ＞ 装载快照。不再回落全局主根 primaryWorkspaceRoot
-		//   ——正在执行的对话（Loop 内非工具 JS 调用）必须保持自己的根，切换
-		//   全局工作区不得带偏（2026-08-23 隔离修复的延伸）。
-		if r := p.toolCallRoot(); r != "" {
-			root = r
-		} else if r := p.uiWsRootValue(); r != "" {
-			root = r
+		// ★ 根解析统一走 ctxServiceRoot（2026-09-20 收敛）：工具调用会话根 ＞ UI
+		//   invoke 绑定主根 ＞ 装载期会话根 ＞ 插件上下文根（随主工作区实时更新）＞
+		//   全局主根兜底。此处原先维护一份手写副本（只认前两档 + 装载快照），是
+		//   「插件产物写进别的工作区」的直接原因（fs 是插件最常用的写入通道）。
+		r := svcRoot()
+		if r == "" {
+			return "", fmt.Errorf("ctx.fs: 工作区根为空，无法解析路径 %q（插件未绑定会话且当前无主工作区）", path)
 		}
-		if root == "" {
-			return "", fmt.Errorf("ctx.fs: 工作区根为空，无法解析路径 %q", path)
-		}
-		return resolvePath(root, path)
+		return resolvePath(r, path)
 	}
 	fs := vm.NewObject()
 	// applyPatch：应用 codex 语法补丁（2026-09 工具重构 Phase B：apply_patch 工具的
@@ -1914,12 +1937,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		if strings.TrimSpace(patch) == "" {
 			panic(vm.NewTypeError("ctx.fs.applyPatch: patch 不能为空"))
 		}
-		r := root
-		if r1 := p.toolCallRoot(); r1 != "" {
-			r = r1
-		} else if r2 := p.uiWsRootValue(); r2 != "" {
-			r = r2
-		}
+		r := svcRoot()
 		if r == "" {
 			panic(vm.NewGoError(fmt.Errorf("ctx.fs.applyPatch: 工作区根为空")))
 		}
@@ -2080,11 +2098,8 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	// ★ 2026-08-23 隔离：主根优先当前工具调用会话根。
 	fs.Set("roots", func(call goja.FunctionCall) goja.Value {
 		roots := []string{}
-		if r := p.toolCallRoot(); r != "" {
-			root = r
-		} else if cur := primaryWorkspaceRoot(); cur != "" {
-			root = cur
-		}
+		// ★ 2026-09-20：改用局部变量——原实现把 root 写回闭包，污染后续 fs 调用的根。
+		root := svcRoot()
 		if root != "" {
 			roots = append(roots, root)
 		}
@@ -2186,7 +2201,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		for k, v := range opts {
 			args[k] = v
 		}
-		out, err := searchContentHandler(root)(context.Background(), args)
+		out, err := searchContentHandler(svcRoot())(context.Background(), args)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -2206,7 +2221,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		for k, v := range opts {
 			args[k] = v
 		}
-		out, err := searchFilesHandler(root)(context.Background(), args)
+		out, err := searchFilesHandler(svcRoot())(context.Background(), args)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -2232,7 +2247,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
-		nodes, err := buildFileTree(full, full, root, depth)
+		nodes, err := buildFileTree(full, full, svcRoot(), depth)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -3280,7 +3295,21 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 //   - 函数形态：return (ctx, config) => void —— cordis 生态惯例
 //     （module.exports = function(ctx, config) {}）；函数名作插件名，匿名用 def.id；
 //     也支持 fn.inject = [...] 静态属性声明硬依赖。
+//
+// ★ 无装载上下文根（wsRoot="")：apply 期间 ctx 服务按插件上下文根解析（= 当前
+// 主工作区，见 SetWorkspaceRoot）。按「发起装载的会话工作区」解析请用
+// LoadJSDynamicRoot（cordis(op=run) 走这条）。
 func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
+	return h.LoadJSDynamicRoot(def, "")
+}
+
+// LoadJSDynamicRoot 同 LoadJSDynamic，但额外绑定「发起装载的会话工作区根」：
+// apply 期间（及装载后无更精确绑定的回调）插件 ctx 基础服务按 wsRoot 解析路径，
+// 避免 agent 经 cordis(op=run) 装载的插件把产物写进宿主创建时那个工作区。
+//
+// wsRoot 为空 = 无会话上下文（启动期磁盘插件装载、retryWaiting 自动激活等），
+// 行为与 LoadJSDynamic 一致。
+func (h *PluginHost) LoadJSDynamicRoot(def *jsPluginDef, wsRoot string) error {
 	if def == nil || strings.TrimSpace(def.code) == "" {
 		return fmt.Errorf("插件 %s: 代码为空", def.id)
 	}
@@ -3365,6 +3394,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		applyFn:    applyFn,
 		handlers:   map[string]func(args any) (any, error){},
 		handlersUI: map[string]func(args any) (any, error){},
+		loadWsRoot: wsRoot,
 	}
 
 	// ★ D8 restart 语义（对齐 run mode=run）：同名插件已注册/运行 →

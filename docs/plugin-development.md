@@ -204,6 +204,27 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 > 还有 `app` / `workspaceRoot` / `store` 三个静态服务：`app` 已无条件注入（见 4.5），
 > `workspaceRoot` 可用 `ctx.get('workspaceRoot')` 取（宿主固有服务），`store` 为会话存储（ConversationStore）。
 
+### 5.1 相对路径的根从哪来（★ 2026-09-20 起统一）
+
+`ctx.fs` / `ctx.bash` / `ctx.binary` / `ctx.process` 等一切需要「工作区根」的能力，
+都按同一优先级解析（宿主 `jsPluginAdapter.ctxServiceRoot`，单一真相源）：
+
+| 档 | 来源 | 生效场景 |
+|---|---|---|
+| 1 | 当前**工具调用会话**根 | agent 执行本插件的工具时自动绑定（并发多会话隔离） |
+| 2 | UI invoke 绑定根 | 浏览器 `ui.invoke` 发起时刻的当前主工作区 |
+| 3 | 装载期会话根 | `cordis(op=run)` 装载本插件的会话工作区（apply 期间及其后无更精确绑定的回调） |
+| 4 | 插件上下文根 | 随宿主主工作区切换**实时更新**（`PluginHost.SetWorkspaceRoot`） |
+| 5 | 全局主工作区 | 最后兜底；全空 → 显式报错「工作区根为空」，**不会**静默落到别的工作区 |
+
+约定：
+
+- 写工程产物用**相对路径**，让它跟随「当前会话」；要「用户当前所见工作区」用 `ctx.app.workspaceRoot`；
+  要插件自身目录（缓存/bundle 资源）用插件目录语义，别拿工作区根凑。
+- 不要在 `apply`（装载）里写工程产物：装载期的根是第 3/4 档，不一定是用户正在操作的会话。
+- 历史坑（已修）：宿主根只在 `NewPluginHost` 时快照、`cordis(op=run)` 不绑定会话根、
+  `ctx.fs` 自己维护一份手写根解析副本 → 插件产物写进了「IDE 启动时那个工作区」。
+
 ---
 
 ## 6. 插件间协作：动态服务 provide / get

@@ -6,7 +6,22 @@ description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整
 # cordis 插件开发指南
 
 本环境支持动态插件：JS/TS 代码在 goja 沙箱中执行（对齐 deepseek-harness cordis-host-runner）。
-插件代码只存在于进程内存（不落盘、跨重启不存续）；需要跨重启存续用磁盘插件包或 .pair/cordis.patch.json。
+
+## 0. 铁律（先读这一节）
+
+1. **自建插件 = 用户资产的持久变更**：`cordis(op=define)` 会把插件固化成磁盘插件包
+   （`<InstallDir>/.pair/plugins/<name>/`，程序安装目录）——**对所有工作区生效、会出现在
+   插件面板、重启自动装配**。因此：
+   - **仅在用户明确要求/同意做插件时才 define**；用户没提插件的事，就不要建插件。
+   - **优先复用**：先 `cordis(op=inspect)` 看已有插件、`cordis(op=services)` 看宿主服务；
+     磁盘插件（tool-art / tool-rig / tool-design / tool-web / tool-harness / tool-memory …）
+     与宿主工具能完成的事，一律直接调用，不要"为了省几次工具调用"另建插件代跑。
+   - 临时验证用途：用完 `cordis(op=stop)` / `undefine` **并提醒用户删除插件面板条目**，
+     否则会长期污染全局插件面（历史事故：agent 自建的探针插件被自动固化，用户不知情地
+     多出一个插件、且其代码随后覆盖了同名磁盘插件的定义）。
+2. **只读 op 不受此限**：inspect / services / query 随时可用，鼓励先查再写。
+3. 磁盘插件包是插件的长期载体（真源在仓库 plugins-dist/ 或 .pair/plugins/）；
+   动态插件适合"用户明确要的临时/实验能力"，不适合悄悄替用户沉淀资产。
 
 ★ 完整版用户文档：docs/plugin-development.md（ctx 全表/示例/坑）+ docs/go-core-capabilities.md（Go 内核能力清单）。
 ★ 写插件前先 cordis(op=services) 查精确签名；动手前可看磁盘插件现成范例（.pair/plugins/core-api、tool-memory、tool-system 等——tool-memory 是「单工具 + op 分派 + dynamicApproval」的现成范例）。
@@ -60,6 +75,26 @@ myPlugin.inject = ['fs']
 ### inject 声明服务（9 个，声明后 ctx.xxx 可用；未声明访问 undefined）
 fs（工作区受限，越界拦截）/ web（GET，60s 超时 4MB）/ bash（120s 超时；git-bash 非 cmd）/ sse / ws / logger(scope)→{log,info,warn,debug,error} / timer / kernel / market
 另有静态服务：app（已无条件注入）、workspaceRoot（ctx.get('workspaceRoot')）、store（会话存储）。
+
+## 2.5 工作区根解析（路径纪律 ★「产物写进别的工作区」的坑）
+
+插件内所有路径解析（ctx.fs / ctx.bash / ctx.binary / ctx.process / grep / glob / tree …）
+按以下优先级取根（宿主统一入口 ctxServiceRoot，与 binary/bash 等服务同源）：
+
+1. 当前**工具调用会话**的工作区根（agent 执行本插件的工具时自动绑定，含并发多会话隔离）
+2. UI invoke 绑定根（浏览器 client 半 `ui.invoke` 发起时刻的当前主工作区）
+3. **装载期会话根**（`cordis(op=run)` 装载本插件的那个会话的工作区）
+4. 插件上下文根（随宿主主工作区切换**实时更新**）
+5. 全局主工作区兜底；全部取不到 → 显式报错「工作区根为空」（绝不静默落到别的工作区）
+
+纪律：
+
+- 要"当前正在干活的会话"的工作区 → 用**相对路径**（`out/a.png`、`src/x.ts`），别写死绝对路径。
+- 要"用户当前所见工作区"（与具体会话无关的 UI 操作）→ 读 `ctx.app.workspaceRoot`（实时 accessor）。
+- 要"插件自己所在目录"（读 bundle 资源/写插件私有缓存）→ 用 `ctx.binary.dir()` 或插件目录语义，别拿工作区根凑。
+- 不要在 `apply`（装载）里写工程产物：apply 只做注册/调度；落盘交给工具 execute（那才有精确的会话根）。
+- 排查"产物跑到别的工作区"：看 `cordis(op=inspect) id=xxx` 的 diag，确认写入发生在哪个阶段
+  （apply / timer 回调 / 工具 execute）——不同阶段的根不同，见上表。
 
 ## 3. 注册工具（harness / ctx.tools）
 
@@ -169,6 +204,7 @@ Node API（require/setTimeout/fetch/process 等）沙箱中**不可用**，调�
 | req.query 不是对象 | RawQuery 字符串 | 自行 URLSearchParams 解析 |
 | ctx.bash 报 move 不存在 | 执行器是 git-bash | 用 mv/cp；中文输出注意编码 |
 | ctx.fs 越界 / web.fetch 只 GET | 设计约束 | 工作区外走内核接口；POST 走 ctx.http 反向或 bash curl |
+| 插件写出的文件跑到别的工作区 | 写入发生在无会话绑定的上下文（apply / timer / 事件回调）且落到了旧快照根 | 2026-09-20 起宿主已修：根随主工作区实时更新 + 装载期绑定发起会话根（见 §2.5）。仍异常时把落盘移进工具 execute，或用相对路径 + `ctx.app.workspaceRoot` 自校验 |
 
 ## 9. 数据纪律
 

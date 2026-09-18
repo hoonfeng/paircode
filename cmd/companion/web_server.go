@@ -365,6 +365,12 @@ func startWebUI(port int) {
 				agent.SetCodeGraphDB(nil)
 				agent.SetCodeGraphRoot("")
 			}
+			// ★ 2026-09-20 插件宿主工作区根同步（修「插件不按工作区切路径 / 产物
+			//   写进别的工作区」）：宿主 root 与各插件上下文根原先只在 NewPluginHost
+			//   时快照，主工作区切换后不再更新 → 插件 ctx 服务（fs/bash/binary/…）
+			//   仍按启动工作区解析路径。root 为空（无主工作区）时同步为空串，
+			//   让插件内的路径解析显式报错，而不是静默沿用旧工作区。
+			ph.SetWorkspaceRoot(root)
 		}
 	}
 	mux := http.NewServeMux()
