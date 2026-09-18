@@ -49,7 +49,11 @@ const publishDir = path.join(root, '.pair', 'publish')
 const npmrcPath = path.join(publishDir, '.npmrc')
 const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmjs.org'
 const SCOPED = '@paircode'
-const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
+// ★ 发布包顶层白名单（2026-09-19 补 'lib'）：tool-voice 的 Node 半实现在 lib/ 下
+//   （index.js 里 require('./lib/{wav,dsp,fixture,deps,analyze,ops,project,verify}')），
+//   漏掉它会把 voice 发成「缺实现模块」的坏包（0.3.2 实测：tarball 里没有 lib/，装载即报错）。
+//   ⚠️ 同时必须同步白名单到 buildPackage 覆写的 pkg.files —— npm publish <dir> 仍按 files 字段过滤。
+const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'README.md']
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
 // ── 代理配置：Web 配置(.pair/publish/.proxy 文件) → PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY ──
 // ★ node fetch 不读 HTTP(S)_PROXY 环境变量，故线上查询改走 curl（天然支持 -x）
@@ -360,7 +364,9 @@ function buildPackage(name) {
     if (!pkg.keywords.includes('paircode')) pkg.keywords.push('paircode')
     pkg.license = pkg.license || 'MIT'
     pkg.publishConfig = { access: 'public' }
-    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'package.json']
+    // 与 PUBLISH_FILES 同步（含 'lib'）：npm publish <dir> 会再按 files 字段过滤一遍，
+    // 只改拷贝白名单而漏掉这里，lib/ 照样进不了 tarball。
+    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json']
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
     return { ok: true, version: pkg.version }
   } catch (e) {
