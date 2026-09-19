@@ -37,6 +37,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
+const { pathToFileURL } = require('node:url');
 
 const BRIDGE_DIR = process.env.CORDIS_BRIDGE_DIR || '.';
 const PLUGINS_FILE = path.join(BRIDGE_DIR, 'plugins.json');
@@ -528,7 +529,14 @@ function readPluginSpecs() {
   return raw.map((entry) => {
     if (typeof entry === 'string') return { spec: entry, runtime: 'node' };
     if (entry && typeof entry === 'object' && typeof entry.spec === 'string') {
-      return { spec: entry.spec, runtime: entry.runtime || 'node' };
+      return {
+        spec: entry.spec,
+        runtime: entry.runtime || 'node',
+        // ★ 2026-09-19：本地插件包目录（磁盘桥轨插件交接）——非空 ⇒ 装载目标为
+        //   <dir>/package.json#main（见 resolveLocalPluginEntry）；spec 仍是规范名，
+        //   日志 / 工具归属 node-bridge:<name> / 面板记录一律用它。
+        dir: typeof entry.dir === 'string' ? entry.dir : '',
+      };
     }
     return null;
   }).filter(Boolean).filter((e) => {
@@ -571,6 +579,25 @@ function resolvePluginApply(candidate) {
   return undefined;
 }
 
+// resolveLocalPluginEntry 本地目录插件（plugins.json 条目带 dir）的入口文件绝对路径：
+//   读 <dir>/package.json 的 main（缺省 index.js）。
+// ★ 宿主把「声明了运行期 npm 依赖的磁盘插件包」（仓库内置 / 开发态 junction 挂载 /
+//   手工复制）按 npm 安装等价形态交接给桥：spec = 规范名（<目录名>@<版本>），
+//   dir = 插件包目录；依赖由插件包自带 node_modules 解析，无需 npm install。
+function resolveLocalPluginEntry(dir) {
+  const abs = path.resolve(dir);
+  let main = 'index.js';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(abs, 'package.json'), 'utf8'));
+    if (pkg && typeof pkg.main === 'string' && pkg.main.trim()) main = pkg.main.trim();
+  } catch (e) {
+    throw new Error(`读插件包 package.json 失败（${abs}）：${e.message}`);
+  }
+  const entry = path.isAbsolute(main) ? main : path.join(abs, main);
+  if (!fs.existsSync(entry)) throw new Error(`插件入口不存在：${entry}`);
+  return entry;
+}
+
 async function loadPlugins() {
   const specs = readPluginSpecs();
   const loaded = [];
@@ -578,12 +605,23 @@ async function loadPlugins() {
     const at = String(spec.spec).lastIndexOf('@');
     const pkgName = at > 0 ? String(spec.spec).slice(0, at) : String(spec.spec);
     const ver = at > 0 ? String(spec.spec).slice(at + 1) : '';
+    // ★ 2026-09-19：本地目录条目 → import 目标换成 <dir>/package.json#main；
+    //   pkgName 保持规范名，故工具归属 / 记录名 / 版本显示全部不变。
+    let importTarget = pkgName;
+    if (spec.dir) {
+      try {
+        importTarget = pathToFileURL(resolveLocalPluginEntry(spec.dir)).href;
+      } catch (e) {
+        console.error(`[bridge] 本地插件 ${pkgName} 入口解析失败:`, (e && e.message) || e);
+        continue;
+      }
+    }
     try {
       let applyFn;
       if (spec.runtime === 'dsh') {
         // ★ Round4：cordis4 + cordis4 服务面装载分支
         const { Context } = await import('@deepseek-ai/cordis');
-        const mod = await import(pkgName);
+        const mod = await import(importTarget);
         const candidate = mod.default || mod;
         applyFn = resolvePluginApply(candidate);
         if (typeof applyFn !== 'function') {
@@ -594,7 +632,7 @@ async function loadPlugins() {
         await applyFn(ctx, {});
       } else {
         const { Context } = await import('@cordisjs/core');
-        const mod = await import(pkgName);
+        const mod = await import(importTarget);
         const candidate = mod.default || mod;
         applyFn = resolvePluginApply(candidate);
         if (typeof applyFn !== 'function') {

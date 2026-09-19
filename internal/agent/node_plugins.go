@@ -40,6 +40,13 @@ type nodePluginsFile struct {
 type nodePluginEntry struct {
 	Spec    string `json:"spec"`
 	Runtime string `json:"runtime,omitempty"` // node（cordis3 默认）| dsh（cordis4）
+	// ★ 2026-09-19：本地插件包目录（磁盘桥轨插件交接用，见 syncDiskNodeTrackPlugins）。
+	//   非空 ⇒ spec 的 <name>@<ver> 只作「装载规范名」（清单记录 / 工具归属
+	//   node-bridge:<name> / 面板版本显示全部复用既有链路），实际装载目标是
+	//   <Dir>/package.json#main（bridge_node.js resolveLocalPluginEntry），
+	//   依赖由插件包自带 node_modules 解析（无需 npm install）。
+	//   空 ⇒ 按 npm 包名从桥 node_modules 装载（市场安装形态）。
+	Dir string `json:"dir,omitempty"`
 }
 
 // UnmarshalJSON 兼容旧字符串条目（"pkg@ver"）与新对象条目。
@@ -401,6 +408,107 @@ func npmInstallPlugin(bridgeDir, spec string) error {
 		return fmt.Errorf("npm install %s 失败: %v（%s）", spec, err, last)
 	}
 	return nil
+}
+
+// ── 磁盘插件包 → Node 桥交接（2026-09-19）────────────────────────────
+//
+// 背景：LoadGlobalPlugins 扫到「声明了运行期 npm 依赖」的磁盘插件包时判定为
+// Node 桥轨并跳过 goja 轨（internal/agent/toolset.go nodePluginRuntime 分支），
+// 但此前**没有任何路径把它登记给桥** —— plugins.json 只由市场 npm 安装
+// （marketInstallNPMPluginNode）写入 ⇒ 随仓库内置 / 开发态 junction 挂载
+// （scripts/dev-sync-dist-plugins.mjs）/ 手工复制进来的桥轨插件包「谁都不装载」：
+// 不注册工具、不在 /api/plugins、工具集添加里也搜不到（现象：市场显示已安装、
+// 面板 tab 在，但插件列表与工具集里没有它）。实测 tool-voice（声明 @audio/*）即此例。
+//
+// 交接形态对齐 npm 安装（等价替代）：条目 {spec:"<目录名>@<版本>", runtime:"node",
+// dir:"<插件包目录>"} —— spec 保持规范名（记录名 / 工具归属 / 面板版本显示零改动），
+// 仅装载目标由桥按 dir 解析本地入口（bridge_node.js resolveLocalPluginEntry）；
+// 依赖（如 @audio/*）由插件包自带 node_modules 解析，**无需 npm install**。
+
+// diskNodeTrackPlugin 磁盘上待交接给 Node 桥的插件包。
+type diskNodeTrackPlugin struct {
+	Name    string // 插件包目录名（= 桥装载规范名）
+	Version string // package.json#version（可空）
+	Dir     string // 插件包目录（绝对路径）
+}
+
+// syncDiskNodeTrackPlugins 幂等登记磁盘桥轨插件到桥清单，并清理已消失的本地条目。
+// 返回 changed=true 表示清单有增删改（调用方据此启动 / 重启桥装载）。
+func syncDiskNodeTrackPlugins(plugins []diskNodeTrackPlugin) (bool, error) {
+	pluginsFile := filepath.Join(nodeBridgeDir(), "plugins.json")
+	doc, err := readNodePluginsFile(pluginsFile)
+	if err != nil {
+		return false, err
+	}
+	changed := false
+
+	// ① 自愈：本地条目（Dir 非空）指向的插件包已消失 → 移除（卸载 / 挂载清理后的残留）
+	kept := doc.Plugins[:0]
+	for _, e := range doc.Plugins {
+		if e.Dir != "" {
+			if st, err := os.Stat(e.Dir); err != nil || !st.IsDir() {
+				log.Printf("[global-plugin] 桥清单清理失效本地条目 %s（插件包已不存在：%s）", e.Spec, e.Dir)
+				changed = true
+				continue
+			}
+		}
+		kept = append(kept, e)
+	}
+	doc.Plugins = kept
+
+	// ② 登记 / 更新：本地条目按目录匹配（改名 / 改版本同步更新）；
+	//    市场 npm 安装形态（无 dir）已存在同名 spec 时不重复登记（npm 来源优先）。
+	for _, p := range plugins {
+		spec := p.Name
+		if p.Version != "" {
+			spec = p.Name + "@" + p.Version
+		}
+		idx := -1
+		for i, e := range doc.Plugins {
+			if e.Dir != "" && samePluginPath(e.Dir, p.Dir) {
+				idx = i
+				break
+			}
+			if e.Dir == "" && e.Spec == spec {
+				idx = -2 // npm 安装形态已存在 → 保持不动
+				break
+			}
+		}
+		switch {
+		case idx == -2:
+		case idx >= 0:
+			if doc.Plugins[idx].Spec != spec || doc.Plugins[idx].Runtime != "node" {
+				doc.Plugins[idx].Spec = spec
+				doc.Plugins[idx].Runtime = "node"
+				changed = true
+			}
+		default:
+			doc.Plugins = append(doc.Plugins, nodePluginEntry{Spec: spec, Runtime: "node", Dir: p.Dir})
+			changed = true
+		}
+	}
+	if !changed {
+		return false, nil
+	}
+	if err := writeNodePluginsFile(pluginsFile, doc); err != nil {
+		return false, err
+	}
+	log.Printf("[global-plugin] Node 桥清单已更新（%d 个磁盘桥轨插件）", len(plugins))
+	return true, nil
+}
+
+// samePluginPath 判断两路径是否指向同一目录（Windows 大小写不敏感）。
+func samePluginPath(a, b string) bool {
+	ca, err1 := filepath.Abs(a)
+	cb, err2 := filepath.Abs(b)
+	if err1 != nil || err2 != nil {
+		return a == b
+	}
+	ca, cb = filepath.Clean(ca), filepath.Clean(cb)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(ca, cb)
+	}
+	return ca == cb
 }
 
 // uninstallNodePlugin 卸载 Node 桥插件：plugins.json 移除 + patch 移除 + 重启桥。

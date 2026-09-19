@@ -657,6 +657,9 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 		return 0
 	}
 	n := 0
+	// ★ 2026-09-19：判定为 Node 桥轨的磁盘插件包（声明运行期 npm 依赖）先收集，
+	//   循环结束后统一交接给 Node 桥（见 syncDiskNodeTrackPlugins 注释）。
+	var nodeTrack []diskNodeTrackPlugin
 	for _, e := range entries {
 		if !isPluginDirEntry(globalPluginsDir(), e) || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
 			continue
@@ -681,6 +684,14 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 				"peerDependencies": pkg.PeerDependencies,
 			}) != "" {
 				log.Printf("[global-plugin] %s 是 Node 桥轨插件（声明了运行期 npm 依赖）——交由 Node 桥装载，跳过 goja 轨", e.Name())
+				// ★ 2026-09-19 修复：此前只打日志跳过 ⇒ 桥轨磁盘插件包「谁都不装载」
+				//   （不注册工具 / 不在 /api/plugins / 工具集添加搜不到）。现按 npm
+				//   安装等价形态交接给 Node 桥（清单条目 + dir 本地装载）。
+				nodeTrack = append(nodeTrack, diskNodeTrackPlugin{
+					Name:    e.Name(),
+					Version: pkg.Version,
+					Dir:     filepath.Join(globalPluginsDir(), e.Name()),
+				})
 				continue
 			}
 		}
@@ -689,6 +700,21 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 			continue
 		}
 		n++
+	}
+	if len(nodeTrack) > 0 {
+		changed, err := syncDiskNodeTrackPlugins(nodeTrack)
+		if err != nil {
+			log.Printf("[global-plugin] 磁盘桥轨插件登记 Node 桥清单失败: %v（%d 个插件可能未装载）", err, len(nodeTrack))
+		} else if changed && globalNodeBridge != nil {
+			// 清单有变化且桥已在运行 → 重启桥装载新清单（与市场安装同法）
+			globalNodeBridge.Close()
+			globalNodeBridge = nil
+		}
+		if _, err := ensureNodeBridge(ph, nodeBridgeDir()); err != nil {
+			log.Printf("[global-plugin] Node 桥启动失败（%d 个磁盘桥轨插件未装载）：%v", len(nodeTrack), err)
+		} else {
+			log.Printf("[global-plugin] 已交接 %d 个磁盘桥轨插件给 Node 桥装载", len(nodeTrack))
+		}
 	}
 	return n
 }
@@ -1795,13 +1821,13 @@ func toolsetVisibleToolsFor(ph *PluginHost, ts *Toolset) map[string]bool {
 		}
 		// ★ JS/磁盘插件条目仅当插件 running 时其工具才进白名单
 		//   （插件未启用/未装载 → 整条跳过，工具不暴露）。
-		if ph == nil || ph.State(p.Name) != PluginRunning {
+		// ★ 2026-09-19：Node 桥插件（含磁盘桥轨插件交接）无 JSDef 状态，但已注册工具
+		//   （归属键 node-bridge:<name>）——按 HasPluginByName 等价放行，否则该插件
+		//   加入工具集后其工具仍进不了 agent 可见白名单（现象：加了却还是不可见）。
+		if ph == nil || !ph.HasPluginByName(p.Name) {
 			continue
 		}
-		var tns []string
-		if ph != nil {
-			tns = ph.PluginToolsByPlugin()[p.Name]
-		}
+		tns := ph.PluginToolsByName(p.Name)
 		for _, tn := range tns {
 			if tn != "" && !disabled[tn] {
 				keep[tn] = true

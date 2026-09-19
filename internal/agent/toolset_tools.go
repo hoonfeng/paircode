@@ -471,7 +471,7 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 						name = mapped // dsh-agent-teams → agent-teams（同源映射为项目名）
 					}
 				}
-				if tools := ph.PluginToolsByPlugin()[pn]; len(tools) > 0 {
+				if tools := ph.PluginToolsByName(pn); len(tools) > 0 {
 					src = ToolsetPlugin{Name: name, Purpose: "DSH/npm 桥插件（node-bridge）", Builtin: "bridge", Tools: tools}
 					found = true
 				}
@@ -514,7 +514,7 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 				want[t] = true
 			}
 		}
-		all := ph.PluginToolsByPlugin()[src.Name]
+		all := ph.PluginToolsByName(src.Name)
 		if len(all) == 0 {
 			return "", fmt.Errorf("插件 %q 已装载但未注册任何工具（无法按 tools 白名单筛选；去掉 tools 参数整插件加入）", src.Name)
 		}
@@ -594,7 +594,7 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 		// 整组移出 = 全部工具移出 agent 可用集合：插件记入工具集（条目 +
 		// DisabledTools 全量摘除）+ 禁用全部工具，重启后保持禁用（enable_tool 可恢复）。
 		if ph != nil {
-			if tns := ph.PluginToolsByPlugin()[pn]; len(tns) > 0 {
+			if tns := ph.PluginToolsByName(pn); len(tns) > 0 {
 				entry := &ToolsetPlugin{Name: pn, Purpose: pluginPurposeOf(ph, pn), DisabledTools: append([]string(nil), tns...)}
 				ts.Plugins = append(ts.Plugins, *entry)
 				if reg := pluginHostRegistry(ph); reg != nil {
@@ -706,7 +706,7 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 				if !t.Enabled {
 					reg.SetToolEnabled(tool, true)
 				}
-				if tns := ph.PluginToolsByPlugin()[pn]; len(tns) > 0 {
+				if tns := ph.PluginToolsByName(pn); len(tns) > 0 {
 					entry := &ToolsetPlugin{Name: pn, Purpose: pluginPurposeOf(ph, pn)}
 					ts.Plugins = append(ts.Plugins, *entry)
 					if err := saveToolset(root, scope, ts); err != nil {
@@ -891,7 +891,7 @@ func toolRegisteredBy(ph *PluginHost, pn, tool string) bool {
 	if ph == nil {
 		return false
 	}
-	for _, tn := range ph.PluginToolsByPlugin()[pn] {
+	for _, tn := range ph.PluginToolsByName(pn) {
 		if tn == tool {
 			return true
 		}

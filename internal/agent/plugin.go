@@ -1604,6 +1604,35 @@ func (h *PluginHost) PluginToolsByPlugin() map[string][]string {
 	return out
 }
 
+// PluginToolsByName 按「插件名」取该插件注册的工具清单（快照）：
+// 先直接命中 pluginTools 键；未命中则回退 Node 桥归属键 "node-bridge:<name>"。
+// ★ 2026-09-19：Node 桥装载的插件（含磁盘桥轨插件交接）在 pluginTools 里的键是
+//   "node-bridge:<name>"，而插件记录（/api/plugins）、工具集条目、前端「工具集 → 添加」
+//   提交用的都是不带前缀的 <name>——不做回退会导致：添加报「宿主未定义插件」、
+//   加入后工具也进不了 agent 可见白名单（现象：插件列表有它，工具集里却加不进/不生效）。
+func (h *PluginHost) PluginToolsByName(name string) []string {
+	if name == "" {
+		return nil
+	}
+	snapshot := h.PluginToolsByPlugin()
+	if tns := snapshot[name]; len(tns) > 0 {
+		return tns
+	}
+	return snapshot["node-bridge:"+name]
+}
+
+// HasPluginByName 插件是否「已装载可用」：JS 插件 running，或已注册工具（含 Node 桥
+// 归属键回退，见 PluginToolsByName）。
+func (h *PluginHost) HasPluginByName(name string) bool {
+	if name == "" {
+		return false
+	}
+	if h.State(name) == PluginRunning {
+		return true
+	}
+	return len(h.PluginToolsByName(name)) > 0
+}
+
 // PluginToolOwners 工具名 → 归属插件（快照；toolOwner 反向表）。
 func (h *PluginHost) PluginToolOwners() map[string]string {
 	h.mu.Lock()
