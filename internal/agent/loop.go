@@ -49,6 +49,15 @@ const (
 	// running 会话的流式生成进度（content/reasoning/toolSegments），前端据此重建
 	// 占位消息，避免断线期间事件丢失导致内容截断。
 	EventSnapshot EventType = "snapshot"
+
+	// EventStatusRefresh 状态刷新信号（★ 2026-09-21）：会话**真正结束**时
+	// （Loop goroutine 的 defer 里把 Running 置 false 之后）由 SessionManager 补发，
+	// WS 端点收到后只补推一条 status 帧（runningConvs 快照），本事件本身不下发前端。
+	// 背景：自主模式下 EventDone 可能早于会话真正结束（工作 agent 每轮自然结束都发 done，
+	// 之后仍有监督者回合与收尾），done 后 50ms 推的 status 仍含本会话（正确），而会话真正
+	// 结束时不再有任何事件 → 前端「运行中」标记永久残留（会话列表状态 / 输入框 / 插件徽标）。
+	// 本信号不携带内容；非 WS 消费方（宿主 OnEvent）应显式忽略。
+	EventStatusRefresh EventType = "status-refresh"
 )
 
 // CacheBoundary 分隔系统提示词静态前缀与动态后缀。
@@ -163,11 +172,9 @@ type Loop struct {
 	// 宿主（web/UI）通过此回调将用户的实时反馈传递给 Loop。
 	OnFeedback func() string
 
-	// OnNextTask 自主模式下，当 agent 自然终止（无 tool_call + 有正文）且 follow-up 队列为空时，
-	// 回调返回下一阶段的任务描述。返回非空字符串则自动注入 follow-up 消息让 agent 继续执行；
-	// 返回 "" 表示无后续任务，正常退出。
-	// 宿主（session_manager）通过此回调从任务队列中 pop 下一条待办任务。
-	OnNextTask func() string
+	// ★ 2026-09-21 旧自主模式删除：原 OnNextTask（自主模式下自然终止时从任务队列拉
+	//   「下一阶段」任务）已被「自主模式决策器」（autopilot.go：工作 agent 自然结束后由
+	//   会话续轮处调用插件注册的决策器，判定继续/完成）取代——循环内不再持有自主续跑钩子。
 
 	// OnBatchPersist 批量持久化回调（可空）。每轮迭代结束立即回调一次当前完整消息列表，
 	// 确保 tool_call 与 tool_result 配对完整写入磁盘。loop.Run 返回后 defer 中会额外调用
@@ -264,6 +271,19 @@ type Loop struct {
 	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	CompactRequested bool   // 外部设置后下轮迭代触发上下文精简（供主动精简 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
+
+	// AgentName 事件来源 Agent 名：空 = 工作 agent 本身（主 Loop）；非空 = 子 agent 回合
+	// （如自主模式的「监督者」）。emit 时回填到事件的 AgentName 字段——前端据此分区渲染
+	// 看板（监督者轨迹 vs 工作 agent 输出），实现可观测/可溯源。由 RunSubagent 设置。
+	AgentName string
+	// forceGoLoop 强制走 Go 原生循环（子 agent 回合专用）：决策器回调运行在插件 JS 栈上，
+	// 若再进入 agentloop 的 JS 循环实现会在同一 VM 上自锁。见 subagent.go。
+	forceGoLoop bool
+
+	// MaxSuperviseRounds 自主模式监督轮数上限（0/负 = 内核默认 DefaultMaxSuperviseRounds）。
+	// 由装配参数透传（agentloop/autopilot 插件可经 ctx.loopFactory.register 覆盖），
+	// 会话层经 MaxSuperviseRoundsOrDefault() 读取（见 autopilot.go）。
+	MaxSuperviseRounds int
 
 	// stats 本次运行的统计累加器（★ 2026-09-12 后端统计改造，见 run_stats.go）：
 	// 由 SessionManager 在会话启动时挂载（SetRunStats），运行期间累加步数/工具调用
@@ -419,6 +439,10 @@ func (l *Loop) emit(e Event) {
 	}
 	if e.Step == 0 {
 		e.Step = l.StepNo
+	}
+	// ★ 子 agent 回合：来源标注（前端看板按 AgentName 分区；空 = 工作 agent 本身）。
+	if e.AgentName == "" && l.AgentName != "" {
+		e.AgentName = l.AgentName
 	}
 	if l.OnEvent != nil {
 		l.OnEvent(e)
@@ -646,7 +670,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	l.resetLive()
 	// ★ agentloop 核心外置：全局注册了 JS 循环实现时，委托 JS 驱动循环
 	//   （Go 保留能力经能力代理注入；停用插件即还原 Go 循环，可回退）。
-	if impl := CurrentJSLoop(); impl != nil {
+	//   ★ 子 agent 回合（forceGoLoop）例外：其调用栈在插件 JS 回调内，再进入 JS
+	//   循环实现会在同一 VM 上自锁（见 subagent.go）。
+	if impl := CurrentJSLoop(); impl != nil && !l.forceGoLoop {
 		return l.runWithJS(ctx, task, history, impl)
 	}
 	// ★ Go 默认循环标记 deprecated（agentloop 核心已外置 JS）。
@@ -1059,21 +1085,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.ephemeralMsgs = append(l.ephemeralMsgs, followUpMsgs...)
 				l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条跟进消息，继续处理", len(followUpMsgs))})
 				l.contentOnlyIters = 0 // 重置内容循环计数，给跟进消息充分响应机会
-			} else if l.Autonomous && l.OnNextTask != nil {
-				// ② 自主模式：从 OnNextTask 获取下一阶段任务，自动注入 follow-up 持续驱动
-				if nextTask := l.OnNextTask(); nextTask != "" {
-					l.followUpQueue = append(l.followUpQueue, Message{Role: RoleUser, Content: nextTask})
-					l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nextTask})
-					l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("进入下一阶段：%s", truncStr(nextTask, 80))})
-					l.contentOnlyIters = 0
-					l.LogEntry("system", "next_phase", "进入下一阶段："+truncStr(nextTask, 80))
-				} else {
-					l.finishResult = &assistant.Content
-					l.LastTurnReason = l.turnStickyReason(TurnCompleted)
-					l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete", TurnReason: string(l.LastTurnReason)})
-					return msgs, nil
-				}
 			} else {
+				// ② 自然完成：整轮结束（自主模式下的「监督 → 续跑」在宿主会话续轮处，
+				//   见 autopilot.go / session_manager 监督续轮；循环内不再自行续跑）。
 				l.finishResult = &assistant.Content
 				l.LastTurnReason = l.turnStickyReason(TurnCompleted)
 				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete", TurnReason: string(l.LastTurnReason)})

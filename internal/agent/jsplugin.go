@@ -1198,7 +1198,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("process", processObj)
 
-	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 setFactory 单槽位）。
+	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（★ 装配器链，多插件叠加）。
 	// apply(opts) → overrides | null：
 	//   opts = { system, stepBudget, toolCallBudget, maxToolBudgetSegments, maxContextTokens,
 	//            autonomous, maxAutonomousMinutes, checkpointInterval,
@@ -1207,7 +1207,11 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//            步数/工具调用取较大者——派生，装配器不可覆盖；两个预算可覆盖）。
 	//   返回同形状对象时非空字段覆盖默认装配参数（如追加提示词/调迭代上限/切换审核模式）；
 	//   返回 null/undefined 表示不改动。注册即替换全局 LoopFactory 单槽位（后注册覆盖先注册），
-	//   插件卸载时自动还原默认工厂。真正替换循环内核留给宿主 Go 代码（ReplaceLoopFactory）。
+	//   ★ 2026-09-21 改为**装配器链**（RegisterLoopAssembler，按注册顺序叠加）：旧的
+	//   单槽位「后注册覆盖」会让后装载插件把先装载插件的装配参数整体吃掉（实测 bug：
+	//   autopilot 装载后 agentloop 的 systemAppend/预算/审核模式全部失效）。同插件名
+	//   重复注册 = 替换该项；插件卸载时自动移除还原。真正替换循环内核仍留给宿主 Go
+	//   代码（ReplaceLoopFactory）。
 	loopFactoryObj := vm.NewObject()
 	loopFactoryObj.Set("register", func(call goja.FunctionCall) goja.Value {
 		applyVal := call.Argument(0)
@@ -1216,9 +1220,9 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			panic(vm.NewTypeError("ctx.loopFactory.register: 参数必须是函数 apply(opts) → overrides"))
 		}
 		bridge := &jsLoopFactoryBridge{vm: vm, apply: applyFn, plugin: p}
-		restore := ReplaceLoopFactory(bridge)
+		restore := RegisterLoopAssembler(p.def.name, bridge.applyAssembly)
 		p.addCleanup(restore)
-		p.def.addDiag("注册 agent 循环装配器（LoopFactory 单槽位，卸载自动还原）")
+		p.def.addDiag("注册 agent 循环装配器（装配器链：多插件按序叠加，卸载自动还原）")
 		return goja.Undefined()
 	})
 	// ★ agentloop 核心外置：registerLoop(impl) 注册 JS 循环实现（Run 委托 JS 驱动）
@@ -1228,9 +1232,16 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//   宿主两个跨轮边界（用户输入 / 段续跑）委托该实现；未注册或执行失败 → Go 默认实现。
 	//   卸载自动还原（插件停用即回退，零风险）。
 	p.attachHandoffRegister(loopFactoryObj)
+	// ★ 2026-09-21 自主模式插件化：registerAutopilot({id?, decide}) 注册决策器——
+	//   工作 agent 自然结束时宿主调用它（审核/评判/决定下一步），插件经 ctx.subagent
+	//   能力派生「监督者」回合自行核查（见 autopilot.go / subagent.go）。未注册 → 无监督。
+	p.attachAutopilotRegister(loopFactoryObj)
 	// ★ LLM 请求/响应完整追踪（llm-trace 缓存分析数据面）：ctx.llmtrace.register(fn)
 	p.attachLLMTrace(ctxObj)
 	ctxObj.Set("loopFactory", loopFactoryObj)
+	// ★ 2026-09-21 ctx.subagent：子 agent 回合能力（独立系统提示/工具白名单/来源标注），
+	//   供自主模式等插件派生「带工具的独立 agent 回合」用（能力 Go / 策略 JS）。
+	p.attachSubagentObject(ctxObj)
 	// ★ 2026-09-12 ctx.handoff：会话交接无状态能力（阈值 / 锚点指纹 / token 估算 /
 	//   规则摘要 / 相关性解析）。口径桥接自 Go（单一真源）——插件内的交接策略复用
 	//   同一套判定，避免两侧漂移导致锚点或阈值不一致（缓存前缀稳定的前提）。

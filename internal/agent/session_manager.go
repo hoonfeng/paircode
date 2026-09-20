@@ -81,10 +81,15 @@ type LoopOpts struct {
 	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
-	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
-	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
-	// Provider 执行规划阶段（任务分解），与主 Provider 区分以支持不同模型。
-	PlanProvider Provider
+	// MaxSuperviseRounds 自主模式监督轮数上限（0/负 = 内核默认 DefaultMaxSuperviseRounds）。
+	//   ★ 2026-09-21：旧自主模式的 PlanProvider（外层规划 Loop / 设计者-执行者双层架构）
+	//   已随该架构删除——自主模式现由插件决策器驱动（autopilot.go），监督者回合经
+	//   ctx.subagent 能力复用本会话模型（不再需要独立规划模型槽位）。
+	MaxSuperviseRounds int
+	// ★ 2026-09-21 SkipPluginAssembly 跳过插件装配器链（子 agent 回合专用，见 subagent.go）：
+	//   子 agent 由插件 JS 回调栈内的宿主能力创建（如 autopilot 决策器经 ctx.subagent.run），
+	//   此时调用插件装配器要取该插件 VM 锁——若正是当前持锁插件即自死锁（goja 锁非重入）。
+	SkipPluginAssembly bool
 	// ★ 2026-09-13：原 ResumeContext（会话连贯性上下文 → 背景上下文快照）已随该实现删除。
 	//   会话连贯性上下文改由提交消息（handoff.go 交接视图）与任务清单工具承载；
 	//   历史进度/摘要等不再每轮注入（每轮必变会稀释前缀缓存命中率）。
@@ -684,6 +689,30 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	loop.ReviewBlacklist = opts.ReviewBlacklist
 	loop.ReviewWhitelist = opts.ReviewWhitelist
 
+	// ★ 2026-09-21 自主模式（插件化）：绑定会话运行环境——插件（如 autopilot）经
+	//   ctx.subagent 能力派生「监督者」等子 agent 回合时，复用本会话的模型/工具面/
+	//   事件通道/审核策略/精简配置；子 agent 事件带 AgentName 经同一通道下发前端
+	//   （看板分区）。会话结束（下方 Run goroutine 的 defer）解除绑定。
+	subagentRt := &SubagentRuntime{
+		ConvID:           convID,
+		WorkspaceRoot:    opts.WorkspaceRoot,
+		Provider:         loop.Provider,
+		Registry:         opts.Registry,
+		System:           opts.System,
+		Events:           sess.Events,
+		Approve:          loop.Approve,
+		ReviewMode:       opts.ReviewMode,
+		ReviewProvider:   opts.ReviewProvider,
+		ReviewBlacklist:  opts.ReviewBlacklist,
+		ReviewWhitelist:  opts.ReviewWhitelist,
+		Compressor:       opts.Compressor,
+		MaxContextTokens: opts.MaxContextTokens,
+		StepBudget:       opts.StepBudget,
+		ToolCallBudget:   opts.ToolCallBudget,
+		ParentCtx:        runCtx,
+	}
+	unregisterSubagent := RegisterSubagentRuntime(subagentRt)
+
 	// OnFeedback：每轮 LLM 调用前检查用户运行时反馈（非阻塞）
 	loop.OnFeedback = func() string {
 		select {
@@ -764,25 +793,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	sess.Loop = loop
 
-	// ★ 自主模式：OnNextTask 回调（自然终止时自动注入下一阶段 follow-up）
-	if opts.Autonomous {
-		loop.OnNextTask = func() string {
-			// 从 TaskManager 获取当前对话的下一条待办任务
-			localRoot := opts.WorkspaceRoot
-			if localRoot == "" {
-				return ""
-			}
-			tm := UseTaskManager(localRoot)
-			tasks := tm.ListPendingTasks(convID)
-			if len(tasks) == 0 {
-				return ""
-			}
-			next := tasks[0]
-			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先用任务清单工具将此项标记为 in_progress，然后开始执行。完成后更新状态。",
-				next.Subject, next.Description)
-			return msg
-		}
-	}
+	// ★ 2026-09-21 旧自主模式删除：原 OnNextTask 回调（从 TaskManager 队列拉「下一阶段任务」）
+	//   已被「自主模式决策器」（插件 ctx.loopFactory.registerAutopilot，见 autopilot.go）
+	//   取代——由插件扮演「人」角色审核/评判/决定下一步，宿主在下方的续轮循环中调用。
 
 	// 注册 ask_user 工具：阻塞等用户回答（从 askCh 读）
 	// Register 同名覆盖，安全替换调用方可能已注册的旧版本。
@@ -926,6 +939,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   避开「运行中切换工作区 → 中断标记写错库」与并发读 m.store。
 		store := sessStore
 		interrupted := false // 会话结束时的中断状态（defer 中据此写回持久化标记）
+		// ★ 会话运行环境（子 agent 能力）随会话结束解除：之后插件再调用 ctx.subagent
+		//   会得到「能力不可用」错误，而不是拿到已结束会话的模型/工具面。
+		defer unregisterSubagent()
 		defer func() {
 			// panic recovery：确保会话状态和事件通道始终被清理
 			if r := recover(); r != nil {
@@ -957,6 +973,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			m.mu.Lock()
 			sess.Running = false
 			m.mu.Unlock()
+			// ★ 2026-09-21 状态刷新信号（见 loop.go EventStatusRefresh 注释）：
+			//   放在 Running=false 之后、close(Events) 之前 —— WS 端点据此补推一次
+			//   status（runningConvs 快照），修正自主模式收尾后前端「运行中」状态残留
+			//   （done 事件早于会话真正结束，done 后那份 status 仍含本会话，之后无事件）。
+			//   非阻塞发送：缓冲满时丢弃无妨（前端重连 / 下轮 done 仍会校正）。
+			select {
+			case sess.Events <- Event{Type: EventStatusRefresh}:
+			default:
+			}
 			// 关闭 Events → fan-out goroutine 退出，subscribers 检测到通道关闭
 			close(sess.Events)
 		}()
@@ -964,17 +989,12 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 自闭环模式：传 nil history，loop.Run 内部使用 loop.History
 		var msgs []Message
 		var err error
+		// ★ 2026-09-21 自主模式（插件化）：Autonomous=true 时 Loop 仍按普通一轮执行，
+		//   「监督 → 续跑」由下方续轮循环调用插件决策器实现（旧的内层阶段化循环已删除）。
 		if opts.Autonomous {
-			// ★ 新自主模式：单 Loop 内阶段化循环
-			// 不再使用 RunAutonomous（外层设计者 Loop + 内层执行 Loop 的嵌套架构）。
-			// 改为设置 loop.Autonomous=true，让 Loop.Run 在自然终止处通过 OnNextTask 回调
-			// 获取下一阶段任务：有任务 → 持久化 + 注入继续消息 + 继续迭代；无任务 → 正常退出。
-			// 由此实现「规划→执行→规划→执行...」的同 Loop 循环，每阶段自动落盘后继续。
 			loop.Autonomous = true
-			msgs, err = loop.Run(runCtx, task, nil)
-		} else {
-			msgs, err = loop.Run(runCtx, task, nil)
 		}
+		msgs, err = loop.Run(runCtx, task, nil)
 		sess.History = msgs
 
 		// ★ 段预算分段续跑（2026-09，tool_budget.go；★ 2026-09-12 双闸门）：
@@ -989,6 +1009,12 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// ★ 2026-09-12 配置化：续跑段数上限取本 Loop 生效值（装配参数
 		//   maxToolBudgetSegments 透传；0/缺省 = 默认 20，见 tool_budget.go）。
 		segLimit := loop.MaxToolBudgetSegmentsOrDefault()
+		// ★ 2026-09-21 自主模式（插件化）：监督续轮计数与上限。
+		//   工作 agent 每次自然结束 → 唤醒插件决策器（「人」角色：审核/评判/决定下一步）；
+		//   判定继续则把指令作为新任务唤醒工作 agent，判定完成/插件未生效则收尾。
+		superviseNo := 0
+		//   上限取本 Loop 生效值（装配参数 maxSuperviseRounds 透传；0/缺省 = 默认 20）。
+		superviseLimit := loop.MaxSuperviseRoundsOrDefault()
 		// ★ Round3 ③.1 goal 自动续轮（对齐 DSH「同会话完成目标」语义）：
 		//   会话 Run 结束后，goal Armed && 非终态 && Rounds < RoundLimit →
 		//   自动发起下一轮（continuation 消息）。pause 停续轮、resume 重挂；
@@ -1045,6 +1071,68 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				continue
 			}
 			segmentNo = 0 // 非分段结束 → 段计数归零（goal 续轮属于新一轮任务阶段）
+
+			// ★ 2026-09-21 自主模式（插件化）：工作 agent 自然结束 → 唤醒「人」角色决策器。
+			//   决策器 = 插件经 ctx.loopFactory.registerAutopilot 注册的实现（策略 JS：
+			//   角色提示词/任务书/裁决语义/记录落盘）；它通常经 ctx.subagent 能力派生一个
+			//   带全部工具的「监督者」回合自行核查（能力 Go，见 subagent.go）。
+			//   判定 continue → 指令作为新任务唤醒工作 agent（历史尾部追加，不破前缀）；
+			//   判定 done / 未生效 → 收尾。轮数上限与用户停止为硬保护。
+			// ★ 2026-09-21 诊断：打印判定要素（排查「监督未触发 / 会话卡在决策器」）——
+			//   自主模式下每次自然结束都记一行，运维可据此确认监督分支是否进入。
+			if opts.Autonomous {
+				log.Printf("[session] 自主模式判定 conv=%s err=%v available=%v turnReason=%q superviseNo=%d limit=%d",
+					convID, err, AutopilotAvailable(), loop.LastTurnReason, superviseNo, superviseLimit)
+			}
+			if opts.Autonomous && err == nil && AutopilotAvailable() &&
+				(loop.LastTurnReason == TurnCompleted || loop.LastTurnReason == TurnContentLoop) {
+				superviseNo++
+				if superviseLimit > 0 && superviseNo > superviseLimit {
+					notice := fmt.Sprintf("自主模式：监督轮数已达上限（%d），自动收尾；如仍需继续，请再发一条消息。", superviseLimit)
+					log.Printf("[session] 自主模式监督轮数达上限 conv=%s limit=%d", convID, superviseLimit)
+					select {
+					case sess.Events <- Event{Type: EventNotice, Content: notice}:
+					default:
+					}
+					break
+				}
+				req := AutopilotRequest{
+					ConvID:        convID,
+					WorkspaceRoot: opts.WorkspaceRoot,
+					Round:         superviseNo,
+					MaxRounds:     superviseLimit,
+					Objective:     FirstUserTask(loop.History),
+					WorkerReport:  LastAssistantContent(msgs),
+					WorkerTurns:   loop.TurnNo,
+					RecentHistory: RecentHistoryTail(loop.History, AutopilotHistoryTail),
+				}
+				// 决策器调用期间绑定本会话环境：插件 ctx.subagent.run 据此复用本会话
+				// 的模型/工具面/事件通道（事件带 AgentName 下发前端，看板分区）。
+				restoreCur := SetCurrentSubagentRuntime(subagentRt)
+				decision := RunAutopilotDecision(runCtx, req)
+				restoreCur()
+				if notice := AutopilotDecisionNotice(decision, superviseNo); notice != "" {
+					select {
+					case sess.Events <- Event{Type: EventNotice, Content: notice}:
+					default:
+					}
+				}
+				if !decision.Continue() {
+					if decision.Error != "" {
+						log.Printf("[session] 自主模式决策失败 conv=%s round=%d err=%s", convID, superviseNo, decision.Error)
+					}
+					break
+				}
+				contMsg := decision.Task
+				log.Printf("[session] 自主模式监督续跑 conv=%s round=%d/%d 指令=%q",
+					convID, superviseNo, superviseLimit, truncStr(contMsg, 80))
+				// 开新一轮前推进持久化基准（防上一轮新增被覆盖）。
+				refreshPersistBase()
+				msgs, err = loop.Run(runCtx, contMsg, nil)
+				sess.History = msgs
+				continue
+			}
+
 			g := goalManager.MarkRound(opts.WorkspaceRoot, convID, err)
 			if g == nil || g.ContinueMessage() == "" {
 				break

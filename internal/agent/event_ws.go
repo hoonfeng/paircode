@@ -102,6 +102,15 @@ func ServeGlobalEventStreamWS(w http.ResponseWriter, r *http.Request, mgr *Sessi
 				// channel 被关闭（不应发生，但兜底）
 				return
 			}
+			// ★ 2026-09-21 状态刷新信号（见 loop.go EventStatusRefresh）：会话真正结束时
+			//   由 SessionManager 补发 —— 只补推一条 status 帧（本事件不下发前端，避免
+			//   前端收到无 runningConvs 的未知消息）。修正自主模式收尾后「运行中」残留。
+			if ge.Event.Type == EventStatusRefresh {
+				if err := wsc.WriteTextFrame(buildStatusPayload(mgr)); err != nil {
+					return
+				}
+				continue
+			}
 			payload := buildWSPayload(ge)
 			if err := wsc.WriteTextFrame(payload); err != nil {
 				return
@@ -211,6 +220,11 @@ func buildWSPayload(ge GlobalEvent) []byte {
 	}
 	if e.Step > 0 {
 		msg["step"] = e.Step
+	}
+	// ★ 2026-09-21 事件来源标注：空 = 工作 agent（主 Loop）；非空 = 子 agent 回合
+	//   （如自主模式的「监督者」，见 subagent.go）——前端据此分区渲染看板（可观测可溯源）。
+	if e.AgentName != "" {
+		msg["agentName"] = e.AgentName
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {

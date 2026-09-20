@@ -827,6 +827,14 @@ export async function loadClientHalvesFromManifest(entries) {
 
 // dispatchHostEvent 把一条 host 事件分发给所有 client 半的 on 监听器。
 function dispatchHostEvent(ev) {
+  // ★ 2026-09-21 主界面也要消费 host 事件（如 autopilot 的 ui:autopilot:round 监督看板）：
+  //   在 window 上统一广播一份（detail={name,payload}）。主界面不是插件实例、拿不到
+  //   client 半的 on 监听器；无监听者时零副作用。
+  try {
+    window.dispatchEvent(new CustomEvent('pair-plugin-event', { detail: { name: ev.name, payload: ev.payload } }))
+  } catch (e) {
+    // 忽略：非浏览器环境
+  }
   for (const inst of instances) {
     const fns = inst.onHandlers.get(ev.name)
     if (!fns) continue

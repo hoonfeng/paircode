@@ -35,6 +35,8 @@ config/models.json
 config/models/
 
 # Generated runtime configs
+config/.params-migrated
+config/.generation-migrated
 
 # Temporary files
 tmp/

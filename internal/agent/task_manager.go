@@ -168,24 +168,8 @@ func (tm *TaskManager) ListByConvID(convID string) []*Task {
 	return filtered
 }
 
-// ListPendingTasks 返回指定对话中待办或进行中的任务（pending / in_progress），
-// 按创建时间升序排列（早创建的优先）。用于自主模式 OnNextTask 回调自动推进下一阶段。
-func (tm *TaskManager) ListPendingTasks(convID string) []*Task {
-	tm.mu.RLock()
-	defer tm.mu.RUnlock()
-	all := tm.readAllLocked()
-	active := make([]*Task, 0)
-	for _, t := range all {
-		if convID != "" && t.ConvID != convID {
-			continue
-		}
-		if t.Status == TaskPending || t.Status == TaskInProgress {
-			active = append(active, t)
-		}
-	}
-	sort.Slice(active, func(i, j int) bool { return active[i].CreatedAt < active[j].CreatedAt })
-	return active
-}
+// ★ 2026-09-21 旧自主模式删除：ListPendingTasks（供旧 OnNextTask 回调从任务队列
+//   自动推进「下一阶段」）已移除——自主模式改由插件决策器驱动（autopilot.go）。
 
 func (tm *TaskManager) GetSummary() TaskSummary {
 	tm.mu.RLock()

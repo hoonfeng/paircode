@@ -176,6 +176,11 @@
         <div class="task-container" :class="{ 'task-empty': currentTasks.length === 0 }">
           <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
+        <!-- 自主模式监督看板（autopilot 插件数据面：GET /api/autopilot/rounds + ui:autopilot:round 事件；
+             无监督回合（插件未装载/未开启自主模式）时容器高度为 0，不占位） -->
+        <div class="autopilot-container" :class="{ 'autopilot-empty': autopilotRounds.length === 0 }">
+          <AutopilotPanel v-if="autopilotRounds.length > 0" :rounds="autopilotRounds" :expanded="autopilotExpanded" @toggle="autopilotExpanded = !autopilotExpanded" />
+        </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
           <!-- ★ chat-tools 槽位（list 型）：输入区上方工具条，插件可叠加快捷按钮（@文件/常用命令/图片等） -->
@@ -271,6 +276,7 @@ import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import SheetPicker from './SheetPicker.vue'
 import TaskPanel from './TaskPanel.vue'
+import AutopilotPanel from './AutopilotPanel.vue'
 import ApprovalBar from './ApprovalBar.vue'
 import ConvSidebar from './ConvSidebar.vue'
 import AskUserCard from './AskUserCard.vue'
@@ -2074,6 +2080,10 @@ const refreshConvMeta = async () => {
     console.warn('[RP] refreshConvMeta 失败:', e)
   }
 }
+// ── 自主模式监督看板状态（数据源见 loadAutopilotRounds）──
+const autopilotRounds = ref([])
+const autopilotExpanded = ref(true)
+
 // loadConvTasks 拉取指定会话的任务清单（TaskPanel 数据源）。
 // ★ 2026-09-12 修复「刷新页面/切换对话后任务面板空白」：任务按会话持久化在
 //   工作区 `.pair/tasks/*.json`（task.convId），前端此前只有运行时 WS 事件
@@ -2096,6 +2106,26 @@ const loadConvTasks = async (convId) => {
   }
 }
 
+// loadAutopilotRounds 拉取指定会话的监督回合列表（自主模式看板数据源）。
+// ★ 数据面由 autopilot 插件提供（GET /api/autopilot/rounds?convId=…，记录落盘
+//   .pair/autopilot/<convId>.jsonl）；插件未装载/从未监督过时接口 404 或 rounds 为空
+//   → 静默置空（看板不显示）。竞态保护：返回时已切换会话则丢弃结果。
+const loadAutopilotRounds = async (convId) => {
+  if (!convId) { autopilotRounds.value = []; return }
+  try {
+    const res = await api.apiGet('/autopilot/rounds', { convId })
+    if (state.currentConvId !== convId) return
+    autopilotRounds.value = (res && Array.isArray(res.rounds)) ? res.rounds : []
+  } catch (e) {
+    // 静默：插件未装载或接口不可用时看板置空（不打扰用户）
+    if (state.currentConvId === convId) autopilotRounds.value = []
+  }
+}
+
+// roundKey 监督回合唯一键（★ round 是「本次运行内的监督序号」，宿主每次 Run 从 1 重数，
+// 同一会话多次运行会出现相同 round → 仅按 round 去重会覆盖历史，见 onPluginEvent）。
+const roundKey = (r) => String((r && r.startedAt) || '') + '#' + String((r && r.round) || '')
+
 const switchConv = async (id) => {
   if (!id || _loadingConvs.has(id)) return
   _loadingConvs.add(id)
@@ -2107,6 +2137,7 @@ const switchConv = async (id) => {
   state.chatLoading = state.loadingByConv[id] || false
   state.agentRunning = state.agentRunningByConv[id] || false
   currentTasks.value = []
+  autopilotRounds.value = []
 
   // 加载 token 统计
   try {
@@ -2165,6 +2196,8 @@ const switchConv = async (id) => {
 
   // 加载任务状态（★ 任务按会话持久化在 .pair/tasks/*.json，见 loadConvTasks）
   await loadConvTasks(id)
+  // 加载自主模式监督回合（看板；★ 按会话持久化在 .pair/autopilot/*.jsonl，见 loadAutopilotRounds）
+  await loadAutopilotRounds(id)
 
   // ★ 2026-08-31：plan 体系已移除，不再从消息重建计划（currentPlan 下线）。
   applyAutoCollapse()
@@ -2362,6 +2395,8 @@ watch(() => state.currentConvId, (id, oldId) => {
       //   （任务面板会停在断开前状态）→ 重连即从服务端重拉该会话任务清单
       //   （任务持久化在 .pair/tasks，不依赖 WS 事件）。
       loadConvTasks(id)
+      // 同上：断线期间的 ui:autopilot:round 事件已丢失 → 重连即重拉监督回合
+      loadAutopilotRounds(id)
       const msgs = state.messagesByConv[id]
       // 断连重连后，如果消息数量和 API 返回不匹配，触发 reload
       // 但只在用户没有正在发送消息时执行（avoid conflict with sendMessage）
@@ -2382,6 +2417,35 @@ watch(() => state.currentConvId, (id, oldId) => {
         }
       }
     }
+  })
+
+  // ── 监督回合实时追加（自主模式看板）：autopilot 插件每完成一次监督回合即
+  //    ctx.emit('ui:autopilot:round', record) → 宿主 client 事件队列 → plugin-runtime
+  //    dispatchHostEvent 在 window 上广播 pair-plugin-event → 此处按 round 去重追加。
+  //    （主界面非插件实例，借广播消费 ui: 事件；完全不可用时由 loadAutopilotRounds 兜底）
+  const onPluginEvent = (e) => {
+    const ev = e && e.detail
+    if (!ev || ev.name !== 'ui:autopilot:round') return
+    const rec = ev.payload
+    if (!rec || !rec.convId || rec.convId !== state.currentConvId) return
+    // ★ 唯一键 = startedAt#round：记录里的 round 是「本次运行的第 N 次监督」
+    //   （宿主每次 Run 从 1 重新计数）→ 同一会话多次运行会出现 round 相同的记录，
+    //   仅按 round 去重会把新一轮覆盖掉上一轮（看板不累加、历史丢失）。
+    const idx = autopilotRounds.value.findIndex(r => roundKey(r) === roundKey(rec))
+    if (idx >= 0) {
+      const next = [...autopilotRounds.value]
+      next.splice(idx, 1, rec)
+      autopilotRounds.value = next
+    } else {
+      autopilotRounds.value = [...autopilotRounds.value, rec]
+    }
+  }
+  window.addEventListener('pair-plugin-event', onPluginEvent)
+
+  // 自主模式收尾补拉：chatLoading 由 true→false 表示本会话本轮已结束（含监督者裁决 done）
+  // → 从服务端补拉监督回合，避免事件丢失导致看板缺轮（continue 轮次由事件实时补）。
+  watch(() => state.chatLoading, (now, prev) => {
+    if (prev && !now && state.currentConvId) loadAutopilotRounds(state.currentConvId)
   })
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
@@ -2463,6 +2527,8 @@ onMounted(() => {
   // ⚡ 初始加载：若已有当前对话，从 API 加载任务状态（走统一入口，含竞态保护）
   // （页面刷新或从其他工作区切换回来时，currentTasks 为空，需要从 TaskManager 恢复）
   nextTick(() => { if (state.currentConvId) loadConvTasks(state.currentConvId) })
+  // 同上：刷新页面后监督看板从服务端恢复（.pair/autopilot/*.jsonl）
+  nextTick(() => { if (state.currentConvId) loadAutopilotRounds(state.currentConvId) })
 
   // ★ 直接检查是否需要恢复对话（替换 restore-conversation 事件机制：
   //   App.vue onMounted 中 dispatchEvent 时 RightPanel 尚未挂载，事件永远丢失。
@@ -2562,6 +2628,7 @@ onUnmounted(() => {
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
   if (runTickTimer) { clearInterval(runTickTimer); runTickTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
+  window.removeEventListener('pair-plugin-event', onPluginEvent)
   stopContentResizeObserver()
   chatSlot.stop()
   if (chatToolsUnsub) { chatToolsUnsub(); chatToolsUnsub = null }
@@ -2935,6 +3002,19 @@ onUnmounted(() => {
 }
 .task-container .plan-panel {
   margin: 0 0 4px 0;
+}
+/* ── 自主模式监督看板容器（输入区上方，与任务进度容器同规格；无回合时高度 0 不占位）── */
+.autopilot-container {
+  flex-shrink: 0;
+  transition: max-height 0.25s ease;
+  padding: 0 8px;
+}
+.autopilot-container.autopilot-empty {
+  max-height: 0;
+  padding: 0 8px;
+}
+.autopilot-container:not(.autopilot-empty) {
+  max-height: 320px;
 }
 /* chat 槽位：插件渲染的对话面板占满 rp-body */
 .plugin-slot-chat { flex: 1; min-height: 0; display: flex; overflow: hidden; }

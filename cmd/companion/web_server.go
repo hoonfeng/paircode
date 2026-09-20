@@ -165,19 +165,16 @@ var ws *webServer
 //	buildProviderFn:   创建 LLM Provider（主模型）
 //	buildSystemPromptFn:创建系统提示语
 //	buildCompressorFn:  创建上下文压缩器（nil=规则式压缩）
-//	buildPlanProviderFn:创建规划 Provider（自主模式，回退到 buildProviderFn）
 type (
 	buildProviderFn     func() agent.Provider
 	buildSystemPromptFn func() string
 	buildCompressorFn   func() agent.Compressor
-	buildPlanProviderFn func() agent.Provider
 )
 
 var (
 	webProvider     buildProviderFn
 	webSystemPrompt buildSystemPromptFn
 	webCompressor   buildCompressorFn
-	webPlanProvider buildPlanProviderFn
 )
 
 // findMessageStoreRoot 在所有工作区文件夹中查找第一个有对话数据目录的路径。
@@ -2554,17 +2551,10 @@ func (s *webServer) launchConvRun(convID, wsRoot, task string, autonomous bool) 
 			}
 		}
 
-		if autonomous {
-			pm := strings.TrimSpace(cur.PlanModel)
-			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-				pp := cur
-				pp.Model = pm
-				pp.Multimodal = false
-				opts.PlanProvider = agent.CreateProvider(pp)
-			} else if prov := buildWebProviderForConv(convID, wsRoot); prov != nil {
-				opts.PlanProvider = prov
-			}
-		}
+		// ★ 2026-09-21 自主模式插件化：原 autonomous 分支创建的 PlanProvider（双层 Loop
+		//   的规划模型）已随该架构删除——自主模式的「监督者」由插件决策器 + ctx.subagent
+		//   能力派生，复用本会话 Provider（「跟随执行模型」）。监督轮数上限由插件经
+		//   ctx.loopFactory.register 覆盖 maxSuperviseRounds（缺省内核 20）。
 
 		// 使用分离的 context：setupCtx 用于 Start 方法本身的超时（避免在获取锁或建表时永久阻塞），
 		// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。

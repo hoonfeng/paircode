@@ -1043,22 +1043,12 @@ return {
               for (const m of fms) ephemeral.push(m);
               loop.events.emit({ type: 'notice', content: `收到 ${fms.length} 条跟进消息，继续处理` });
               contentOnlyIters = 0;
-            } else if (autonomous) {
-              // ② 自主模式：下一阶段任务
-              const next = loop.ctrl.nextTask();
-              if (next) {
-                ephemeral.push({ role: 'user', content: next });
-                loop.events.emit({ type: 'notice', content: '进入下一阶段：' + loop.ctrl.truncStr(next, 80) });
-                loop.ctrl.logEntry('system', 'next_phase', '进入下一阶段：' + loop.ctrl.truncStr(next, 80));
-                contentOnlyIters = 0;
-              } else {
-                // 无后续任务 → 正常完成
-                const reason = loop.ctrl.stickyReason('completed');
-                loop.events.emit({ type: 'done', content: assistant.content.trim(), doneReason: 'task_complete', turnReason: reason });
-                return { msgs };
-              }
             } else {
-              // 非自主 → 正常完成
+              // ② 正常完成：整轮结束。
+              // ★ 2026-09-21 旧自主模式删除：原「自主模式下一阶段任务」（loop.ctrl.nextTask
+              //   从任务清单队列拉下一条）已移除——自主模式的「监督 → 续跑」现由宿主的
+              //   会话续轮处驱动（插件 ctx.loopFactory.registerAutopilot 注册决策器，
+              //   判定继续则把指令作为新任务唤醒工作 agent；见 autopilot.go / subagent.go）。
               const reason = loop.ctrl.stickyReason('completed');
               loop.events.emit({ type: 'done', content: assistant.content.trim(), doneReason: 'task_complete', turnReason: reason });
               return { msgs };

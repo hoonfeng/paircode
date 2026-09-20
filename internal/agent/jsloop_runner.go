@@ -572,13 +572,6 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		}
 		return goja.Undefined()
 	})
-	// nextTask()：自主模式下一阶段任务
-	ctrlObj.Set("nextTask", func(call goja.FunctionCall) goja.Value {
-		if l.OnNextTask == nil {
-			return vm.ToValue("")
-		}
-		return vm.ToValue(l.OnNextTask())
-	})
 	// feedback()：用户运行时反馈
 	ctrlObj.Set("feedback", func(call goja.FunctionCall) goja.Value {
 		if l.OnFeedback == nil {

@@ -33,8 +33,9 @@ type AgentConfig struct {
 	SystemPrompt string
 	// 上下文压缩器（可选）。空则规则式摘要。
 	Compressor Compressor
-	// 规划 Provider（可选）。非空时启用自主模式双层 Loop。
-	PlanProvider Provider
+	// ★ 2026-09-21 自主模式插件化：原 PlanProvider（规划 Provider，双层 Loop
+	//   「设计者→执行者」）已随该架构删除——自主模式的「监督者」由插件决策器 +
+	//   ctx.subagent 能力派生（复用本会话 Provider，见 autopilot.go / subagent.go）。
 	// 审核 Provider（可选）。非空+ReviewMode="auto" 时启用 AI 审核。
 	ReviewProvider Provider
 
@@ -49,7 +50,8 @@ type AgentConfig struct {
 	// 上下文 token 上限（>0 启用压缩）
 	MaxContextTokens int
 
-	// 自主模式标志（双层 Loop：设计者→执行者）
+	// 自主模式标志：开启后工作 agent 每次自然结束都会唤醒插件决策器（「人」角色
+	// 审核/评判/决定下一步），需要装载自主模式插件（.pair/plugins/autopilot）才生效。
 	Autonomous bool
 	// 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
 	ReviewMode string
@@ -160,6 +162,11 @@ func (a *AgentBase) Init() error {
 	go func() {
 		ch := sm.SubscribeAll()
 		for ge := range ch {
+			// ★ 内部状态信号不下发宿主（见 loop.go EventStatusRefresh）：它只服务于
+			//   WS 端点的 status 补推，携带内容为空，转发出去会让上层收到无意义事件。
+			if ge.Event.Type == EventStatusRefresh {
+				continue
+			}
 			if a.Config.OnEvent != nil {
 				a.Config.OnEvent(ge.Event)
 			}

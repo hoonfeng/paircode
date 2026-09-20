@@ -4,6 +4,51 @@
 
 ---
 
+## 1.6.5 — 2026-09-21
+
+> 本版把「自主模式」重做为**监督者（「人」）驱动**：工作 agent 每次自然结束，由一个独立的
+> 监督者回合审核产出、评判质量、决定下一步——监督者自己能调工具核查证据（读文件 / 搜索 /
+> git / 跑命令），裁决与完整轨迹实时进看板、刷新后仍可回放。插件面同时开放
+> `registerAutopilot` 与 `ctx.subagent.run`（策略在插件、能力在宿主）。另把**生成参数与连接
+> 信息从内核剥离**（改由 AI 配置 / 服务商配置 / 插件注册段提供），并修复工作区级技能被内置
+> 技能压制的问题。
+
+### 新增
+
+- **自主模式：监督者（autopilot）插件** — 新增 `.pair/plugins/autopilot`（策略全在插件：角色提示词 / 任务书 / 裁决语义 / 记录落盘 / 看板数据），宿主提供能力 `ctx.loopFactory.registerAutopilot({id, decide})`：工作 agent 每次自然结束（无 tool_call + 有正文）时，宿主在会话续轮处调用 `decide(req)`——任务书含用户目标 / 工作 agent 本轮汇报 / 运行统计 / 最近工作记录；返回 `continue + task` 则把指令作为新任务唤醒工作 agent，`done` 则整轮收尾。监督者是**具备全部工具的独立回合**（自行核查证据后经 `submit_result` 提交裁决：评判 + 下一步指令 + 证据），同一插件名重复注册即替换策略。
+- **子 agent 能力 `ctx.subagent.run(spec)`** — 插件可发起「子 agent 回合」：独立系统提示 / 任务书 / 模型 / 工具白名单与黑名单 / 独立历史 / 超时与轮次上限；事件带来源标注（`agentName`）供前端分区渲染，返回轨迹分段、工具调用、用量、耗时与结束方式。同步阻塞式调用（异步插件同样可用），未注册 provider 或能力不可用时给出明确错误。
+- **自主模式看板** — 右侧面板新增「监督者」折叠面板（对话区下方）：头部显示监督者轮次与末次裁决，每轮卡片含序号 / 裁决徽标 / 耗时·步数·工具数·tokens / 评判 / 下一步指令 / 证据·轨迹·工作 agent 侧记录（可折叠）。数据双通道：`GET /api/autopilot/rounds?convId=…`（切会话、刷新、WS 重连、会话结束补拉）+ `ui:autopilot:round` 实时事件；监督者回合的实时事件经 WS 下发并带 `agentName=supervisor`，前端按来源分区。记录落盘 `.pair/autopilot/<convId>.jsonl`（单会话滚动保留 200 轮），可溯源回放。
+- **服务商改名与删除引用提示** — 设置面板「服务商」tab 名称框解除禁用；保存时先调 `POST /api/models/rename`（同步迁移 `models.json` 键**并**更新 `ai-presets.json` 里引用旧名的 AI 配置，避免连接信息丢失），失败即中止；删除服务商时确认框列出仍引用它的 AI 配置名，并说明「仍可继续聊天（配置是完整快照），但对话面板会失去模型分组」。
+- **主界面可消费插件事件** — 插件运行时在分发宿主 `ui:` 事件时于 window 广播 `pair-plugin-event`：主界面组件（不是插件实例，原本收不到）也能消费插件事件，无监听者时零副作用。
+
+### 变更 / 改进
+
+- **循环装配器改为「链」语义** — `ctx.loopFactory.register` 从「单槽位后注册整体覆盖」改为**装配器链**：多插件按注册顺序依次叠加，仅「同一插件名重复注册」替换该项（卸载自动摘除）。修复此前后装载插件会把先装载插件（agentloop 的系统提示追加 / 分段预算 / 审核模式）装配参数整体吃掉的问题。
+- **生成参数来源唯一化** — 优先级：模型级（`models.json` 的 `modelParams[模型]`）> 服务商级（`models.json` 服务商条目）> AI 配置（`ai-presets.json`）> 全局默认（插件注册段 `generation`，存 `pluginSettings.generation`）。Go 内核零直读（原 `core.Temperature()` / `Settings.{MaxTokens,ThinkingMode,ContextMaxTokens}` 直读取消），设置面板新增由 agentloop 插件注册的「生成参数」页；插件侧一律 `ctx.getSettings('generation')` 实时读取（改设置即时生效）。
+- **连接信息退出内核** — AI 连接字段（provider / baseURL / apiKey / model / executeModel / planModel / reviewModel）此前在 `settings.json` 顶层与 `ai-presets.json` 双份存储；现唯一来源 = **AI 配置**，`settings` 只保留激活配置名 `preset`。旧值由 `core.MigrateLegacyConnectionToPreset()` 一次性迁移（只补空字段、不覆盖已有配置），`core.MainModel()` / `core.Configured()` 删除（启动日志改打印激活配置名）。
+- **旧自主控制器退役** — 删除 `internal/agent/autonomous_controller.go`（「任务队列驱动下一阶段」实现）；自主模式唯一入口 = 监督者裁决，会话管理 / 任务管理 / 循环随之收敛。
+
+### 修复
+
+- **工作区级技能不再被内置技能压制** — 同名技能同时存在于系统 / 工作区 / 全局时，此前 `load_skill` 永远返回**内置旧版**（`skill_list` 还会出现两条同名条目、提示词重复注入）。现按 **工作区 > 全局 > 内置** 归并去重后返回。
+- **磁盘 Node 桥轨插件的可见性** — 修复 `tool-voice` 等桥轨插件在插件列表 / 工具集中不可见（磁盘插件正确交接给 Node 桥）。
+- **前端事件处理残留** — `agent-events.js` 的 usage 分支删除本地累加残留（运行统计唯一真源在后端），消除每次 usage 事件的 `ReferenceError`；自主模式收尾后前端「运行中」状态残留一并修正。
+
+### 文档
+
+- `docs/plugin-development.md`（774 → 934 行）：新增 `ctx.commands`（§4.7）、自主模式与 `ctx.subagent.run`（§4.8，含决策器返回契约与最小骨架）；inject 服务清单 9 → **25 个**；循环装配器链语义与坑表补充 5 条。
+- 技能 `cordis-plugin-development`（工作区版 / 内置版同步为 283 行）：补铁律、自主模式骨架、UI 插件实战要点、坑表。
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.5`。
+
+### 验证
+
+- `go test ./internal/agent/` 全绿（含自主模式 / 装配器链 / 会话监督 / 技能层级新增用例与整包回归）。
+- 技能层级探针（真实目录：工作区 `.pair/skills` + 安装目录 `config/skills`）：同名归并后选中**工作区版**。
+- 前端：`npm run build` + `node scripts/build-ui.mjs` 重建主壳与区域包，看板在真实会话下实时追加、刷新后经接口回放，控制台 0 错误。
+- 发布包冒烟：解压 `release/PairCode-1.6.5.zip` 以独立端口启动，`/api/system/info` 返回 `1.6.5`，插件与工具集装载正常、首屏控制台 0 错误。
+
+---
+
 ## 1.6.4 — 2026-09-19
 
 > 本版新增**应用内在线更新**：直接对接 GitHub Releases，一键完成「检查 → 下载 → 校验 → 替换 →

@@ -12078,6 +12078,10 @@
     reportState();
   }
   function dispatchHostEvent(ev) {
+    try {
+      window.dispatchEvent(new CustomEvent("pair-plugin-event", { detail: { name: ev.name, payload: ev.payload } }));
+    } catch (e) {
+    }
     for (const inst of instances) {
       const fns = inst.onHandlers.get(ev.name);
       if (!fns) continue;
@@ -13182,11 +13186,6 @@
       return;
     } else if (data.type === "usage" && data.usage) {
       const u = data.usage;
-      if (runStat) {
-        runStat.promptTokens += u.prompt_tokens || 0;
-        runStat.completionTokens += u.completion_tokens || 0;
-        runStat.llmCalls++;
-      }
       if (isCurrent) {
         const cs = getConvCtxStats(convId);
         cs.promptTokens = u.prompt_tokens || 0;

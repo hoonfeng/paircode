@@ -97,7 +97,7 @@ func LoadAllSkills() []Skill {
 			all = append(all, applyStatusOverride(extra, SkillStatusOverride)...)
 		}
 	}
-	return all
+	return dedupeSkills(all)
 }
 
 // LoadAllSkillsFromRoot 按指定工作区根目录加载技能（不依赖全局 SkillProjectDir）。
@@ -119,7 +119,7 @@ func LoadAllSkillsFromRoot(root, systemDir string, enabled map[string]bool) []Sk
 		extra := loadSkillsFromDir(agentsDir, LevelProject, enabled)
 		all = append(all, applyStatusOverride(extra, SkillStatusOverride)...)
 	}
-	return all
+	return dedupeSkills(all)
 }
 
 // loadAllFrom 内部实现（可测试，传参不依赖全局）。
@@ -177,6 +177,43 @@ func loadSkillsFromDir(dir string, level SkillLevel, enabled map[string]bool) []
 		if v, ok := enabled[string(level)+"::"+s.Name]; ok && !v {
 			continue
 		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// dedupeSkills 同名技能按层级优先级去重：project > global > system，同层保留先出现者。
+//
+// ★ 2026-09-21 修复（实测 bug）：loadAllFrom 按 system→project→global 顺序 append，
+// 而 FindSkill 只取**首个**匹配 —— 结果同名技能总是**内置版赢**：工作区
+// （.pair/skills/）与全局（<InstallDir>/.pair/skills/）里对同名技能的修改永远读不到
+// （实测 load_skill 返回内置旧版正文、skill_list 出现两条同名条目），
+// 与工具描述「同名时工作区优先」相反；L1 提示词也会把同名技能重复注入（浪费 token）。
+func dedupeSkills(skills []Skill) []Skill {
+	if len(skills) < 2 {
+		return skills
+	}
+	rank := func(l SkillLevel) int {
+		switch l {
+		case LevelProject:
+			return 0
+		case LevelGlobal:
+			return 1
+		case LevelSystem:
+			return 2
+		}
+		return 3
+	}
+	pos := make(map[string]int, len(skills))
+	out := make([]Skill, 0, len(skills))
+	for _, s := range skills {
+		if i, ok := pos[s.Name]; ok {
+			if rank(s.Level) < rank(out[i].Level) {
+				out[i] = s // 更高优先级覆盖（保持先出现位置，顺序稳定）
+			}
+			continue
+		}
+		pos[s.Name] = len(out)
 		out = append(out, s)
 	}
 	return out
