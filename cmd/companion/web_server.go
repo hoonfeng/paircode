@@ -218,7 +218,8 @@ func startWebUI(port int) {
 	ws.installSessionWake()
 	// ★ 2026-09 精简策略可见化：硬地板默认关闭（只用窗口比例阈值），
 	//   想恢复绝对量保护设 PAIR_COMPACT_HARD_FLOOR=<token>。
-	log.Printf("[compact] 精简策略：%s", agent.CompactPolicy(core.Settings.ContextMaxTokens))
+	// ★ 2026-09-19：上下文窗口以服务商配置（models.json）为准（经装配器；settings 顶层值仅兜底）
+	log.Printf("[compact] 精简策略：%s", agent.CompactPolicy(agent.ContextWindow(agent.ResolveProviderParams())))
 	// ★ 钩子系统（t1 L2 闭环）：装载配置钩子（.pair/settings.json + ~/.pair/settings.json），
 	//   与桌面端 Init 同一入口；无配置时全部 no-op。
 	agent.InitLoopHooks()
@@ -2306,15 +2307,19 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	//   替代全量历史注入（防上下文膨胀；复用/刷新见 handoff.go）；未达阈值/关闭时
 	//   保持原逻辑（按 token 压力精简，未达压力阈值即逐字节原样，缓存连续命中）。
 	handoffApplied := false
+	// ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：装配器按「模型级 > 服务商级」
+	//   取值，settings 顶层值仅在服务商/模型都未配置时兜底（此前这里直读 settings → 服务商配置不生效）。
+	convParams := agent.ResolveProviderParamsForConv(convID, root)
+	ctxWindow := agent.ContextWindow(convParams)
 	if store := agentMgr.StoreFor(root); store != nil {
 		// ★ 判官实例（B/C 语义复检）：独立轻量实例——non-thinking + 极小输出
 		//   （只输出一个词），与主对话通道隔离；构建为纯参数装配（无网络），每轮现建。
-		judge := agent.HandoffJudgeProvider(agent.ResolveProviderParamsForConv(convID, root))
+		judge := agent.HandoffJudgeProvider(convParams)
 		// ★ 2026-09-12 策略外置：整理由 agentloop 插件（registerHandoff.onUserTurn）实现，
 		//   宿主只提供调用位置（会话装配前——插件无从自主介入）与能力（provider/judge/
 		//   store/口径工具）；未注册或执行失败 → 回退 Go 默认实现（语义不变）。
 		view, ok, hnotice := agent.HandoffUserTurnView(context.Background(), prov, judge, store,
-			convID, root, history, message, core.Settings.ContextMaxTokens)
+			convID, root, history, message, ctxWindow)
 		if ok {
 			log.Printf("[handoff] conv=%s 已启用交接视图（历史 %d 条 → %d 条）", convID, len(history), len(view))
 			history = view
@@ -2326,7 +2331,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		}
 	}
 	if !handoffApplied {
-		history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
+		history = agent.CondenseHistoryByPressure(history, ctxWindow)
 	}
 
 	// ★ 2026-09-12：「最大迭代数」配置已移除（原此处读 core.Settings.MaxIterations，
@@ -2343,7 +2348,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		//   （见 .pair/plugins/agentloop/index.js 的 ctx.loopFactory.register）；
 		//   宿主不设默认值——0 = agent 侧默认（120 次 / 20 段），
 		//   负数预算 = 不限（归一化见 agent/tool_budget.go）。
-		MaxContextTokens:    core.Settings.ContextMaxTokens,
+		MaxContextTokens:    ctxWindow,
 		Compressor:          webCompressor(),
 		History:             history,         // 压缩版：供 LLM 上下文使用
 		HistoryOriginal:     originalHistory, // 原始版：供持久化使用，防止压缩版写回历史记录

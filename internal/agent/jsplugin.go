@@ -1301,14 +1301,42 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			return goja.Null()
 		}
 		e := core.GetProviderEntry(name)
-		if e.BaseURL == "" && len(e.Models) == 0 && e.APIKey == "" && e.Protocol == "" && e.ContextMaxTokens == 0 {
+		if e.BaseURL == "" && len(e.Models) == 0 && e.APIKey == "" && e.Protocol == "" &&
+			e.ContextMaxTokens == 0 && e.Temperature == "" && e.MaxTokens == 0 && len(e.ModelParams) == 0 {
 			return goja.Null()
+		}
+		// ★ 2026-09-19 模型级参数显式转小写键（goja 直转 Go struct 会用 Go 字段名，JS 读不到）；
+		//   零值字段直接省略（0/空/false = 未配置，避免 JS 侧把 0 当成有效配置而阻断逐级回退）。
+		mp := make(map[string]any, len(e.ModelParams))
+		for mk, mv := range e.ModelParams {
+			item := map[string]any{}
+			if mv.Temperature != "" {
+				item["temperature"] = mv.Temperature
+			}
+			if mv.ThinkingMode != "" {
+				item["thinkingMode"] = mv.ThinkingMode
+			}
+			if mv.MaxTokens > 0 {
+				item["maxTokens"] = mv.MaxTokens
+			}
+			if mv.ContextMaxTokens > 0 {
+				item["contextMaxTokens"] = mv.ContextMaxTokens
+			}
+			if mv.Multimodal {
+				item["multimodal"] = true
+			}
+			if len(item) > 0 {
+				mp[mk] = item
+			}
 		}
 		return vm.ToValue(map[string]any{
 			"baseURL":          e.BaseURL,
 			"apiKey":           e.APIKey,
 			"protocol":         e.Protocol,
 			"contextMaxTokens": e.ContextMaxTokens,
+			"temperature":      e.Temperature, // ★ 服务商级默认温度（models.json = 生成参数唯一来源）
+			"maxTokens":        e.MaxTokens,   // ★ 服务商级默认最大输出 token
+			"modelParams":      mp,            // ★ 模型级参数（模型名 → 参数；覆盖服务商级）
 			"models":           e.Models,
 		})
 	})

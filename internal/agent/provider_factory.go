@@ -97,8 +97,10 @@ func logResolvedParams(tag, convID string, p ProviderParams) {
 	if convID != "" {
 		extra = fmt.Sprintf(" conv=%s (会话选定 provider=%s model=%s preset=%s)", convID, p.ConvProvider, p.ConvModel, p.ConvPreset)
 	}
-	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s%s",
-		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, extra)
+	// ★ 2026-09-19：一并打印生成参数（温度/最大输出/上下文窗口）——便于确认取值来源
+	//   （温度/最大输出/上下文窗口一律以 models.json 服务商配置为准，模型级 > 服务商级）。
+	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s | temperature=%.2f maxTokens=%d contextMaxTokens=%d%s",
+		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, p.Temperature, p.MaxTokens, p.ContextMaxTokens, extra)
 }
 
 // ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
@@ -150,6 +152,19 @@ func resolveProviderBase() ProviderParams {
 func ConfiguredProvider() bool {
 	p := ResolveProviderParams()
 	return p.APIKey != "" && p.BaseURL != "" && p.Model != ""
+}
+
+// ContextWindow 返回生效的上下文窗口（token）——一律以服务商配置（models.json）为准：
+// 装配器已按「模型级（models.json modelParams）> 服务商级（models.json）」算出 ContextMaxTokens；
+// 仅在服务商/模型均未配置时才回退 settings 顶层值（兼容旧配置）。
+//
+// ★ 2026-09-19 缺陷修复：此前 Loop 装配 / 历史精简 / 会话交接 / 精简策略都直接读
+// core.Settings.ContextMaxTokens，models.json 的服务商级上下文窗口不生效（装配结果无人消费）。
+func ContextWindow(p ProviderParams) int {
+	if p.ContextMaxTokens > 0 {
+		return p.ContextMaxTokens
+	}
+	return core.Settings.ContextMaxTokens
 }
 
 // ConfiguredProviderForConv 会话感知的 Provider 就绪检查（★ 2026-09-04 同步段校验修复）：

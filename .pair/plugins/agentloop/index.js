@@ -437,7 +437,9 @@ return {
     //   本装配器决策链：① 配置整套展开（会话配置 > 全局激活，经 ctx.aiPresets）
     //   → ② 会话级覆盖（conv*）→ ③ 服务商数据兜底（经 ctx.models）→ ④ Key 选择
     //   → ⑤ 模型级参数 → ⑥ 上下文窗口层级 → ⑦ 全局温度/思考/输出兜底
-    //   → ⑧ 统一模型同步（plan/review 跟随执行模型）。
+    //   → ⑧ 服务商配置为准（★ 2026-09-19：models.json 的温度/最大输出/上下文窗口
+    //        覆盖上述 settings 取值——生成参数的唯一来源是「服务商」）
+    //   → ⑨ 统一模型同步（plan/review 跟随执行模型）。
     // ═══════════════════════════════════════════════════════════
     ctx.providerFactory.register((current) => {
       const s = (ctx.app && ctx.app.settings) || {};
@@ -530,7 +532,32 @@ return {
       if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0) && s.maxTokens && Number(s.maxTokens) > 0) {
         over.maxTokens = Number(s.maxTokens);
       }
-      // ── ⑧ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
+      // ── ⑧ 服务商配置为准（★ 2026-09-19 修复）：温度/最大输出/上下文窗口的唯一来源 = models.json ──
+      //   层级：模型级（me.modelParams[模型]）> 服务商级（me.temperature/maxTokens/contextMaxTokens）。
+      //   上方 ⑤⑥⑦ 的 settings 取值仅在两处都未配置时兜底——不再覆盖服务商值。
+      const mpm = (me.modelParams && me.modelParams[model]) || null;
+      // 取「已配置」的值：undefined/null/空串/数字 0 一律视为未配置（0=不设），
+      // 逐级回退：models.json 模型级 → models.json 服务商级。
+      const svcPick = (k) => {
+        for (const v of (mpm ? [mpm[k], me[k]] : [me[k]])) {
+          if (v === undefined || v === null || v === '') continue;
+          if (typeof v === 'number' && v <= 0) continue;
+          if (typeof v === 'string' && v.trim() === '') continue;
+          return v;
+        }
+        return '';
+      };
+      const svcTemp = svcPick('temperature');
+      if (svcTemp !== '') {
+        const t = parseFloat(svcTemp);
+        if (!isNaN(t) && t >= 0) over.temperature = t;
+      }
+      const svcMax = Number(svcPick('maxTokens'));
+      if (svcMax > 0) over.maxTokens = svcMax;
+      const svcCtx = Number(svcPick('contextMaxTokens'));
+      if (svcCtx > 0) over.contextMaxTokens = svcCtx;
+      if (mpm && mpm.multimodal === true) over.multimodal = true;
+      // ── ⑨ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
       if (model) { over.planModel = model; over.reviewModel = model; }
       return over;
     });
@@ -557,7 +584,6 @@ return {
       if (cfg.maxToolBudgetSegments != null && Number(cfg.maxToolBudgetSegments) > 0) {
         over.maxToolBudgetSegments = Number(cfg.maxToolBudgetSegments);
       }
-      if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) over.maxContextTokens = Number(cfg.maxContextTokens);
       // ★ 2026-08-19 修复：仅强制开启（true 才覆盖）——false 不再覆盖全局，
       //   消除「保存设置面板即强制关闭全局自主模式」的默认值缺陷。
       if (cfg.autonomous === true) over.autonomous = true;
@@ -570,10 +596,18 @@ return {
       if (typeof cfg.reviewWhitelist === 'string' && cfg.reviewWhitelist) {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
-// ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
-      const aiTop = (ctx.app && ctx.app.settings) || {};
-      const ctxMax = Number(aiTop.contextMaxTokens);
-      if (ctxMax > 0) over.maxContextTokens = ctxMax;
+      // ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：宿主已按装配结果
+      //   （服务商级 > settings 兜底）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
+      //   才用插件设置 / 全局 settings 兜底——不再无条件覆盖服务商值。
+      if (!(Number(opts.maxContextTokens) > 0)) {
+        if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) {
+          over.maxContextTokens = Number(cfg.maxContextTokens);
+        } else {
+          const aiTop = (ctx.app && ctx.app.settings) || {};
+          const ctxMax = Number(aiTop.contextMaxTokens);
+          if (ctxMax > 0) over.maxContextTokens = ctxMax;
+        }
+      }
       return over;
     });
 

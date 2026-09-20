@@ -487,6 +487,9 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		"providerKeys":     core.GetProviderAPIKeys(),          // ★ 服务商独立 API Key（切服务商自动带出）
 		"providerContexts": core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
 		"providerProtocols": core.GetProviderProtocols(),       // ★ 2026-09-02 服务商 LLM 协议（前端联动下拉）
+		"providerTemperatures": core.GetProviderTemperatures(), // ★ 2026-09-19 服务商级默认温度（models.json = 生成参数唯一来源）
+		"providerMaxTokens":    core.GetProviderMaxTokens(),    // ★ 2026-09-19 服务商级默认最大输出 token
+		"providerModelParams":  core.GetProviderModelParams(),  // ★ 2026-09-19 模型级参数（模型名 → 参数；覆盖服务商级）
 	})
 }
 

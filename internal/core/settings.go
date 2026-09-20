@@ -170,6 +170,9 @@ func Load() bool {
 	EnsureModelList()
 	// 确保 AI 配置预设已加载（ai-presets.json 不存在则建空映射）
 	EnsureAiPresets()
+	// ★ 2026-09-19：把 settings 里的生成参数（温度/最大输出/上下文窗口）一次性迁进
+	//   models.json（此后服务商配置为唯一来源）；幂等，迁过即跳过。
+	MigrateParamSettingsToModels()
 	return loaded
 }
 
