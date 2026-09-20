@@ -1377,6 +1377,11 @@ func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
 	handler.HandleModels(w, r)
 }
 
+// handleModelsRename 服务商改名（委托共享实现）：改 models.json 键 + 同步 AI 配置里的 provider 引用
+func (s *webServer) handleModelsRename(w http.ResponseWriter, r *http.Request) {
+	handler.HandleModelsRename(w, r)
+}
+
 // handleAiPresets AI 配置预设 API（委托共享实现）：GET 查询 / POST 保存-应用-删除 / PUT 全量保存
 func (s *webServer) handleAiPresets(w http.ResponseWriter, r *http.Request) {
 	handler.HandleAiPresets(w, r)

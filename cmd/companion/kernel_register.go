@@ -69,6 +69,7 @@ func registerKernelAPIs(s *webServer) {
 
 	// ── 模型 / 指令 / 思想 ──
 	_ = agent.KernelAPIRegister("models", "GET,POST,PUT", "/api/models", "模型列表读取/全量保存", s.handleModels)
+	_ = agent.KernelAPIRegister("models.rename", "POST", "/api/models/rename", "服务商改名（同步 AI 配置里的 provider 引用）", s.handleModelsRename)
 	_ = agent.KernelAPIRegister("ai-presets", "GET,POST,PUT", "/api/ai-presets", "AI 配置预设：保存/应用/删除/全量（多套配置对话快速切换）", s.handleAiPresets)
 	_ = agent.KernelAPIRegister("instructions", "GET,PUT", "/api/instructions", "指令读取/保存", s.handleInstructions)
 

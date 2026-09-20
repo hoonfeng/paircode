@@ -493,6 +493,60 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleModelsRename 服务商改名（POST /api/models/rename；body: {"old":"…","new":"…"}）。
+//
+// ★ 2026-09-20 接线：服务商名既是 models.json 的键，也是 ai-presets.json 里 AI 配置的
+// 连接引用（连接信息唯一来源 = AI 配置）。改名必须同时改这两处，否则配置仍指向旧名
+// ——装配时查不到 models.json 条目就丢了地址/协议/参数。core.RenameProvider 早已实现该
+// 语义，但没有任何调用方（前端名称输入框 disabled、也无 API 端点），改名只能「删 + 新增」，
+// 而删除会让引用它的配置在面板上失去模型分组。本端点把这条链路接上。
+//
+// 返回 {ok, renamed, old, new, updatedPresets, presets}：
+//   - renamed=false（old == new）表示同名幂等，未改动任何数据；
+//   - updatedPresets = 被同步改写的 AI 配置名清单（前端可直接告知用户）。
+func HandleModelsRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonErr(w, "仅支持 POST")
+		return
+	}
+	var req struct {
+		Old string `json:"old"`
+		New string `json:"new"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "无效 JSON: "+err.Error())
+		return
+	}
+	oldName := strings.TrimSpace(req.Old)
+	newName := strings.TrimSpace(req.New)
+	if oldName == "" {
+		jsonErr(w, "原服务商名称不能为空")
+		return
+	}
+	if newName == "" {
+		jsonErr(w, "新服务商名称不能为空")
+		return
+	}
+	if oldName == newName {
+		jsonResp(w, map[string]any{
+			"ok": true, "renamed": false, "old": oldName, "new": newName,
+			"updatedPresets": []string{}, "presets": core.GetAiPresets(),
+		})
+		return
+	}
+	// 先统计受影响的 AI 配置（改名后它们就指向新名了，无法再按旧名筛选）
+	affected := core.PresetsReferencing(oldName)
+	if err := core.RenameProvider(oldName, newName); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{
+		"ok": true, "renamed": true, "old": oldName, "new": newName,
+		"updatedPresets": affected,
+		"presets":        core.GetAiPresets(), // 回带最新配置，前端免二次请求
+	})
+}
+
 // HandleAiPresets AI 配置预设管理（GET 查询 / POST 保存-删除-应用 / PUT 全量保存）。
 // ★ 2026-08-20 AI 配置预设：把「一份完整 AI 配置」命名保存为预设，对话面板快速切换。
 //

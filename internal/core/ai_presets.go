@@ -146,6 +146,24 @@ func RenamePresetProvider(oldName, newName string) int {
 	return n
 }
 
+// PresetsReferencing 返回引用了指定服务商的 AI 配置名（排序）。
+// ★ 2026-09-20：服务商改名/删除前用它给出「受影响的配置」提示与统计——
+// 配置自带完整的连接快照（provider/baseURL/apiKey/模型），所以服务商消失后
+// 聊天仍可用，但该配置在对话面板的模型分组（取自 models.json 的服务商模型列表）会消失。
+func PresetsReferencing(provider string) []string {
+	names := []string{}
+	if provider == "" {
+		return names
+	}
+	for n, p := range GetAiPresets() {
+		if p.Provider == provider {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // SetAiPresets 全量替换预设定义。
 func SetAiPresets(g AiPresets) {
 	PresetList = g

@@ -634,6 +634,15 @@ async function saveModels(providers) {
 
 }
 
+// renameProvider 服务商改名（后端把 models.json 的键与 ai-presets.json 里 AI 配置的
+// provider 引用一并同步；返回 {renamed, old, new, updatedPresets}）。
+// ★ 2026-09-20：改名必须走后端——只改 models.json 会让引用旧名的 AI 配置丢地址/Key/协议。
+async function renameProvider(oldName, newName) {
+
+  return apiPost('/models/rename', { old: oldName, new: newName })
+
+}
+
 // getAiPresets 获取 AI 配置预设列表（预设名 → 完整配置快照；config/ai-presets.json）
 async function getAiPresets() {
 
@@ -717,7 +726,7 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, renameProvider, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
 
 // ─── UI 插件 boot 图（外部兼容 /api/ui-boot 单图）──────────────
 // getUIBoot 取外部 boot 图（WebBootGraph 等价，{rev, entries:[{id,url,rev,inject,immediately,external}]}）。

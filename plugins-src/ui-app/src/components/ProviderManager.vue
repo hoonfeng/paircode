@@ -72,7 +72,8 @@
           <div class="pm-edit-title">编辑服务商：{{ p.name }}</div>
           <div class="pm-field">
             <span class="pm-field-label">服务商名称</span>
-            <input :value="p.name" disabled />
+            <input v-model="editForm.name" placeholder="如 deepseek" />
+            <span class="pm-hint">改名会一并同步引用该服务商的 AI 配置（连接信息不丢）；空=保持原名</span>
           </div>
           <div class="pm-field">
             <span class="pm-field-label">API URL（基础地址或完整端点）</span>
@@ -289,28 +290,40 @@ function snapshot() {
 }
 
 async function saveEdit() {
-  const name = editForm.value.name.trim() || (editingName.value !== '__new__' ? editingName.value : '')
+  const oldName = editingName.value        // '' | '__new__' | 被编辑的服务商原名
+  const isRename = oldName !== '__new__' && oldName !== ''
+  const name = editForm.value.name.trim() || (isRename ? oldName : '')
   if (!name) { error.value = '服务商名称不能为空'; return }
-  const map = snapshot()
-  if (editingName.value === '__new__' && map[name]) { error.value = `服务商「${name}」已存在`; return }
-  map[name] = {
-    baseURL: editForm.value.baseURL.trim(),
-    models: editModels.value,
-    contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0), // ★ 服务商级默认上下文窗口
-    protocol: (editForm.value.protocol || '').trim(), // ★ 2026-09-02 LLM 协议（空=默认 openai-completions）
-    // ★ 2026-09-19 生成参数（温度/最大输出）与模型级参数一律落 models.json（服务商配置为准）
-    temperature: String(editForm.value.temperature ?? '').trim(),
-    maxTokens: Math.max(0, Number(editForm.value.maxTokens) || 0),
-    modelParams: cleanModelParams(),
+  if (name !== oldName && providers.value.some(p => p.name === name)) {
+    error.value = `服务商「${name}」已存在`; return
   }
   saving.value = true
   try {
+    // ★ 2026-09-20 改名先走后端：由它迁移 models.json 的键并同步 AI 配置里的 provider 引用。
+    //   失败即中止（否则后面的全量保存会把旧键写回去，等于改名没发生）。
+    let renamed = null
+    if (isRename && name !== oldName) renamed = await api.renameProvider(oldName, name)
+    const map = snapshot()
+    if (isRename && name !== oldName) delete map[oldName] // 旧键已由后端改名，快照里必须清掉
+    map[name] = {
+      baseURL: editForm.value.baseURL.trim(),
+      models: editModels.value,
+      contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0),
+      protocol: (editForm.value.protocol || '').trim(),
+      temperature: String(editForm.value.temperature ?? '').trim(),
+      maxTokens: Math.max(0, Number(editForm.value.maxTokens) || 0),
+      modelParams: cleanModelParams(),
+    }
     await api.saveModels(map)
     editingName.value = ''
     await load()
     emit('saved') // AI tab 下拉同步刷新
+    if (renamed && renamed.renamed) {
+      const n = (renamed.updatedPresets || []).length
+      window.$toast(`已改名为「${name}」` + (n ? `，同步更新 ${n} 条 AI 配置` : ''), 'success')
+    }
   } catch (e) {
-    error.value = '保存失败: ' + (e.message || e)
+    error.value = (isRename && name !== oldName ? '改名失败: ' : '保存失败: ') + (e.message || e)
   } finally { saving.value = false }
 }
 
@@ -338,7 +351,22 @@ function cleanModelParams() {
 }
 
 async function removeProvider(p) {
-  if (!window.confirm(`删除服务商「${p.name}」？\n（AI tab 将不再可选该服务商）`)) return
+  // ★ 2026-09-20：删除前列出仍引用该服务商的 AI 配置——配置自带完整连接快照，删掉服务商后
+  //   这些配置仍能聊天，但它们在对话面板的模型分组会消失（分组取自 models.json 的服务商模型
+  //   列表），用户会以为配置坏了。此处提前告知并给出去向建议。
+  let affected = []
+  try {
+    const d = await api.getAiPresets()
+    const presets = (d && d.presets) || {}
+    affected = Object.keys(presets).filter(n => (presets[n] || {}).provider === p.name).sort()
+  } catch {}
+  let msg = `删除服务商「${p.name}」？\n（AI tab 将不再可选该服务商）`
+  if (affected.length) {
+    msg += `\n\n以下 ${affected.length} 条 AI 配置仍引用它：\n· ${affected.join('\n· ')}`
+      + '\n\n删除后它们仍可继续聊天（配置是完整快照），但在对话面板里会失去模型分组；'
+      + '建议先在「AI 配置」里把它们改选到其他服务商。'
+  }
+  if (!window.confirm(msg)) return
   const map = snapshot()
   delete map[p.name]
   try {
@@ -439,6 +467,7 @@ function paramsSummary(providerName) {
   border-radius: 4px; padding: 1px 7px; display: inline-block; margin-bottom: 4px;
 }
 .pm-protocol-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; }
+.pm-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; line-height: 1.5; }
 .pm-ctx { font-size: 11px; color: var(--text-secondary, #999); }
 .pm-models { display: flex; flex-wrap: wrap; gap: 5px; }
 .pm-tag {
