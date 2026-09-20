@@ -90,10 +90,14 @@ func TestExtRouteJSPlugin(t *testing.T) {
 	}
 
 	// ⑦ 重复注册报错
-	_, err = RegisterExtRoute("GET", "/api/ext/dup", func(w http.ResponseWriter, r *http.Request) {})
+	unregDup, err := RegisterExtRoute("GET", "/api/ext/dup", func(w http.ResponseWriter, r *http.Request) {})
 	if err != nil {
 		t.Fatalf("首次注册应成功: %v", err)
 	}
+	// ★ 这是直接写全局路由表（非插件路由，插件卸载不会自动注销）：必须显式注销，
+	//   否则同包重复运行（-count=2 等）时第二轮这条「首次注册」会因第一轮残留条目
+	//   报「重复注册」→ 假失败（实测 -count=2 必现）。
+	t.Cleanup(unregDup)
 	if _, err = RegisterExtRoute("GET", "/api/ext/dup", func(w http.ResponseWriter, r *http.Request) {}); err == nil {
 		t.Fatal("重复注册应报错")
 	}
