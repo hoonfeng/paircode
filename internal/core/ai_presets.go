@@ -144,6 +144,8 @@ func EnsureAiPresets() {
 
 // AiPresetFromSettings 从当前 settings 抓取 AI 配置快照（保存预设时用；未传 preset 的兜底）。
 // ★ 2026-08-21 统一模型：不再拆分 规划/审核 模型，plan/review 与执行模型一致。
+// ★ 2026-09-20 生成参数从插件注册域取（pluginSettings.generation，agentloop 注册）——
+//   核心不再直读 settings 顶层生成参数字段（旧字段已一次性迁移并清空）。
 func AiPresetFromSettings() AiPreset {
 	return AiPreset{
 		Provider:         Settings.Provider,
@@ -152,10 +154,10 @@ func AiPresetFromSettings() AiPreset {
 		ExecuteModel:     Settings.ExecuteModel,
 		PlanModel:        Settings.ExecuteModel,
 		ReviewModel:      Settings.ExecuteModel,
-		Temperature:      Settings.Temperature,
-		ThinkingMode:     Settings.ThinkingMode,
-		MaxTokens:        Settings.MaxTokens,
-		ContextMaxTokens: Settings.ContextMaxTokens,
+		Temperature:      GenerationTemperature(),
+		ThinkingMode:     GenerationThinkingMode(),
+		MaxTokens:        GenerationMaxTokens(),
+		ContextMaxTokens: GenerationContextMaxTokens(),
 	}
 }
 
