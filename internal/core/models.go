@@ -341,7 +341,9 @@ func UpdateProviderModels(name string, baseURL string, models []string) error {
 	return SaveModelList()
 }
 
-// RenameProvider 重命名服务商（同时更新 settings 中引用的 provider 名）
+// RenameProvider 重命名服务商（同时更新 AI 配置中引用的 provider 名）。
+// ★ 2026-09-20：引用改在 ai-presets.json 里更新——连接信息唯一来源是 AI 配置，
+// settings.Provider 已退出核心（见 settings_connection.go），此前只改它等于没改。
 func RenameProvider(oldName, newName string) error {
 	if ModelList == nil {
 		LoadModelList()
@@ -358,11 +360,10 @@ func RenameProvider(oldName, newName string) error {
 	}
 	delete(ModelList, oldName)
 	ModelList[newName] = entry
-	// 更新 settings 中的 provider 引用
-	if Settings.Provider == oldName {
-		Settings.Provider = newName
+	// 更新 AI 配置中的 provider 引用（改名后配置仍指向有效服务商）
+	if n := RenamePresetProvider(oldName, newName); n > 0 {
+		log.Printf("[config] 服务商改名 %q → %q：已同步 %d 条 AI 配置", oldName, newName, n)
 	}
-	Save()
 	return SaveModelList()
 }
 

@@ -28,10 +28,14 @@ func TestContextWindowUsesAssembledValue(t *testing.T) {
 	}
 }
 
-// TestResolveProviderBaseHasNoGenerationParams 裸基线不携带任何生成参数
-// （★ 2026-09-20：温度/思考档位/最大输出/上下文窗口/模型级参数表一律由插件装配器决策——
-// 全局默认取自插件注册配置域 pluginSettings.generation，模型/服务商级取自 models.json）。
-func TestResolveProviderBaseHasNoGenerationParams(t *testing.T) {
+// TestResolveProviderBaseHasNoConfigReads 裸基线不携带任何配置值（连接字段 + 生成参数）。
+//
+// ★ 2026-09-20 生成参数零直读：温度/思考档位/最大输出/上下文窗口/模型级参数表一律由
+// 插件装配器决策（全局默认取插件注册域 pluginSettings.generation，模型/服务商级取 models.json）。
+// ★ 2026-09-20 连接字段零直读：服务商/地址/Key/模型不再从 settings 顶层兜底——
+// 旧顶层值已迁入 ai-presets.json 的一条 AI 配置并清空（core/settings_connection.go），
+// 装配器按激活配置（core.Settings.Preset → ctx.aiPresets）经 ctx.models 展开。
+func TestResolveProviderBaseHasNoConfigReads(t *testing.T) {
 	oldSettings, oldList := core.Settings, core.ModelList
 	defer func() { core.Settings, core.ModelList = oldSettings, oldList }()
 
@@ -46,8 +50,13 @@ func TestResolveProviderBaseHasNoGenerationParams(t *testing.T) {
 		},
 	}
 	core.Settings = core.Default()
+	core.Settings.Preset = "激活配置" // 装配上下文：必须透传给装配器
+	// 即使旧连接字段与生成参数字段被写回（历史数据/外部写入），基线也不得携带它们
 	core.Settings.Provider = "prov-x"
-	// 即使旧字段被写回（历史数据/外部写入），基线也不得携带它们
+	core.Settings.BaseURL = "https://legacy.example/v1"
+	core.Settings.APIKey = "LEGACY-KEY"
+	core.Settings.ExecuteModel = "m-legacy"
+	core.Settings.Model = "m-legacy-old"
 	core.Settings.Temperature = "0.9"
 	core.Settings.ThinkingMode = "max"
 	core.Settings.MaxTokens = 99999
@@ -57,11 +66,24 @@ func TestResolveProviderBaseHasNoGenerationParams(t *testing.T) {
 	}
 
 	base := resolveProviderBase()
-	if base.ProviderContextMaxTokens != 1000000 {
-		t.Errorf("服务商级上下文窗口应透传（数据面预查，供装配器决策），得到 %d", base.ProviderContextMaxTokens)
+	if base.Preset != "激活配置" {
+		t.Errorf("装配上下文（激活配置名）必须透传，得到 %q", base.Preset)
 	}
-	if base.Provider != "prov-x" {
-		t.Errorf("服务商应为 prov-x，得到 %q", base.Provider)
+	// ★ 连接字段零直读：基线这四项必须是「未配置」机制语义
+	if base.Provider != "" {
+		t.Errorf("基线服务商应为空（由装配器按激活配置展开），得到 %q", base.Provider)
+	}
+	if base.BaseURL != "" {
+		t.Errorf("基线 API 地址应为空（唯一来源 AI 配置/models.json），得到 %q", base.BaseURL)
+	}
+	if base.APIKey != "" {
+		t.Errorf("基线 API Key 应为空（唯一来源 AI 配置），得到 %q", base.APIKey)
+	}
+	if base.Model != "" {
+		t.Errorf("基线模型应为空（唯一来源 AI 配置/会话选定），得到 %q", base.Model)
+	}
+	if base.ProviderContextMaxTokens != 0 {
+		t.Errorf("基线不应预查服务商级上下文窗口（装配器按最终服务商经 ctx.models 取），得到 %d", base.ProviderContextMaxTokens)
 	}
 	// ★ 生成参数零直读：基线这五项必须是「未配置」机制语义
 	if base.Temperature != -1 {

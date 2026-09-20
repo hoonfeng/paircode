@@ -71,6 +71,14 @@ func (b *jsProviderFactoryBridge) applyOverrides(cur ProviderParams, obj *goja.O
 	out := cur
 	get := func(key string) goja.Value { return obj.Get(key) }
 
+	// ★ 2026-09-20 缺陷修复：服务商覆盖此前被丢弃——JS 装配器算出的最终服务商
+	//   （激活配置展开 / 会话选定 convProvider）只用于其内部查 ctx.models，
+	//   而 ProviderParams.Provider 始终停留在基线值。旧基线（core.Settings.Provider）
+	//   有兜底值所以未暴露；基线不再直读连接字段后表现为 provider 恒空
+	//   （服务商实现路由 LookupProviderImpl 与装配日志失真）。
+	if v := get("provider"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
+		out.Provider = v.String()
+	}
 	if v := get("baseURL"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.BaseURL = v.String()
 	}

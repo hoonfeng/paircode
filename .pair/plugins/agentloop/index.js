@@ -475,10 +475,13 @@ return {
     //   → ⑨ 统一模型同步（plan/review 跟随执行模型）。
     //   ★ 2026-09-20：⑤⑥⑦ 的取值源已从核心字段（ctx.app.settings 顶层）改为
     //     插件注册配置域（ctx.getSettings('generation')）+ models.json；
-    //     本插件不再读任何生成参数核心字段（③ 的连接字段兜底不属生成参数）。
+    //     本插件不再读任何生成参数核心字段。
+    //   ★ 2026-09-20 连接字段同样不再读核心字段：③ 段的 s.provider/s.executeModel/s.model
+    //     兜底已移除——settings 顶层旧连接字段已由 core 迁入 ai-presets.json 的一条配置并
+    //     清空（core/settings_connection.go）。连接信息唯一来源：① 激活配置整套展开
+    //     （ctx.aiPresets）+ ② 会话三元组 + ④ 服务商数据（ctx.models）。
     // ═══════════════════════════════════════════════════════════
     ctx.providerFactory.register((current) => {
-      const s = (ctx.app && ctx.app.settings) || {};
       // ★ 2026-09-20 生成参数全局默认的取值源 = 插件注册配置域 pluginSettings.generation
       //   （核心 Go 已不直读生成参数）。默认值用 GEN_DEFAULTS（与 schema default 同源）。
       const gset = ctx.getSettings(GEN_KEY) || {};
@@ -515,8 +518,10 @@ return {
       if (current.convProvider) over.provider = current.convProvider;
       if (current.convModel) over.model = current.convModel;
       // ── ③ 最终 服务商/模型（后续决策的依据）──
-      const provider = over.provider || current.provider || s.provider || '';
-      const model = over.model || current.model || s.executeModel || s.model || '';
+      //   ★ 2026-09-20：不再兜底核心 settings 顶层字段（已迁入 AI 配置并清空）——
+      //   over.*=配置展开/会话选定，current.*=Go 注入的会话上下文（conv*）。
+      const provider = over.provider || current.provider || '';
+      const model = over.model || current.model || '';
       // ── ④ 服务商数据兜底（经 ctx.models 查 models.json：BaseURL/协议/Key/上下文）──
       const me = (provider && ctx.models.get(provider)) || {};
       const presetProvider = presValid ? (pres.provider || '') : '';
@@ -641,14 +646,19 @@ return {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
       // ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：宿主已按装配结果
-      //   （服务商级 > settings 兜底）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
-      //   才用插件设置 / 全局 settings 兜底——不再无条件覆盖服务商值。
+      //   （服务商级 > 配置级 > 全局默认）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
+      //   才用插件设置 / 插件注册配置域兜底——不再无条件覆盖服务商值。
+      // ★ 2026-09-20：全局兜底改读插件注册配置域 generation 段——settings 顶层
+      //   contextMaxTokens 旧字段已迁入该域并清空（core/settings_generation.go），
+      //   核心字段零读取。
       if (!(Number(opts.maxContextTokens) > 0)) {
         if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) {
           over.maxContextTokens = Number(cfg.maxContextTokens);
         } else {
-          const aiTop = (ctx.app && ctx.app.settings) || {};
-          const ctxMax = Number(aiTop.contextMaxTokens);
+          const gsetCtx = ctx.getSettings(GEN_KEY) || {};
+          const gv = (gsetCtx.contextMaxTokens === undefined || gsetCtx.contextMaxTokens === null || gsetCtx.contextMaxTokens === '')
+            ? GEN_DEFAULTS.contextMaxTokens : gsetCtx.contextMaxTokens;
+          const ctxMax = Number(gv);
           if (ctxMax > 0) over.maxContextTokens = ctxMax;
         }
       }

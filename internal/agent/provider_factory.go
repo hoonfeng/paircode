@@ -6,7 +6,8 @@
 //   获取最终 Provider 参数，不再直接读 core.Settings 的 AI 业务字段。
 //
 // ★ 2026-09-03 决策全量迁插件（本轮）：Go 只留「机制 + 数据面」——
-//   · 裸基线 resolveProviderBase：仅读连接字段（服务商/地址/Key/模型）与装配上下文（零决策）；
+//   · 裸基线 resolveProviderBase：只注入装配上下文（零决策；★ 2026-09-20 起连接字段
+//     也不再读，见下）；
 //   · 装配上下文注入：Preset（当前生效配置名：会话级 > 全局激活）与 Conv*（会话选定值）
 //     透传给装配器（JS 经 ctx.aiPresets / ctx.models 查数据面表）；
 //   · 决策（配置整套展开、服务商数据兜底、Key 选择、统一模型同步、参数级覆盖、
@@ -21,6 +22,12 @@
 //   · 服务商级 / 模型级 → models.json（经 ctx.models）；
 //   · 配置级（AI 配置预设）→ ai-presets.json（经 ctx.aiPresets）。
 //   核心只消费装配结果（ProviderParams.ContextMaxTokens 等）。
+//
+// ★ 2026-09-20 连接字段零直读（同批清理）：服务商/地址/Key/模型此前从 settings 顶层
+//   兜底读取（resolveProviderBase 的 Provider/BaseURL/APIKey/MainModel + 装配器 ③ 段的
+//   s.provider/s.executeModel）。settings 顶层旧值已由 core 一次性迁入 ai-presets.json
+//   的一条 AI 配置并清空（core/settings_connection.go）——现基线只传「装配上下文」
+//   （Preset + 会话三元组），连接信息一律由装配器按激活配置经 ctx.aiPresets/ctx.models 展开。
 
 package agent
 
@@ -134,28 +141,27 @@ func ResolveProviderParams() ProviderParams {
 	return p
 }
 
-// resolveProviderBase 解析装配器之前的裸基线（存储镜像，零决策）：
-// 只读连接字段（Provider/BaseURL/APIKey/Model）+ 装配上下文（Preset=全局激活配置名，
-// Conv* 由 ForConv 注入）。
+// resolveProviderBase 解析装配器之前的裸基线（零决策）：
+// 只注入装配上下文（Preset=全局激活配置名；Conv* 由 ForConv 注入）。
 // 服务商默认数据（BaseURL/Key/协议/上下文）与配置展开由装配器经 ctx.models/ctx.aiPresets
 // 决策（★ 2026-09-03 决策迁插件——Go 不再预填任何 AI 业务派生值）。
+//
+// ★ 2026-09-20 连接字段零直读：此前基线还从 core.Settings 抓 Provider/BaseURL/APIKey/
+// Model（旧连接字段兜底），装配器再兜一层 s.provider/s.executeModel——同一份连接信息
+// 在 settings 顶层与 ai-presets.json 两处存储、易漂移。现 settings 顶层旧值已一次性迁入
+// AI 配置并清空（core/settings_connection.go），基线只留装配上下文；服务商/地址/Key/模型
+// 由装配器按激活配置展开（无激活配置 → 未配置，运行期由 ConfiguredProvider 报缺失）。
 func resolveProviderBase() ProviderParams {
-	cur := ProviderParams{
-		Provider: core.Settings.Provider,
-		BaseURL:  core.Settings.BaseURL,
-		APIKey:   core.Settings.APIKey,
-		Model:    core.MainModel(),
+	return ProviderParams{
 		// ★ 2026-09-20 生成参数不再由核心直读（见文件头）：基线一律留「未配置」，
 		//   由装配器按插件注册配置（generation 段）/ models.json / ai-presets.json 决策。
 		//   Temperature=-1 是「不下发温度」的机制语义（Provider 不传 temperature 字段）。
-		Temperature:              -1,
-		ProviderContextMaxTokens: core.GetProviderContextMaxToken(core.Settings.Provider), // 服务商默认上下文（数据面预查；装配器按最终服务商再决策）
-		Preset:                   core.Settings.Preset, // 全局激活配置名（装配上下文）
+		Temperature: -1,
+		// 装配上下文：全局激活配置名（装配器据此经 ctx.aiPresets 整套展开）。
+		// ★ 服务商级默认上下文窗口（ProviderContextMaxTokens）不再预查——装配器按
+		//   「最终服务商」经 ctx.models 取（基线预查会按旧服务商算，可能不是最终值）。
+		Preset: core.Settings.Preset,
 	}
-	// 统一模型同步（无分支的无害兜底：装配器最终按执行模型覆盖 plan/review）
-	cur.PlanModel = cur.Model
-	cur.ReviewModel = cur.Model
-	return cur
 }
 
 // ConfiguredProvider 是否已配好可用 Provider（业务层用，替代 core.Configured 的 AI 检查）。

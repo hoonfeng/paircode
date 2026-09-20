@@ -14,7 +14,14 @@ import (
 // ★ 2026-08-21 AI 业务字段（provider/baseURL/apiKey/模型）加 omitempty：
 //
 //	settings 不再存 key/模型（唯一来源 ai-presets.json），Save 时不把空字段写回文件。
+//
+// ★ 2026-09-20 连接字段彻底退出核心（见 settings_connection.go）：
+//
+//	provider/baseURL/apiKey/model/executeModel/planModel/reviewModel 仅在启动时被迁移
+//	读取一次（→ AI 配置），随后清空；运行期无任何消费者（resolveProviderBase 也不再读）。
+//	连接信息唯一来源 = ai-presets.json 的当前激活配置（装配器按 settings.Preset 展开）。
 type AppSettings struct {
+	// ── 以下 AI 连接字段：仅迁移读取（见 MigrateLegacyConnectionToPreset），运行期零消费者 ──
 	Provider         string `json:"provider,omitempty"`
 	Preset           string `json:"preset"` // ★ 2026-08-20 当前 AI 配置预设名（对话面板选预设时记录，UI 高亮用）
 	BaseURL          string `json:"baseURL,omitempty"`
@@ -122,6 +129,9 @@ func Default() AppSettings {
 		// ★ 2026-09-20 生成参数（温度/思考/输出/上下文窗口）默认值也移出核心：
 		//   改由插件 agentloop 经 ctx.registerSettings 注册（generation 段，
 		//   见 settings_generation.go）——核心不再持有生成参数默认值。
+		// ★ 2026-09-20 连接字段（provider/baseURL/apiKey/model）同样无默认值：
+		//   唯一来源是 AI 配置（ai-presets.json）；旧顶层值启动时一次性迁入配置并清空
+		//   （见 settings_connection.go）——核心零直读连接字段。
 		Provider: "", BaseURL: "", APIKey: "",
 		PlanModel: "", ExecuteModel: "", ReviewModel: "",
 		AutoIterate: true, ReviewMode: "auto",
@@ -184,6 +194,12 @@ func Load() bool {
 	//   零直读，全局默认取值一律走插件注册配置。
 	//   ★ 顺序：必须在 MigrateParamSettingsToModels 之后（模型级参数先搬进 models.json）。
 	MigrateGenerationSettingsFromLegacy()
+	// ★ 2026-09-20：把 settings 顶层的旧连接字段（provider/baseURL/apiKey/模型）迁进
+	//   ai-presets.json 的一条 AI 配置（并把 preset 指向它）后清空——此后核心零直读连接
+	//   字段，连接信息唯一来源 = AI 配置（插件经 ctx.aiPresets 读写）。
+	//   ★ 顺序：必须在 MigrateParamSettingsToModels 之后（该迁移仍需 Settings.Provider
+	//     定位「当前服务商」以写入服务商级参数）。
+	MigrateLegacyConnectionToPreset()
 	return loaded
 }
 
@@ -226,19 +242,6 @@ func SyncWorkspaceFolderList(wsRoot string, folders []string) {
 			Settings.RecentProjects = Settings.RecentProjects[:20]
 		}
 	}
-}
-
-// MainModel 主循环用的模型：执行模型优先，回退旧 Model 字段。
-func MainModel() string {
-	if Settings.ExecuteModel != "" {
-		return Settings.ExecuteModel
-	}
-	return Settings.Model
-}
-
-// Configured 是否已配好可用 Provider。
-func Configured() bool {
-	return Settings.APIKey != "" && Settings.BaseURL != "" && MainModel() != ""
 }
 
 // FirstFontFamily 从 CSS 字体栈取首个具体族名。

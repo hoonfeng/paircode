@@ -473,17 +473,17 @@ function modelValueOf(provider, model) {
   if (n) return 'preset::' + n + '::' + model
   return String(provider || '') + '::' + String(model || '')
 }
-// 全局默认（settings/preset）解析出的 服务商+模型：会话未设模型时下拉显示它
+// 全局默认（激活配置）解析出的 服务商+模型：会话未设模型时下拉显示它
+// ★ 2026-09-20：不再读 settings 顶层连接字段（provider/executeModel 已由 core 迁入
+//   ai-presets.json 的一条配置并清空，见 core/settings_connection.go）——唯一来源是
+//   激活配置（settings.preset → ai-presets.json 整套展开）。
 function defaultProviderModel() {
   const s = state.settings || {}
   const md = modelData.value || {}
-  let prov = s.provider || ''
-  let model = s.executeModel || ''
-  const presets = md.presets || null // 激活预设（携带 Key），仅解析服务商/模型
-  if (presets && s.preset && presets[s.preset]) {
-    prov = presets[s.preset].provider || prov
-    model = presets[s.preset].executeModel || model
-  }
+  const presets = md.presets || null // 激活配置（携带 Key），仅解析服务商/模型
+  const pres = (presets && s.preset && presets[s.preset]) || null
+  let prov = (pres && pres.provider) || ''
+  let model = (pres && pres.executeModel) || ''
   // 回落：当前配置分组中取首项（模型取该服务商 models 列表首个）
   const items = composerItems.value
   if (!prov && items[0]) prov = items[0].provider
@@ -2389,7 +2389,10 @@ watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterat
 // ★ 2026-08-31 会话级模型：下拉不再跟随全局 settings（切模型只写会话）。
 //   会话切换/新建时按会话元数据同步下拉；服务商配置（Key/模型列表）变化时刷新分组。
 watch(() => state.currentConvId, () => { syncComposerModelFromConv() })
-watch(() => [state.settings && state.settings.provider, state.settings && state.settings.executeModel], () => {
+// ★ 2026-09-20：全局默认配置的判据改为「激活配置名」（settings.preset）——
+//   连接字段（provider/executeModel）已退出 settings 顶层（迁入 ai-presets.json 并清空），
+//   监听它们将永不触发（应用另一条配置后下拉不刷新）。
+watch(() => state.settings && state.settings.preset, () => {
   // 全局默认配置变化：仅当当前会话未设置模型时下拉才需要刷新显示
   loadModelData().then(() => syncComposerModelFromConv())
 })

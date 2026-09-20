@@ -119,6 +119,33 @@ func GetPresetAPIKeyForProvider(provider string) string {
 	return ""
 }
 
+// RenamePresetProvider 把 AI 配置中引用旧服务商名的条目改为新名（服务商改名时调用）。
+// 返回改动的配置数（0=无改动，不落盘）。
+//
+// ★ 2026-09-20：连接信息唯一来源是 AI 配置（ai-presets.json）——此前服务商改名只更新
+// settings.Provider（该字段已退出核心、运行期零消费者），配置里仍指向旧名会导致
+// 装配时「服务商不存在」而丢失地址/Key（models.json 查不到新条目）。
+func RenamePresetProvider(oldName, newName string) int {
+	if oldName == "" || newName == "" || oldName == newName {
+		return 0
+	}
+	g := GetAiPresets()
+	n := 0
+	for k, p := range g {
+		if p.Provider != oldName {
+			continue
+		}
+		p.Provider = newName
+		g[k] = p
+		n++
+	}
+	if n > 0 {
+		PresetList = g
+		_ = SaveAiPresets()
+	}
+	return n
+}
+
 // SetAiPresets 全量替换预设定义。
 func SetAiPresets(g AiPresets) {
 	PresetList = g
@@ -142,18 +169,22 @@ func EnsureAiPresets() {
 	LoadAiPresets()
 }
 
-// AiPresetFromSettings 从当前 settings 抓取 AI 配置快照（保存预设时用；未传 preset 的兜底）。
+// AiPresetFromSettings 抓取「当前生效 AI 配置」快照（保存配置时用；未传配置快照的兜底）。
 // ★ 2026-08-21 统一模型：不再拆分 规划/审核 模型，plan/review 与执行模型一致。
-// ★ 2026-09-20 生成参数从插件注册域取（pluginSettings.generation，agentloop 注册）——
-//   核心不再直读 settings 顶层生成参数字段（旧字段已一次性迁移并清空）。
+// ★ 2026-09-20 连接信息从**激活配置**取：settings 顶层连接字段已一次性迁入 AI 配置并
+//   清空（settings_connection.go），核心不再持有连接配置——快照来源即 settings.Preset
+//   指向的那条配置（唯一来源），而非核心字段。
+// ★ 2026-09-20 生成参数从插件注册域取（pluginSettings.generation，agentloop 注册）。
 func AiPresetFromSettings() AiPreset {
+	cur := GetPreset(Settings.Preset)
 	return AiPreset{
-		Provider:         Settings.Provider,
-		BaseURL:          Settings.BaseURL,
-		APIKey:           Settings.APIKey,
-		ExecuteModel:     Settings.ExecuteModel,
-		PlanModel:        Settings.ExecuteModel,
-		ReviewModel:      Settings.ExecuteModel,
+		Provider:         cur.Provider,
+		BaseURL:          cur.BaseURL,
+		APIKey:           cur.APIKey,
+		ExecuteModel:     cur.ExecuteModel,
+		PlanModel:        cur.ExecuteModel,
+		ReviewModel:      cur.ExecuteModel,
+		Protocol:         cur.Protocol,
 		Temperature:      GenerationTemperature(),
 		ThinkingMode:     GenerationThinkingMode(),
 		MaxTokens:        GenerationMaxTokens(),

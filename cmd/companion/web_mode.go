@@ -33,7 +33,11 @@ func InitCore() int {
 	for i, f := range folders {
 		log.Printf("[core]   文件夹[%d]: %s", i, f)
 	}
-	log.Printf("[core] API 已配置: %v", core.Configured())
+	// ★ 2026-09-20：不再输出「是否已配置」——连接信息唯一来源是 AI 配置
+	//   （ai-presets.json，settings 顶层连接字段已退出核心），且启动时插件尚未装载
+	//   （装配器未注册 → 装配结果为空），此处判定必然失真。就绪判定请以运行期
+	//   装配结果为准（agent.ConfiguredProvider，缺失项含 API Key/地址/模型）。
+	log.Printf("[core] 当前激活 AI 配置: %q（连接信息以 config/ai-presets.json 为准）", core.Settings.Preset)
 
 	port := 9090
 	if p := os.Getenv("WEB_PORT"); p != "" {
