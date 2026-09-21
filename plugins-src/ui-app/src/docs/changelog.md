@@ -9,7 +9,7 @@
 ### 变更 / 改进
 
 - **移除「文件快照」能力（编辑文件不再产生快照）** — 此前 `write` / `apply_patch` 在改文件前会把原文件复制到 `.pair/snapshots/<相对路径>/<时间戳>`，超量时按文件保留最近 20 份，并注册 `restore_snapshot` / `list_snapshots` 两个工具供查询与恢复（`.pair/rollback/msg-snapshots.json` 记录快照与用户消息的关联）。该能力整体下线：内核 `internal/agent/snapshot.go` / `rollback.go` 删除，写前快照调用点（`write` / `apply_patch` 内核 / harness 辅助）清除，插件 `tool-harness` 中两个工具声明同步摘除；启动时不再创建 `.pair/snapshots/` 目录，编辑文件不再写入任何快照文件。
-- **移除「回退到消息」** — 该功能依赖文件快照（恢复该消息关联的文件 + 截断其后对话历史），随快照下线：消息气泡悬停出现的「回退」按钮、`POST /api/chat/rollback` 接口（含 `chat.rollback` 内核 API 注册）一并移除。需要回溯文件改动请使用 git 历史；已有 `.pair/snapshots/` 与 `.pair/rollback/` 残留数据不再被读取，可自行删除。
+- **移除「回退到消息」** — 该功能依赖文件快照（恢复该消息关联的文件 + 截断其后对话历史），随快照下线：消息气泡悬停出现的「回退」按钮、会话回滚接口（HTTP 端点与内核 API 注册）一并移除。需要回溯文件改动请使用 git 历史；已有 `.pair/snapshots/` 与 `.pair/rollback/` 残留数据不再被读取，可自行删除。
 
 ---
 
