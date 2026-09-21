@@ -4,12 +4,27 @@
 
 ---
 
-## 未发布
+## 1.6.6 — 2026-09-22
 
 ### 变更 / 改进
 
 - **移除「文件快照」能力（编辑文件不再产生快照）** — 此前 `write` / `apply_patch` 在改文件前会把原文件复制到 `.pair/snapshots/<相对路径>/<时间戳>`，超量时按文件保留最近 20 份，并注册 `restore_snapshot` / `list_snapshots` 两个工具供查询与恢复（`.pair/rollback/msg-snapshots.json` 记录快照与用户消息的关联）。该能力整体下线：内核 `internal/agent/snapshot.go` / `rollback.go` 删除，写前快照调用点（`write` / `apply_patch` 内核 / harness 辅助）清除，插件 `tool-harness` 中两个工具声明同步摘除；启动时不再创建 `.pair/snapshots/` 目录，编辑文件不再写入任何快照文件。
 - **移除「回退到消息」** — 该功能依赖文件快照（恢复该消息关联的文件 + 截断其后对话历史），随快照下线：消息气泡悬停出现的「回退」按钮、会话回滚接口（HTTP 端点与内核 API 注册）一并移除。需要回溯文件改动请使用 git 历史；已有 `.pair/snapshots/` 与 `.pair/rollback/` 残留数据不再被读取，可自行删除。
+
+### 修复
+
+- **应用内「API 文档」残留已移除接口** — `HelpModal` 经 `api-docs.md?raw` 打进 **UI 区域包**（`.pair/plugins/ui-modals/assets/ui-modals.js`），与 vite 主壳是**两条独立产物链**；上一轮只重建了主壳，导致「帮助 → API 文档」仍显示 7.14 回滚接口。现 `node scripts/build-ui.mjs` 全量重建 15 个区域包（并 `--region modals` 复建），包内检索该接口路径与回退提示文案均为 0。
+
+### 文档
+
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.6`。
+
+### 验证
+
+- `go build ./...` / `go vet` 通过；`go test ./internal/agent/ ./internal/server/handler` 全绿。
+- UI 区域包重建后检索：`ui-modals.js` / `ui-right-panel.js` 回滚残留 = 0，`ui-modals.js` 含 `### 7.14 压缩上下文`；同步 `bin/.pair/plugins` 镜像后复验同为 0。
+- 遗留数据清理：`.pair/snapshots`（56MB）与 `.pair/rollback`（404KB）已删除，`ls` 确认不存在（本机 9090 仍为旧二进制，安装新版前该目录可能被旧逻辑重建，属预期）。
+- 发布包冒烟：解压 `release/PairCode-1.6.6.zip` 以独立端口启动，`/api/system/info` 返回 `1.6.6`，首屏控制台 0 错误。
 
 ---
 
