@@ -273,6 +273,10 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 - 子 agent 循环**强制走 Go 路径**（不能在 JS 回调栈上重入 agentloop 的 JS 循环实现）；
 - 先探测再派发：`ctx.subagent.available() → bool`（无会话运行环境时 `run` 抛错）；
 - 子 agent 的工具执行走宿主注册表，**审批 / 预算 / 事件复用宿主管线**，插件不必自建执行器。
+- **`system` 是完整替换（无内核提示兜底）**：子回合既不经内核 `DefaultSystemPrompt`、也不经插件
+  装配器链（`SkipPluginAssembly`），内核提示里的「语言锁定（中文）」**不会自动带入**。需要中文
+  思考/输出的子回合，必须在 `system` 里自行写明语言约束——否则推理模型默认用英文思考
+  （实测：autopilot 监督者修复前 thinking 全英文，而评判/指令因 schema 描述为中文而呈中文）。
 
 #### 4.8.3 最小骨架
 

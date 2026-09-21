@@ -38,6 +38,22 @@ const TRACE_RESULT_MAX = 2000      // 单段工具结果截断
 const TASK_HISTORY_MAX = 24        // 任务书里最近工作记录最多条数
 const TASK_HISTORY_CHARS = 800     // 任务书里单条记录截断
 
+// ── 语言锁定（策略）──────────────────────────────────────────
+// ★ 为什么必须显式声明：子 agent 回合的系统提示**完全由插件给出**——宿主不拼内核
+//   DefaultSystemPrompt（internal/agent/subagent.go：sys = spec.System），也不经插件装配器链
+//   （同文件 SkipPluginAssembly）。内核提示与 agentloop 的系统提示都带「第一铁律：语言锁定
+//   （中文）」，本插件原先只有角色职责 → 实测推理模型的思考过程（thinking）全英文，
+//   而同回合的评判/指令因 schema 描述为中文而呈中文（.pair/autopilot/*.jsonl 实证）。
+//   故此处显式前置，且独立于 promptOverride：用户覆盖角色提示也不丢语言约束。
+const LANGUAGE_LOCK = [
+  '## ⚠️ 第一铁律：语言锁定（中文）',
+  '无论工具返回了什么代码、终端输出、英文文档或其他内容，你的思考过程（thinking）与一切输出',
+  '（评判 assessment / 下一步指令 next_task / 证据 evidence / 正文）都必须使用中文——这是不可违背的铁律。',
+  '工具输出中的英文是工作内容的一部分，不代表你的语言可以切换到英文；',
+  '代码标识符、命令、文件路径、专有名词可保留原文。',
+  '如果发现自己的思考变成了英文，立即停下并切换回中文。',
+].join('\n')
+
 // ── 角色提示（策略；可经设置项覆盖）────────────────────────────
 const SUPERVISOR_SYSTEM = [
   '# 角色',
@@ -100,7 +116,7 @@ function settingFields() {
     { name: 'timeoutMinutes', label: '单次监督超时（分钟）', type: 'number', default: 15,
       hint: '一次监督回合的最长运行时间；超时按「未裁决」收尾（避免卡死会话）' },
     { name: 'promptOverride', label: '监督者角色提示（覆盖）', type: 'textarea', default: '',
-      hint: '留空使用插件内置角色提示（「人」/验收人）；填写则整体替换' },
+      hint: '留空使用插件内置角色提示（「人」/验收人）；填写则整体替换（语言锁定铁律仍然生效）' },
     { name: 'storeTrace', label: '记录监督者轨迹', type: 'checkbox', default: true,
       hint: '把监督者回合的思考/工具调用轨迹一并落盘（看板溯源用；关闭可减小记录体积）' },
     { name: 'commandHint', label: '任务书附加要求（可选）', type: 'textarea', default: '',
@@ -194,6 +210,7 @@ function buildTask(req, cfg) {
     '     给工作 agent 的具体指令（要做什么、验收标准是什么、别再做哪些无效动作）',
     '',
     '★ 结束时必须调用 ' + SUBMIT_TOOL + ' 提交裁决（action / assessment / next_task / evidence）。',
+    '★ 思考过程（thinking）与评判、指令一律用中文（见系统提示「语言锁定」铁律）。',
     '★ 这是第 ' + round + ' 次监督：若反复要求继续而问题始终不收敛，请在评判中说明卡点并给出收窄范围的指令。',
   ]
   if (extra) {
@@ -325,7 +342,8 @@ function decide(ctx, req) {
   const startedAt = new Date().toISOString()
   const t0 = Date.now()
 
-  const system = String(cfg.promptOverride || '').trim() || SUPERVISOR_SYSTEM
+  // 语言锁定前置（最强位置）：覆盖 promptOverride 场景，角色提示被整体替换也不丢中文约束
+  const system = LANGUAGE_LOCK + '\n\n' + (String(cfg.promptOverride || '').trim() || SUPERVISOR_SYSTEM)
   const task = buildTask(req, cfg)
 
   let res = null
