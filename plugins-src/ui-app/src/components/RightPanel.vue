@@ -65,9 +65,6 @@
                       <span class="att-tag-label">{{ att.label }}</span>
                     </div>
                   </div>
-                  <div class="rollback-area" v-if="!state.chatLoading">
-                    <button class="rollback-btn" @click="rollbackTo(combo.user._idx)" title="回到此消息前的状态"><SvgIcon name="undo" :size="11" /> 回退</button>
-                  </div>
                   <div v-if="combo.user._time" class="msg-time">{{ combo.user._time }}</div>
                 </div>
               </div>
@@ -1822,31 +1819,6 @@ const resolveApproval = async (approved) => {
   try { await api.apiPost('/chat/approve', { convId, approved: isApproved, reply }) } catch { a.waiting = true }
 }
 
-// ── 回退按钮 ──
-const rollbackTo = async (msgIdx) => {
-  const convId = state.currentConvId
-  if (!convId) return
-  const ok = await window.$confirm?.(`确定回退到此消息？\n\n将恢复该消息之前的文件状态，并删除此消息之后的所有对话。此操作不可撤销。`, '回退确认', '确定回退', '取消')
-  if (!ok) return
-  try {
-    await api.chatRollback(convId, msgIdx)
-    window.$toast?.('已回退到消息 ' + (msgIdx + 1), 'success')
-    // 强制重新加载对话
-    state.messagesByConv[convId] = state.messagesByConv[convId].slice(0, msgIdx + 1)
-    state.messages = state.messagesByConv[convId]
-    // 更新对话的 msgCount
-    const localConv = state.conversations.find(c => c.id === convId)
-    if (localConv) localConv.msgCount = state.messages.length
-    state.chatLoading = false
-    state.agentRunning = false
-    state.loadingByConv[convId] = false
-    state.agentRunningByConv[convId] = false
-    nextTick(() => scrollToBottom())
-  } catch (err) {
-    window.$toast?.('回退失败: ' + err.message, 'error')
-  }
-}
-
 // ── ★ 2026-08-22 contenteditable 输入框：Enter 发送（IME 确认不拦截）+ Backspace/Delete 处理 tag 边缘删除 ──
 // handleTagEdgeDelete Backspace/Delete 在 tag 相邻边缘时删除整个 tag（否则浏览器半删除/光标穿墙）
 function handleTagEdgeDelete(e) {
@@ -2710,10 +2682,6 @@ onUnmounted(() => {
 .badge-feedback { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
 .umh-agent { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px; }
 .user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
-.rollback-area { opacity: 0; transition: opacity 0.15s; position: absolute; right: -2px; top: -6px; z-index: 2; }
-.msg-item:hover .rollback-area { opacity: 1; }
-.rollback-btn { display: flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 8px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.2); border: none; user-select: none; }
-.rollback-btn:hover { color: #f48771; background: rgba(244, 135, 113, 0.25); }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .msg-user .msg-avatar { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; box-shadow: 0 1px 4px rgba(88, 166, 255, 0.25); }
 .msg-assistant .msg-avatar { background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-active) 100%); color: var(--accent); border: 1px solid var(--border-color); }

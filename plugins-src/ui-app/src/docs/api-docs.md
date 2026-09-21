@@ -803,32 +803,7 @@ POST /api/chat/answer
 
 ---
 
-### 7.14 回滚消息
-
-```
-POST /api/chat/rollback
-```
-
-回滚到指定用户消息之前的状态：恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
-
-**请求体：**
-```json
-{
-  "convId": "conv_xxx",
-  "msgIdx": 3
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| convId | string | 是 | 对话 ID |
-| msgIdx | number | 是 | 用户消息索引（0 基），回滚到此消息之前 |
-
-**响应：** `{"ok": true, "msgIdx": 3}`
-
----
-
-### 7.15 压缩上下文
+### 7.14 压缩上下文
 
 ```
 POST /api/chat/compact?convId={对话ID}
@@ -1776,7 +1751,6 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | POST | `/api/chat/approve` | 审批操作 |
 | POST | `/api/chat/feedback` | 发送运行时反馈 |
 | POST | `/api/chat/answer` | 回答 ask_user 提问 |
-| POST | `/api/chat/rollback` | 回滚到指定消息前 |
 | POST | `/api/chat/compact` | 手动压缩上下文 |
 | GET | `/api/models` | 可用模型列表 |
 

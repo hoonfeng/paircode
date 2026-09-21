@@ -1,10 +1,12 @@
 // legacy_host_tools.go — 孤儿工具组「宿主能力存档」（t1 报告 T1 缺口闭环）
 //
 // ★ 背景（2026-09）：registerAssetTools / registerBridgeTools /
-//   registerEntryConfigTools / registerEvolutionTools / registerProgressChecker /
-//   registerResourceTools / RegisterSnapshotTools / registerVerifyTools 这 8 组
-//   约 22 个工具有完整 Go 实现但零调用点——既未插件化也未装配，
+//   registerEvolutionTools / registerProgressChecker / registerResourceTools /
+//   registerVerifyTools 这 6 组工具有完整 Go 实现但零调用点——既未插件化也未装配，
 //   Agent 永远用不到。
+//   ★ 2026-09-21：原 RegisterSnapshotTools 组随「文件快照」能力整体移除
+//   （internal/agent/snapshot.go / rollback.go 删除；restore_snapshot /
+//   list_snapshots 工具与「回退到消息」功能一并下线）。
 //
 // ★ 处置（对齐 harness seam「能力在宿主、编排在插件」）：
 //   1. 磁盘插件（.pair/plugins/tool-*，由 tool_plugin_gen.go 生成）声明工具
@@ -38,7 +40,6 @@ var legacyToolGroups = []struct {
 	{registerProgressChecker, "进度检查（progress_checker）"},
 	{registerResourceTools, "资源管理（resource_list/search/stats）"},
 	{registerVerifyTools, "知识库过期验证（memory_verify/project_info_verify；2026-09-04 随 tool-verify 并入 tool-resource 加档）"},
-	{RegisterSnapshotTools, "会话快照（restore_snapshot/list_snapshots）"},
 }
 
 var (

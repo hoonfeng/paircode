@@ -104,10 +104,9 @@ var toolPluginModes = map[string]string{
 var toolHarnessAliases = map[string]bool{
 	"read": true, "write": true, "apply_patch": true, "glob": true, "grep": true,
 	"web_fetch": true, "web_search": true,
-	// ★ 2026-09-12 并入声明：tool-snapshot→tool-harness（list/restore_snapshot 走
-	// 宿主存档 hostTool）；tool-vision→tool-web（read_image JS 原生）；
+	// ★ 2026-09-12 并入声明：tool-vision→tool-web（read_image JS 原生）；
 	// screenshot 三合一（调度直通内核原名 screenshot_desktop/window/area）
-	"list_snapshots": true, "restore_snapshot": true,
+	// ★ 2026-09-21：文件快照能力移除，list/restore_snapshot 别名声明同步删除。
 	"read_image": true,
 	"screenshot": true,
 	// tool-workflow（2026-09 ③.4 后为 mixed）：workflow→宿主 goja 运行器（hostTool），

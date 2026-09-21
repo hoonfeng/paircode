@@ -53,7 +53,6 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("chat.answer", "POST", "/api/chat/answer", "ask_user 回答", s.handleChatAnswer)
 	_ = agent.KernelAPIRegister("chat.approve", "POST", "/api/chat/approve", "审批结果", s.handleChatApprove)
 	_ = agent.KernelAPIRegister("chat.feedback", "POST", "/api/chat/feedback", "运行时反馈", s.handleChatFeedback)
-	_ = agent.KernelAPIRegister("chat.rollback", "POST", "/api/chat/rollback", "回滚到指定消息", s.handleChatRollback)
 	_ = agent.KernelAPIRegister("chat.compact", "POST", "/api/chat/compact", "会话压缩", s.handleChatCompact)
 
 	// ── Slash 命令（Round3 ④.2：ctx.commands 面 HTTP 出口）──

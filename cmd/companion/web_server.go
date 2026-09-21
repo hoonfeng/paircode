@@ -263,7 +263,6 @@ func startWebUI(port int) {
 	}
 	if root := core.Root(); root != "" {
 		memory.SetRoot(root)
-		agent.InitTracker(root)
 	}
 	// 初始化 Skills 资源目录（供 LoadAllSkills 使用）
 	if root := core.Root(); root != "" {
@@ -724,7 +723,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			core.Save()
 
-			// 5. 可选：删除工作区下的 .pair 目录（对话历史、快照等）
+			// 5. 可选：删除工作区下的 .pair 目录（对话历史等）
 			if req.DeleteFiles {
 				pairDir := filepath.Join(root, ".pair")
 				if stat, err := os.Stat(pairDir); err == nil && stat.IsDir() {
@@ -2465,14 +2464,6 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// 记录当前消息索引，后续文件编辑快照关联到此消息（★ 按会话根路由 store）
-	if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
-		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
-			if tr := agent.GetTracker(); tr != nil {
-				tr.SetCurrentMsg(req.ConvID, count-1)
-			}
-		}
-	}
 	// ★ 2026-08-22 异步 Start：重活（opts 构建/插件合并/会话上下文注入/会话装配/历史加载）
 	//   可能在 10s~76s 波动（实测日志），原同步等待会让前端 30s 超时显示「请求超时」。
 	//   现改为 HTTP 立即返回「马上的消息」，Start 在后台 goroutine 执行；
@@ -2786,45 +2777,6 @@ func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, map[string]any{"ok": true})
-}
-
-// handleChatRollback POST /api/chat/rollback 回滚到指定用户消息前的状态。
-// 恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
-// 请求体: { convId, msgIdx }
-// convId 为对话 ID，msgIdx 为用户消息索引（0 基）。
-func (s *webServer) handleChatRollback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ConvID string `json:"convId"`
-		MsgIdx int    `json:"msgIdx"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "工作区未设置")
-		return
-	}
-	var store agent.ConversationStore
-	if agentMgr != nil {
-		store = agentMgr.Store()
-	}
-	if err := agent.RollbackToMsg(root, req.ConvID, req.MsgIdx, store); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	// 停止正在运行的 agent 会话（如果有）
-	agentMgr.Stop(req.ConvID)
-	jsonResp(w, map[string]any{"ok": true, "msgIdx": req.MsgIdx})
 }
 
 // startEventPersistWorker 设置 OnDone 回调（compressor 由 webCompressor 回调提供）。

@@ -56,7 +56,6 @@ func RegisterAll(r *Router) {
 	r.Handle("POST", "/api/chat/answer", HandleChatAnswer)
 	r.Handle("POST", "/api/chat/approve", HandleChatApprove)
 	r.Handle("POST", "/api/chat/feedback", HandleChatFeedback)
-	r.Handle("POST", "/api/chat/rollback", HandleChatRollback)
 
 	// 对话列表 / 消息
 	r.Handle("GET", "/api/conversations", HandleConversations)

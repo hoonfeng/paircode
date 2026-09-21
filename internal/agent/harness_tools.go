@@ -36,12 +36,6 @@ func RegisterHarnessTools(r *Registry, root string) {
 	registerRunCode(r, root)
 }
 
-// writeFileWithSnapshot 带快照写文件（复用全局快照机制）。
-func writeFileWithSnapshot(root, p, content string) error {
-	SnapshotBeforeWriteWithTracking(root, p)
-	return os.WriteFile(p, []byte(content), 0o644)
-}
-
 // displayPath 显示工作区相对路径（稳定、可读）。
 func displayPath(root, p string) string {
 	rel, err := filepath.Rel(root, p)

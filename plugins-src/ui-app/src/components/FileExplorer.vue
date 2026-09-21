@@ -267,7 +267,7 @@ async function showWsContextMenu(e, ws) {
         const result = await window.$confirmWithCheckbox(
           `确认删除工作区 "${ws.name}"？`,
           '删除工作区',
-          '同时删除该工作区的对话历史、快照等文件 (.pair目录)'
+          '同时删除该工作区的对话历史等文件 (.pair目录)'
         )
         if (!result || !result.confirmed) return
         try {

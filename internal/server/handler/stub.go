@@ -71,13 +71,6 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if store := AgentMgr.Store(); store != nil {
-		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
-			if tr := agent.GetTracker(); tr != nil {
-				tr.SetCurrentMsg(req.ConvID, count-1)
-			}
-		}
-	}
 	opts := BuildLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 	opts.ReviewMode = core.Settings.ReviewMode
@@ -171,36 +164,6 @@ func HandleChatFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	AgentMgr.SendFeedback(req.ConvID, req.Content)
 	jsonResp(w, map[string]any{"ok": true})
-}
-
-func HandleChatRollback(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ConvID string `json:"convId"`
-		MsgIdx int    `json:"msgIdx"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "工作区未设置")
-		return
-	}
-	var store agent.ConversationStore
-	if AgentMgr != nil {
-		store = AgentMgr.Store()
-	}
-	if err := agent.RollbackToMsg(root, req.ConvID, req.MsgIdx, store); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	AgentMgr.Stop(req.ConvID)
-	jsonResp(w, map[string]any{"ok": true, "msgIdx": req.MsgIdx})
 }
 
 // ─── 对话列表 ──────────────────────────────────────────────

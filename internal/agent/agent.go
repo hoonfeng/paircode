@@ -25,7 +25,7 @@ import (
 
 // AgentConfig 宿主注入的全部配置（依赖倒置：Agent 不感知宿主具体实现）。
 type AgentConfig struct {
-	// 工作区根路径（必填）。用于对话存储、快照、Skill 加载等。
+	// 工作区根路径（必填）。用于对话存储、Skill 加载等。
 	WorkspaceRoot string
 	// LLM Provider（必填）。Agent 通过它调用模型。
 	Provider Provider
@@ -97,8 +97,7 @@ func NewAgentBase(cfg AgentConfig) *AgentBase {
 //  2. 初始化存储（SQLite/JSONL）
 //  3. 创建工具注册表并注册默认工具
 //  4. 初始化会话管理器
-//  5. 初始化快照跟踪器
-//  6. 初始化执行计划管理器
+//  5. 初始化执行计划管理器
 //
 // 可多次安全调用（第二次起为 no-op）。
 func (a *AgentBase) Init() error {
@@ -119,7 +118,7 @@ func (a *AgentBase) Init() error {
 	if err := os.MkdirAll(pairDir, 0755); err != nil {
 		return fmt.Errorf("AgentBase: 创建 .pair 目录失败: %w", err)
 	}
-	for _, sub := range []string{"conversations", "snapshots", "skills", "memory", "project-info", "tools"} {
+	for _, sub := range []string{"conversations", "skills", "memory", "project-info", "tools"} {
 		if err := os.MkdirAll(filepath.Join(pairDir, sub), 0755); err != nil {
 			return fmt.Errorf("AgentBase: 创建 %s 目录失败: %w", sub, err)
 		}
@@ -173,24 +172,21 @@ func (a *AgentBase) Init() error {
 		}
 	}()
 
-	// 5. 初始化快照跟踪器
-	InitTracker(root)
-
-	// 6. 初始化执行计划管理器（任务追踪用）
+	// 5. 初始化执行计划管理器（任务追踪用）
 	InitExecutionManager(root)
 	InitPlanManager(root)
 
-	// 7. 设置 Skills 加载路径
+	// 6. 设置 Skills 加载路径
 	// ★ 2026-09-12 注：SkillGlobalDir 不在此设置——AgentBase 依赖倒置不引
 	//   core 包；skillTargetDir 空值时运行时兜底（core.InstallDir()）。
 	SkillProjectDir = filepath.Join(root, ".pair", "skills")
 	SkillSystemDir = filepath.Join(root, "config", "skills")
 
-	// 8. 设置 CodeGraph DB
+	// 7. 设置 CodeGraph DB
 	SetCodeGraphDB(sm.RawDB())
 	SetCodeGraphRoot(root) // 共享 DB 归属主项目（多项目时其他项目用独立 JSONStore）
 
-	// 9. 初始化执行状态管理器
+	// 8. 初始化执行状态管理器
 	InitExecStateManager(root)
 
 	a.Registry = registry
