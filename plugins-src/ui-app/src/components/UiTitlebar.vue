@@ -82,24 +82,33 @@ let navSubUnsub = null   // 视图注册表订阅退订句柄（胶囊自动增�
 //   问题：插件不止「设计」一个 —— 六域（画板/设计/3D 模型/音乐/角色/人声）与
 //   autopilot 看板都注册了主区视图，却只有「设计」在标题栏有入口，其余只能去
 //   主区 tab 栏/视图菜单里找，可发现性差且每加一个插件都要改壳代码。
-//   现方案：胶囊 = 内置「对话/编辑器」+ **全部** registerView 注册视图 + 内置「市场」，
+//   现方案：胶囊 = 内置「对话/编辑器」+ registerView 注册视图（按 regions 筛）+ 内置「市场」，
 //   数据源是 plugin-runtime 的 clientViews（跨 bundle 共享的同一数组）。
 //     · 刷新：setViewMount(订阅) → 插件注册/卸载视图时 emitViewChanged → viewTick++；
 //     · 顺序：注册表已按 order 排序（六域 10..60、autopilot 90、默认 100），
 //       插件视图排在「编辑器」与「市场」之间，与设计稿四项的相对次序一致；
-//     · 点击：layout.openViewTab(pluginName, id)（未打开则打开并激活，与主区 tab
-//       栏、视图菜单同源，状态存 plugin-runtime 的 viewOpen:* 持久化）。
+//     · ★ 入驻区域（regions，2026-09）：只收声明含 'titlebar' 的视图 —— 插件可用
+//       regions:['mainTab'] 表示「只要主区内容、别占顶栏」（自带入口者如 autopilot
+//       在其活动栏图标里自开视图）；**不声明时默认两项都进**，故已发布插件无感。
+//       （'mainTab' = 主区内容出口，含渲染必要条件，故 plugin-runtime 侧缺失即补回。）
+//     · 点击：layout.openViewTab(pluginName, id)（未打开则打开并激活，与主区内容
+//       出口同源，状态存 plugin-runtime 的 viewOpen:* 持久化）。
 const viewTick = ref(0)   // 注册表版本号：computed 依赖它才能在插件增删时重算
 
 const pluginNavs = computed(() => {
   viewTick.value   // 显式读一次建立依赖（clientViews 是普通数组，本身非响应式）
-  return (clientViews || []).map(v => ({
-    key: layout.viewTabKey(v.pluginName, v.id),   // 'view:<插件名>:<视图 id>'
-    label: v.title,
-    title: '插件视图 · ' + v.pluginName,
-    pluginName: v.pluginName,
-    id: v.id,
-  }))
+  return (clientViews || [])
+    // ★ 入驻区域过滤（regions）：只渲染声明含 'titlebar' 的视图。单插件视图自带
+    //   入口（活动栏图标）时可声明 regions:['mainTab'] 主动让位；老注册表项
+    //   （页内残留 / 未带 regions 字段）兜底显示，避免升级瞬间胶囊整体消失。
+    .filter(v => (Array.isArray(v.regions) ? v.regions.includes('titlebar') : true))
+    .map(v => ({
+      key: layout.viewTabKey(v.pluginName, v.id),   // 'view:<插件名>:<视图 id>'
+      label: v.title,
+      title: '插件视图 · ' + v.pluginName,
+      pluginName: v.pluginName,
+      id: v.id,
+    }))
 })
 
 const navs = computed(() => [

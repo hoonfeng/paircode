@@ -252,6 +252,9 @@ function refreshViews(list) {
     pluginName: v.pluginName,
     title: v.title,
     icon: v.icon,
+    // ★ 入驻区域（regions，2026-09）：'mainTab' 才在主区建内容容器；
+    //   老注册表项无该字段时兜底两项都算（与 plugin-runtime 的默认一致）。
+    regions: Array.isArray(v.regions) ? v.regions : ['titlebar', 'mainTab'],
     render: v.render,
     open: isViewOpen(v),
   }))
@@ -270,7 +273,10 @@ function refreshViews(list) {
   }
 }
 
-const openViews = computed(() => views.value.filter(v => v.open))
+// openViews 建立「主区内容容器（pane）」的视图清单：① 已打开 ② 声明含 mainTab 区域。
+//   二者缺一都不建容器 —— 未打开 = 不该占主区；无 mainTab = 无内容出口。
+//   （plugin-runtime 侧对缺失 mainTab 会自动补回 + 告警，故后者实为防御性过滤。）
+const openViews = computed(() => views.value.filter(v => v.open && v.regions.includes('mainTab')))
 // 并排开关可用性：对话本身是当前视图时无意义（会变成两栏对话）
 const canSplit = computed(() => mainView.value !== 'conversation' || state.panels.splitView)
 const splitActive = computed(() => layout.isSplitActive())
