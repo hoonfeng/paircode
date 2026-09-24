@@ -243,8 +243,8 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--text-muted);
 }
-.dot-error, .dot-panic, .dot-build { background: #e74c3c; }
-.dot-warning { background: #f39c12; }
+.dot-error, .dot-panic, .dot-build { background: var(--color-danger); }
+.dot-warning { background: var(--color-warning); }
 
 .dlp-body {
   flex: 1;
@@ -289,15 +289,15 @@ onUnmounted(() => {
   text-align: center;
 }
 .level-error, .level-panic, .level-build {
-  background: rgba(231, 76, 60, 0.15);
-  color: #e74c3c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 .level-warning {
-  background: rgba(243, 156, 18, 0.15);
-  color: #f39c12;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 .level-info, .level-debug, .level-debugop {
-  background: rgba(149, 165, 166, 0.15);
+  background: var(--color-surface-3);
   color: var(--text-muted);
 }
 

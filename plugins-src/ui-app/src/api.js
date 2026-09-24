@@ -21,13 +21,38 @@ function apiURL(path, params = {}) {
 
 }
 
+// ── GET 并发合并（★ 2026-09-25 性能）─────────────────────────────
+// 同一 URL+参数的 GET 在「请求在途」窗口内复用同一 Promise。
+// 实测首屏重复（CDP 时序）：/conversations/<id>/messages（12.6MB）被并发请求 2 次
+// （t=209ms 与 t=221ms，间隔 12ms，参数完全相同 → 白拉 12.6MB）；/git/status 并发
+// 2 次（间隔 1ms）；/tasks 5 次。来源是多个组件在同一帧各自触发（mounted nextTick /
+// switchConv / WS 重连 / 定时器探测），彼此不知道对方已在拉同一份数据。
+// ★ 只合并「在途」窗口，**不缓存结果**：请求一返回即移出表，后续调用仍真实发请求
+//   →「强制刷新」语义（WS 重连补拉、会话结束补拉、手动刷新按钮）完全不受影响。
+// ★ 逃生开关：opts.dedupe === false 时该请求不参与合并。
+const _getInflight = new Map()
+
 async function apiGet(path, params = {}, opts = {}) {
-  const r = await fetch(apiURL(path, params), { signal: apiSignal(opts) })
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({ error: r.statusText }))
-    throw new Error(e.error || e.message || r.statusText)
+  const url = apiURL(path, params)
+  const dedupe = opts.dedupe !== false
+  if (dedupe) {
+    const pending = _getInflight.get(url)
+    if (pending) return pending
   }
-  return r.json()
+  const task = (async () => {
+    const r = await fetch(url, { signal: apiSignal(opts) })
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({ error: r.statusText }))
+      throw new Error(e.error || e.message || r.statusText)
+    }
+    return r.json()
+  })()
+  if (dedupe) {
+    _getInflight.set(url, task)
+    const cleanup = () => { _getInflight.delete(url) }
+    task.then(cleanup, cleanup)
+  }
+  return task
 }
 
 async function apiPost(path, body = {}, params = {}, opts = {}) {
@@ -565,9 +590,16 @@ async function chatCompact(convId) {
 // ★ 2026-08-23 工作区隔离：workspaceRoot 参数透传（对话消息回放按所属工作区路由，
 // 运行中切换工作区后回放旧工作区对话不再落到新工作区存储）
 
-async function getMessages(convId, { limit = 50, before = null, workspaceRoot = '' } = {}) {
+async function getMessages(convId, { limit = 50, before = null, workspaceRoot = '', slim = true } = {}) {
 
   const params = { limit }
+
+  // ★ 2026-09-25 性能（接口瘦身）：slim=1 → 后端省略前端不消费的重字段
+  //   （message.reasoning_content / message.tool_calls —— 实测与 segments 的
+  //   thinking / tool_call 段同内容：单会话 50 条 19.57MB 中两者合计 5.1M 字符，
+  //   裁剪后约 12.3MB，−37%）。前端只用 message.role/content/images + segments
+  //   （见 RightPanel.vue 的 apiLoadAndBuildConv）。
+  if (slim) params.slim = 1
 
   if (before !== null && before !== undefined) params.before = before
 

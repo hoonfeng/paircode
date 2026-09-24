@@ -64,12 +64,42 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
-import mermaid from 'mermaid'
+import { isDarkTheme } from '../ui-state.js'
+
+// ══════════════════════════════════════════════════════════════
+// ★★ 2026-09-25 性能修复：mermaid 由「静态 import」改为「按需惰性加载」★★
+//   根因：mermaid.min.js 单体 3.6MB，静态 import 会被打进**每一个**引用本组件的
+//   区域包（实测 ui-right-panel.js 3.6MB 几乎全是它、ui-editor.js 4.6MB 亦含它）
+//   → 首屏必须下载+编译约 7.2MB JS。区域包为 IIFE 单文件 lib 构建，动态 import()
+//   会被 rollup 内联，故**无法**靠 code-splitting 拆分，只能改为运行时按需注入。
+//   而绝大多数对话/文件根本不含 mermaid 图 → 改成「真有图要渲染时才注入 <script>」，
+//   从运行目录 /vendor/mermaid.min.js 取（mermaid 官方 dist，尾部
+//   `globalThis["mermaid"] = ...`，onload 后 window.mermaid 即可用）。
+//   ★ 副产品：任何区域包都不再打包 mermaid（体积骤降），加载时机与引用方无关。
+let _mermaidPromise = null
+function loadMermaid() {
+  if (window.mermaid) return Promise.resolve(window.mermaid)
+  if (_mermaidPromise) return _mermaidPromise        // 并发去重：多个渲染器共享同一次加载
+  _mermaidPromise = new Promise((resolve, reject) => {
+    // 相对 document.baseURI 解析（子路径部署同样正确）
+    const url = new URL('vendor/mermaid.min.js', document.baseURI).href
+    const s = document.createElement('script')
+    s.src = url
+    s.async = true
+    s.onload = () => { window.mermaid ? resolve(window.mermaid) : reject(new Error('全局 mermaid 未暴露')) }
+    s.onerror = () => { _mermaidPromise = null; reject(new Error('mermaid 资源加载失败: ' + url)) }
+    document.head.appendChild(s)
+  })
+  return _mermaidPromise
+}
 
 const props = defineProps({
   text: { type: String, default: '' },
-  // 图表主题：'dark' | 'light' | 'warm' | 'cute'
-  theme: { type: String, default: 'dark' },
+  // ★ 主题名 = UI 主题名（midnight/graphite/obsidian/aurora/daylight/paper/sand/slate）。
+  //   旧注释的 'dark'|'light'|'warm'|'cute' 是扩到 8 套主题前的旧值域，已失效：
+  //   调用方传的是 state.theme（UI 主题名）→ 旧 switch 永不命中 → mermaid 恒用暗色主题，
+  //   于是亮色 UI 主题下图表仍是深色块。现改为按 isDarkTheme 双档 + 令牌取色。
+  theme: { type: String, default: 'midnight' },
 })
 
 const uid = ref('md_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6))
@@ -77,49 +107,58 @@ const renderRef = ref(null)
 const mermaidErrors = ref({})
 const boxZoomed = ref({})
 
-// ── Mermaid 初始化配置（按主题） ──
+// ── Mermaid 初始化配置（按 UI 主题明暗双档，色值全部取自令牌） ──
+// ★ 旧实现用 4 个硬编码主题名分支（'dark'|'light'|'warm'|'cute'），而 props.theme 实际收到的
+//   是 UI 主题名（midnight/graphite/…/slate）→ switch 永不命中 → 恒落 default 的暗色主题
+//   → 亮色 UI 主题下 mermaid 图仍渲染成深色块（亮色主题「深色割裂块」的主因之一）。
+// ★ mermaid 生成 SVG 时会对颜色做运算（派生深浅色），故必须传入**真实色值**而非 var(--x)；
+//   用 cssVar() 读取计算后的令牌值 → 既跟随主题、又是合法色值。
+function cssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    return v || fallback
+  } catch (e) { return fallback }
+}
+
 function getMermaidTheme(themeName) {
-  switch (themeName) {
-    case 'dark': return { theme: 'dark',
-      themeVariables: {
-        primaryColor: '#1f2937', primaryTextColor: '#e6edf3', primaryBorderColor: '#30363d',
-        lineColor: '#58a6ff', secondaryColor: '#161b22', tertiaryColor: '#21262d',
-        clusterBkg: '#0d1117', clusterBorder: '#30363d', edgeLabelBackground: '#161b22',
-        nodeBorder: '#58a6ff', nodeTextColor: '#e6edf3', background: 'transparent',
-        mainBkg: '#161b22', signalColor: '#58a6ff', signalTextColor: '#e6edf3',
-        labelTextColor: '#8b949e', noteTextColor: '#e6edf3', noteBkgColor: '#21262d',
-        noteBorderColor: '#30363d', git0: '#1f6feb', git1: '#3fb950', git2: '#d29922',
-        git3: '#f85149', git4: '#bc8cff', git5: '#6e7681', git6: '#58a6ff', git7: '#da3633',
-      },
-    }
-    case 'light': return { theme: 'default',
-      themeVariables: {
-        primaryColor: '#e8eaed', primaryTextColor: '#1a1a2e', primaryBorderColor: '#dadce0',
-        lineColor: '#1a73e8', secondaryColor: '#f8f9fa', tertiaryColor: '#f0f1f3',
-        clusterBkg: '#ffffff', clusterBorder: '#dadce0', edgeLabelBackground: '#f8f9fa',
-        nodeBorder: '#1a73e8', nodeTextColor: '#1a1a2e', background: 'transparent',
-        mainBkg: '#f8f9fa',
-      },
-    }
-    case 'warm': return { theme: 'default',
-      themeVariables: {
-        primaryColor: '#efe4d4', primaryTextColor: '#3d2c1e', primaryBorderColor: '#d6c8b8',
-        lineColor: '#b87333', secondaryColor: '#f5ece0', tertiaryColor: '#efe4d4',
-        clusterBkg: '#faf3e8', clusterBorder: '#d6c8b8', edgeLabelBackground: '#f5ece0',
-        nodeBorder: '#b87333', nodeTextColor: '#3d2c1e', background: 'transparent',
-        mainBkg: '#f5ece0',
-      },
-    }
-    case 'cute': return { theme: 'default',
-      themeVariables: {
-        primaryColor: '#fce4ec', primaryTextColor: '#4a1a2e', primaryBorderColor: '#e8b8c8',
-        lineColor: '#e84393', secondaryColor: '#fff5f7', tertiaryColor: '#f8d7e0',
-        clusterBkg: '#fff5f7', clusterBorder: '#e8b8c8', edgeLabelBackground: '#fce4ec',
-        nodeBorder: '#e84393', nodeTextColor: '#4a1a2e', background: 'transparent',
-        mainBkg: '#fce4ec',
-      },
-    }
-    default: return { theme: 'dark' }
+  const dark = isDarkTheme(themeName)
+  // fallback 取默认主题（:root = midnight）的对应档值，仅在令牌未就绪的极端情况生效
+  const f = dark
+    ? { fg: '#E7ECF5', muted: '#8D9BB3', surface: '#151B29', surface2: '#1C2436', surface3: '#232b3c', bg: '#0F1420', border: '#2A3550', blue: '#6FA8FF', green: '#6BD98A', amber: '#F0C158', purple: '#C0A6F5', teal: '#3FD0E0', danger: '#FF8085' }
+    : { fg: '#101418', muted: '#5A6B85', surface: '#FFFFFF', surface2: '#EEF1F6', surface3: '#E4E9F2', bg: '#F5F7FB', border: '#DCE3ED', blue: '#1B5FD9', green: '#186418', amber: '#8A5A00', purple: '#6B3FA0', teal: '#0A6E7A', danger: '#C42B2B' }
+  const V = (n, k) => cssVar(n, f[k])
+  return {
+    theme: dark ? 'dark' : 'default',
+    themeVariables: {
+      primaryColor: V('--color-surface-2', 'surface2'),
+      primaryTextColor: V('--color-fg', 'fg'),
+      primaryBorderColor: V('--color-border', 'border'),
+      lineColor: V('--color-cat-blue', 'blue'),
+      secondaryColor: V('--color-surface', 'surface'),
+      tertiaryColor: V('--color-surface-3', 'surface3'),
+      clusterBkg: V('--color-bg', 'bg'),
+      clusterBorder: V('--color-border', 'border'),
+      edgeLabelBackground: V('--color-surface', 'surface'),
+      nodeBorder: V('--color-cat-blue', 'blue'),
+      nodeTextColor: V('--color-fg', 'fg'),
+      background: 'transparent',
+      mainBkg: V('--color-surface', 'surface'),
+      signalColor: V('--color-cat-blue', 'blue'),
+      signalTextColor: V('--color-fg', 'fg'),
+      labelTextColor: V('--color-muted', 'muted'),
+      noteBkgColor: V('--color-surface-2', 'surface2'),
+      noteBorderColor: V('--color-border', 'border'),
+      noteTextColor: V('--color-fg', 'fg'),
+      // git 图 8 色：以品类色为主（保持可区分），不足处以语义色补齐
+      git0: V('--color-cat-blue', 'blue'),
+      git1: V('--color-cat-green', 'green'),
+      git2: V('--color-cat-amber', 'amber'),
+      git3: V('--color-danger', 'danger'),
+      git4: V('--color-cat-purple', 'purple'),
+      git5: V('--color-muted', 'muted'),
+      git6: V('--color-cat-teal', 'teal'),
+      git7: V('--color-warning', 'amber'),
+    },
   }
 }
 
@@ -419,7 +458,7 @@ function setupModalContainer(style) {
     padding: '0', minHeight: '200px',
     background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
     borderRadius: '12px', overflow: 'hidden',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)', maxWidth: '500px', margin: '0 auto',
+    boxShadow: 'var(--shadow-lg)', maxWidth: '500px', margin: '0 auto',
   })
 }
 
@@ -469,15 +508,27 @@ function filterItemLines(lines, lang) {
 }
 
 function getIsDark() {
-  return document.documentElement.classList.contains('dark') ||
-         document.body.classList.contains('dark-mode') ||
-         window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
+  // ★ 原实现查 documentElement 的 'dark' class、body 的 'dark-mode' class 与
+  //   prefers-color-scheme。但主题 class 实为 theme-<名>（如 theme-daylight），
+  //   前两者恒为 false；末者跟随**操作系统**而非 UI 主题 → 配色与 UI 主题脱钩，
+  //   造成亮色 UI 主题下仍用暗色档（割裂块成因）。改为按 props.theme 判定。
+  return isDarkTheme(props.theme)
 }
 
 function getBgColors(isDark) {
-  return isDark
-    ? ['#1f6feb', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#58a6ff', '#6e7681', '#da3633']
-    : ['#4285f4', '#34a853', '#fbbc04', '#ea4335', '#ab47bc', '#1a73e8', '#5f6368', '#e37400']
+  // 布局/流程图节点用可区分的类别色（8 类）。改用令牌 → 跟随 UI 主题，不再两档硬编码。
+  // ★ 调用方按 `bgColors[ci] + '20'` / `+ '55'` 拼 alpha（#6FA8FF + 20 → #6FA8FF20），
+  //   故此处必须返回 **6 位 hex**：令牌值均为 hex，符合要求；cssVar 失败则回退同档 hex。
+  // ★ 类别色须保持可区分，不得塌成 4 个语义色（详见 design/ui-theme.notes.md §18）。
+  const fb = isDark
+    ? ['#6FA8FF', '#6BD98A', '#F0C158', '#FF8085', '#C0A6F5', '#3FD0E0', '#8D9BB3', '#4FD8A4']
+    : ['#1B5FD9', '#186418', '#8A5A00', '#C42B2B', '#6B3FA0', '#0A6E7A', '#5A6B85', '#0F7A4A']
+  const names = ['--color-cat-blue', '--color-cat-green', '--color-cat-amber', '--color-danger',
+    '--color-cat-purple', '--color-cat-teal', '--color-muted', '--color-success']
+  return names.map((n, i) => {
+    const v = cssVar(n, fb[i])
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : fb[i]
+  })
 }
 
 // 解析单个布局项（增强版）
@@ -550,7 +601,7 @@ function parseLayoutItem(line, bgColors, idx, lang, isDark) {
     case '+': itemStyle.flexShrink = '0'; itemStyle.flexGrow = '0'; break
     case '-': itemStyle.opacity = '0.65'; itemStyle.fontSize = '11px'; break
     case '*': itemStyle.fontStyle = 'italic'; itemStyle.opacity = '0.8'; break
-    case '!': itemStyle.fontWeight = 700; itemStyle.borderColor = '#f85149'; break
+    case '!': itemStyle.fontWeight = 700; itemStyle.borderColor = 'var(--color-danger)'; break
     case '@': itemStyle.borderStyle = 'dotted'; itemStyle.opacity = '0.7'; break
   }
 
@@ -559,7 +610,7 @@ function parseLayoutItem(line, bgColors, idx, lang, isDark) {
     itemStyle.borderRadius = '8px'
     itemStyle.padding = '12px 16px'
     itemStyle.minHeight = '60px'
-    itemStyle.boxShadow = '0 1px 4px rgba(0,0,0,0.1)'
+    itemStyle.boxShadow = 'var(--shadow-sm)'
     if (idx === 0) itemStyle.gridColumn = '1 / -1' // 首项可能跨列
   }
   if (lang === 'navbar') {
@@ -586,8 +637,8 @@ function parseLayoutItem(line, bgColors, idx, lang, isDark) {
     itemStyle.fontSize = '12px'
     itemStyle.flexShrink = '0'
     if (idx === 0) {
-      itemStyle.background = isDark ? 'rgba(31,111,235,0.2)' : 'rgba(66,133,244,0.15)'
-      itemStyle.borderBottom = '2px solid ' + (isDark ? '#58a6ff' : '#4285f4')
+      itemStyle.background = 'var(--color-accent-bg)'
+      itemStyle.borderBottom = '2px solid var(--color-cat-blue)'
     }
   }
   if (lang === 'form') {
@@ -660,7 +711,7 @@ function parseLayoutItem(line, bgColors, idx, lang, isDark) {
     itemStyle.borderRadius = '8px'
     itemStyle.padding = '16px'
     itemStyle.minHeight = '80px'
-    itemStyle.boxShadow = '0 1px 4px rgba(0,0,0,0.1)'
+    itemStyle.boxShadow = 'var(--shadow-sm)'
     if (idx === 0) itemStyle.gridColumn = '1 / -1'
     if (idx <= 2) itemStyle.minHeight = '60px'
   }
@@ -696,32 +747,32 @@ function generateBoxModelItems(code, containerStyle, items, isDark) {
   items.push({
     label: 'margin: ' + margin + 'px', sub: '', icon: '',
     style: { position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
-      background: isDark ? 'rgba(248,81,73,0.12)' : 'rgba(234,67,53,0.08)',
-      border: '2px dashed ' + (isDark ? '#f85149' : '#ea4335'),
+      background: 'var(--color-danger-bg)',
+      border: '2px dashed var(--color-danger)',
       borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0', }
   })
   const bOff = margin
   items.push({
     label: 'border: ' + border + 'px solid', sub: '', icon: '',
     style: { position: 'absolute', top: bOff + 'px', left: bOff + 'px', right: bOff + 'px', bottom: bOff + 'px',
-      background: isDark ? 'rgba(212,167,78,0.12)' : 'rgba(251,188,4,0.08)',
-      border: border + 'px solid ' + (isDark ? '#d29922' : '#fbbc04'), borderRadius: '3px',
+      background: 'var(--color-warning-bg)',
+      border: border + 'px solid var(--color-warning)', borderRadius: '3px',
       display: 'flex', alignItems: 'center', justifyContent: 'center', }
   })
   const pOff = bOff + border
   items.push({
     label: 'padding: ' + padding + 'px', sub: '', icon: '',
     style: { position: 'absolute', top: pOff + 'px', left: pOff + 'px', right: pOff + 'px', bottom: pOff + 'px',
-      background: isDark ? 'rgba(63,185,80,0.12)' : 'rgba(52,168,83,0.08)',
-      border: '2px dashed ' + (isDark ? '#3fb950' : '#34a853'), borderRadius: '2px',
+      background: 'var(--color-success-bg)',
+      border: '2px dashed var(--color-success)', borderRadius: '2px',
       display: 'flex', alignItems: 'center', justifyContent: 'center', }
   })
   const cOff = pOff + padding
   items.push({
     label: contentText, sub: '', icon: '',
     style: { position: 'absolute', top: cOff + 'px', left: cOff + 'px', right: cOff + 'px', bottom: cOff + 'px',
-      background: isDark ? 'rgba(88,166,255,0.18)' : 'rgba(66,133,244,0.1)',
-      border: '1px solid ' + (isDark ? '#58a6ff' : '#4285f4'), borderRadius: '2px',
+      background: 'var(--color-info-bg)',
+      border: '1px solid var(--color-info)', borderRadius: '2px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', }
   })
@@ -737,7 +788,7 @@ function generateCardItems(code, containerStyle, items, bgColors, isDark) {
           background: bgColors[i % bgColors.length] + '18',
           border: '1px solid ' + bgColors[i % bgColors.length] + '44',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.08)', }
+          boxShadow: 'var(--shadow-sm)', }
       })
     }
   }
@@ -769,8 +820,8 @@ function generateTabsItems(code, containerStyle, items, isDark) {
       label: tabs[i], sub: '', icon: '',
       style: { borderRadius: '6px 6px 0 0', padding: '6px 18px', minHeight: '32px',
         fontSize: '12px', flexShrink: '0', cursor: 'pointer',
-        background: i === 0 ? (isDark ? 'rgba(31,111,235,0.2)' : 'rgba(66,133,244,0.12)') : 'transparent',
-        border: '1px solid var(--border-color)', borderBottom: i === 0 ? '2px solid ' + (isDark ? '#58a6ff' : '#4285f4') : '1px solid var(--border-color)',
+        background: i === 0 ? 'var(--color-accent-bg)' : 'transparent',
+        border: '1px solid var(--border-color)', borderBottom: i === 0 ? '2px solid var(--color-cat-blue)' : '1px solid var(--border-color)',
         marginBottom: i === 0 ? '0' : '-1px', color: 'var(--text-primary)', }
     })
   }
@@ -790,16 +841,26 @@ function retryMermaid(i) { mermaidErrors.value = { ...mermaidErrors.value, [i]: 
 // ── 初始化 Mermaid 渲染 ──
 async function initMermaid() {
   if (!renderRef.value) return
-  const themeConfig = getMermaidTheme(props.theme)
-  try { mermaid.initialize({ startOnLoad: false, ...themeConfig, securityLevel: 'loose', fontFamily: '"Inter", system-ui, sans-serif' }) } catch {}
-  const containers = renderRef.value.querySelectorAll('.mermaid-container')
-  for (const el of containers) {
-    const id = el.id; if (!id) continue
+  // ★ 先收集**待渲染**容器：一个都没有就直接返回 —— 绝不加载 3.6MB 的 mermaid。
+  const pending = []
+  for (const el of renderRef.value.querySelectorAll('.mermaid-container')) {
+    if (el.querySelector('svg')) continue                  // 已渲染
     const srcEl = el.querySelector('.mermaid-src'); if (!srcEl) continue
-    if (el.querySelector('svg')) continue
     const code = srcEl.textContent.trim(); if (!code) continue
+    pending.push({ el, code })
+  }
+  if (pending.length === 0) return
+  let mm
+  try { mm = await loadMermaid() } catch (e) {
+    console.warn('[Mermaid] 加载失败:', e && e.message)
+    return
+  }
+  const themeConfig = getMermaidTheme(props.theme)
+  try { mm.initialize({ startOnLoad: false, ...themeConfig, securityLevel: 'loose', fontFamily: '"Inter", system-ui, sans-serif' }) } catch {}
+  for (const { el, code } of pending) {
+    const id = el.id; if (!id) continue
     try {
-      const { svg } = await mermaid.render(id + '-svg', code)
+      const { svg } = await mm.render(id + '-svg', code)
       el.innerHTML = svg
     } catch (err) {
       console.warn('[Mermaid] 渲染失败:', err.message)
@@ -842,7 +903,7 @@ watch(() => props.theme, () => {
 .md-html :deep(ul) { margin: 2px 0; padding-left: 18px; }
 .md-html :deep(ol) { margin: 2px 0; padding-left: 28px; }
 .md-html :deep(li) { margin: 1px 0; }
-.md-html :deep(code) { background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
+.md-html :deep(code) { background: var(--color-surface-2); padding: 1px 4px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
 .md-html :deep(pre) { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; margin: 4px 0; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
 .md-html :deep(pre code) { background: none; padding: 0; border-radius: 0; white-space: pre-wrap; word-break: break-word; }
 .md-html :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: 8px; margin: 4px 0; color: var(--text-secondary); font-style: italic; }
@@ -893,7 +954,7 @@ watch(() => props.theme, () => {
 .chart-error-msg { padding: 12px; }
 .chart-error-msg pre { margin: 0; padding: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; overflow-x: auto; }
 .chart-error-msg code { font-family: var(--font-code); white-space: pre; }
-.chart-error-hint { margin: 6px 0 0; font-size: 11px; color: #f85149; opacity: 0.7; }
+.chart-error-hint { margin: 6px 0 0; font-size: 11px; color: var(--color-danger); opacity: 0.7; }
 
 /* ── 数据图表 Canvas 容器 ── */
 
@@ -930,7 +991,7 @@ watch(() => props.theme, () => {
 }
 .layout-item:hover {
   transform: scale(1.03); z-index: 2;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-md);
 }
 .layout-item-icon { font-size: 14px; margin-bottom: 2px; pointer-events: none; }
 .layout-item-label { font-size: 11px; font-weight: 600; line-height: 1.3; pointer-events: none; }
@@ -966,7 +1027,7 @@ watch(() => props.theme, () => {
 .layout-style-dashboard .layout-preview { background: var(--bg-secondary); border-radius: 8px; }
 .layout-style-dashboard .layout-item { min-height: 60px; }
 .layout-style-form .layout-preview { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; }
-.layout-style-modal .layout-preview { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+.layout-style-modal .layout-preview { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-lg); }
 .layout-style-tree .layout-preview { background: transparent; }
 .layout-style-tree .layout-item { border-left: 2px solid var(--border-color); }
 .layout-style-flow .layout-preview { background: var(--bg-secondary); border-radius: 8px; }

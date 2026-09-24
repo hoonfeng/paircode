@@ -1,11 +1,16 @@
 <template>
   <div class="menubar">
     <div v-for="menu in menus" :key="menu.label" class="menu-group">
+      <!-- ★ 2026-09-25（用户指令：帮助菜单移到标题栏左侧 + 调整样式）：
+           按钮 = 文字 + chevron-down 展开指示——IDE 菜单栏惯例，明示「此处可展开」；
+           展开中箭头旋转 180° 且按钮保持 hover 态，指明当前打开的是哪一项。 -->
       <button class="menu-btn"
+              :class="{ open: openMenu === menu.label }"
               :ref="el => { if (el) btnRefs[menu.label] = el }"
               @click="toggleMenu($event, menu.label)"
               @mouseenter="hoverMenu(menu.label)">
-        {{ menu.label }}
+        <span class="menu-btn-label">{{ menu.label }}</span>
+        <span class="menu-btn-caret"><SvgIcon name="chevron-down" :size="11" /></span>
       </button>
     </div>
     <div v-if="openMenu" class="menu-dropdown"
@@ -30,6 +35,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { state, layout, setFocusMode, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
 import api from '../api.js'
 import { switchActivity } from '../app-actions.js'
+import SvgIcon from './SvgIcon.vue'
 
 const menus = [
   {
@@ -291,32 +297,45 @@ onUnmounted(() => document.removeEventListener('click', handleDocClick))
 </script>
 
 <style scoped>
+/* ★ 2026-09-24 新 UI 风格适配（本组件按用户指令回归顶栏 th206，40px 高）：
+   按钮收敛为 h=24 / 圆角 full / 11px 的低调胶囊，与顶栏其它入口
+   （.tb-nav-pill / .plugin-slot-item）同规格；下拉面板半径 4→8、内边距 4px 0→4px、
+   菜单项 13→12px 且带自身圆角；hover 由 accent 实底改为克制的 --bg-hover
+   （与顶栏导航胶囊 hover 一致，不抢视觉焦点）。 */
 .menubar { display: flex; flex-direction: row; align-items: center; height: 100%; gap: 0; }
 .menu-group { position: relative; }
 .menu-btn {
-  display: flex; align-items: center; height: 30px; padding: 0 10px; font-size: 13px;
-  color: var(--text-secondary); background: none; border: none; cursor: pointer; user-select: none; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px 0 10px; font-size: 11px;
+  color: var(--text-muted); background: none; border: none; cursor: pointer; user-select: none; white-space: nowrap;
+  border-radius: 999px; transition: color .15s, background .15s;
 }
 .menu-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+/* 展开中：与 hover 同态 —— 鼠标移入下拉面板后按钮仍保持高亮，明示「当前打开项」 */
+.menu-btn.open { background: var(--bg-hover); color: var(--text-primary); }
+/* 展开指示箭头：常驻低对比（不抢焦点），hover/展开时提亮，展开时旋转 180° */
+.menu-btn-caret { display: inline-flex; align-items: center; transition: transform .15s; opacity: .7; }
+.menu-btn:hover .menu-btn-caret, .menu-btn.open .menu-btn-caret { opacity: 1; }
+.menu-btn.open .menu-btn-caret { transform: rotate(180deg); }
 .menu-dropdown {
   position: fixed;
   min-width: 220px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 4px 0;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: var(--shadow-lg);
   z-index: 9999;
 }
 .menu-item {
-  display: flex; align-items: center; padding: 5px 14px; cursor: pointer;
-  font-size: 13px; color: var(--text-primary); gap: 24px;
+  display: flex; align-items: center; padding: 6px 10px; cursor: pointer;
+  font-size: 12px; color: var(--text-primary); gap: 24px;
+  border-radius: 6px;
 }
-.menu-item:hover { background: var(--accent); color: #fff; }
+.menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .menu-item.disabled { color: var(--text-muted); cursor: default; }
 .menu-item.disabled:hover { background: none; color: var(--text-muted); }
 .menu-item-label { flex: 1; white-space: nowrap; }
 .menu-item-shortcut { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
-.menu-item:hover .menu-item-shortcut { color: rgba(255,255,255,0.7); }
-.menu-divider { height: 1px; background: var(--border-color); margin: 4px 8px; opacity: 0.6; }
+.menu-item:hover .menu-item-shortcut { color: var(--text-muted); }
+.menu-divider { height: 1px; background: var(--border-color); margin: 4px 6px; opacity: 0.6; }
 </style>

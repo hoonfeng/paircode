@@ -68,40 +68,40 @@ function removeAt(i) {
 
 <style scoped>
 .me-field { display: flex; flex-direction: column; gap: 5px; }
-.me-label { font-size: 12px; color: var(--text-secondary, #999); font-weight: 500; }
+.me-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 .me-editor {
   display: flex; flex-direction: column; gap: 8px;
-  border: 1px solid var(--border-color, #3a3a4a); border-radius: 8px;
-  padding: 10px; background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color); border-radius: 8px;
+  padding: 10px; background: var(--input-bg);
 }
 .me-input-row { display: flex; gap: 8px; }
 .me-input {
   flex: 1; min-width: 0; box-sizing: border-box;
-  background: rgba(0,0,0,.2);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee); border-radius: 6px;
+  background: var(--color-surface-3);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary); border-radius: 6px;
   padding: 6px 10px; font-size: 13px; outline: none; font-family: inherit;
 }
-.me-input:focus { border-color: var(--accent, #4f8cff); }
+.me-input:focus { border-color: var(--accent); }
 .me-btn {
   padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
-  border: 1px solid var(--border-color, #444); background: none;
-  color: var(--text-primary, #ddd); transition: all .15s; flex-shrink: 0;
+  border: 1px solid var(--border-color); background: none;
+  color: var(--text-primary); transition: all .15s; flex-shrink: 0;
 }
-.me-btn:hover { background: var(--bg-hover, rgba(255,255,255,.06)); }
+.me-btn:hover { background: var(--bg-hover); }
 .me-tags { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; }
 .me-tag {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 12px; padding: 3px 6px 3px 10px; border-radius: 12px;
-  background: rgba(79,140,255,.12); color: #8ab4ff;
-  border: 1px solid rgba(79,140,255,.25);
+  background: var(--color-info-bg); color: var(--color-info);
+  border: 1px solid var(--color-accent-bg);
 }
 .me-x {
   width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
-  border: none; background: none; color: #8ab4ff; cursor: pointer;
+  border: none; background: none; color: var(--color-accent); cursor: pointer;
   font-size: 13px; line-height: 1; border-radius: 50%;
   padding: 0; opacity: .6;
 }
-.me-x:hover { opacity: 1; background: rgba(79,140,255,.25); color: #fff; }
-.me-empty { font-size: 12px; color: var(--text-secondary, #777); padding: 4px 0; }
+.me-x:hover { opacity: 1; background: var(--color-accent-bg); color: var(--color-fg); }
+.me-empty { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
 </style>

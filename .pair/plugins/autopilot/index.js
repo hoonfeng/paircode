@@ -334,6 +334,33 @@ function compactTrace(segments) {
   })
 }
 
+// ── 接口响应瘦身：看板单行显示所需的轨迹内容上限 ──────────────────
+// 落盘（compactTrace，上限 2000~4000）保留较全内容供排查；HTTP 响应只回看板
+// 「单行 ellipsis」真正能看到的部分（详见 /api/autopilot/rounds handler 注释）。
+const ROUND_TRACE_TEXT_MAX = 240
+const slimText = (s) => truncText(String(s == null ? '' : s), ROUND_TRACE_TEXT_MAX)
+
+// slimRound 复制一条监督回合并把 trace 内容压到看板可见长度（不改原对象）。
+function slimRound(r) {
+  if (!r || typeof r !== 'object') return r
+  if (!Array.isArray(r.trace)) return r
+  const out = Object.assign({}, r)
+  out.trace = r.trace.map((t) => {
+    if (!t || typeof t !== 'object') return t
+    if (t.type === 'tool_call') {
+      return {
+        type: 'tool_call',
+        name: String(t.name || ''),
+        callId: String(t.callId || ''),
+        args: slimText(t.args),
+        result: slimText(t.result),
+      }
+    }
+    return { type: String(t.type || ''), content: slimText(t.content) }
+  })
+  return out
+}
+
 // ── 决策器（宿主在每次工作 agent 自然结束时调用）────────────────
 function decide(ctx, req) {
   const log = ctx.logger('autopilot')
@@ -462,7 +489,20 @@ return {
       })
       if (!convId) return respond({ ok: false, error: '缺少 convId', rounds: [] })
       const rounds = loadRounds(ctx, convId)
-      return respond({ ok: true, convId: convId, total: rounds.length, rounds: rounds })
+      // ★ 2026-09-25 性能（接口瘦身）：默认只回看板可见所需——实测单会话 48 轮
+      //   响应 4.50MB，其中 trace 占 94.3%（3.69M 字符 / 2549 条：result 1.52M +
+      //   content 1.51M + args 0.48M）。两个消费者（RightPanel.vue 监督者面板、
+      //   本插件 client.js 看板）都只在**单行 ellipsis** 里显示轨迹
+      //   （.apb-trace-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}，
+      //   且无 title 属性）→ 传 2000~4000 字符与传 240 字符的用户可见效果完全相同。
+      //   ?full=1 回完整内容（排查/导出场景）。落盘内容不变（仍 2000~4000）。
+      const full = String(q.full || '') === '1'
+      return respond({
+        ok: true,
+        convId: convId,
+        total: rounds.length,
+        rounds: full ? rounds : rounds.map(slimRound),
+      })
     })
 
     log.info('自主模式已装配：监督者决策器已注册（工作 agent 每次自然结束时审核/评判/决定下一步）')

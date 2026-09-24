@@ -52,6 +52,20 @@ type SettingField struct {
 	ProtocolLabel   string   `json:"protocolLabel,omitempty"`
 	ProtocolOptions []string `json:"protocolOptions,omitempty"`
 	ProtocolHint    string   `json:"protocolHint,omitempty"`
+	// ★ 2026-09-25 画廊 / 色板选项（theme-gallery 等 type 专用）：插件声明每个选项的
+	//   显示名、明暗标识与缩略色卡色值（如 8 套主题的三色预览条）。
+	//   ★ 此前这类字段无对应 Go 字段 → JS 侧写了也被**静默丢弃**，前端只能回退成
+	//     options 纯文本 —— 8 套主题在设置面板退化为小写 id 的文字胶囊（实测）。
+	Swatches []SwatchDef `json:"swatches,omitempty"`
+}
+
+// SwatchDef 画廊 / 色板选项定义（theme-gallery 等 type 专用，schema 驱动）。
+type SwatchDef struct {
+	Value  string   `json:"value"`            // 选项值（写入设置的值，如主题 id）
+	Label  string   `json:"label"`            // 显示名（含中文名与明暗标识）
+	Desc   string   `json:"desc,omitempty"`   // 定位文案（画廊卡片第二行，如「默认暗色，久看不累」）
+	Scheme string   `json:"scheme,omitempty"` // 明暗：dark|light
+	Colors []string `json:"colors,omitempty"` // 缩略色卡色值序列（bg/surface/fg/accent/success…）
 }
 
 // ModelEditorDef provider-manager 的模型编辑器声明（schema 驱动）。

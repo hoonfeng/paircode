@@ -18,6 +18,8 @@
 // ═══════════════════════════════════════════════════════════════
 (ui) => {
   const PLUGIN = 'autopilot'
+  // ★ 2026-09-25 用户指令（反向调整）：①标题栏状态徽标改回 titlebar-right —— 该槽位为
+  //   list 型、由 StatusBar.vue（状态栏）渲染，撤销本日早些时候迁到活动栏的改动。
   const SLOT_ID = 'titlebar-right'
   const VIEW_ID = 'autopilot-board'
   const VIEW_TITLE = '自主模式'
@@ -49,22 +51,38 @@
   const keyOf = (r) => String((r && r.startedAt) || '') + '#' + String((r && r.round) || '')
 
   // load 拉取指定会话的回合表（缺省=当前会话）；期间切会话/又发起新拉取 → 丢弃本次结果。
+  // ★ 2026-09-25 性能（并发合并）：同一 target 在途时复用同一 Promise。
+  //   本看板与 RightPanel 的监督者面板各自拉同一接口；且在途期间 setInterval(POLL_MS)
+  //   因 loadedConvId 要到 await 之后才赋值 → 判定 id !== loadedConvId 为真 → 重复触发，
+  //   同一份 1.5MB 数据被拉多次。合并后同 target 只发 1 次；切换会话（不同 target）
+  //   仍各自独立发起，语义不变（loadSeq 作废逻辑保留）。
+  let inflightKey = ''
+  let inflightPromise = null
+
   async function load(convId) {
     const target = (convId === undefined) ? currentConvId() : String(convId || '')
-    const seq = ++loadSeq
     if (!target) { rounds = []; loadedConvId = ''; notify('rounds'); return }
-    let next = []
-    try {
-      const res = await ui.http.get('/autopilot/rounds', { convId: target })
-      next = (res && Array.isArray(res.rounds)) ? res.rounds : []
-    } catch (e) {
-      next = []   // 接口不可用 / 无记录：视作空表（不打断 UI）
-    }
-    if (seq !== loadSeq || currentConvId() !== target) return
-    const same = JSON.stringify(next) === JSON.stringify(rounds)
-    rounds = next
-    loadedConvId = target
-    notify(same ? 'state' : 'rounds')
+    if (inflightPromise && inflightKey === target) return inflightPromise
+    const p = (async () => {
+      const seq = ++loadSeq
+      let next = []
+      try {
+        const res = await ui.http.get('/autopilot/rounds', { convId: target })
+        next = (res && Array.isArray(res.rounds)) ? res.rounds : []
+      } catch (e) {
+        next = []   // 接口不可用 / 无记录：视作空表（不打断 UI）
+      }
+      if (seq !== loadSeq || currentConvId() !== target) return
+      const same = JSON.stringify(next) === JSON.stringify(rounds)
+      rounds = next
+      loadedConvId = target
+      notify(same ? 'state' : 'rounds')
+    })()
+    inflightKey = target
+    inflightPromise = p
+    const done = () => { if (inflightPromise === p) { inflightPromise = null; inflightKey = '' } }
+    p.then(done, done)
+    return p
   }
 
   // append 实时追加/替换一个回合（幂等键 = startedAt#round：同轮次重复事件只更新不重复）

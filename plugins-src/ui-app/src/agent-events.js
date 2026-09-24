@@ -1012,6 +1012,9 @@ export function getConvCtxStats(convId) {
       cacheHitTokens: 0, cacheMissTokens: 0,
       systemTokens: 0, skillsTokens: 0, mcpTokens: 0,
       toolTokens: 0, historyTokens: 0, otherTokens: 0,
+      // ★ 生效上下文窗口（后端 token-stats 下发；= agent.ContextWindow 装配口径，
+      //   供右栏/状态栏展示「已用 / 上限」——前端不得自行兜底臆测上限）
+      contextMaxTokens: 0,
     })
   }
   return state.convCtxStatsByConv[convId]
@@ -1024,6 +1027,7 @@ export function resetConvCtxStats(convId) {
       cacheHitTokens: 0, cacheMissTokens: 0,
       systemTokens: 0, skillsTokens: 0, mcpTokens: 0,
       toolTokens: 0, historyTokens: 0, otherTokens: 0,
+      contextMaxTokens: 0,
     })
   }
 }

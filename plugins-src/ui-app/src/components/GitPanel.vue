@@ -114,7 +114,7 @@
         <!-- 冲突 -->
         <div class="section-block">
           <div class="section-header conflict" @click="toggleCollapse('conflict')">
-            <SvgIcon :name="collapsed.conflict ? 'chevron-right' : 'chevron-down'" :size="12" color="#f48771" />
+            <SvgIcon :name="collapsed.conflict ? 'chevron-right' : 'chevron-down'" :size="12" color="var(--color-danger)" />
             <span>冲突 ({{ conflict.length }})</span>
           </div>
           <div v-if="!collapsed.conflict" class="section-items">
@@ -128,7 +128,7 @@
         <!-- 已修改 -->
         <div class="section-block">
           <div class="section-header modified" @click="toggleCollapse('modified')">
-            <SvgIcon :name="collapsed.modified ? 'chevron-right' : 'chevron-down'" :size="12" color="#dcdcaa" />
+            <SvgIcon :name="collapsed.modified ? 'chevron-right' : 'chevron-down'" :size="12" color="var(--color-cat-amber)" />
             <span>已修改 ({{ modified.length }})</span>
           </div>
           <div v-if="!collapsed.modified" class="section-items">
@@ -414,7 +414,12 @@ async function loadStatus() {
   if (loading.value) { pendingReload.value = true; return }
   loading.value = true
   try {
-    const res = await api.apiGet('/git/status', gitParams())
+    // ★ 2026-09-25：显式绕过 git-api 的 status 短 TTL 缓存（?refresh=1）。
+    //   本面板的 loadStatus 由「30s 轮询 + 每个写操作后立即调用」触发（add/reset/
+    //   discard/branch/commit… 均 `await loadStatus()`）—— 若命中缓存（5s TTL），
+    //   用户暂存/提交后会看到操作**之前**的文件列表（明显回归）。
+    //   该缓存只服务状态栏（StatusBar 15s 轮询、与写操作无耦合）的高频拉取。
+    const res = await api.apiGet('/git/status', gitParams({ refresh: 1 }))
     hasData.value = true
     isRepo.value = res.isRepo || false
     if (isRepo.value) {
@@ -699,8 +704,8 @@ watch(gitProject, () => { loadStatus() })
   max-width: 120px; cursor: pointer;
 }
 .git-project-select:hover { border-color: var(--accent); }
-.ahead-badge { color: #4ec9b0; font-size: 10px; }
-.behind-badge { color: #dcdcaa; font-size: 10px; }
+.ahead-badge { color: var(--color-cat-teal); font-size: 10px; }
+.behind-badge { color: var(--color-cat-amber); font-size: 10px; }
 .repo-actions { margin-left: auto; display: flex; gap: 2px; }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -715,7 +720,7 @@ watch(gitProject, () => { loadStatus() })
   position: absolute; top: 32px; left: 8px; z-index: 100;
   width: calc(100% - 16px); max-width: 300px;
   background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  border-radius: 6px; box-shadow: var(--shadow-md);
   max-height: 300px; display: flex; flex-direction: column;
 }
 .branch-filter-input {
@@ -737,7 +742,7 @@ watch(gitProject, () => { loadStatus() })
   width: 18px; height: 18px; border: none; background: none;
   cursor: pointer; color: var(--text-muted); border-radius: 3px;
 }
-.branch-del-btn:hover { background: rgba(244,135,113,0.2); color: #f48771; }
+.branch-del-btn:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 .branch-menu-footer {
   display: flex; gap: 4px; padding: 8px; border-top: 1px solid var(--border-color);
   justify-content: flex-end;
@@ -756,10 +761,10 @@ watch(gitProject, () => { loadStatus() })
 .git-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .git-btn:disabled { opacity: 0.4; cursor: default; }
 .action-btn { font-size: 11px; min-height: 24px; }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--color-accent-fg); border-color: var(--accent); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
 .action-spacer { flex: 1; }
-.init-btn { margin-top: 8px; background: var(--accent); color: #fff; border: none; padding: 6px 16px; }
+.init-btn { margin-top: 8px; background: var(--accent); color: var(--color-accent-fg); border: none; padding: 6px 16px; }
 
 /* 变更区块 */
 .git-sections { flex: 1; overflow-y: auto; border-top: 1px solid var(--border-color); }
@@ -769,8 +774,8 @@ watch(gitProject, () => { loadStatus() })
   cursor: pointer; font-size: 11px; color: var(--accent); user-select: none;
 }
 .section-header:hover { background: var(--bg-hover); }
-.section-header.conflict { color: #f48771; }
-.section-header.modified { color: #dcdcaa; }
+.section-header.conflict { color: var(--color-danger); }
+.section-header.modified { color: var(--color-cat-amber); }
 .section-header.untracked { color: var(--text-muted); }
 .section-items { max-height: 300px; overflow-y: auto; }
 .file-row {
@@ -782,11 +787,11 @@ watch(gitProject, () => { loadStatus() })
   width: 14px; text-align: center; font-size: 12px; font-weight: bold; flex-shrink: 0;
 }
 .file-status.staged { color: var(--accent); }
-.file-status.modified-st { color: #dcdcaa; }
+.file-status.modified-st { color: var(--color-cat-amber); }
 .file-status.untracked-st { color: var(--text-muted); }
-.file-status.conflict-st { color: #f48771; }
+.file-status.conflict-st { color: var(--color-danger); }
 .file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-path.conflict-text { color: #f48771; }
+.file-path.conflict-text { color: var(--color-danger); }
 .file-path.untracked-text { color: var(--text-muted); }
 .file-actions { display: flex; gap: 2px; opacity: 0; }
 .file-row:hover .file-actions { opacity: 1; }
@@ -796,7 +801,7 @@ watch(gitProject, () => { loadStatus() })
   color: var(--text-muted); border-radius: 3px;
 }
 .row-btn:hover { background: var(--bg-hover); color: var(--accent); }
-.row-btn.danger:hover { color: #f48771; }
+.row-btn.danger:hover { color: var(--color-danger); }
 .clean-hint {
   display: flex; align-items: center; gap: 6px; padding: 8px 12px;
   color: var(--text-muted); font-size: 11px;
@@ -835,12 +840,12 @@ watch(gitProject, () => { loadStatus() })
 /* 暂存面板 */
 .overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.4); z-index: 1000;
+  background: var(--color-scrim); z-index: 1000;
   display: flex; align-items: flex-start; justify-content: center; padding-top: 80px;
 }
 .overlay-panel {
   background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 8px; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  border-radius: 8px; display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
 }
 .stash-panel { width: 480px; max-height: 400px; }
 .overlay-header {

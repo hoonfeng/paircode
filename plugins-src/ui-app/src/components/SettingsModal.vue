@@ -1,17 +1,29 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
-      <h2><SvgIcon name="settings" :size="18" /> 设置
+      <!-- ★ 2026-09-24 对齐设计稿 appearance-theme th782（头部 = 标题 + 副标题两行）：
+           副标题显示**当前分类名**（真实数据，非装饰文案）。 -->
+      <div class="modal-head">
+        <div class="mh-text">
+          <div class="mh-title"><SvgIcon name="settings" :size="16" /> 设置</div>
+          <div class="mh-sub">{{ (tabs.find(t => t.key === activeTab) || {}).title || '所有分类' }}</div>
+        </div>
         <button class="modal-close" @click="$emit('close')">×</button>
-      </h2>
+      </div>
       <div class="modal-body">
         <!-- ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ -->
         <div v-if="tabs.length" class="settings-tabs">
+          <!-- 设计稿 th783：分组标题「设置分类」 -->
+          <div class="settings-tabs-title">设置分类</div>
           <div v-if="tabs.length > 6" class="settings-tabs-filter-wrap">
             <input v-model="tabQuery" class="settings-tabs-filter" type="text" placeholder="筛选设置…" />
           </div>
+          <!-- 设计稿 th755-th773：项 32 高 / radius 8 / 前置图标（选中态=check） -->
           <button v-for="t in filteredTabs" :key="t.key" :class="['settings-tab', { active: activeTab === t.key }]"
-                  @click="activeTab = t.key">{{ t.title }}</button>
+                  @click="activeTab = t.key">
+            <SvgIcon :name="activeTab === t.key ? 'check' : 'chevron-right'" :size="14" />
+            <span class="st-label">{{ t.title }}</span>
+          </button>
           <div v-if="filteredTabs.length === 0" class="settings-tabs-none">无匹配设置</div>
         </div>
         <div class="settings-content">
@@ -46,6 +58,36 @@
                       <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select" @change="onSelectChange(f)">
                         <option v-for="o in dynamicOptions(tab.key, f)" :key="o" :value="o">{{ o }}</option>
                       </select>
+
+                      <!-- theme-gallery（主题画廊：缩略色卡选择）
+                           ★ 值仍是 string 主题 id，binding 直连 AppSettings.theme —— 与 select 同数据模型，
+                             仅换一种更直观的呈现（色卡 + 明暗标识）。无联动字段故不调 onSelectChange。 -->
+                      <div v-else-if="f.type === 'theme-gallery'" class="theme-gallery">
+                        <button v-for="it in galleryItems(f)" :key="it.value" type="button"
+                                class="tg-item" :class="{ active: form[tab.key][f.name] === it.value }"
+                                :title="it.label" @click="form[tab.key][f.name] = it.value">
+                          <!-- 设计稿 th584：预览区 48 高（主题代表色横向平铺） -->
+                          <span class="tg-preview">
+                            <i v-for="(c, ci) in it.colors" :key="ci" :style="{ background: c }"></i>
+                          </span>
+                          <span class="tg-text">
+                            <span class="tg-label">{{ it.label }}</span>
+                            <!-- ★ 2026-09-25：定位文案（设计稿每张卡 = 预览 + 名称 + 一句定位，
+                                 如「默认暗色，久看不累」）。由插件 swatches[].desc 提供。 -->
+                            <span v-if="it.desc" class="tg-desc">{{ it.desc }}</span>
+                          </span>
+                        </button>
+                      </div>
+
+                      <!-- color-dots（色点选择：强调色覆盖等 —— 圆点 + 选中描边，悬停看名称）
+                           ★ 值仍是 string，与 select / theme-gallery 同数据模型，仅换呈现形态。 -->
+                      <div v-else-if="f.type === 'color-dots'" class="color-dots">
+                        <button v-for="it in galleryItems(f)" :key="it.value" type="button"
+                                class="cd-item" :class="{ active: String(form[tab.key][f.name] || '') === it.value }"
+                                :title="it.label" @click="form[tab.key][f.name] = it.value">
+                          <i class="cd-dot" :style="{ background: (it.colors && it.colors[0]) || 'transparent' }"></i>
+                        </button>
+                      </div>
 
                       <!-- textarea -->
                       <textarea v-else-if="f.type === 'textarea'" v-model="form[tab.key][f.name]" class="field-textarea"
@@ -94,7 +136,10 @@
           <div v-if="!tabs.length" class="settings-empty">暂无配置项（等待插件注册…）</div>
         </div>
       </div>
+      <!-- ★ 2026-09-24 对齐设计稿 th790（底 48：说明 + 信息）：左侧补说明文本，
+           与「撤销 / 保存设置」按钮同行（设计稿未画按钮，但 schema 驱动需显式保存）。 -->
       <div class="modal-footer">
+        <span class="mf-note">配置项由插件注册，修改后点「保存设置」生效</span>
         <button class="btn-secondary" @click="resetForm">撤销</button>
         <button class="btn-primary" @click="saveSettings">保存设置</button>
       </div>
@@ -212,6 +257,13 @@ function onSelectChange(f) {
 // ─── 值模型：binding → 顶层 AppSettings；非 binding → 插件命名空间 ───
 const form = reactive({})       // form[tabKey][fieldName] = 值
 const projectInst = ref('')     // 项目级指令（type=project 字段）
+
+// galleryItems：主题画廊条目。优先用插件给的 swatches（含缩略色卡色值），
+// 缺失时回退为 options 的纯文本条目 —— 老插件/未升级的 schema 也能正常渲染。
+function galleryItems(f) {
+  if (Array.isArray(f.swatches) && f.swatches.length) return f.swatches
+  return (f.options || []).map(o => ({ value: o, label: o, colors: [] }))
+}
 
 function zeroValue(type) {
   switch (type) {
@@ -357,70 +409,84 @@ onMounted(async () => {
 <style scoped>
 .modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-scrim);
   display: flex; align-items: center; justify-content: center; z-index: 1000;
 }
 .modal-content {
-  background: var(--bg-secondary, #1e1e2e);
-  border: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   /* ★ 2026-09-01 固定高宽：切换 tab 不再来回改变面板尺寸（内容在内部滚动） */
   width: min(94vw, 880px);
   height: min(86vh, 720px);
   display: flex; flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0,0,0,.4);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
-h2 {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0; padding: 14px 18px;
-  font-size: 15px; font-weight: 600;
-  border-bottom: 1px solid var(--border-color, #333);
-  color: var(--text-primary, #eee);
+/* 设计稿 th782：头部左「标题 + 副标题」两行、右侧操作区（原 h2 单行 + × 按钮） */
+.modal-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
 }
+.mh-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mh-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 600; color: var(--text-primary);
+}
+.mh-sub { font-size: 11px; color: var(--text-muted); }
 .modal-close {
   margin-left: auto; background: none; border: none;
-  color: var(--text-secondary, #999); font-size: 18px; cursor: pointer;
+  color: var(--text-secondary); font-size: 18px; cursor: pointer;
   width: 28px; height: 28px; border-radius: 6px; line-height: 1;
 }
-.modal-close:hover { background: var(--bg-hover, rgba(255,255,255,.08)); color: #fff; }
+.modal-close:hover { background: var(--bg-hover); color: var(--color-fg); }
 .modal-body { display: flex; flex: 1; min-height: 0; }
 .settings-tabs {
-  display: flex; flex-direction: column; gap: 3px;
+  display: flex; flex-direction: column; gap: 4px;
   padding: 12px 10px; width: 184px; flex-shrink: 0;
-  border-right: 1px solid var(--border-color, #333);
-  background: var(--bg-tertiary, rgba(0,0,0,.15));
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
   overflow-y: auto;
+}
+/* 设计稿 th783：分组标题 xs(11)/muted/600 */
+.settings-tabs-title {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  padding: 2px 6px 4px;
 }
 .settings-tabs-filter-wrap { margin-bottom: 6px; }
 .settings-tabs-filter {
   width: 100%; box-sizing: border-box;
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   border-radius: 6px; padding: 5px 9px; font-size: 12px;
   outline: none; transition: border-color .15s;
 }
-.settings-tabs-filter:focus { border-color: var(--accent, #4f8cff); }
-.settings-tabs-none { color: var(--text-secondary, #888); font-size: 12px; text-align: center; padding: 12px 4px; }
+.settings-tabs-filter:focus { border-color: var(--accent); }
+.settings-tabs-none { color: var(--text-secondary); font-size: 12px; text-align: center; padding: 12px 4px; }
+/* 设计稿 th755-th773：分类项 32 高、radius 8、pad sm(8)、gap sm(8)、前置图标 14；
+   选中态 = surface-3 底(→ --bg-active) + accent 文字（**不是** accent 实底），
+   图标随之由 chevron-right 换成 check（th762）。 */
 .settings-tab {
-  text-align: left; padding: 9px 12px; border: none; border-radius: 7px;
-  background: none; color: var(--text-secondary, #aaa);
-  font-size: 13px; line-height: 1.3; min-height: 18px;
-  cursor: pointer; transition: all .15s;
-  word-break: break-word;
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 8px; border: none; border-radius: 8px;
+  background: none; color: var(--text-primary);
+  font-size: 12px; text-align: left; cursor: pointer;
+  transition: background .15s, color .15s;
 }
-.settings-tab:hover { background: var(--bg-hover, rgba(255,255,255,.06)); color: var(--text-primary, #eee); }
-.settings-tab.active {
-  background: var(--accent, #4f8cff); color: #fff; font-weight: 600;
-}
+.settings-tab .svg-icon { flex-shrink: 0; color: var(--text-muted); }
+.st-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-tab:hover { background: var(--bg-hover); }
+.settings-tab.active { background: var(--bg-active); color: var(--accent); font-weight: 600; }
+.settings-tab.active .svg-icon { color: var(--accent); }
 .settings-content { flex: 1; padding: 16px 18px; overflow-y: auto; }
-.settings-empty { color: var(--text-secondary, #888); text-align: center; padding: 40px 0; font-size: 13px; }
+.settings-empty { color: var(--text-secondary); text-align: center; padding: 40px 0; font-size: 13px; }
 
 .setting-group { margin-bottom: 14px; }
 .group-title {
   font-size: 12px; font-weight: 600; letter-spacing: .4px;
-  color: var(--text-secondary, #999); margin-bottom: 8px;
+  color: var(--text-secondary); margin-bottom: 8px;
   text-transform: uppercase; opacity: .85;
 }
 .setting-row {
@@ -428,10 +494,10 @@ h2 {
   padding: 8px 10px; margin-bottom: 6px; border-radius: 7px;
   transition: background .12s;
 }
-.setting-row:hover { background: var(--bg-hover, rgba(255,255,255,.04)); }
+.setting-row:hover { background: var(--bg-hover); }
 .setting-row.row-toggle { flex-direction: row; align-items: center; justify-content: space-between; }
 .field-label {
-  font-size: 13px; color: var(--text-primary, #ddd); font-weight: 500;
+  font-size: 13px; color: var(--text-primary); font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .field-control { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -441,70 +507,109 @@ h2 {
 .setting-row input[type="number"],
 .setting-row .field-select {
   width: 100%; box-sizing: border-box;
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   border-radius: 6px; padding: 6px 10px; font-size: 13px;
   outline: none; transition: border-color .15s;
 }
 .setting-row input:focus,
-.setting-row select:focus { border-color: var(--accent, #4f8cff); }
+.setting-row select:focus { border-color: var(--accent); }
 .setting-hint {
-  font-size: 11px; color: var(--text-secondary, #888);
+  font-size: 11px; color: var(--text-secondary);
   line-height: 1.45; min-width: 0;
 }
 .field-textarea {
   width: 100%; box-sizing: border-box; resize: vertical;
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee); border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary); border-radius: 6px;
   padding: 8px 10px; font-size: 13px; font-family: inherit; outline: none;
 }
-.field-textarea:focus { border-color: var(--accent, #4f8cff); }
+.field-textarea:focus { border-color: var(--accent); }
 
 /* 开关（对齐 pp-switch 风格） */
 .pp-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .pp-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .pp-switch-track {
   width: 34px; height: 18px; border-radius: 9px;
-  background: var(--border-color, #444); position: relative; transition: background .18s;
+  background: var(--border-color); position: relative; transition: background .18s;
 }
 .pp-switch-track::after {
   content: ''; position: absolute; top: 2px; left: 2px;
   width: 14px; height: 14px; border-radius: 50%;
   background: #fff; transition: transform .18s;
 }
-.pp-switch input:checked + .pp-switch-track { background: var(--accent, #4f8cff); }
+.pp-switch input:checked + .pp-switch-track { background: var(--accent); }
 .pp-switch input:checked + .pp-switch-track::after { transform: translateX(16px); }
 
 /* slider */
 .slider-row { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.slider-row input[type="range"] { flex: 1; accent-color: var(--accent, #4f8cff); }
+.slider-row input[type="range"] { flex: 1; accent-color: var(--accent); }
 .slider-val {
   min-width: 36px; text-align: right;
-  font-size: 12px; color: var(--text-primary, #eee); font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--text-primary); font-variant-numeric: tabular-nums;
 }
 
 /* color */
 .color-row { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .color-row input[type="color"] {
-  width: 34px; height: 24px; border: 1px solid var(--border-color, #3a3a4a);
+  width: 34px; height: 24px; border: 1px solid var(--border-color);
   border-radius: 5px; background: none; padding: 1px; cursor: pointer;
 }
-.color-code { font-size: 12px; color: var(--text-secondary, #aaa); }
+.color-code { font-size: 12px; color: var(--text-secondary); }
 
-.modal-footer {
-  display: flex; justify-content: flex-end; gap: 10px;
-  padding: 12px 18px; border-top: 1px solid var(--border-color, #333);
+/* theme-gallery（主题画廊：缩略色卡）—— 颜色全部走设计令牌，跟随当前主题 */
+/* 设计稿 th589/th608/th627：主题卡 224×128、radius 12、pad sm(8)、gap sm(8)；
+   预览区 48 高（主题代表色平铺）+ 名称(sm/600) + 定位文案(xs/muted)；
+   选中卡以 accent 描边（设计稿 border=$color.accent）。 */
+.theme-gallery {
+  flex: 1; min-width: 0;
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
+.tg-item {
+  display: flex; flex-direction: column; gap: 8px; padding: 8px;
+  min-height: 118px; text-align: left;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.tg-item:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+.tg-item.active { border-color: var(--accent); }
+.tg-preview { display: flex; height: 48px; border-radius: 8px; overflow: hidden; flex: none; }
+.tg-preview i { display: block; flex: 1 1 0; min-width: 0; }
+.tg-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tg-label { font-size: 12px; font-weight: 600; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+/* color-dots（色点选择） */
+.color-dots { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cd-item {
+  display: flex; padding: 3px; background: none;
+  border: 2px solid transparent; border-radius: 999px; cursor: pointer; transition: all .15s;
+}
+.cd-item:hover { border-color: var(--text-muted); }
+.cd-item.active { border-color: var(--accent); }
+.cd-dot {
+  display: block; width: 18px; height: 18px; border-radius: 999px;
+  border: 1px solid var(--border-color);
+}
+
+/* 设计稿 th790：底部 48 高（pad md=12），左「说明文本」+ 右「操作按钮」同行 */
+.modal-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 12px 18px; border-top: 1px solid var(--border-color);
+}
+.mf-note { margin-right: auto; font-size: 11px; color: var(--text-muted); }
 .btn-secondary, .btn-primary {
   padding: 7px 16px; border-radius: 7px; font-size: 13px;
-  cursor: pointer; border: 1px solid var(--border-color, #444); transition: all .15s;
+  cursor: pointer; border: 1px solid var(--border-color); transition: all .15s;
 }
-.btn-secondary { background: none; color: var(--text-primary, #ddd); }
-.btn-secondary:hover { background: var(--bg-hover, rgba(255,255,255,.06)); }
+.btn-secondary { background: none; color: var(--text-primary); }
+.btn-secondary:hover { background: var(--bg-hover); }
 .btn-primary {
-  background: var(--accent, #4f8cff); color: #fff; border-color: var(--accent, #4f8cff); font-weight: 600;
+  background: var(--accent); color: var(--color-accent-fg); border-color: var(--accent); font-weight: 600;
 }
 .btn-primary:hover { filter: brightness(1.12); }
 </style>

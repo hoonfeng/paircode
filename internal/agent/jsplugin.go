@@ -1752,6 +1752,34 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 						}
 					}
 				}
+				// ★ 2026-09-25 画廊 / 色板选项：解析 swatches（每项 {value,label,scheme,colors}）。
+				//   无此解析时插件写的缩略色卡被静默丢弃，前端主题画廊退化成纯文本按钮。
+				//   ★ 过滤 value 为空的项：swatches 数组里混入非选项对象（例如误插的字段定义）
+				//     时，前端会渲染出无值无色的「坏卡」，在此拦截更早也更可靠。
+				if sws, ok := fm["swatches"].([]any); ok {
+					for _, sv := range sws {
+						sm, ok := sv.(map[string]any)
+						if !ok {
+							continue
+						}
+						sd := core.SwatchDef{}
+						sd.Value, _ = sm["value"].(string)
+						if sd.Value == "" {
+							continue
+						}
+						sd.Label, _ = sm["label"].(string)
+						sd.Desc, _ = sm["desc"].(string)
+						sd.Scheme, _ = sm["scheme"].(string)
+						if cs, ok := sm["colors"].([]any); ok {
+							for _, c := range cs {
+								if s, ok := c.(string); ok {
+									sd.Colors = append(sd.Colors, s)
+								}
+							}
+						}
+						f.Swatches = append(f.Swatches, sd)
+					}
+				}
 				// ★ 2026-08-21 模型参数定义（provider-manager 专用）：解析 modelParamFields
 				//   数组（每项 {name,label,type,default,options,hint,min,max,step}），
 				//   前端 ProviderManager 按此 schema 动态渲染逐模型参数区。

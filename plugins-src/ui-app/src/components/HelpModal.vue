@@ -186,7 +186,7 @@ onMounted(() => {
 <style scoped>
 .modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5); z-index: 2000;
+  background: var(--color-scrim); z-index: 2000;
   display: flex; align-items: center; justify-content: center;
 }
 .modal-content {
@@ -198,7 +198,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-lg);
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;

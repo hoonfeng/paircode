@@ -149,8 +149,8 @@ const structuredSummary = computed(() => {
   transition: opacity 0.15s; white-space: nowrap;
 }
 .approval-btn:hover { opacity: 0.85; }
-.approval-btn-allow { background: #2ea043; color: #fff; }
-.approval-btn-deny { background: #da3633; color: #fff; }
+.approval-btn-allow { background: var(--color-success); color: var(--color-accent-fg); }
+.approval-btn-deny { background: var(--color-danger); color: var(--color-accent-fg); }
 .approval-btn-toggle { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); display: flex; align-items: center; gap: 2px; padding: 4px 6px; }
 .approval-btn-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
 </style>

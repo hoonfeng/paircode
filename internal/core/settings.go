@@ -135,8 +135,31 @@ func Default() AppSettings {
 		Provider: "", BaseURL: "", APIKey: "",
 		PlanModel: "", ExecuteModel: "", ReviewModel: "",
 		AutoIterate: true, ReviewMode: "auto",
-		Theme: "dark", FontSize: 14, TabSize: 2,
+		// ★ 2026-09-25：主题 v2（8 套）落地后默认值改为新主题 id。
+		//   旧 id "dark" 虽是 midnight 的别名（client.js 仍能注入正确 CSS 文件），
+		//   但设置面板的「主题画廊」按新 id 判定选中态，故默认值也必须是新 id。
+		Theme: "midnight", FontSize: 14, TabSize: 2,
 	}
+}
+
+// ThemeIDAliases 旧 4 主题 id → 主题 v2 的 8 套新 id。
+//
+// ★ 与 ui-appearance 插件 client.js 的 THEME_FILE 别名表保持一致：旧 id 的 CSS
+// 选择器仍保留在各 theme-<id>.css 中（旧配置值的视觉行为不变），但设置面板的
+// 「主题画廊」按新 id 判定选中态 —— 不迁移则没有任何卡片高亮（实测 activeCard=无）。
+var ThemeIDAliases = map[string]string{
+	"dark":  "midnight",
+	"night": "obsidian",
+	"light": "daylight",
+	"warm":  "sand",
+}
+
+// NormalizeThemeID 把旧主题 id 归一化为新 id（未知值原样返回）。
+func NormalizeThemeID(id string) string {
+	if n, ok := ThemeIDAliases[id]; ok {
+		return n
+	}
+	return id
 }
 
 // Load 读 settings.json 进 Settings。同时确保 models.json 存在并加载模型列表。
@@ -177,6 +200,11 @@ func Load() bool {
 			}
 		}
 	}
+	// ★ 2026-09-25：迁移旧 4 主题 id → 主题 v2 的 8 套新 id（见 NormalizeThemeID）。
+	//   幂等：已是新 id 原样返回。
+	//   ★ 放在 if 块**之外**：无论是否读到 settings.json、是否命中上面的旧字段迁移分支，
+	//     最终 Theme 都必须是新 id —— 否则设置面板画廊没有任何卡片高亮（实测 activeCard=无）。
+	Settings.Theme = NormalizeThemeID(Settings.Theme)
 	if Settings.ExecuteModel == "" && Settings.Model != "" {
 		Settings.ExecuteModel = Settings.Model
 	}

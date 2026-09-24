@@ -284,6 +284,11 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 			}
 			jsonResp(w, map[string]any{"messages": msgs, "total": total})
 		case "token-stats":
+			// ★ 与 web 端 web_server.go 同源：补生效上下文窗口真值（agent.ContextWindow
+			//   装配口径），供前端展示「已用 / 上限」而不自行兜底臆测。本路径无
+			//   workspaceRoot 变量，按 run-stats 同规则回退 core.Root()。
+			wsRootForCtx := core.Root()
+			ctxWindow := agent.ContextWindow(agent.ResolveProviderParamsForConv(id, wsRootForCtx))
 			meta, err := store.GetConversation(id)
 			if err != nil {
 				jsonErr(w, err.Error())
@@ -293,6 +298,7 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 				jsonResp(w, map[string]any{
 					"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
 					"cacheHitTokens": 0, "cacheMissTokens": 0,
+					"contextMaxTokens": ctxWindow,
 				})
 				return
 			}
@@ -303,6 +309,7 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 				"totalTokens":      cs.TotalTokens,
 				"cacheHitTokens":   cs.PromptCacheHitTokens,
 				"cacheMissTokens":  cs.PromptCacheMissTokens,
+				"contextMaxTokens": ctxWindow,
 			}
 			if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
 				cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {

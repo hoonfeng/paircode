@@ -679,7 +679,7 @@ onUnmounted(() => {
 .pp-lang { width: auto; flex-shrink: 0; }
 .pp-check { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .pp-new-msg { font-size: 11px; color: var(--accent-light); word-break: break-all; }
-.pp-new-msg.err { color: var(--error, #e06c75); }
+.pp-new-msg.err { color: var(--error); }
 
 /* client 面板区 */
 .pp-client {
@@ -731,7 +731,7 @@ onUnmounted(() => {
   line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;
 }
 .pp-slot-kind.kind-single { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-.pp-slot-kind.kind-list { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30); }
+.pp-slot-kind.kind-list { color: var(--color-cat-green); background: var(--color-cat-green-bg); border: 1px solid var(--color-cat-green-bg); }
 .pp-slot-list { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
 .pp-slot-list-item {
   display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);
@@ -799,7 +799,7 @@ onUnmounted(() => {
 .pp-state {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
-.pp-state.on { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6); }
+.pp-state.on { background: var(--color-success); box-shadow: 0 0 4px var(--color-success); }
 .pp-state.off { background: var(--text-muted); opacity: .4; }
 .pp-name {
   flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -808,41 +808,41 @@ onUnmounted(() => {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
   font-family: var(--font-code); text-transform: uppercase;
 }
-.pp-src.js { background: rgba(240, 219, 79, .15); color: #e5c07b; }
-.pp-src.go { background: rgba(0, 178, 255, .12); color: #61afef; }
+.pp-src.js { background: var(--color-cat-amber-bg); color: var(--color-cat-amber); }
+.pp-src.go { background: var(--color-cat-blue-bg); color: var(--color-cat-blue); }
 /* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */
-.pp-src.node-bridge { background: rgba(86, 182, 194, .14); color: #56b6c2; }
+.pp-src.node-bridge { background: var(--color-cat-teal-bg); color: var(--color-cat-teal); }
 .pp-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
-  background: rgba(198, 120, 221, .15); color: #c678dd;
+  background: var(--color-cat-purple-bg); color: var(--color-cat-purple);
   flex-shrink: 0;
 }
 .pp-badge-warn {
-  background: rgba(229, 192, 123, .18); color: #e5c07b;
+  background: var(--color-warning-bg); color: var(--color-warning);
   cursor: help;
 }
 .pp-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
 .pp-ui-label { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
-.pp-ui-label.on { color: var(--accent, #4c9aff); }
+.pp-ui-label.on { color: var(--accent); }
 .pp-chevron { transition: transform .15s; flex-shrink: 0; }
 .pp-chevron.open { transform: rotate(90deg); }
 
 .pp-detail { padding: 4px 10px 10px 24px; background: var(--bg-tertiary); }
 .pp-d-purpose { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
 .pp-d-line { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all; }
-.pp-d-error { color: #e06c75; }
+.pp-d-error { color: var(--color-danger); }
 .pp-d-hint { font-size: 11px; color: var(--text-muted); }
 /* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */
 .pp-d-conflict {
   margin: 6px 0;
   padding: 5px 6px;
-  border: 1px solid rgba(229, 192, 123, .35);
+  border: 1px solid var(--color-warning-bg);
   border-radius: 4px;
-  background: rgba(229, 192, 123, .06);
+  background: var(--color-warning-bg);
 }
 .pp-d-conflict-title {
   display: flex; align-items: center; gap: 5px;
-  font-size: 10px; color: #e5c07b; margin-bottom: 4px;
+  font-size: 10px; color: var(--color-warning); margin-bottom: 4px;
 }
 .pp-d-conflict-row {
   display: flex; align-items: center; gap: 6px;
@@ -855,21 +855,21 @@ onUnmounted(() => {
   color: var(--text-muted); white-space: nowrap;
 }
 .pp-d-side.on {
-  border-color: rgba(152, 195, 121, .5);
-  background: rgba(152, 195, 121, .12);
-  color: #98c379;
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 /* 生效方切换结果提示（插件列表上方） */
 .pp-prefer-msg {
   display: flex; align-items: center; gap: 5px;
   margin: 4px 10px; padding: 4px 6px;
   font-size: 11px; border-radius: 4px;
-  color: #98c379; background: rgba(152, 195, 121, .1);
-  border: 1px solid rgba(152, 195, 121, .3);
+  color: var(--color-success); background: var(--color-success-bg);
+  border: 1px solid var(--color-success-bg);
 }
 .pp-prefer-msg.err {
-  color: #e06c75; background: rgba(224, 108, 117, .1);
-  border-color: rgba(224, 108, 117, .3);
+  color: var(--color-danger); background: var(--color-danger-bg);
+  border-color: var(--color-danger-bg);
 }
 .pp-d-tools { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); }
 .pp-d-tools-title { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
@@ -912,21 +912,21 @@ onUnmounted(() => {
 }
 .pp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .pp-btn.primary { border-color: var(--accent); color: var(--accent-light); }
-.pp-btn.danger { border-color: #e06c75; color: #e06c75; }
+.pp-btn.danger { border-color: var(--color-danger); color: var(--color-danger); }
 .pp-btn:disabled { opacity: .5; cursor: not-allowed; }
 .spinner { animation: pp-spin 1s linear infinite; }
 @keyframes pp-spin { to { transform: rotate(360deg); } }
 .pp-builtin {
   display: flex; flex-direction: column; gap: 6px;
   margin: 4px 6px 10px; padding: 8px 10px;
-  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;
-  background: rgba(212,167,78,.05);
+  border: 1px solid var(--color-cat-amber-bg); border-radius: 8px;
+  background: var(--color-cat-amber-bg);
 }
 .pp-builtin-head { display: flex; align-items: center; gap: 8px; }
-.pp-builtin-head:hover { background: rgba(212,167,78,.08); }
+.pp-builtin-head:hover { background: var(--color-cat-amber-bg); }
 .pp-builtin-title {
   display: flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;
+  font-size: 12px; font-weight: 700; color: var(--color-cat-amber); letter-spacing: .3px;
 }
 .pp-builtin-sub { font-size: 10px; color: var(--text-muted); flex: 1; }
 .pp-builtin-group {

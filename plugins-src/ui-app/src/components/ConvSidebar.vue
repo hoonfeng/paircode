@@ -1,144 +1,61 @@
 <template>
   <div class="conv-sidebar" :class="{ 'conv-sidebar-horizontal': horizontal }" :style="horizontal ? {} : { width: width + 'px' }">
     <div class="conv-sidebar-header">
-      <span>会话</span>
-    </div>
-    <div class="conv-list">
-      <div v-for="conv in localConvs" :key="conv.id"
-           :class="['conv-item', { active: conv.id === currentConvId }]"
-           @click="$emit('switch-conversation', conv.id)">
-        <div class="conv-title">{{ conv.title }}</div>
-        <div class="conv-meta">
-          <span v-if="loadingByConv[conv.id]" class="conv-running-tag" title="Agent 运行中">
-            <span class="conv-running-dot"></span>
-            <span class="conv-running-text">运行中</span>
-          </span>
-          <span v-else-if="conv.interrupted" class="conv-interrupted-tag" title="上次任务未完成，点击后可直接继续">⚠️ 未完成</span>
-          <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
-          <span class="conv-time">{{ conv.updatedAt ? formatConvTime(conv.updatedAt) : '' }}</span>
-        </div>
-        <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
+      <!-- ★ 2026-09-25 对齐设计稿 th23：标题「会话」(sm/600) + 右侧 2 图标
+           （th20 muted 14 / th21 accent 14）。 -->
+      <span class="csh-title">会话</span>
+      <div class="csh-actions">
+        <button class="csh-btn" title="刷新会话列表" @click="refreshConvs"><SvgIcon name="refresh" :size="14" /></button>
+        <button class="csh-btn csh-btn-accent" title="新建对话" @click="$emit('new-conversation')"><SvgIcon name="plus" :size="14" /></button>
       </div>
+    </div>
+    <div class="conv-sb-divider"></div>
+
+    <!-- ★ 2026-09-25 对齐设计稿 th61：分组标签（th25「今天」/ th41「更早」）＋
+         行结构对齐 th30（row 248×32, pad=8, bg=surface-3 选中）：
+         [icon(accent 14)] + [标题(sm, fg, w156)] + [计数(52, right, muted, xs)]。
+         ★ 监督纠正：去掉设计稿没有的**时间**列；「运行中/未完成」保留为极小的
+           状态点（功能必需信息，设计稿无对应节点，已在 notes §26 说明理由）。 -->
+    <div class="conv-list">
+      <template v-if="todayConvs.length">
+        <div class="conv-group-label">今天</div>
+        <div v-for="conv in todayConvs" :key="conv.id" class="conv-item"
+             :class="{ active: conv.id === currentConvId }"
+             @click="$emit('switch-conversation', conv.id)">
+          <SvgIcon class="conv-row-icon" name="message-square" :size="14" />
+          <span class="conv-title">{{ conv.title }}</span>
+          <span v-if="loadingByConv[conv.id]" class="conv-running-dot" title="Agent 运行中"></span>
+          <span v-else-if="conv.interrupted" class="conv-interrupted-dot" title="上次任务未完成"></span>
+          <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
+          <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
+        </div>
+      </template>
+      <template v-if="earlierConvs.length">
+        <div class="conv-group-label">更早</div>
+        <div v-for="conv in earlierConvs" :key="conv.id" class="conv-item"
+             :class="{ active: conv.id === currentConvId }"
+             @click="$emit('switch-conversation', conv.id)">
+          <SvgIcon class="conv-row-icon" name="message-square" :size="14" />
+          <span class="conv-title">{{ conv.title }}</span>
+          <span v-if="loadingByConv[conv.id]" class="conv-running-dot" title="Agent 运行中"></span>
+          <span v-else-if="conv.interrupted" class="conv-interrupted-dot" title="上次任务未完成"></span>
+          <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
+          <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
+        </div>
+      </template>
       <div v-if="localConvs.length === 0" class="conv-empty">暂无对话</div>
     </div>
 
-    <!-- Token 统计面板 -->
-    <div class="conv-stats cs-tokens">
-      <div class="conv-stats-header" @click="toggleTokens">
-        <svg v-if="!convStatsExpanded" class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
-        <svg v-else class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
-        <SvgIcon name="code" :size="11" />
-        <span>Token 统计</span>
-        <span class="conv-stats-total">{{ shortTokens(wsTokenStats.totalTokens) }}</span>
-      </div>
-      <div v-if="convStatsExpanded" class="conv-stats-body">
-        <div class="cache-ring-wrap">
-          <svg class="cache-ring" viewBox="0 0 48 48" width="96" height="96">
-            <circle cx="24" cy="24" r="18" fill="none" stroke="var(--border-color)" stroke-width="4" />
-            <circle cx="24" cy="24" r="18" fill="none" stroke="#6a9955" stroke-width="4"
-              :stroke-dasharray="cacheRingDash" stroke-linecap="round"
-              transform="rotate(-90 24 24)" style="transition: stroke-dasharray 0.3s;" />
-          </svg>
-          <div class="cache-ring-label">
-            <span class="cache-ring-pct">{{ cacheRate || 0 }}%</span>
-            <span class="cache-ring-text">缓存命中</span>
-          </div>
-        </div>
-        <div class="conv-stats-detail">
-          <div class="cs-row">
-            <span class="cs-label">输入</span>
-            <span class="cs-val cs-prompt">{{ shortTokens(wsTokenStats.promptTokens) }}</span>
-          </div>
-          <div class="cs-row">
-            <span class="cs-label cs-cachelbl">● 缓存命中</span>
-            <span class="cs-val cs-cache">{{ shortTokens(wsTokenStats.cacheHitTokens) }}</span>
-          </div>
-          <div class="cs-row">
-            <span class="cs-label cs-misslbl">● 缓存未命中</span>
-            <span class="cs-val cs-miss">{{ shortTokens(wsTokenStats.cacheMissTokens) }}</span>
-          </div>
-          <div class="cs-row">
-            <span class="cs-label">输出</span>
-            <span class="cs-val cs-out">{{ shortTokens(wsTokenStats.completionTokens) }}</span>
-          </div>
-          <div class="cs-divider"></div>
-          <div class="cs-row cs-total">
-            <span class="cs-label">总 Token</span>
-            <span class="cs-val">{{ shortTokens(wsTokenStats.totalTokens) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 上下文窗口 + 构成占比 -->
-    <div class="conv-stats cs-context">
-      <div class="conv-stats-header" @click="toggleCtx">
-        <svg v-if="!ctxStatsExpanded" class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
-        <svg v-else class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
-        <SvgIcon name="layers" :size="11" />
-        <span>上下文</span>
-        <span class="conv-stats-pct">{{ ctxUsagePct }}%</span>
-      </div>
-      <div v-if="ctxStatsExpanded" class="conv-stats-body ctx-body">
-        <div class="ctx-bar-wrap">
-          <div class="ctx-bar">
-            <div class="ctx-bar-fill" :style="{ width: ctxUsagePct + '%' }"></div>
-          </div>
-          <div class="ctx-bar-labels">
-            <span>已用: {{ shortTokens(convCtxStats.promptTokens) }}</span>
-            <span>上限: {{ shortTokens(ctxMaxTokens) }}</span>
-          </div>
-        </div>
-        <div class="ctx-detail">
-          <div class="ctx-row">
-            <span class="cs-label">上下文大小</span>
-            <span class="cs-val">{{ shortTokens(convCtxStats.promptTokens) }} / {{ shortTokens(ctxMaxTokens) }}</span>
-          </div>
-          <div class="ctx-row">
-            <span class="cs-label">占用比例</span>
-            <span class="cs-val" :class="ctxPctClass">{{ ctxUsagePct }}%</span>
-          </div>
-          <div class="ctx-row">
-            <span class="cs-label">剩余空间</span>
-            <span class="cs-val cs-remain">{{ shortTokens(ctxRemaining) }}</span>
-          </div>
-        </div>
-        <div class="comp-bar-wrap">
-          <div class="comp-bar-title">上下文构成</div>
-          <div class="comp-bar">
-            <div v-if="convCtxStats.systemTokens > 0" class="comp-bar-seg comp-system" :style="{ width: compSystemPct + '%' }"
-                 :title="'提示词: ' + shortTokens(convCtxStats.systemTokens)"></div>
-            <div v-if="convCtxStats.skillsTokens > 0" class="comp-bar-seg comp-skills" :style="{ width: compSkillsPct + '%' }"
-                 :title="'技能: ' + shortTokens(convCtxStats.skillsTokens)"></div>
-            <div v-if="convCtxStats.mcpTokens > 0" class="comp-bar-seg comp-mcp" :style="{ width: compMCPPct + '%' }"
-                 :title="'MCP: ' + shortTokens(convCtxStats.mcpTokens)"></div>
-            <div v-if="convCtxStats.toolTokens > 0" class="comp-bar-seg comp-tool" :style="{ width: compToolPct + '%' }"
-                 :title="'工具: ' + shortTokens(convCtxStats.toolTokens)"></div>
-            <div v-if="convCtxStats.historyTokens > 0" class="comp-bar-seg comp-history" :style="{ width: compHistoryPct + '%' }"
-                 :title="'历史: ' + shortTokens(convCtxStats.historyTokens)"></div>
-            <div v-if="convCtxStats.otherTokens > 0" class="comp-bar-seg comp-other" :style="{ width: compOtherPct + '%' }"
-                 :title="'其他: ' + shortTokens(convCtxStats.otherTokens)"></div>
-          </div>
-          <div class="comp-legend">
-            <span v-if="convCtxStats.systemTokens > 0" class="comp-leg-item"><span class="leg-dot comp-system-dot"></span>提示词 {{ shortTokens(convCtxStats.systemTokens) }}</span>
-            <span v-if="convCtxStats.skillsTokens > 0" class="comp-leg-item"><span class="leg-dot comp-skills-dot"></span>技能 {{ shortTokens(convCtxStats.skillsTokens) }}</span>
-            <span v-if="convCtxStats.mcpTokens > 0" class="comp-leg-item"><span class="leg-dot comp-mcp-dot"></span>MCP {{ shortTokens(convCtxStats.mcpTokens) }}</span>
-            <span v-if="convCtxStats.toolTokens > 0" class="comp-leg-item"><span class="leg-dot comp-tool-dot"></span>工具 {{ shortTokens(convCtxStats.toolTokens) }}</span>
-            <span v-if="convCtxStats.historyTokens > 0" class="comp-leg-item"><span class="leg-dot comp-history-dot"></span>历史 {{ shortTokens(convCtxStats.historyTokens) }}</span>
-            <span v-if="convCtxStats.otherTokens > 0" class="comp-leg-item"><span class="leg-dot comp-other-dot"></span>其他 {{ shortTokens(convCtxStats.otherTokens) }}</span>
-          </div>
-        </div>
-
-        <!-- ═══ 底部快捷入口 ═══ -->
-        <div class="conv-footer-actions">
-          <button class="conv-footer-btn" @click="openMarketplace" title="市场（安装 MCP/技能）">
-            <SvgIcon name="package" :size="10" /> 市场
-          </button>
-          <button class="conv-footer-btn" @click="openSettings" title="设置（管理已安装技能）">
-            <SvgIcon name="settings" :size="10" /> 设置
-          </button>
-        </div>
-      </div>
+    <!-- ★ 2026-09-25 用户指令：token 统计**统一到右栏**（StatsRail「运行统计」卡下方的
+         「Token 统计」卡 = 环形缓存图 + 数字明细）。左栏不再重复渲染同一份数据，
+         原 .cs-tokens / .cache-ring 结构已移除，避免同一统计两处展示。 -->
+    <!-- ★ 2026-09-25 对齐设计稿 th60：底部＝胶囊（row 248×32, pad=8, gap=8,
+         bg=surface-2, radius=8, border）＝ icon(accent 14) + 文案(200, muted, xs)
+         「全栈开发 · 14 插件」。★ 监督纠正：原先的「市场/设置」两按钮形态不符，
+         已改为设计稿的单胶囊形态。 -->
+    <div class="conv-footer-pill" :title="footerTitle">
+      <SvgIcon name="layers" :size="14" />
+      <span class="cfp-text">{{ footerLabel }}</span>
     </div>
   </div>
 </template>
@@ -146,7 +63,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
-import { showSettings } from '../ui-state.js'
+import { state, showSettings } from '../ui-state.js'
 import { switchActivity } from '../app-actions.js'
 
 function openMarketplace() {
@@ -154,16 +71,6 @@ function openMarketplace() {
 }
 function openSettings() {
   showSettings.value = true
-}
-function formatConvTime(iso) {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime())) return iso.slice(11,16) || ''
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return iso.slice(11,16) || ''
-  }
 }
 
 const props = defineProps({
@@ -185,81 +92,57 @@ defineEmits(['new-conversation', 'switch-conversation', 'delete-conversation'])
 //   在 goja 里正常触发（显式依赖），这里把 prop 复制到本地 ref——ref 的
 //   set 能触发 v-for 重新渲染。
 const localConvs = ref([])
+
+// ── ★ 2026-09-25 对齐设计稿 th61：分组（th25「今天」/ th41「更早」）──
+function isToday(iso) {
+  if (!iso) return false
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return false
+  const n = new Date()
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
+}
+const todayConvs = computed(() => localConvs.value.filter(c => isToday(c.updatedAt)))
+const earlierConvs = computed(() => localConvs.value.filter(c => !isToday(c.updatedAt)))
+
+// 表头 th20 图标：刷新会话列表（触发持久化事件让上层重新同步，不新增轮询）
+function refreshConvs() { window.dispatchEvent(new Event("save-conversations")) }
+
+// ── ★ 底部胶囊 th60：「全栈开发 · 14 插件」＝ 当前场景（会话级工具集）+ 该场景的插件数 ──
+// ★ 2026-09-25 接线修复：原读 settings.scenarioName / toolsetName / defaultToolset ——
+//   这三个字段全项目从未被写入（grep 仅此处 1 处引用）→ 胶囊恒显示硬编码字面量
+//   「默认场景」；且读的是**全局 settings** 而非当前会话 → 切换对话也不变；插件数取的
+//   还是「全部已装插件数」（与本场景无关）。
+//   现改为读 state.convToolsetInfo —— 唯一写方 = RightPanel.publishConvToolsetInfo()，
+//   权威源 GET /api/toolsets/active（agent.ResolveConvToolsetActive：会话元数据未显式
+//   选择时回落默认集合「基础」）→ 场景名与插件数均随当前对话变化。
+const pluginCount = computed(() => (state.pluginSchemas ? state.pluginSchemas.length : 0))
+const footerLabel = computed(() => {
+  const info = state.convToolsetInfo || {}
+  // ★ 未解析（页面首帧 / 刚切换对话）：显示"解析中"而非任何场景名 —— 切换对话时
+  //   真实场景要等异步请求返回（切到大对话时主线程繁忙，实测可达数秒），若此时
+  //   沿用上一个对话的值即为**错误信息**（该窗口已用 CDP 时间线 + fetch 探针实测确认）。
+  if (!info.resolved) return "场景解析中…"
+  // ① 已收敛到具体集合：场景名 + 该集合装配的插件数（与右侧选择器 toolsetLabel 同源）
+  if (info.name) return info.name + " · " + (info.pluginCount || 0) + " 插件"
+  // ② 未收敛（集合文件缺失/无集合配置）：不按集合收敛工具面，全部工具可用
+  return "全部工具可用 · " + pluginCount.value + " 插件"
+})
+const footerTitle = computed(() => {
+  const info = state.convToolsetInfo || {}
+  if (info.resolved && info.name) {
+    return "当前场景与已装配插件：" + footerLabel.value +
+      (info.isDefault ? "（默认集合" + (info.defaultName ? "：" + info.defaultName : "") + "）" : "（本对话已选择）")
+  }
+  return "当前场景与已装配插件：" + footerLabel.value
+})
 watch(() => props.conversations, (v) => {
   localConvs.value = Array.isArray(v) ? v.slice() : []
 }, { immediate: true, deep: true })
 
-const convStatsExpanded = ref(true)
-const ctxStatsExpanded = ref(true)
+// ★ 2026-09-25 用户指令：token 统计统一到右栏后，左栏的 cacheRate / cacheRingDash /
+//   shortTokens 已无消费方（右栏 StatsRail 用自带的 cacheRate/cacheRingDash + fmt），故移除。
+//   props.wsTokenStats 声明仍保留：Sidebar.vue 继续透传，删声明会产生 extraneous prop 噪声。
 
-function toggleTokens() { convStatsExpanded.value = !convStatsExpanded.value }
-function toggleCtx() { ctxStatsExpanded.value = !ctxStatsExpanded.value }
-
-// ── Token 工具 ──
-function shortTokens(n) {
-  if (n >= 999950) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
-  return String(n)
-}
-
-function statusLabel(s) {
-  if (s === 'completed' || s === 'done') return '✅ 已完成'
-  if (s === 'in_progress') return '🔄 进行中'
-  if (s === 'cancelled') return '❌ 已取消'
-  return '⏳ 待执行'
-}
-
-const cacheRate = computed(() => {
-  const stats = props.wsTokenStats
-  const denom = stats.cacheHitTokens + stats.cacheMissTokens
-  if (denom > 0) {
-    return ((stats.cacheHitTokens / denom) * 100).toFixed(1)
-  }
-  return 0
-})
-
-const cacheRingDash = computed(() => {
-  const stats = props.wsTokenStats
-  const denom = stats.cacheHitTokens + stats.cacheMissTokens
-  if (denom <= 0) return '0 113.1'
-  const ratio = stats.cacheHitTokens / denom
-  const circ = 2 * Math.PI * 18 // r=18 → ≈113.1
-  const hit = circ * ratio
-  const miss = circ - hit
-  return `${hit} ${miss}`
-})
-
-// ── 上下文计算 ──
-const ctxMaxTokens = computed(() => {
-  return (props.ctxMaxTokensVal && props.ctxMaxTokensVal > 0) ? props.ctxMaxTokensVal : 64000
-})
-const ctxUsagePct = computed(() => {
-  if (!ctxMaxTokens.value) return 0
-  const prompt = props.convCtxStats.promptTokens
-  if (prompt <= 0) return 0
-  return Math.min(100, Math.round((prompt / ctxMaxTokens.value) * 100))
-})
-const ctxRemaining = computed(() => {
-  return Math.max(0, ctxMaxTokens.value - props.convCtxStats.promptTokens)
-})
-const ctxPctClass = computed(() => {
-  const pct = ctxUsagePct.value
-  if (pct >= 90) return 'cs-danger'
-  if (pct >= 70) return 'cs-warn'
-  return 'cs-safe'
-})
-
-const compTotalCtx = computed(() => {
-  const s = props.convCtxStats
-  return s.systemTokens + s.skillsTokens + s.mcpTokens +
-    s.toolTokens + s.historyTokens + s.otherTokens || 1
-})
-const compSystemPct = computed(() => ((props.convCtxStats.systemTokens / compTotalCtx.value) * 100).toFixed(1))
-const compSkillsPct = computed(() => ((props.convCtxStats.skillsTokens / compTotalCtx.value) * 100).toFixed(1))
-const compMCPPct = computed(() => ((props.convCtxStats.mcpTokens / compTotalCtx.value) * 100).toFixed(1))
-const compToolPct = computed(() => ((props.convCtxStats.toolTokens / compTotalCtx.value) * 100).toFixed(1))
-const compHistoryPct = computed(() => ((props.convCtxStats.historyTokens / compTotalCtx.value) * 100).toFixed(1))
-const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotalCtx.value) * 100).toFixed(1))
 </script>
 
 <style scoped>
@@ -325,51 +208,6 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   font-size: 12px;
   line-height: 1.4;
 }
-.conv-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.conv-running-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: rgba(78, 204, 163, 0.15);
-  color: #4ecca3;
-  font-size: 9px;
-  line-height: 16px;
-  flex-shrink: 0;
-}
-.conv-running-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #4ecca3;
-  animation: conv-pulse 1.2s ease-in-out infinite;
-}
-.conv-running-text {
-  font-weight: 500;
-}
-.conv-interrupted-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: rgba(232, 172, 82, 0.16);
-  color: #e8ac52;
-  font-size: 9px;
-  line-height: 16px;
-  font-weight: 500;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.conv-interrupted-tag:hover {
-  background: rgba(232, 172, 82, 0.3);
-}
 @keyframes conv-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.2); }
@@ -384,12 +222,6 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   min-width: 16px;
   text-align: center;
 }
-.conv-time {
-  font-size: 10px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  opacity: 0.7;
-}
 .conv-del {
   display: none;
   background: none;
@@ -403,7 +235,7 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   transition: opacity 0.12s;
 }
 .conv-item:hover .conv-del { display: block; }
-.conv-del:hover { opacity: 1; color: #c03; }
+.conv-del:hover { opacity: 1; color: var(--color-danger); }
 .conv-empty {
   padding: 16px 8px;
   font-size: 11px;
@@ -413,155 +245,16 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 }
 
 /* ── 统计/上下文面板 ── */
-.conv-stats {
-  border-top: 1px solid var(--border-color);
-  flex-shrink: 0;
-  user-select: none;
-  background: var(--bg-tertiary);
-}
-.conv-stats-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.conv-stats-header:hover { background: var(--bg-hover); }
-.conv-stats-chevron { color: var(--text-muted); width: 10px; flex-shrink: 0; display: block; }
-.conv-stats-total {
-  margin-left: auto;
-  font-family: var(--font-code);
-  font-size: 12px;
-  color: var(--accent);
-  font-weight: 700;
-}
-.conv-stats-pct {
-  margin-left: auto;
-  font-family: var(--font-code);
-  font-size: 11px;
-  color: var(--accent-light);
-  font-weight: 600;
-}
-.conv-stats-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 10px;
-}
-.ctx-body {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-}
+/* ★ 2026-09-25（设计稿屏 1 ②）：上下文折叠态的**一行摘要** ——
+   已用/上限 · 占用比例 · 缓存命中率（后者直接决定要不要压缩历史）。
+   沿用 .conv-stats-pct 的等宽数字排版，但信息量从 1 个百分比升到 3 项。 */
 
-/* ── 环形缓存图 ── */
-.cache-ring-wrap {
-  position: relative;
-  flex-shrink: 0;
-  width: 96px;
-  height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cache-ring { display: block; }
-.cache-ring-label {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.3;
-}
-.cache-ring-pct {
-  font-size: 18px;
-  font-weight: 700;
-  color: #6a9955;
-  font-family: var(--font-code);
-}
-.cache-ring-text { font-size: 10px; color: var(--text-muted); }
-
-/* ── 数字明细 ── */
-.conv-stats-detail {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-}
-.cs-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2px 0;
-}
-.cs-label { color: var(--text-muted); font-size: 11px; }
-.cs-cachelbl { color: #6a9955; font-size: 11px; }
-.cs-misslbl { color: #c586c0; font-size: 11px; }
-.cs-val {
-  font-family: var(--font-code);
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-.cs-prompt { color: var(--text-primary); }
-.cs-cache { color: #6a9955; }
-.cs-miss { color: #c586c0; }
-.cs-out { color: var(--accent-light); }
-.cs-divider { height: 1px; background: var(--border-color); margin: 4px 0; }
-.cs-total .cs-label { font-weight: 600; color: var(--text-primary); font-size: 12px; }
-.cs-total .cs-val { color: var(--accent); font-weight: 700; font-size: 14px; }
-.cs-safe { color: #6a9955; }
-.cs-warn { color: #d4a74e; }
-.cs-danger { color: #c03; }
+/* ★ 2026-09-25 用户指令：token 统计统一到右栏 —— 左栏 .cs-tokens / .cache-ring-* /
+   .conv-stats-detail / .cs-row 等样式已随之移除（对应结构迁至 StatsRail.vue 卡 ①b）。 */
 
 /* ── 上下文窗口条 ── */
-.ctx-bar-wrap { display: flex; flex-direction: column; gap: 4px; }
-.ctx-bar {
-  height: 12px;
-  background: var(--bg-primary);
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-.ctx-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #6a9955, #d4a74e, #c03);
-  border-radius: 6px;
-  transition: width 0.4s ease;
-  min-width: 4px;
-}
-.ctx-bar-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-code);
-}
-.ctx-detail { font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
-.ctx-row { display: flex; justify-content: space-between; align-items: center; padding: 1px 0; }
-.ctx-row .cs-val { font-size: 12px; }
-.cs-remain { color: var(--accent-light); }
 
 /* ── 构成占比横条 ── */
-.comp-bar-wrap { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-color); }
-.comp-bar-title { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-.comp-bar { display: flex; height: 12px; background: var(--bg-primary); border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
-.comp-bar-seg { height: 100%; transition: width 0.3s ease; min-width: 2px; }
-.comp-system { background: var(--accent); }
-.comp-skills { background: #6a9955; }
-.comp-mcp { background: #c586c0; }
-.comp-tool { background: var(--accent-light); }
-.comp-history { background: #d4a74e; }
-.comp-other { background: #888; }
-.comp-legend { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; font-size: 10px; color: var(--text-muted); }
-.comp-leg-item { display: flex; align-items: center; gap: 3px; }
-.leg-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.comp-system-dot { background: var(--accent); }
-.comp-skills-dot { background: #6a9955; }
-.comp-mcp-dot { background: #c586c0; }
-.comp-tool-dot { background: var(--accent-light); }
-.comp-history-dot { background: #d4a74e; }
-.comp-other-dot { background: #888; }
 
 /* ── rp-btn 复用 ── */
 .rp-btn {
@@ -590,8 +283,8 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   margin-left: auto;
   font-family: var(--font-code);
   font-size: 10px;
-  color: #6a9955;
-  background: rgba(106, 153, 85, 0.1);
+  color: var(--color-success);
+  background: var(--color-cat-amber-bg);
   padding: 0 5px;
   border-radius: 6px;
   line-height: 16px;
@@ -679,9 +372,9 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   transition: all 0.12s;
 }
 .installed-del-btn:hover {
-  color: #c03;
-  border-color: rgba(204,0,51,0.2);
-  background: rgba(204,0,51,0.08);
+  color: var(--color-danger);
+  border-color: var(--color-danger-bg);
+  background: var(--color-danger-bg);
 }
 
 /* ── 底部快捷入口 ── */
@@ -782,11 +475,6 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   font-weight: 500;
   width: 100%;
 }
-.conv-sidebar-horizontal .conv-meta {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
 .conv-sidebar-horizontal .conv-del {
   position: absolute;
   top: 2px;
@@ -796,37 +484,6 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   font-size: 11px;
   padding: 8px 16px;
   white-space: nowrap;
-}
-.conv-sidebar-horizontal .conv-stats {
-  border-top: none;
-  border-left: 1px solid var(--border-color);
-  min-width: 180px;
-  max-width: 260px;
-  flex-shrink: 0;
-  overflow-y: auto;
-}
-.conv-sidebar-horizontal .conv-stats-header {
-  padding: 4px 8px;
-  font-size: 10px;
-}
-.conv-sidebar-horizontal .conv-stats-body {
-  padding: 4px 8px 6px;
-  gap: 4px;
-}
-.conv-sidebar-horizontal .cache-ring-wrap {
-  width: 64px;
-  height: 64px;
-  flex-shrink: 0;
-}
-.conv-sidebar-horizontal .cache-ring {
-  width: 64px;
-  height: 64px;
-}
-.conv-sidebar-horizontal .cache-ring-pct {
-  font-size: 14px;
-}
-.conv-sidebar-horizontal .conv-stats-detail {
-  font-size: 10px;
 }
 .conv-sidebar-horizontal .cs-row {
   padding: 1px 0;
@@ -853,4 +510,39 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   font-size: 9px;
   padding: 3px 6px;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ 2026-09-25 对齐设计稿 th61（监督纠正后重写）
+   th23 表头 / th25·th41 分组标签 / th30 会话行 / th60 底部胶囊
+   ═══════════════════════════════════════════════════════════════ */
+/* th23：row 248×32 — 标题 sm/600 + 右侧 2 图标（gap=space.xs） */
+.conv-sidebar-header { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 8px; }
+.csh-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.csh-actions { display: flex; align-items: center; gap: 4px; }
+.csh-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: none; background: none; cursor: pointer; border-radius: 4px; color: var(--text-muted); }
+.csh-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+/* th21 = accent 图标（新建对话） */
+.csh-btn-accent { color: var(--accent); }
+/* th24 divider h=1 */
+.conv-sb-divider { height: 1px; background: var(--border-color); margin: 2px 0 4px; }
+/* th25 / th41：分组标签 */
+.conv-group-label { font-size: 11px; color: var(--text-muted); padding: 6px 10px 2px; }
+/* th30：row 248×32, pad=8；选中 bg=surface-3 */
+.conv-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.conv-item { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 6px; cursor: pointer; background: var(--bg-secondary); position: relative; }
+.conv-item:hover { background: var(--bg-hover); }
+.conv-item.active { background: var(--bg-active); }
+.conv-row-icon { flex: 0 0 auto; color: var(--accent); }
+/* 标题占 w156 语义：flex:1 分配，多余省略 */
+.conv-item .conv-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-primary); }
+/* th29：计数 52/右对齐/muted/xs */
+.conv-item .conv-msg-count { flex: 0 0 auto; font-size: 11px; color: var(--text-muted); }
+/* 运行中/未完成：极小状态点（设计稿无对应节点，功能必需，见 notes §26） */
+.conv-running-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.conv-interrupted-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--warning, #F0C158); }
+/* th60：底部胶囊 row 248×32, pad=8, gap=8, bg=surface-2, radius=8, border */
+.conv-footer-pill { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin: 4px 8px 8px; border-radius: 8px; background: var(--bg-hover); border: 1px solid var(--border-color); color: var(--accent); flex: 0 0 auto; }
+.cfp-text { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 </style>

@@ -460,7 +460,7 @@ onUnmounted(() => {
 .tb-action:disabled { opacity: 0.3; cursor: default; }
 .tab-icon { font-size: 12px; }
 .tab-name { overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
-.dirty-mark { color: #e2b714; font-size: 12px; } /* yellow — universal indicator */
+.dirty-mark { color: var(--color-warning); font-size: 12px; } /* yellow — universal indicator */
 .tab-close { font-size: 14px; margin-left: 4px; padding: 0 2px; opacity: 0.6; }
 .tab-close:hover { opacity: 1; }
 .editor-body { flex: 1; overflow: hidden; position: relative; }
@@ -485,7 +485,7 @@ onUnmounted(() => {
   cursor: pointer; border-radius: 3px; transition: all 0.12s;
 }
 .md-mode-btn.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
+  background: var(--accent); color: var(--color-accent-fg); border-color: var(--accent);
 }
 .md-mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
 

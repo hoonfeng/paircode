@@ -40,6 +40,17 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
     }
     const bodyOf = (req) => { try { return req.json ? req.json() : {} } catch (e) { return {} } }
 
+    // ── /api/git/status 短 TTL 缓存（★ 2026-09-25 性能）──────────────
+    // 该接口每次要跑 4~5 个 git 子进程（rev-parse / branch --show-current / rev-list /
+    // `status --porcelain` / branch --format），实测单次 1.2~1.4s（大仓库 + Windows 文件系统）。
+    // 前端状态栏每 15s 轮询一次 → 每次都重付这份开销。
+    // 策略：5s TTL，按「工作区目录」分键（与 gitRun 的 dir 口径一致 → 不同工作区不串味）。
+    //   · 轮询间隔 15s ≫ TTL 5s ⇒ 轮询语义与返回内容完全等价（不会拿到更旧的一轮）；
+    //   · `?refresh=1` 强制绕过（面板手动刷新、需实时数据的调用方）。
+    // 仅缓存读接口；写操作（add/commit/push…）不涉及。
+    const STATUS_TTL_MS = 5000
+    const statusCache = new Map()   // dir -> { at, out }
+
     // ── 接口注册 ──
     const R = []
     const reg = (path, handler) => R.push([path, handler])
@@ -61,9 +72,20 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
 
     // ── 1. status ──
     reg('/api/git/status', (req) => {
+      const dir = qp(req, 'path') || ctx.workspaceRoot || (ctx.app && ctx.app.workspaceRoot) || ''
+      const wantFresh = qp(req, 'refresh') === '1'
+      if (dir && !wantFresh) {
+        const hit = statusCache.get(dir)
+        if (hit && (Date.now() - hit.at) < STATUS_TTL_MS) return hit.out
+      }
+      const cacheAndOk = (r0) => {
+        const o = ok(r0)
+        if (dir) statusCache.set(dir, { at: Date.now(), out: o })
+        return o
+      }
       const res = { branch: '', ahead: 0, behind: 0, isRepo: false, staged: [], conflict: [], modified: [], untracked: [], brances: [] }
       const check = gitRun(req, ['rev-parse', '--is-inside-work-tree'])
-      if (check.fail || check.out !== 'true') { res.error = '非 Git 仓库或未设置工作区'; return ok(res) }
+      if (check.fail || check.out !== 'true') { res.error = '非 Git 仓库或未设置工作区'; return cacheAndOk(res) }
       res.isRepo = true
       const br = gitRun(req, ['branch', '--show-current'])
       if (!br.fail) res.branch = br.out
@@ -91,7 +113,7 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
       }
       const bl = gitRun(req, ['branch', '--format=%(refname:short)'])
       if (!bl.fail) res.brances = bl.out.split('\n').map(s => s.trim()).filter(Boolean)
-      return ok(res)
+      return cacheAndOk(res)
     })
 
     // ── 2. init（POST，返回 {output}）──

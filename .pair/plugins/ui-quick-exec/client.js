@@ -10,6 +10,9 @@
 // ═══════════════════════════════════════════════════════════════
 (ui) => {
   const PLUGIN = 'ui-quick-exec'
+  // ★ 2026-09-25 用户指令（反向调整）：改回 titlebar-right 槽位 —— 「快速执行」按钮
+  //   回归**状态栏**承载（titlebar-right 是 list 型槽位，由 StatusBar.vue 渲染），
+  //   撤销本日早些时候迁到活动栏的改动。
   const SLOT = 'titlebar-right'
 
   // ─── SVG 图标（禁止 emoji，全部内联 SVG）─────────────────

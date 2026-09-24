@@ -1,7 +1,7 @@
 (function() {
   "use strict";
   var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n@keyframes stopPulse-4492abde {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-4492abde {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-4492abde] {\n  animation: stopPulse-4492abde 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-4492abde] {\n  animation: stopRingPulse-4492abde 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-4492abde] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-cd39b7a9] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-cd39b7a9] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-cd39b7a9] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-cd39b7a9] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-cd39b7a9] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-cd39b7a9]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-cd39b7a9] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-cd39b7a9] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-cd39b7a9], .pp-textarea[data-v-cd39b7a9] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-cd39b7a9] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-cd39b7a9] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-cd39b7a9] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-cd39b7a9] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-cd39b7a9] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-cd39b7a9] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-cd39b7a9] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-cd39b7a9] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-cd39b7a9] { color: var(--accent);\n}\n.pp-slots-sub[data-v-cd39b7a9] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-cd39b7a9] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-cd39b7a9]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-cd39b7a9] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-cd39b7a9] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-cd39b7a9] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-cd39b7a9] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-cd39b7a9] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-cd39b7a9] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-cd39b7a9] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-cd39b7a9] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-cd39b7a9] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-cd39b7a9]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-cd39b7a9] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-cd39b7a9] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-cd39b7a9] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-cd39b7a9]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-cd39b7a9]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-cd39b7a9] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-cd39b7a9] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-cd39b7a9] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-cd39b7a9] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-cd39b7a9] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-cd39b7a9], .pp-empty[data-v-cd39b7a9] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-cd39b7a9] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-cd39b7a9] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-cd39b7a9]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-cd39b7a9] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-cd39b7a9] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-cd39b7a9] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-cd39b7a9] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-cd39b7a9] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-cd39b7a9] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-cd39b7a9] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-cd39b7a9] { background: rgba(86, 182, 194, .14); color: #56b6c2;\n}\n.pp-badge[data-v-cd39b7a9] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-cd39b7a9] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-cd39b7a9] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-cd39b7a9] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-cd39b7a9] { transform: rotate(90deg);\n}\n.pp-detail[data-v-cd39b7a9] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-cd39b7a9] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-cd39b7a9] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-cd39b7a9] { color: #e06c75;\n}\n.pp-d-hint[data-v-cd39b7a9] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-cd39b7a9] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid rgba(229, 192, 123, .35);\n  border-radius: 4px;\n  background: rgba(229, 192, 123, .06);\n}\n.pp-d-conflict-title[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: #e5c07b; margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-cd39b7a9] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-cd39b7a9] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-cd39b7a9] {\n  border-color: rgba(152, 195, 121, .5);\n  background: rgba(152, 195, 121, .12);\n  color: #98c379;\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: #98c379; background: rgba(152, 195, 121, .1);\n  border: 1px solid rgba(152, 195, 121, .3);\n}\n.pp-prefer-msg.err[data-v-cd39b7a9] {\n  color: #e06c75; background: rgba(224, 108, 117, .1);\n  border-color: rgba(224, 108, 117, .3);\n}\n.pp-d-tools[data-v-cd39b7a9] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-cd39b7a9] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-cd39b7a9]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-cd39b7a9] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-cd39b7a9] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-cd39b7a9] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-cd39b7a9] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-cd39b7a9] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-cd39b7a9] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-cd39b7a9]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-cd39b7a9] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-cd39b7a9] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-cd39b7a9]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-cd39b7a9] { animation: pp-spin-cd39b7a9 1s linear infinite;\n}\n@keyframes pp-spin-cd39b7a9 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-cd39b7a9] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-cd39b7a9] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-cd39b7a9]:hover { background: rgba(212,167,78,.08);\n}\n.pp-builtin-title[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-cd39b7a9] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-cd39b7a9] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-cd39b7a9] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-cd39b7a9] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-cd39b7a9] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-cd39b7a9] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-cd39b7a9] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.tp-panel[data-v-19156019] {\r\n  display: flex;\r\n  flex-direction: column;\r\n  height: 100%;\r\n  min-height: 0;\r\n  padding: 8px;\r\n  gap: 8px;\n}\r\n\r\n/* ── 头部 ── */\n.tp-header[data-v-19156019] {\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: space-between;\r\n  padding: 2px 2px 6px;\r\n  border-bottom: 1px solid var(--border-color, #3a3a4a);\n}\n.tp-title[data-v-19156019] {\r\n  display: inline-flex;\r\n  align-items: center;\r\n  gap: 6px;\r\n  font-size: 13px;\r\n  font-weight: 600;\r\n  color: var(--text-primary, #eee);\n}\n.tp-actions[data-v-19156019] { display: inline-flex; gap: 4px;\n}\n.tp-icon-btn[data-v-19156019] {\r\n  width: 26px; height: 26px;\r\n  display: inline-flex; align-items: center; justify-content: center;\r\n  background: none; border: none; border-radius: 6px;\r\n  color: var(--text-muted, #888);\r\n  cursor: pointer;\n}\n.tp-icon-btn[data-v-19156019]:hover { color: var(--text-primary, #eee); background: var(--bg-hover, rgba(255,255,255,0.06));\n}\r\n\r\n/* ── 主体（左栏列表 + 右栏详情） ── */\n.tp-body[data-v-19156019] {\r\n  flex: 1;\r\n  min-height: 0;\r\n  display: flex;\r\n  gap: 8px;\n}\r\n\r\n/* ── 列表（左栏） ── */\n.tp-list[data-v-19156019] {\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 4px;\r\n  width: 200px;\r\n  flex-shrink: 0;\r\n  overflow-y: auto;\r\n  padding-right: 6px;\r\n  border-right: 1px solid var(--border-color, #3a3a4a);\n}\n.tp-item[data-v-19156019] {\r\n  padding: 6px 8px;\r\n  border-radius: 8px;\r\n  border: 1px solid transparent;\r\n  cursor: pointer;\r\n  transition: background 0.12s, border-color 0.12s;\n}\n.tp-item[data-v-19156019]:hover { background: var(--bg-hover, rgba(255,255,255,0.05));\n}\n.tp-item.active[data-v-19156019] {\r\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\r\n  border-color: var(--accent, #4f8cff);\r\n  box-shadow: inset 2px 0 0 var(--accent, #4f8cff);\n}\n.tp-item-main[data-v-19156019] { display: flex; align-items: center; gap: 6px;\n}\n.tp-item-name[data-v-19156019] { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-item-count[data-v-19156019] {\r\n  font-size: 10px; color: var(--text-muted, #888);\r\n  background: var(--bg-tertiary, rgba(0,0,0,0.2));\r\n  padding: 1px 6px; border-radius: 999px;\n}\n.tp-item-desc[data-v-19156019] {\r\n  font-size: 11px; color: var(--text-muted, #888);\r\n  margin-top: 2px;\r\n  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\r\n\r\n/* ── 详情（右栏） ── */\n.tp-detail[data-v-19156019] {\r\n  flex: 1;\r\n  min-width: 0;\r\n  min-height: 0;\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 8px;\r\n  overflow: hidden;\r\n  padding-left: 4px;\n}\n.tp-dhead[data-v-19156019] { padding: 0 2px;\n}\n.tp-dtitle[data-v-19156019] {\r\n  display: flex; align-items: center; gap: 6px;\r\n  font-size: 13px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-badge[data-v-19156019] {\r\n  font-size: 9.5px; padding: 1px 6px; border-radius: 999px;\r\n  background: var(--accent, #4f8cff); color: #fff; font-weight: 500;\n}\n.tp-badge.proj[data-v-19156019] { background: rgba(79, 140, 255, 0.25); color: var(--accent-light, #9dc0ff);\n}\n.tp-dactions[data-v-19156019] { display: flex; gap: 6px; margin-top: 6px;\n}\n.tp-ddesc[data-v-19156019] { font-size: 11px; color: var(--text-muted, #888); margin-top: 4px;\n}\n.tp-section-title[data-v-19156019] {\r\n  font-size: 10px; color: var(--text-muted, #888);\r\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;\r\n  margin: 2px 0 4px;\n}\n.tp-plugins[data-v-19156019] {\r\n  flex: 1;\r\n  min-height: 0;\r\n  overflow-y: auto;\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 8px;\r\n  padding: 0 2px;\n}\n.tp-plugin[data-v-19156019] {\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 8px;\r\n  padding: 6px 8px;\r\n  background: var(--bg-secondary, rgba(255,255,255,0.02));\n}\n.tp-prow[data-v-19156019] { display: flex; align-items: center; justify-content: space-between; gap: 6px;\n}\n.tp-pname[data-v-19156019] { font-size: 12px; font-weight: 600; color: var(--text-primary, #eee); font-family: var(--font-code, monospace);\n}\n.tp-ppurpose[data-v-19156019] { font-size: 11px; color: var(--text-muted, #888); margin-top: 2px;\n}\n.tp-tools[data-v-19156019] {\r\n  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;\n}\n.tp-tool[data-v-19156019] {\r\n  display: inline-flex; align-items: center; gap: 4px;\r\n  font-size: 11px;\r\n  color: var(--text-secondary, #bbb);\r\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 999px;\r\n  padding: 2px 9px;\r\n  cursor: pointer;\r\n  user-select: none;\r\n  font-family: inherit;\r\n  line-height: 1.5;\r\n  transition: border-color 0.12s, color 0.12s, opacity 0.12s;\n}\n.tp-tool[data-v-19156019]:hover { border-color: var(--accent, #4f8cff); color: var(--text-primary, #eee);\n}\n.tp-tool.off[data-v-19156019] { text-decoration: line-through; opacity: 0.45; border-color: transparent;\n}\n.tp-muted[data-v-19156019] { font-size: 11px; color: var(--text-muted, #888);\n}\r\n\r\n/* ── 按钮 ── */\n.tp-btn[data-v-19156019] {\r\n  display: inline-flex; align-items: center; gap: 4px;\r\n  font-size: 11.5px; font-family: inherit;\r\n  color: var(--text-primary, #eee);\r\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 6px;\r\n  padding: 4px 10px;\r\n  cursor: pointer;\r\n  transition: border-color 0.15s, background 0.15s;\n}\n.tp-btn[data-v-19156019]:hover { border-color: var(--accent, #4f8cff);\n}\n.tp-btn.tiny[data-v-19156019] { padding: 2px 7px; font-size: 10.5px;\n}\n.tp-btn.primary[data-v-19156019] { background: var(--accent, #4f8cff); border-color: var(--accent, #4f8cff); color: #fff;\n}\n.tp-btn.primary[data-v-19156019]:disabled { opacity: 0.5; cursor: not-allowed;\n}\n.tp-btn.danger[data-v-19156019] { color: #ff6b6b;\n}\n.tp-btn.danger[data-v-19156019]:hover { border-color: #ff6b6b;\n}\r\n\r\n/* ── 添加插件 ── */\n.tp-add[data-v-19156019] { padding: 2px; flex-shrink: 0;\n}\n.tp-add-btn[data-v-19156019] {\r\n  width: 100%; justify-content: center;\r\n  border-style: dashed; color: var(--accent, #4f8cff);\n}\n.tp-add-btn[data-v-19156019]:hover { background: rgba(79, 140, 255, 0.08);\n}\r\n\r\n/* ── 添加插件浮层（卡片 grid） ── */\r\n/* 双 class 提高优先级，覆盖 .tp-sheet 的 480px（浮层更宽以容纳卡片墙） */\n.tp-sheet.tp-add-sheet[data-v-19156019] { width: min(680px, 92vw);\n}\n.tp-add-search[data-v-19156019] { position: relative; margin: 0 16px 10px;\n}\n.tp-add-search-icon[data-v-19156019] {\r\n  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);\r\n  color: var(--text-muted, #888); pointer-events: none;\n}\n.tp-add-search-input[data-v-19156019] { width: 100%; padding-left: 30px;\n}\n.tp-add-grid[data-v-19156019] {\r\n  display: grid;\r\n  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));\r\n  gap: 8px;\r\n  padding: 4px 16px 16px;\r\n  overflow-y: auto;\r\n  max-height: 60vh;\n}\n.tp-pcard[data-v-19156019] {\r\n  display: flex; flex-direction: column; gap: 5px;\r\n  text-align: left;\r\n  padding: 9px 10px;\r\n  background: var(--bg-tertiary, rgba(0, 0, 0, 0.15));\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  font-family: inherit;\r\n  transition: border-color 0.13s, background 0.13s, box-shadow 0.13s;\n}\n.tp-pcard[data-v-19156019]:hover {\r\n  border-color: var(--accent, #4f8cff);\r\n  background: rgba(79, 140, 255, 0.06);\r\n  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.12);\n}\n.tp-pcard-head[data-v-19156019] { display: flex; align-items: center; justify-content: space-between; gap: 6px;\n}\n.tp-pcard-name[data-v-19156019] {\r\n  font-size: 12px; font-weight: 600; color: var(--text-primary, #eee);\r\n  font-family: var(--font-code, monospace);\r\n  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.tp-pcard-count[data-v-19156019] {\r\n  font-size: 9.5px; color: var(--text-muted, #888);\r\n  background: var(--bg-secondary, rgba(255, 255, 255, 0.05));\r\n  padding: 1px 6px; border-radius: 999px; flex-shrink: 0;\n}\n.tp-pcard-desc[data-v-19156019] {\r\n  font-size: 11px; color: var(--text-muted, #888); line-height: 1.45;\r\n  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;\r\n  min-height: 32px;\n}\n.tp-pcard-add[data-v-19156019] {\r\n  display: inline-flex; align-items: center; gap: 3px;\r\n  font-size: 10.5px; color: var(--accent, #4f8cff);\r\n  margin-top: 2px;\n}\r\n\r\n/* ── 空态 ── */\n.tp-empty[data-v-19156019] {\r\n  font-size: 11.5px; color: var(--text-muted, #888);\r\n  padding: 16px 8px; text-align: center; line-height: 1.7;\n}\n.tp-side-empty[data-v-19156019] {\r\n  flex: 1;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\n}\r\n\r\n/* ── 弹层（居中 modal，桌面端更合理；2026-09-05 从 bottom-sheet 改造） ── */\n.tp-overlay[data-v-19156019] {\r\n  position: fixed; inset: 0;\r\n  background: rgba(0, 0, 0, 0.45);\r\n  z-index: 10050;\r\n  display: flex; align-items: center; justify-content: center;\r\n  padding: 16px;\n}\n.tp-sheet[data-v-19156019] {\r\n  width: min(480px, 94vw);\r\n  max-height: 84vh;\r\n  display: flex; flex-direction: column;\r\n  background: var(--bg-secondary, #1c1c28);\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 14px;\r\n  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);\r\n  animation: tp-sheet-in-19156019 0.18s ease-out;\n}\n@keyframes tp-sheet-in-19156019 {\nfrom { transform: translateY(10px) scale(0.98); opacity: 0.6;\n}\nto { transform: translateY(0) scale(1); opacity: 1;\n}\n}\n.tp-sheet-head[data-v-19156019] {\r\n  display: flex; align-items: center; justify-content: space-between;\r\n  padding: 10px 16px 8px;\n}\n.tp-sheet-title[data-v-19156019] { font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-cancel[data-v-19156019] { background: none; border: none; color: var(--accent, #4f8cff); font-size: 13px; cursor: pointer; font-family: inherit;\n}\n.tp-sheet-body[data-v-19156019] { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;\n}\n.tp-field[data-v-19156019] { display: flex; flex-direction: column; gap: 4px;\n}\n.tp-field-label[data-v-19156019] { font-size: 11px; color: var(--text-muted, #888);\n}\n.tp-input[data-v-19156019] {\r\n  font-size: 12.5px; font-family: inherit;\r\n  color: var(--text-primary, #eee);\r\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\r\n  border: 1px solid var(--border-color, #3a3a4a);\r\n  border-radius: 8px;\r\n  padding: 7px 10px;\r\n  outline: none;\n}\n.tp-input[data-v-19156019]:focus { border-color: var(--accent, #4f8cff);\n}\n.tp-textarea[data-v-19156019] { resize: vertical; min-height: 40px;\n}\n.tp-textarea.code[data-v-19156019] { font-family: var(--font-code, monospace); font-size: 11.5px;\n}\n.tp-hint[data-v-19156019] { font-size: 11px; color: #ffb84d;\n}\n.tp-sheet-actions[data-v-19156019] { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;\n}\n.tp-file-row[data-v-19156019] { display: flex; align-items: center; gap: 8px;\n}\n.tp-hidden-input[data-v-19156019] { display: none;\n}\n.tp-fade-enter-active[data-v-19156019], .tp-fade-leave-active[data-v-19156019] { transition: opacity 0.18s;\n}\n.tp-fade-enter-from[data-v-19156019], .tp-fade-leave-to[data-v-19156019] { opacity: 0;\n}\n.spinning[data-v-19156019] { animation: tp-spin-19156019 0.8s linear infinite;\n}\n@keyframes tp-spin-19156019 {\nfrom { transform: rotate(0deg);\n}\nto { transform: rotate(360deg);\n}\n}\r\n\n.app-root[data-v-7b7fd08b] {\r\n  display: grid;\r\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\r\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\r\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\r\n  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);\r\n  grid-template-rows: 30px 1fr 22px;\r\n  width: 100%; height: 100%;\r\n  background: var(--bg-primary);\r\n  color: var(--text-primary);\r\n  overflow: hidden;\r\n  font-family: var(--font-ui);\n}\r\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-7b7fd08b] {\r\n  grid-template-columns: 1fr;\r\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-7b7fd08b] {\r\n  grid-column: 1; grid-row: 1;\r\n  width: 100% !important;\r\n  height: 100%;\n}\n.app-root.panel-only .main-tabs[data-v-7b7fd08b] { display: none;\n}\r\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-7b7fd08b] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-7b7fd08b] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-7b7fd08b] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\r\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-7b7fd08b] {\r\n  grid-column: 3; grid-row: 2;\r\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\r\n/* tab 栏：对话 / 编辑器 */\n.main-tabs[data-v-7b7fd08b] {\r\n  display: flex; flex-shrink: 0; height: 30px;\r\n  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);\r\n  position: relative;\n}\n.main-tab[data-v-7b7fd08b] {\r\n  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */\r\n  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;\r\n  color: var(--text-muted); font-size: 12px; font-weight: 600;\r\n  padding: 0 18px; border-bottom: 2px solid transparent;\r\n  transition: color .15s, background .15s;\n}\n.main-tab[data-v-7b7fd08b]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab.active[data-v-7b7fd08b] { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active);\n}\r\n/* ★ 内容区（2026-09）：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图） */\n.main-views[data-v-7b7fd08b] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden; position: relative;\n}\r\n/* 并排：横排两栏；split-chat-right 用 row-reverse 把对话栏换到右侧\r\n   （对话 pane 始终是 DOM 首个子元素：换边只改方向，不动挂载顺序） */\n.main-views.split[data-v-7b7fd08b] { flex-direction: row;\n}\n.main-views.split.split-chat-right[data-v-7b7fd08b] { flex-direction: row-reverse;\n}\n.view-pane[data-v-7b7fd08b] {\r\n  flex: 1 1 auto; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden; position: relative;\n}\r\n/* 并排时对话栏固定比例（当前视图栏占剩余空间） */\n.main-views.split .view-pane-chat[data-v-7b7fd08b] {\r\n  flex: 0 0 var(--split-chat-w, 42%);\r\n  border-right: 1px solid var(--border-color);\n}\n.main-views.split.split-chat-right .view-pane-chat[data-v-7b7fd08b] {\r\n  border-right: none; border-left: 1px solid var(--border-color);\n}\r\n/* 插件中间区域视图容器（registerView）：bundle 挂载点，撑满所在栏 */\n.view-pane-plugin[data-v-7b7fd08b] { background: var(--bg-primary);\n}\r\n/* tab 栏右侧工具区（视图列表 + 并排开关） */\n.main-tab-tools[data-v-7b7fd08b] {\r\n  margin-left: auto; display: flex; align-items: stretch;\r\n  position: relative; flex-shrink: 0;\n}\n.main-tab-tool[data-v-7b7fd08b] {\r\n  border: none; background: none; cursor: pointer;\r\n  color: var(--text-muted); font-size: 11px; font-weight: 600;\r\n  padding: 0 10px; border-left: 1px solid var(--border-color);\r\n  transition: color .15s, background .15s;\n}\n.main-tab-tool[data-v-7b7fd08b]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab-tool.active[data-v-7b7fd08b] { color: var(--text-primary); background: var(--bg-active);\n}\n.main-tab-tool[data-v-7b7fd08b]:disabled { opacity: .4; cursor: default;\n}\n.main-tab-tool[data-v-7b7fd08b]:disabled:hover { color: var(--text-muted); background: none;\n}\r\n/* 视图列表浮层（勾选 = tab 打开；后台打开，不抢对话主视图） */\n.view-menu[data-v-7b7fd08b] {\r\n  position: absolute; top: 30px; right: 0; width: 240px;\r\n  max-height: 320px; overflow: auto; padding: 4px 0; z-index: 120;\r\n  background: var(--bg-elevated, #262932);\r\n  border: 1px solid var(--border-color); border-radius: 6px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, .4);\n}\n.view-menu-head[data-v-7b7fd08b] {\r\n  padding: 4px 10px 6px; margin-bottom: 2px;\r\n  font-size: 11px; color: var(--text-muted);\r\n  border-bottom: 1px solid var(--border-color);\n}\n.view-menu-item[data-v-7b7fd08b] {\r\n  display: flex; align-items: center; gap: 8px;\r\n  padding: 5px 10px; font-size: 12px; color: var(--text-primary);\r\n  cursor: pointer;\n}\n.view-menu-item[data-v-7b7fd08b]:hover { background: var(--bg-hover);\n}\n.view-menu-title[data-v-7b7fd08b] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.view-menu-src[data-v-7b7fd08b] { font-size: 10px; color: var(--text-muted);\n}\n.view-menu-empty[data-v-7b7fd08b] { padding: 8px 10px; font-size: 11px; color: var(--text-muted);\n}\r\n/* 菜单外点关闭背板（仅菜单打开时存在，点一下就关） */\n.view-menu-backdrop[data-v-7b7fd08b] { position: fixed; inset: 0; z-index: 110;\n}\r\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-7b7fd08b] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\r\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-7b7fd08b] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\r\n/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */\n.market-container[data-v-7b7fd08b] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\r\n/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */\n.main-tab-close[data-v-7b7fd08b] {\r\n  display: inline-flex; align-items: center; justify-content: center;\r\n  margin-left: 6px; font-size: 13px; line-height: 1;\r\n  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;\n}\n.main-tab-close[data-v-7b7fd08b]:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary);\n}\n.app-statusbar-host[data-v-7b7fd08b] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-7b7fd08b] { height: 100%; overflow: hidden;\n}\r\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\r\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-7b7fd08b] > * { width: 100%; min-width: 0;\n}\r\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-7b7fd08b] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-7b7fd08b] > * { pointer-events: auto;\n}\n.modals-empty[data-v-7b7fd08b] { display: none;\n}\r\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-7b7fd08b] {\r\n  display: flex; flex-direction: row; gap: 8px;\r\n  align-items: center; justify-content: center;\r\n  color: var(--text-muted); font-size: 12px;\r\n  background: var(--bg-primary);\r\n  border: 1px dashed var(--border-color);\r\n  min-height: 0;\n}\r\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-7b7fd08b] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-7b7fd08b] { font-size: 11px; padding: 2px 8px;\n}\r\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\r\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-7b7fd08b] {\r\n  background: none; border: 1px solid var(--border-color);\r\n  color: var(--accent, #4f8cff); font-size: 12px;\r\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\r\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-7b7fd08b]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\r\n/* ─── 壳级逃生口：插件面板浮动入口 ───\r\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\r\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-7b7fd08b] {\r\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\r\n  width: 22px; height: 22px; border-radius: 5px;\r\n  display: flex; align-items: center; justify-content: center;\r\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\r\n  border: 1px solid var(--border-color); cursor: pointer;\r\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-7b7fd08b]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-7b7fd08b] {\r\n  position: fixed; inset: 0; z-index: 400;\r\n  background: rgba(0,0,0,.45);\r\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-7b7fd08b] {\r\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\r\n  background: var(--bg-primary); border: 1px solid var(--border-color);\r\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-7b7fd08b] {\r\n  display: flex; align-items: center; justify-content: space-between;\r\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\r\n  border-bottom: 1px solid var(--border-color);\r\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-7b7fd08b] {\r\n  border: none; background: none; color: var(--text-muted);\r\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-7b7fd08b]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-7b7fd08b] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-7b7fd08b] { height: 100%; border: none;\n}\r\n/*$vite$:1*/";
+  __vite_style__.textContent = "\n@keyframes stopPulse-4492abde {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-4492abde {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-4492abde] {\n  animation: stopPulse-4492abde 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-4492abde] {\n  animation: stopRingPulse-4492abde 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-4492abde] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-08bc13a6] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-08bc13a6] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-08bc13a6] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-08bc13a6] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-08bc13a6] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-08bc13a6]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-08bc13a6] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-08bc13a6] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-08bc13a6], .pp-textarea[data-v-08bc13a6] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-08bc13a6] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-08bc13a6] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-08bc13a6] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-08bc13a6] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-08bc13a6] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-08bc13a6] { color: var(--error);\n}\n\n/* client 面板区 */\n.pp-client[data-v-08bc13a6] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-08bc13a6] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-08bc13a6] { color: var(--accent);\n}\n.pp-slots-sub[data-v-08bc13a6] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-08bc13a6] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-08bc13a6]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-08bc13a6] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-08bc13a6] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-08bc13a6] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-08bc13a6] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-08bc13a6] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-08bc13a6] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-08bc13a6] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-08bc13a6] { color: var(--color-cat-green); background: var(--color-cat-green-bg); border: 1px solid var(--color-cat-green-bg);\n}\n.pp-slot-list[data-v-08bc13a6] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-08bc13a6]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-08bc13a6] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-08bc13a6] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-08bc13a6] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-08bc13a6]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-08bc13a6]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-08bc13a6] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-08bc13a6] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-08bc13a6] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-08bc13a6] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-08bc13a6] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-08bc13a6], .pp-empty[data-v-08bc13a6] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-08bc13a6] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-08bc13a6] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-08bc13a6]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-08bc13a6] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-08bc13a6] { background: var(--color-success); box-shadow: 0 0 4px var(--color-success);\n}\n.pp-state.off[data-v-08bc13a6] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-08bc13a6] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-08bc13a6] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-08bc13a6] { background: var(--color-cat-amber-bg); color: var(--color-cat-amber);\n}\n.pp-src.go[data-v-08bc13a6] { background: var(--color-cat-blue-bg); color: var(--color-cat-blue);\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-08bc13a6] { background: var(--color-cat-teal-bg); color: var(--color-cat-teal);\n}\n.pp-badge[data-v-08bc13a6] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: var(--color-cat-purple-bg); color: var(--color-cat-purple);\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-08bc13a6] {\n  background: var(--color-warning-bg); color: var(--color-warning);\n  cursor: help;\n}\n.pp-count[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-08bc13a6] { color: var(--accent);\n}\n.pp-chevron[data-v-08bc13a6] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-08bc13a6] { transform: rotate(90deg);\n}\n.pp-detail[data-v-08bc13a6] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-08bc13a6] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-08bc13a6] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-08bc13a6] { color: var(--color-danger);\n}\n.pp-d-hint[data-v-08bc13a6] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-08bc13a6] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid var(--color-warning-bg);\n  border-radius: 4px;\n  background: var(--color-warning-bg);\n}\n.pp-d-conflict-title[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: var(--color-warning); margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-08bc13a6] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-08bc13a6] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-08bc13a6] {\n  border-color: var(--color-success);\n  background: var(--color-success-bg);\n  color: var(--color-success);\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: var(--color-success); background: var(--color-success-bg);\n  border: 1px solid var(--color-success-bg);\n}\n.pp-prefer-msg.err[data-v-08bc13a6] {\n  color: var(--color-danger); background: var(--color-danger-bg);\n  border-color: var(--color-danger-bg);\n}\n.pp-d-tools[data-v-08bc13a6] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-08bc13a6] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-08bc13a6]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-08bc13a6] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-08bc13a6] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-08bc13a6] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-08bc13a6] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-08bc13a6] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-08bc13a6] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-08bc13a6]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-08bc13a6] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-08bc13a6] { border-color: var(--color-danger); color: var(--color-danger);\n}\n.pp-btn[data-v-08bc13a6]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-08bc13a6] { animation: pp-spin-08bc13a6 1s linear infinite;\n}\n@keyframes pp-spin-08bc13a6 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-08bc13a6] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid var(--color-cat-amber-bg); border-radius: 8px;\n  background: var(--color-cat-amber-bg);\n}\n.pp-builtin-head[data-v-08bc13a6] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-08bc13a6]:hover { background: var(--color-cat-amber-bg);\n}\n.pp-builtin-title[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: var(--color-cat-amber); letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-08bc13a6] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-08bc13a6] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-08bc13a6] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-08bc13a6] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-08bc13a6] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-08bc13a6] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-08bc13a6] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.tp-panel[data-v-d09e78dd] {\r\n  display: flex;\r\n  flex-direction: column;\r\n  height: 100%;\r\n  min-height: 0;\r\n  padding: 8px;\r\n  gap: 8px;\n}\r\n\r\n/* ── 头部 ── */\n.tp-header[data-v-d09e78dd] {\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: space-between;\r\n  padding: 2px 2px 6px;\r\n  border-bottom: 1px solid var(--border-color);\n}\n.tp-title[data-v-d09e78dd] {\r\n  display: inline-flex;\r\n  align-items: center;\r\n  gap: 6px;\r\n  font-size: 13px;\r\n  font-weight: 600;\r\n  color: var(--text-primary);\n}\n.tp-actions[data-v-d09e78dd] { display: inline-flex; gap: 4px;\n}\n.tp-icon-btn[data-v-d09e78dd] {\r\n  width: 26px; height: 26px;\r\n  display: inline-flex; align-items: center; justify-content: center;\r\n  background: none; border: none; border-radius: 6px;\r\n  color: var(--text-muted);\r\n  cursor: pointer;\n}\n.tp-icon-btn[data-v-d09e78dd]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\r\n\r\n/* ── 主体（左栏列表 + 右栏详情） ── */\n.tp-body[data-v-d09e78dd] {\r\n  flex: 1;\r\n  min-height: 0;\r\n  display: flex;\r\n  gap: 8px;\n}\r\n\r\n/* ── 列表（左栏） ── */\n.tp-list[data-v-d09e78dd] {\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 4px;\r\n  width: 200px;\r\n  flex-shrink: 0;\r\n  overflow-y: auto;\r\n  padding-right: 6px;\r\n  border-right: 1px solid var(--border-color);\n}\n.tp-item[data-v-d09e78dd] {\r\n  padding: 6px 8px;\r\n  border-radius: 8px;\r\n  border: 1px solid transparent;\r\n  cursor: pointer;\r\n  transition: background 0.12s, border-color 0.12s;\n}\n.tp-item[data-v-d09e78dd]:hover { background: var(--bg-hover);\n}\n.tp-item.active[data-v-d09e78dd] {\r\n  background: var(--bg-tertiary);\r\n  border-color: var(--accent);\r\n  box-shadow: inset 2px 0 0 var(--accent);\n}\n.tp-item-main[data-v-d09e78dd] { display: flex; align-items: center; gap: 6px;\n}\n.tp-item-name[data-v-d09e78dd] { font-size: 12.5px; font-weight: 600; color: var(--text-primary);\n}\n.tp-item-count[data-v-d09e78dd] {\r\n  font-size: 10px; color: var(--text-muted);\r\n  background: var(--bg-tertiary);\r\n  padding: 1px 6px; border-radius: 999px;\n}\n.tp-item-desc[data-v-d09e78dd] {\r\n  font-size: 11px; color: var(--text-muted);\r\n  margin-top: 2px;\r\n  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\r\n\r\n/* ── 详情（右栏） ── */\n.tp-detail[data-v-d09e78dd] {\r\n  flex: 1;\r\n  min-width: 0;\r\n  min-height: 0;\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 8px;\r\n  overflow: hidden;\r\n  padding-left: 4px;\n}\n.tp-dhead[data-v-d09e78dd] { padding: 0 2px;\n}\n.tp-dtitle[data-v-d09e78dd] {\r\n  display: flex; align-items: center; gap: 6px;\r\n  font-size: 13px; font-weight: 600; color: var(--text-primary);\n}\n.tp-badge[data-v-d09e78dd] {\r\n  font-size: 9.5px; padding: 1px 6px; border-radius: 999px;\r\n  background: var(--accent); color: var(--color-accent-fg); font-weight: 500;\n}\n.tp-badge.proj[data-v-d09e78dd] { background: var(--color-accent-bg); color: var(--color-accent);\n}\n.tp-dactions[data-v-d09e78dd] { display: flex; gap: 6px; margin-top: 6px;\n}\n.tp-ddesc[data-v-d09e78dd] { font-size: 11px; color: var(--text-muted); margin-top: 4px;\n}\n.tp-section-title[data-v-d09e78dd] {\r\n  font-size: 10px; color: var(--text-muted);\r\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;\r\n  margin: 2px 0 4px;\n}\n.tp-plugins[data-v-d09e78dd] {\r\n  flex: 1;\r\n  min-height: 0;\r\n  overflow-y: auto;\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 8px;\r\n  padding: 0 2px;\n}\n.tp-plugin[data-v-d09e78dd] {\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 8px;\r\n  padding: 6px 8px;\r\n  background: var(--bg-secondary);\n}\n.tp-prow[data-v-d09e78dd] { display: flex; align-items: center; justify-content: space-between; gap: 6px;\n}\n.tp-pname[data-v-d09e78dd] { font-size: 12px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace);\n}\n.tp-ppurpose[data-v-d09e78dd] { font-size: 11px; color: var(--text-muted); margin-top: 2px;\n}\n.tp-tools[data-v-d09e78dd] {\r\n  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;\n}\n.tp-tool[data-v-d09e78dd] {\r\n  display: inline-flex; align-items: center; gap: 4px;\r\n  font-size: 11px;\r\n  color: var(--text-secondary);\r\n  background: var(--bg-tertiary);\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 999px;\r\n  padding: 2px 9px;\r\n  cursor: pointer;\r\n  user-select: none;\r\n  font-family: inherit;\r\n  line-height: 1.5;\r\n  transition: border-color 0.12s, color 0.12s, opacity 0.12s;\n}\n.tp-tool[data-v-d09e78dd]:hover { border-color: var(--accent); color: var(--text-primary);\n}\n.tp-tool.off[data-v-d09e78dd] { text-decoration: line-through; opacity: 0.45; border-color: transparent;\n}\n.tp-muted[data-v-d09e78dd] { font-size: 11px; color: var(--text-muted);\n}\r\n\r\n/* ── 按钮 ── */\n.tp-btn[data-v-d09e78dd] {\r\n  display: inline-flex; align-items: center; gap: 4px;\r\n  font-size: 11.5px; font-family: inherit;\r\n  color: var(--text-primary);\r\n  background: var(--bg-tertiary);\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 6px;\r\n  padding: 4px 10px;\r\n  cursor: pointer;\r\n  transition: border-color 0.15s, background 0.15s;\n}\n.tp-btn[data-v-d09e78dd]:hover { border-color: var(--accent);\n}\n.tp-btn.tiny[data-v-d09e78dd] { padding: 2px 7px; font-size: 10.5px;\n}\n.tp-btn.primary[data-v-d09e78dd] { background: var(--accent); border-color: var(--accent); color: var(--color-accent-fg);\n}\n.tp-btn.primary[data-v-d09e78dd]:disabled { opacity: 0.5; cursor: not-allowed;\n}\n.tp-btn.danger[data-v-d09e78dd] { color: var(--color-danger);\n}\n.tp-btn.danger[data-v-d09e78dd]:hover { border-color: var(--color-danger);\n}\r\n\r\n/* ── 添加插件 ── */\n.tp-add[data-v-d09e78dd] { padding: 2px; flex-shrink: 0;\n}\n.tp-add-btn[data-v-d09e78dd] {\r\n  width: 100%; justify-content: center;\r\n  border-style: dashed; color: var(--accent);\n}\n.tp-add-btn[data-v-d09e78dd]:hover { background: var(--color-accent-bg);\n}\r\n\r\n/* ── 添加插件浮层（卡片 grid） ── */\r\n/* 双 class 提高优先级，覆盖 .tp-sheet 的 480px（浮层更宽以容纳卡片墙） */\n.tp-sheet.tp-add-sheet[data-v-d09e78dd] { width: min(680px, 92vw);\n}\n.tp-add-search[data-v-d09e78dd] { position: relative; margin: 0 16px 10px;\n}\n.tp-add-search-icon[data-v-d09e78dd] {\r\n  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);\r\n  color: var(--text-muted); pointer-events: none;\n}\n.tp-add-search-input[data-v-d09e78dd] { width: 100%; padding-left: 30px;\n}\n.tp-add-grid[data-v-d09e78dd] {\r\n  display: grid;\r\n  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));\r\n  gap: 8px;\r\n  padding: 4px 16px 16px;\r\n  overflow-y: auto;\r\n  max-height: 60vh;\n}\n.tp-pcard[data-v-d09e78dd] {\r\n  display: flex; flex-direction: column; gap: 5px;\r\n  text-align: left;\r\n  padding: 9px 10px;\r\n  background: var(--bg-tertiary);\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  font-family: inherit;\r\n  transition: border-color 0.13s, background 0.13s, box-shadow 0.13s;\n}\n.tp-pcard[data-v-d09e78dd]:hover {\r\n  border-color: var(--accent);\r\n  background: var(--color-accent-bg);\r\n  box-shadow: 0 0 0 3px var(--color-accent-ring);\n}\n.tp-pcard-head[data-v-d09e78dd] { display: flex; align-items: center; justify-content: space-between; gap: 6px;\n}\n.tp-pcard-name[data-v-d09e78dd] {\r\n  font-size: 12px; font-weight: 600; color: var(--text-primary);\r\n  font-family: var(--font-code, monospace);\r\n  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.tp-pcard-count[data-v-d09e78dd] {\r\n  font-size: 9.5px; color: var(--text-muted);\r\n  background: var(--bg-secondary);\r\n  padding: 1px 6px; border-radius: 999px; flex-shrink: 0;\n}\n.tp-pcard-desc[data-v-d09e78dd] {\r\n  font-size: 11px; color: var(--text-muted); line-height: 1.45;\r\n  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;\r\n  min-height: 32px;\n}\n.tp-pcard-add[data-v-d09e78dd] {\r\n  display: inline-flex; align-items: center; gap: 3px;\r\n  font-size: 10.5px; color: var(--accent);\r\n  margin-top: 2px;\n}\r\n\r\n/* ── 空态 ── */\n.tp-empty[data-v-d09e78dd] {\r\n  font-size: 11.5px; color: var(--text-muted);\r\n  padding: 16px 8px; text-align: center; line-height: 1.7;\n}\n.tp-side-empty[data-v-d09e78dd] {\r\n  flex: 1;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\n}\r\n\r\n/* ── 弹层（居中 modal，桌面端更合理；2026-09-05 从 bottom-sheet 改造） ── */\n.tp-overlay[data-v-d09e78dd] {\r\n  position: fixed; inset: 0;\r\n  background: var(--color-scrim);\r\n  z-index: 10050;\r\n  display: flex; align-items: center; justify-content: center;\r\n  padding: 16px;\n}\n.tp-sheet[data-v-d09e78dd] {\r\n  width: min(480px, 94vw);\r\n  max-height: 84vh;\r\n  display: flex; flex-direction: column;\r\n  background: var(--bg-secondary);\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 14px;\r\n  box-shadow: var(--shadow-lg);\r\n  animation: tp-sheet-in-d09e78dd 0.18s ease-out;\n}\n@keyframes tp-sheet-in-d09e78dd {\nfrom { transform: translateY(10px) scale(0.98); opacity: 0.6;\n}\nto { transform: translateY(0) scale(1); opacity: 1;\n}\n}\n.tp-sheet-head[data-v-d09e78dd] {\r\n  display: flex; align-items: center; justify-content: space-between;\r\n  padding: 10px 16px 8px;\n}\n.tp-sheet-title[data-v-d09e78dd] { font-size: 14px; font-weight: 600; color: var(--text-primary);\n}\n.tp-cancel[data-v-d09e78dd] { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; font-family: inherit;\n}\n.tp-sheet-body[data-v-d09e78dd] { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;\n}\n.tp-field[data-v-d09e78dd] { display: flex; flex-direction: column; gap: 4px;\n}\n.tp-field-label[data-v-d09e78dd] { font-size: 11px; color: var(--text-muted);\n}\n.tp-input[data-v-d09e78dd] {\r\n  font-size: 12.5px; font-family: inherit;\r\n  color: var(--text-primary);\r\n  background: var(--bg-tertiary);\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 8px;\r\n  padding: 7px 10px;\r\n  outline: none;\n}\n.tp-input[data-v-d09e78dd]:focus { border-color: var(--accent);\n}\n.tp-textarea[data-v-d09e78dd] { resize: vertical; min-height: 40px;\n}\n.tp-textarea.code[data-v-d09e78dd] { font-family: var(--font-code, monospace); font-size: 11.5px;\n}\n.tp-hint[data-v-d09e78dd] { font-size: 11px; color: var(--color-warning);\n}\n.tp-sheet-actions[data-v-d09e78dd] { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;\n}\n.tp-file-row[data-v-d09e78dd] { display: flex; align-items: center; gap: 8px;\n}\n.tp-hidden-input[data-v-d09e78dd] { display: none;\n}\n.tp-fade-enter-active[data-v-d09e78dd], .tp-fade-leave-active[data-v-d09e78dd] { transition: opacity 0.18s;\n}\n.tp-fade-enter-from[data-v-d09e78dd], .tp-fade-leave-to[data-v-d09e78dd] { opacity: 0;\n}\n.spinning[data-v-d09e78dd] { animation: tp-spin-d09e78dd 0.8s linear infinite;\n}\n@keyframes tp-spin-d09e78dd {\nfrom { transform: rotate(0deg);\n}\nto { transform: rotate(360deg);\n}\n}\r\n\n/* ═══ 设计稿 th178：col w=288, bg=color.bg, pad=space.md(12), gap=space.sm(8) ═══ */\n.stats-rail[data-v-f8d7be09] {\n  width: 288px; height: 100%;\n  display: flex; flex-direction: column; gap: 8px;\n  padding: 12px;\n  background: var(--bg-primary);\n  border-left: 1px solid var(--border-color);\n  overflow-y: auto; overflow-x: hidden;\n  box-sizing: border-box;\n}\n/* 设计稿 th148/th164/th173：bg=surface, radius=8, border, pad=12, gap=4 */\n.sr-card[data-v-f8d7be09] {\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 8px;\n  padding: 12px;\n  display: flex; flex-direction: column; gap: 4px;\n  flex: 0 0 auto;\n}\n.sr-head[data-v-f8d7be09] { display: flex; align-items: center; justify-content: space-between; height: 24px;\n}\n/* 设计稿 th131/th151/th165：字号 sm(12) + 字重 600 + fg */\n.sr-title[data-v-f8d7be09] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n/* 设计稿 th150（任务进度「4 / 7」）与 th77/th85（主区结果徽章）：\n   64×24 居中胶囊 —— radius=full、bg=surface-3(→ --bg-active)、accent 文字、等宽数字。\n   本类同时供「Token 统计」卡的「命中 NN%」使用，两处形态统一。 */\n.sr-badge[data-v-f8d7be09] {\n  display: inline-flex; align-items: center; justify-content: center;\n  min-width: 64px; height: 24px; padding: 0 10px;\n  border-radius: 999px; background: var(--bg-active);\n  font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums;\n}\n.sr-icon-btn[data-v-f8d7be09] {\n  border: none; background: none; color: var(--text-muted); cursor: pointer;\n  display: inline-flex; align-items: center; padding: 0; opacity: .75;\n}\n.sr-icon-btn[data-v-f8d7be09]:hover { opacity: 1; color: var(--text-primary);\n}\n/* 设计稿 th134：accent 色摘要行 */\n.sr-summary[data-v-f8d7be09] { font-size: 11px; color: var(--accent); line-height: 1.5;\n}\n.sr-divider[data-v-f8d7be09] { height: 1px; background: var(--border-color); margin: 2px 0;\n}\n/* 设计稿 th138/th141/…：行高 24，左 muted 右 fg */\n.sr-row[data-v-f8d7be09] { display: flex; align-items: center; justify-content: space-between; height: 24px; gap: 8px;\n}\n.sr-k[data-v-f8d7be09] { font-size: 11px; color: var(--text-muted); min-width: 0;\n}\n.sr-v[data-v-f8d7be09] { font-size: 11px; color: var(--text-primary); white-space: nowrap;\n}\n.sr-v-ok[data-v-f8d7be09] { color: var(--success, #4FD8A4);\n}\n.sr-v-run[data-v-f8d7be09] { color: var(--accent);\n}\n.sr-v-dim[data-v-f8d7be09] { color: var(--text-muted);\n}\n.sr-empty[data-v-f8d7be09] { font-size: 11px; color: var(--text-muted); padding: 4px 0;\n}\n.sr-note[data-v-f8d7be09] { font-size: 11px; color: var(--text-muted); line-height: 1.5;\n}\n/* 设计稿 th154/th153：h=8、圆角 4 的进度条（底 = surface-2 → --bg-hover；填充 = accent） */\n.sr-bar[data-v-f8d7be09] { height: 8px; border-radius: 4px; background: var(--bg-hover); overflow: hidden;\n}\n.sr-bar-fill[data-v-f8d7be09] { height: 100%; border-radius: 4px; background: var(--accent); transition: width .25s;\n}\n/* ── ★ 任务进度列表（2026-09-25 用户指令）：**完整可滚动列表** ──\n   全部任务逐条列出；行数超出时在卡内 max-height 内滚动（细滚动条），\n   任务文本换行显示完整内容 —— 不裁剪行数、不加省略号、不显示「还有 N 项…」。 */\n.sr-tasks[data-v-f8d7be09] {\n  flex: 1 1 auto; min-height: 0;\n  max-height: 240px;\n  overflow-y: auto; overflow-x: hidden;\n  display: flex; flex-direction: column; gap: 2px;\n  scrollbar-gutter: stable;\n  /* ★ 必须显式置 auto：见下方滚动条注释（全局继承的 scrollbar-color 会废掉 webkit 伪元素） */\n  scrollbar-color: auto;\n}\n/* 细滚动条（与 GitPanel 同口径：4px + --scrollbar-thumb）。\n   ★★ 两个实测坑（否则滚动条根本不是 4px）：\n     ① index.html 全局给 html 设了 scrollbar-color，而**该属性可继承** —— 只要继承到\n        非 auto 的 scrollbar-color，Chromium 就忽略 ::-webkit-scrollbar 伪元素，\n        滚动条回退平台默认粗度（实测 17px）⇒ 必须在本元素显式 scrollbar-color: auto；\n     ② 一旦设了标准 scrollbar-width（如 thin），同样会让 ::-webkit-scrollbar 失效\n        （实测 thin = 11px）⇒ 本元素刻意不写 scrollbar-width。 */\n.sr-tasks[data-v-f8d7be09]::-webkit-scrollbar { width: 4px;\n}\n.sr-tasks[data-v-f8d7be09]::-webkit-scrollbar-track { background: transparent;\n}\n.sr-tasks[data-v-f8d7be09]::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px;\n}\n.sr-tasks[data-v-f8d7be09]::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover);\n}\n/* 单条任务：左＝文本（换行完整显示）｜右＝状态（不换行、不被压缩） */\n.sr-task[data-v-f8d7be09] { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 2px 0;\n}\n.sr-task-text[data-v-f8d7be09] {\n  flex: 1 1 auto; min-width: 0;\n  font-size: 11px; line-height: 1.45; color: var(--text-muted);\n  word-break: break-word;\n}\n.sr-task-st[data-v-f8d7be09] { flex: 0 0 auto; font-size: 11px; line-height: 1.45; white-space: nowrap;\n}\n/* 设计稿 th170：h=8, gap=4, 圆角 4 的水平分段条（非圆环） */\n.sr-segbar[data-v-f8d7be09] { display: flex; gap: 4px; height: 8px; margin: 4px 0;\n}\n.sr-seg[data-v-f8d7be09] { height: 8px; border-radius: 4px; min-width: 2px; transition: width .25s;\n}\n/* ── ★ Token 统计（卡 ①b）：环形缓存图 + 数字明细 ── */\n.sr-tokens[data-v-f8d7be09] { display: flex; align-items: center; gap: 10px; padding-top: 2px;\n}\n.cache-ring-wrap[data-v-f8d7be09] {\n  position: relative; flex: 0 0 auto;\n  width: 72px; height: 72px;\n  display: flex; align-items: center; justify-content: center;\n}\n.cache-ring[data-v-f8d7be09] { display: block;\n}\n.cache-ring-label[data-v-f8d7be09] {\n  position: absolute;\n  display: flex; flex-direction: column; align-items: center;\n  line-height: 1.25;\n}\n.cache-ring-pct[data-v-f8d7be09] {\n  font-size: 14px; font-weight: 700;\n  color: var(--accent); font-family: var(--font-code);\n}\n.cache-ring-text[data-v-f8d7be09] { font-size: 9px; color: var(--text-muted);\n}\n.sr-token-detail[data-v-f8d7be09] { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px;\n}\n.sr-token-detail .sr-row[data-v-f8d7be09] { height: 20px;\n}\n.sr-token-total .sr-k[data-v-f8d7be09], .sr-token-total .sr-v[data-v-f8d7be09] { font-weight: 600; color: var(--text-primary);\n}\n.sr-filler[data-v-f8d7be09] { flex: 1 1 auto; min-height: 0;\n}\n/* 设计稿 th177：bg=surface-2 */\n.sr-card-tip[data-v-f8d7be09] { background: var(--bg-hover);\n}\n.sr-tip-main[data-v-f8d7be09] { font-size: 11px; color: var(--text-primary); line-height: 1.5;\n}\n.sr-tip-sub[data-v-f8d7be09] { font-size: 11px; color: var(--text-muted); line-height: 1.5;\n}\n\n.app-root[data-v-19660edb] {\r\n  display: grid;\r\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\r\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\r\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\r\n  /* ★ 2026-09-25 对齐设计稿：活动栏 48 ｜ 会话 264 ｜ 主区 1fr ｜ 右栏 288。 */\r\n  grid-template-columns: 48px var(--sidebar-w, 264px) minmax(0, 1fr) var(--rail-w, 288px);\r\n  /* ★ 2026-09-25：顶栏为整条（titlebar 跨全部列，见 UiTitlebar）；原 main-tabs 已移除。 */\r\n  /* ★ 2026-09-25 对齐设计稿：底栏 28px（th219）；顶栏 titlebar 跨全部列（整条 40px）。 */\r\n  grid-template-rows: 40px 1fr 28px;\r\n  width: 100%; height: 100%;\r\n  background: var(--bg-primary);\r\n  color: var(--text-primary);\r\n  overflow: hidden;\r\n  font-family: var(--font-ui);\n}\r\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-19660edb] {\r\n  grid-template-columns: 1fr;\r\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-19660edb] {\r\n  grid-column: 1; grid-row: 1;\r\n  width: 100% !important;\r\n  height: 100%;\n}\r\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸\r\n   ★ 2026-09-25：设计稿顶栏是【整条】(th206 w=1440)，故 titlebar 跨全部列；\r\n   main-tabs 改为浮在顶栏行右侧的导航胶囊组（见下方 justify-self:end）。 */\n.plugin-area-titlebar[data-v-19660edb] { grid-column: 1 / -1; grid-row: 1; height: 40px;\n}\n.slot-empty.plugin-area-titlebar[data-v-19660edb] { grid-column: 1 / -1; grid-row: 1; height: 40px;\n}\n.plugin-area-activitybar[data-v-19660edb] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-19660edb] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\r\n/* ★ 右栏（设计稿第 4 列）：288px 常驻信息栏 */\n.right-rail-host[data-v-19660edb] { grid-column: 4; grid-row: 2; min-width: 0; height: 100%; overflow: hidden;\n}\r\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-19660edb] {\r\n  grid-column: 3; grid-row: 2;\r\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\r\n/* tab 栏：对话 / 编辑器 */\r\n/* ★ 内容区（2026-09）：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图） */\n.main-views[data-v-19660edb] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden; position: relative;\n}\r\n/* 并排：横排两栏；split-chat-right 用 row-reverse 把对话栏换到右侧\r\n   （对话 pane 始终是 DOM 首个子元素：换边只改方向，不动挂载顺序） */\n.main-views.split[data-v-19660edb] { flex-direction: row;\n}\n.main-views.split.split-chat-right[data-v-19660edb] { flex-direction: row-reverse;\n}\n.view-pane[data-v-19660edb] {\r\n  flex: 1 1 auto; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden; position: relative;\n}\r\n/* 并排时对话栏固定比例（当前视图栏占剩余空间） */\n.main-views.split .view-pane-chat[data-v-19660edb] {\r\n  flex: 0 0 var(--split-chat-w, 42%);\r\n  border-right: 1px solid var(--border-color);\n}\n.main-views.split.split-chat-right .view-pane-chat[data-v-19660edb] {\r\n  border-right: none; border-left: 1px solid var(--border-color);\n}\r\n/* 插件中间区域视图容器（registerView）：bundle 挂载点，撑满所在栏 */\n.view-pane-plugin[data-v-19660edb] { background: var(--bg-primary);\n}\r\n/* tab 栏右侧工具区（视图列表 + 并排开关） */\r\n/* 视图列表浮层（勾选 = tab 打开；后台打开，不抢对话主视图） */\r\n/* 菜单外点关闭背板（仅菜单打开时存在，点一下就关） */\r\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-19660edb] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\r\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-19660edb] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\r\n/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */\n.market-container[data-v-19660edb] {\r\n  flex: 1; min-width: 0; min-height: 0;\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\r\n/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */\r\n/* ★ 2026-09-25 对齐设计稿 th219（row h=28）。 */\n.app-statusbar-host[data-v-19660edb] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 28px;\n}\n.plugin-slot-host[data-v-19660edb] { height: 100%; overflow: hidden;\n}\r\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\r\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-19660edb] > * { width: 100%; min-width: 0;\n}\r\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-19660edb] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-19660edb] > * { pointer-events: auto;\n}\n.modals-empty[data-v-19660edb] { display: none;\n}\r\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-19660edb] {\r\n  display: flex; flex-direction: row; gap: 8px;\r\n  align-items: center; justify-content: center;\r\n  color: var(--text-muted); font-size: 12px;\r\n  background: var(--bg-primary);\r\n  border: 1px dashed var(--border-color);\r\n  min-height: 0;\n}\r\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-19660edb] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-19660edb] { font-size: 11px; padding: 2px 8px;\n}\r\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\r\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-19660edb] {\r\n  background: none; border: 1px solid var(--border-color);\r\n  color: var(--accent); font-size: 12px;\r\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\r\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-19660edb]:hover { opacity: 1; background: var(--color-accent-bg);\n}\r\n/* ─── 壳级逃生口：插件面板浮动入口 ───\r\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\r\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-19660edb] {\r\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\r\n  width: 22px; height: 22px; border-radius: 5px;\r\n  display: flex; align-items: center; justify-content: center;\r\n  background: var(--bg-elevated); color: var(--text-muted);\r\n  border: 1px solid var(--border-color); cursor: pointer;\r\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-19660edb]:hover { opacity: 1; color: var(--accent);\n}\n.plugin-escape-overlay[data-v-19660edb] {\r\n  position: fixed; inset: 0; z-index: 400;\r\n  background: var(--color-scrim);\r\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-19660edb] {\r\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\r\n  background: var(--bg-primary); border: 1px solid var(--border-color);\r\n  border-radius: 10px; box-shadow: var(--shadow-lg);\r\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-19660edb] {\r\n  display: flex; align-items: center; justify-content: space-between;\r\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\r\n  border-bottom: 1px solid var(--border-color);\r\n  background: var(--bg-elevated);\n}\n.plugin-escape-close[data-v-19660edb] {\r\n  border: none; background: none; color: var(--text-muted);\r\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-19660edb]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.plugin-escape-body[data-v-19660edb] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-19660edb] { height: 100%; border: none;\n}\r\n/*$vite$:1*/";
   document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.39
@@ -10968,13 +10968,30 @@
     }
     return u.toString();
   }
+  const _getInflight = /* @__PURE__ */ new Map();
   async function apiGet(path, params = {}, opts = {}) {
-    const r = await fetch(apiURL(path, params), { signal: apiSignal(opts) });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({ error: r.statusText }));
-      throw new Error(e.error || e.message || r.statusText);
+    const url = apiURL(path, params);
+    const dedupe = opts.dedupe !== false;
+    if (dedupe) {
+      const pending = _getInflight.get(url);
+      if (pending) return pending;
     }
-    return r.json();
+    const task = (async () => {
+      const r = await fetch(url, { signal: apiSignal(opts) });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(e.error || e.message || r.statusText);
+      }
+      return r.json();
+    })();
+    if (dedupe) {
+      _getInflight.set(url, task);
+      const cleanup = () => {
+        _getInflight.delete(url);
+      };
+      task.then(cleanup, cleanup);
+    }
+    return task;
   }
   async function apiPost(path, body = {}, params = {}, opts = {}) {
     const r = await fetch(apiURL(path, params), {
@@ -11249,8 +11266,9 @@
   async function chatCompact(convId) {
     return apiPost("/chat/compact?convId=" + encodeURIComponent(convId), {});
   }
-  async function getMessages(convId, { limit = 50, before = null, workspaceRoot = "" } = {}) {
+  async function getMessages(convId, { limit = 50, before = null, workspaceRoot = "", slim = true } = {}) {
     const params = { limit };
+    if (slim) params.slim = 1;
     if (before !== null && before !== void 0) params.before = before;
     if (workspaceRoot) params.workspaceRoot = workspaceRoot;
     return apiGet("/conversations/" + encodeURIComponent(convId) + "/messages", params);
@@ -12304,12 +12322,22 @@
     }, duration);
   };
   const state = /* @__PURE__ */ reactive({
-    activeActivity: "explorer",
+    // ★ 2026-09-25 对齐设计稿 shell-midnight：左栏默认显示【会话列表】（th61「会话」），
+    //   文件浏览器改为活动栏第二个图标进入（原默认 explorer）。
+    activeActivity: "chat",
     sidebarVisible: true,
     rightPanelVisible: true,
     // ★ 会话列表面板（.conv-sidebar，250px，含 Token 统计/上下文占用）整体显隐。
     //   默认显示；用户选择持久化；进入专注模式自动收起、退出还原（setFocusMode）。
     convListVisible: true,
+    // ★ 右栏（2026-09-25 对齐设计稿 th178）：运行统计 / 任务进度 / 上下文构成 / 底提示，
+    //   宽 288px，占网格第 4 列。默认显示。
+    statsRailVisible: true,
+    // ★ 右栏运行统计条折叠（P4-2，2026-09-25）——.phase-bar 里的步数/工具次数与
+    //   耗时/墙钟耗时/输出速度/输出 token 六个数字整体收起，只留阶段图标+阶段文案+
+    //   进度条（「正在做什么」始终可见，「做过多少」按需展开）。
+    //   属纯展示偏好（非 focusMode 那类临时视图态）→ 持久化，与 convListVisible 同规则。
+    runStatsCollapsed: false,
     bottomPanelVisible: true,
     bottomPanelTab: "terminal",
     workspaceRoot: "",
@@ -12373,6 +12401,15 @@
     settingsLoaded: false,
     pluginSchemas: [],
     // 插件注册的配置段（ctx.registerSettings → GET /api/settings.schemas）
+    // ★ 2026-09-25 会话级「场景（=工具集）」生效信息镜像 —— 供会话侧栏底部胶囊
+    //   （设计稿 th60「全栈开发 · 14 插件」= 场景名 + 该场景装配的插件数）读取。
+    //   权威源 = GET /api/toolsets/active（agent.ResolveConvToolsetActive），由
+    //   RightPanel.syncConvToolsetFromConv() 写入（唯一写方，避免双源不一致）。
+    //   ★ 修复前史：侧栏读 settings.scenarioName/toolsetName/defaultToolset —— 这
+    //   三个字段全项目从未被写入 → 胶囊恒显示硬编码兜底「默认场景」（假数据），
+    //   且读全局 settings（非当前会话）→ 切会话也不变。
+    //   { name, defaultName, isDefault, converged, pluginCount, resolved }
+    convToolsetInfo: { name: "", defaultName: "", isDefault: true, converged: false, pluginCount: 0, resolved: false },
     searchResults: [],
     selectedFilePaths: [],
     // 文件树多选路径列表
@@ -12380,7 +12417,7 @@
     // 文件树最近点击（Shift范围选择用）
     tasks: [],
     notificationCount: 0,
-    theme: "dark",
+    theme: "midnight",
     focusMode: false,
     // ★ 默认非专注：编辑器+对话区并排（右侧宽度可拖拽调整）；Ctrl+K 切换专注（隐藏编辑器）
     // ── ★ chat 优先薄壳布局：编辑器按需打开的装配状态（默认编辑器隐藏）──
@@ -12435,7 +12472,7 @@
   });
   const bottomPanelHeight = /* @__PURE__ */ ref(180);
   const rightPanelWidth = /* @__PURE__ */ ref(320);
-  const sidebarWidth = /* @__PURE__ */ ref(280);
+  const sidebarWidth = /* @__PURE__ */ ref(264);
   function loadPanelSize() {
     try {
       const d = JSON.parse(localStorage.getItem("paircode-panel-size") || "{}");
@@ -12625,13 +12662,17 @@
     }
   }
   function applyTheme(themeName) {
-    const theme = themeName || state.theme || "dark";
+    const theme = themeName || state.theme || "midnight";
     state.theme = theme;
-    document.documentElement.classList.remove("theme-dark", "theme-light", "theme-warm", "theme-night");
-    document.body.classList.remove("theme-dark", "theme-light", "theme-warm", "theme-night");
     const cls = "theme-" + theme;
-    document.documentElement.classList.add(cls);
-    document.body.classList.add(cls);
+    for (const el of [document.documentElement, document.body]) {
+      for (const c of Array.from(el.classList)) {
+        if (c.startsWith("theme-")) el.classList.remove(c);
+      }
+      el.classList.add(cls);
+      el.dataset.theme = theme;
+      el.dataset.themeScheme = isDarkTheme(theme) ? "dark" : "light";
+    }
     loadThemeFonts(theme);
     savePersistentState();
   }
@@ -12644,6 +12685,8 @@
         rightPanelVisible: state.rightPanelVisible,
         // 会话列表面板显隐：属面板偏好（非 focusMode 那类临时视图态）→ 持久化
         convListVisible: state.convListVisible,
+        // 运行统计条折叠：同属面板偏好 → 持久化
+        runStatsCollapsed: state.runStatsCollapsed,
         bottomPanelVisible: state.bottomPanelVisible,
         bottomPanelTab: state.bottomPanelTab,
         theme: state.theme
@@ -12664,15 +12707,47 @@
       if (typeof data.sidebarVisible === "boolean") state.sidebarVisible = data.sidebarVisible;
       if (typeof data.rightPanelVisible === "boolean") state.rightPanelVisible = data.rightPanelVisible;
       if (typeof data.convListVisible === "boolean") state.convListVisible = data.convListVisible;
+      if (typeof data.runStatsCollapsed === "boolean") state.runStatsCollapsed = data.runStatsCollapsed;
       if (typeof data.bottomPanelVisible === "boolean") state.bottomPanelVisible = data.bottomPanelVisible;
       if (data.bottomPanelTab) state.bottomPanelTab = data.bottomPanelTab;
       if (data.theme) {
-        if (["dark", "light", "warm", "night"].includes(data.theme)) {
+        if (/^[a-z][a-z0-9-]{0,23}$/.test(data.theme)) {
           applyTheme(data.theme);
         }
       }
     } catch (e) {
     }
+  }
+  watch(() => state.currentConvId, (id, old) => {
+    if (id === old) return;
+    state.convToolsetInfo = {
+      name: "",
+      defaultName: "",
+      isDefault: true,
+      converged: false,
+      pluginCount: 0,
+      resolved: false
+    };
+  });
+  const DARK_THEME_NAMES = /* @__PURE__ */ new Set([
+    "midnight",
+    "graphite",
+    "obsidian",
+    "aurora",
+    // 8 套中暗色 4 套
+    "dark",
+    "night"
+    // 别名
+  ]);
+  function isDarkTheme(name) {
+    return DARK_THEME_NAMES.has(name || state.theme || "midnight");
+  }
+  function initTheme() {
+    loadPersistentState();
+  }
+  function syncThemeFromSettings() {
+    const t = state.settings && state.settings.theme;
+    if (t && t !== state.theme) applyTheme(t);
   }
   const uiState = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
@@ -12681,6 +12756,8 @@
     bottomPanelHeight,
     dialogState,
     helpDocTarget,
+    initTheme,
+    isDarkTheme,
     layout,
     loadPanelSize,
     loadPersistentState,
@@ -12697,7 +12774,8 @@
     showSystem,
     showUpdate,
     sidebarWidth,
-    state
+    state,
+    syncThemeFromSettings
   }, Symbol.toStringTag, { value: "Module" }));
   const runtimes = {};
   let msgKeyCounter = 0;
@@ -13595,7 +13673,10 @@
         mcpTokens: 0,
         toolTokens: 0,
         historyTokens: 0,
-        otherTokens: 0
+        otherTokens: 0,
+        // ★ 生效上下文窗口（后端 token-stats 下发；= agent.ContextWindow 装配口径，
+        //   供右栏/状态栏展示「已用 / 上限」——前端不得自行兜底臆测上限）
+        contextMaxTokens: 0
       });
     }
     return state.convCtxStatsByConv[convId];
@@ -13612,7 +13693,8 @@
         mcpTokens: 0,
         toolTokens: 0,
         historyTokens: 0,
-        otherTokens: 0
+        otherTokens: 0,
+        contextMaxTokens: 0
       });
     }
   }
@@ -13767,7 +13849,8 @@
       return;
     }
     if (id === "chat") {
-      state.rightPanelVisible = !state.rightPanelVisible;
+      state.activeActivity = "chat";
+      state.sidebarVisible = true;
       return;
     }
     if (id === "marketplace") {
@@ -13930,6 +14013,7 @@
           state.settings = sresp.settings;
           state.settingsLoaded = true;
           state.pluginSchemas = sresp.schemas || [];
+          syncThemeFromSettings();
         }
       } catch {
       }
@@ -14087,55 +14171,55 @@
     }
     return target;
   };
-  const _hoisted_1$3 = ["width", "height"];
-  const _hoisted_2$3 = {
+  const _hoisted_1$4 = ["width", "height"];
+  const _hoisted_2$4 = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _hoisted_3$3 = {
+  const _hoisted_3$4 = {
     key: 7,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
-  const _hoisted_4$3 = {
+  const _hoisted_4$4 = {
     key: 10,
     points: "9 6 15 12 9 18"
   };
-  const _hoisted_5$3 = {
+  const _hoisted_5$4 = {
     key: 11,
     points: "6 9 12 15 18 9"
   };
-  const _hoisted_6$3 = {
+  const _hoisted_6$4 = {
     key: 31,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_7$3 = {
+  const _hoisted_7$4 = {
     key: 49,
     x1: "5",
     y1: "12",
     x2: "19",
     y2: "12"
   };
-  const _hoisted_8$3 = {
+  const _hoisted_8$4 = {
     key: 53,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
-  const _hoisted_9$3 = {
+  const _hoisted_9$4 = {
     key: 56,
     points: "20 6 9 17 4 12"
   };
-  const _hoisted_10$3 = {
+  const _hoisted_10$4 = {
     key: 59,
     d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
   };
-  const _hoisted_11$3 = {
+  const _hoisted_11$4 = {
     key: 69,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_12$3 = {
+  const _hoisted_12$4 = {
     key: 71,
     points: "15 6 9 12 15 18"
   };
-  const _sfc_main$3 = {
+  const _sfc_main$4 = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -14154,7 +14238,7 @@
           "stroke-linecap": "round",
           "stroke-linejoin": "round"
         }, [
-          __props.name === "folder" ? (openBlock(), createElementBlock("path", _hoisted_2$3)) : __props.name === "folder-open" ? (openBlock(), createElementBlock(Fragment, { key: 1 }, [
+          __props.name === "folder" ? (openBlock(), createElementBlock("path", _hoisted_2$4)) : __props.name === "folder-open" ? (openBlock(), createElementBlock(Fragment, { key: 1 }, [
             _cache[0] || (_cache[0] = createBaseVNode("path", { d: "M6 17l-3-9h18l-3 9H6z" }, null, -1)),
             _cache[1] || (_cache[1] = createBaseVNode("path", { d: "M4 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3" }, null, -1))
           ], 64)) : __props.name === "file" ? (openBlock(), createElementBlock(Fragment, { key: 2 }, [
@@ -14197,7 +14281,7 @@
               x2: "20",
               y2: "19"
             }, null, -1))
-          ], 64)) : __props.name === "chat" ? (openBlock(), createElementBlock("path", _hoisted_3$3)) : __props.name === "settings" ? (openBlock(), createElementBlock(Fragment, { key: 8 }, [
+          ], 64)) : __props.name === "chat" ? (openBlock(), createElementBlock("path", _hoisted_3$4)) : __props.name === "settings" ? (openBlock(), createElementBlock(Fragment, { key: 8 }, [
             _cache[13] || (_cache[13] = createBaseVNode("circle", {
               cx: "12",
               cy: "12",
@@ -14207,7 +14291,7 @@
           ], 64)) : __props.name === "home" ? (openBlock(), createElementBlock(Fragment, { key: 9 }, [
             _cache[15] || (_cache[15] = createBaseVNode("path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }, null, -1)),
             _cache[16] || (_cache[16] = createBaseVNode("polyline", { points: "9 22 9 12 15 12 15 22" }, null, -1))
-          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$3)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$3)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
+          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$4)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$4)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
             _cache[17] || (_cache[17] = createBaseVNode("line", {
               x1: "12",
               y1: "5",
@@ -14408,7 +14492,7 @@
               r: "10",
               class: "stop-pulse-ring"
             }, null, -1))
-          ], 64)) : __props.name === "wrench" ? (openBlock(), createElementBlock("path", _hoisted_6$3)) : __props.name === "database" ? (openBlock(), createElementBlock(Fragment, { key: 32 }, [
+          ], 64)) : __props.name === "wrench" ? (openBlock(), createElementBlock("path", _hoisted_6$4)) : __props.name === "database" ? (openBlock(), createElementBlock(Fragment, { key: 32 }, [
             _cache[67] || (_cache[67] = createBaseVNode("ellipse", {
               cx: "12",
               cy: "5",
@@ -14570,7 +14654,7 @@
               ry: "2"
             }, null, -1)),
             _cache[111] || (_cache[111] = createBaseVNode("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }, null, -1))
-          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$3)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 50 }, [
+          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$4)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 50 }, [
             _cache[112] || (_cache[112] = createBaseVNode("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }, null, -1)),
             _cache[113] || (_cache[113] = createBaseVNode("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" }, null, -1))
           ], 64)) : __props.name === "trash" ? (openBlock(), createElementBlock(Fragment, { key: 51 }, [
@@ -14591,7 +14675,7 @@
               x2: "15",
               y2: "15"
             }, null, -1))
-          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$3)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 54 }, [
+          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$4)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 54 }, [
             _cache[120] || (_cache[120] = createBaseVNode("path", { d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v3" }, null, -1)),
             _cache[121] || (_cache[121] = createBaseVNode("line", {
               x1: "12",
@@ -14610,7 +14694,7 @@
             _cache[124] || (_cache[124] = createBaseVNode("path", { d: "M9 12v2" }, null, -1)),
             _cache[125] || (_cache[125] = createBaseVNode("path", { d: "M15 12v2" }, null, -1)),
             _cache[126] || (_cache[126] = createBaseVNode("path", { d: "M12 9v5" }, null, -1))
-          ], 64)) : __props.name === "check" ? (openBlock(), createElementBlock("polyline", _hoisted_9$3)) : __props.name === "clock" ? (openBlock(), createElementBlock(Fragment, { key: 57 }, [
+          ], 64)) : __props.name === "check" ? (openBlock(), createElementBlock("polyline", _hoisted_9$4)) : __props.name === "clock" ? (openBlock(), createElementBlock(Fragment, { key: 57 }, [
             _cache[127] || (_cache[127] = createBaseVNode("circle", {
               cx: "12",
               cy: "12",
@@ -14630,7 +14714,7 @@
               x2: "12.01",
               y2: "17"
             }, null, -1))
-          ], 64)) : __props.name === "shield" ? (openBlock(), createElementBlock("path", _hoisted_10$3)) : __props.name === "shield-off" ? (openBlock(), createElementBlock(Fragment, { key: 60 }, [
+          ], 64)) : __props.name === "shield" ? (openBlock(), createElementBlock("path", _hoisted_10$4)) : __props.name === "shield-off" ? (openBlock(), createElementBlock(Fragment, { key: 60 }, [
             _cache[132] || (_cache[132] = createBaseVNode("path", { d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" }, null, -1)),
             _cache[133] || (_cache[133] = createBaseVNode("line", {
               x1: "4",
@@ -14674,9 +14758,9 @@
           ], 64)) : __props.name === "book-open" ? (openBlock(), createElementBlock(Fragment, { key: 68 }, [
             _cache[148] || (_cache[148] = createBaseVNode("path", { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" }, null, -1)),
             _cache[149] || (_cache[149] = createBaseVNode("path", { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" }, null, -1))
-          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$3)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 70 }, [
+          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$4)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 70 }, [
             _cache[150] || (_cache[150] = createStaticVNode('<rect x="2" y="4" width="20" height="16" rx="2" ry="2" data-v-4492abde></rect><line x1="6" y1="8" x2="6.01" y2="8" data-v-4492abde></line><line x1="10" y1="8" x2="10.01" y2="8" data-v-4492abde></line><line x1="14" y1="8" x2="14.01" y2="8" data-v-4492abde></line><line x1="18" y1="8" x2="18.01" y2="8" data-v-4492abde></line><line x1="6" y1="12" x2="6.01" y2="12" data-v-4492abde></line><line x1="10" y1="12" x2="10.01" y2="12" data-v-4492abde></line><line x1="14" y1="12" x2="14.01" y2="12" data-v-4492abde></line><line x1="18" y1="12" x2="18.01" y2="12" data-v-4492abde></line><line x1="6" y1="16" x2="18" y2="16" data-v-4492abde></line>', 10))
-          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$3)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 72 }, [
+          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$4)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 72 }, [
             _cache[151] || (_cache[151] = createBaseVNode("rect", {
               x: "3",
               y: "3",
@@ -14720,35 +14804,35 @@
               y2: "17"
             }, null, -1))
           ], 64))
-        ], 8, _hoisted_1$3);
+        ], 8, _hoisted_1$4);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["__scopeId", "data-v-4492abde"]]);
-  const _hoisted_1$2 = { class: "plugin-panel" };
-  const _hoisted_2$2 = { class: "pp-header" };
-  const _hoisted_3$2 = { class: "pp-title" };
-  const _hoisted_4$2 = { class: "pp-actions" };
-  const _hoisted_5$2 = {
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-4492abde"]]);
+  const _hoisted_1$3 = { class: "plugin-panel" };
+  const _hoisted_2$3 = { class: "pp-header" };
+  const _hoisted_3$3 = { class: "pp-title" };
+  const _hoisted_4$3 = { class: "pp-actions" };
+  const _hoisted_5$3 = {
     key: 0,
     class: "pp-new"
   };
-  const _hoisted_6$2 = { class: "pp-new-foot" };
-  const _hoisted_7$2 = { class: "pp-check" };
-  const _hoisted_8$2 = ["disabled"];
-  const _hoisted_9$2 = {
+  const _hoisted_6$3 = { class: "pp-new-foot" };
+  const _hoisted_7$3 = { class: "pp-check" };
+  const _hoisted_8$3 = ["disabled"];
+  const _hoisted_9$3 = {
     key: 1,
     class: "pp-client"
   };
-  const _hoisted_10$2 = { class: "pp-client-tabs" };
-  const _hoisted_11$2 = ["onClick"];
-  const _hoisted_12$2 = { class: "pp-client-tab-title" };
-  const _hoisted_13$2 = {
+  const _hoisted_10$3 = { class: "pp-client-tabs" };
+  const _hoisted_11$3 = ["onClick"];
+  const _hoisted_12$3 = { class: "pp-client-tab-title" };
+  const _hoisted_13$3 = {
     key: 2,
     class: "pp-slots"
   };
-  const _hoisted_14$2 = ["title"];
-  const _hoisted_15$2 = { class: "pp-slots-title" };
+  const _hoisted_14$3 = ["title"];
+  const _hoisted_15$3 = { class: "pp-slots-title" };
   const _hoisted_16$2 = { class: "pp-slot-info" };
   const _hoisted_17$2 = { class: "pp-slot-title-row" };
   const _hoisted_18$2 = { class: "pp-slot-id" };
@@ -14760,45 +14844,45 @@
     class: "pp-slot-list"
   };
   const _hoisted_23$2 = ["checked", "onChange"];
-  const _hoisted_24$1 = {
+  const _hoisted_24$2 = {
     key: 0,
     class: "pp-slot-empty"
   };
-  const _hoisted_25$1 = { class: "pp-list" };
-  const _hoisted_26$1 = {
+  const _hoisted_25$2 = { class: "pp-list" };
+  const _hoisted_26$2 = {
     key: 0,
     class: "pp-builtin"
   };
-  const _hoisted_27$1 = ["title"];
-  const _hoisted_28$1 = { class: "pp-builtin-title" };
-  const _hoisted_29$1 = { class: "pp-builtin-grow" };
-  const _hoisted_30$1 = { class: "pp-builtin-gname" };
-  const _hoisted_31$1 = {
+  const _hoisted_27$2 = ["title"];
+  const _hoisted_28$2 = { class: "pp-builtin-title" };
+  const _hoisted_29$2 = { class: "pp-builtin-grow" };
+  const _hoisted_30$2 = { class: "pp-builtin-gname" };
+  const _hoisted_31$2 = {
     key: 0,
     class: "pp-builtin-gdesc"
   };
-  const _hoisted_32$1 = { class: "pp-builtin-gcount" };
-  const _hoisted_33$1 = ["onClick"];
-  const _hoisted_34$1 = ["onClick"];
-  const _hoisted_35$1 = { class: "pp-builtin-tools" };
-  const _hoisted_36$1 = ["title"];
-  const _hoisted_37$1 = { class: "pp-d-tname" };
-  const _hoisted_38$1 = ["title"];
-  const _hoisted_39$1 = ["checked", "onChange"];
-  const _hoisted_40$1 = {
+  const _hoisted_32$2 = { class: "pp-builtin-gcount" };
+  const _hoisted_33$2 = ["onClick"];
+  const _hoisted_34$2 = ["onClick"];
+  const _hoisted_35$2 = { class: "pp-builtin-tools" };
+  const _hoisted_36$2 = ["title"];
+  const _hoisted_37$2 = { class: "pp-d-tname" };
+  const _hoisted_38$2 = ["title"];
+  const _hoisted_39$2 = ["checked", "onChange"];
+  const _hoisted_40$2 = {
     key: 2,
     class: "pp-loading"
   };
-  const _hoisted_41$1 = {
+  const _hoisted_41$2 = {
     key: 3,
     class: "pp-empty"
   };
-  const _hoisted_42$1 = {
+  const _hoisted_42$2 = {
     key: 4,
     class: "pp-empty"
   };
-  const _hoisted_43$1 = ["onClick"];
-  const _hoisted_44$1 = ["title"];
+  const _hoisted_43$2 = ["onClick"];
+  const _hoisted_44$2 = ["title"];
   const _hoisted_45$1 = ["title"];
   const _hoisted_46$1 = {
     key: 0,
@@ -14875,7 +14959,7 @@
   const _hoisted_77 = ["onClick"];
   const _hoisted_78 = ["onClick"];
   const _hoisted_79 = ["onClick"];
-  const _sfc_main$2 = {
+  const _sfc_main$3 = {
     __name: "PluginPanel",
     setup(__props) {
       const plugins = /* @__PURE__ */ ref([]);
@@ -15198,16 +15282,16 @@
         }
       });
       return (_ctx, _cache) => {
-        return openBlock(), createElementBlock("div", _hoisted_1$2, [
-          createBaseVNode("div", _hoisted_2$2, [
-            createBaseVNode("span", _hoisted_3$2, [
+        return openBlock(), createElementBlock("div", _hoisted_1$3, [
+          createBaseVNode("div", _hoisted_2$3, [
+            createBaseVNode("span", _hoisted_3$3, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 14
               }),
               _cache[9] || (_cache[9] = createTextVNode(" 插件", -1))
             ]),
-            createBaseVNode("div", _hoisted_4$2, [
+            createBaseVNode("div", _hoisted_4$3, [
               createBaseVNode("button", {
                 class: "pp-icon-btn",
                 onClick: refresh,
@@ -15231,7 +15315,7 @@
               ])
             ])
           ]),
-          showNew.value ? (openBlock(), createElementBlock("div", _hoisted_5$2, [
+          showNew.value ? (openBlock(), createElementBlock("div", _hoisted_5$3, [
             _cache[12] || (_cache[12] = createBaseVNode("div", { class: "pp-new-title" }, "新建 JS 动态插件", -1)),
             withDirectives(createBaseVNode("input", {
               "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => newForm.purpose = $event),
@@ -15256,7 +15340,7 @@
             }, null, 512), [
               [vModelText, newForm.client]
             ]),
-            createBaseVNode("div", _hoisted_6$2, [
+            createBaseVNode("div", _hoisted_6$3, [
               withDirectives(createBaseVNode("select", {
                 "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => newForm.language = $event),
                 class: "pp-input pp-lang"
@@ -15267,7 +15351,7 @@
               ])], 512), [
                 [vModelSelect, newForm.language]
               ]),
-              createBaseVNode("label", _hoisted_7$2, [
+              createBaseVNode("label", _hoisted_7$3, [
                 withDirectives(createBaseVNode("input", {
                   type: "checkbox",
                   "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => newForm.run = $event)
@@ -15280,15 +15364,15 @@
                 class: "pp-btn primary",
                 disabled: defining.value || !newForm.purpose || !newForm.code,
                 onClick: doDefine
-              }, toDisplayString(defining.value ? "定义中…" : "定义"), 9, _hoisted_8$2)
+              }, toDisplayString(defining.value ? "定义中…" : "定义"), 9, _hoisted_8$3)
             ]),
             newMsg.value ? (openBlock(), createElementBlock("div", {
               key: 0,
               class: normalizeClass(["pp-new-msg", { err: newMsgErr.value }])
             }, toDisplayString(newMsg.value), 3)) : createCommentVNode("", true)
           ])) : createCommentVNode("", true),
-          unref(clientPanels).length > 0 ? (openBlock(), createElementBlock("div", _hoisted_9$2, [
-            createBaseVNode("div", _hoisted_10$2, [
+          unref(clientPanels).length > 0 ? (openBlock(), createElementBlock("div", _hoisted_9$3, [
+            createBaseVNode("div", _hoisted_10$3, [
               (openBlock(true), createElementBlock(Fragment, null, renderList(unref(clientPanels), (p2) => {
                 return openBlock(), createElementBlock("div", {
                   key: p2.id,
@@ -15299,8 +15383,8 @@
                     name: p2.icon || "sparkles",
                     size: 12
                   }, null, 8, ["name"]),
-                  createBaseVNode("span", _hoisted_12$2, toDisplayString(p2.title), 1)
-                ], 10, _hoisted_11$2);
+                  createBaseVNode("span", _hoisted_12$3, toDisplayString(p2.title), 1)
+                ], 10, _hoisted_11$3);
               }), 128))
             ]),
             createBaseVNode("div", {
@@ -15309,14 +15393,14 @@
               class: "pp-client-body"
             }, null, 512)
           ])) : createCommentVNode("", true),
-          slotGroups.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_13$2, [
+          slotGroups.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_13$3, [
             createBaseVNode("div", {
               class: "pp-slots-head",
               onClick: _cache[6] || (_cache[6] = ($event) => slotsOpen.value = !slotsOpen.value),
               title: slotsOpen.value ? "点击收起 UI 槽位列表" : "点击展开 UI 槽位列表",
               style: { "cursor": "pointer" }
             }, [
-              createBaseVNode("span", _hoisted_15$2, [
+              createBaseVNode("span", _hoisted_15$3, [
                 createVNode(SvgIcon, {
                   name: "layers",
                   size: 13
@@ -15329,7 +15413,7 @@
                 size: 11,
                 class: normalizeClass(["pp-chevron", { open: slotsOpen.value }])
               }, null, 8, ["class"])
-            ], 8, _hoisted_14$2),
+            ], 8, _hoisted_14$3),
             slotsOpen.value ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(slotGroups.value, (g) => {
               return openBlock(), createElementBlock("div", {
                 key: g.slotId + "::" + g.kind,
@@ -15374,20 +15458,20 @@
                       createBaseVNode("span", null, toDisplayString(c.pluginName) + " · " + toDisplayString(c.title), 1)
                     ]);
                   }), 128)),
-                  !g.candidates.length ? (openBlock(), createElementBlock("span", _hoisted_24$1, "（无叠加条目）")) : createCommentVNode("", true)
+                  !g.candidates.length ? (openBlock(), createElementBlock("span", _hoisted_24$2, "（无叠加条目）")) : createCommentVNode("", true)
                 ]))
               ]);
             }), 128)) : createCommentVNode("", true)
           ])) : createCommentVNode("", true),
-          createBaseVNode("div", _hoisted_25$1, [
-            builtinGroups.value.length ? (openBlock(), createElementBlock("div", _hoisted_26$1, [
+          createBaseVNode("div", _hoisted_25$2, [
+            builtinGroups.value.length ? (openBlock(), createElementBlock("div", _hoisted_26$2, [
               createBaseVNode("div", {
                 class: "pp-builtin-head",
                 onClick: _cache[7] || (_cache[7] = ($event) => builtinOpen.value = !builtinOpen.value),
                 title: builtinOpen.value ? "点击收起内置工具区" : "点击展开内置工具区",
                 style: { "cursor": "pointer" }
               }, [
-                createBaseVNode("span", _hoisted_28$1, [
+                createBaseVNode("span", _hoisted_28$2, [
                   createVNode(SvgIcon, {
                     name: "package",
                     size: 12
@@ -15400,37 +15484,37 @@
                   size: 11,
                   class: normalizeClass(["pp-chevron", { open: builtinOpen.value }])
                 }, null, 8, ["class"])
-              ], 8, _hoisted_27$1),
+              ], 8, _hoisted_27$2),
               builtinOpen.value ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(builtinGroups.value, (g) => {
                 return openBlock(), createElementBlock("div", {
                   key: g.name,
                   class: "pp-builtin-group"
                 }, [
-                  createBaseVNode("div", _hoisted_29$1, [
-                    createBaseVNode("span", _hoisted_30$1, toDisplayString(g.title || g.name), 1),
-                    g.desc ? (openBlock(), createElementBlock("span", _hoisted_31$1, toDisplayString(g.desc), 1)) : createCommentVNode("", true),
-                    createBaseVNode("span", _hoisted_32$1, toDisplayString(g.tools.length) + " 工具", 1),
+                  createBaseVNode("div", _hoisted_29$2, [
+                    createBaseVNode("span", _hoisted_30$2, toDisplayString(g.title || g.name), 1),
+                    g.desc ? (openBlock(), createElementBlock("span", _hoisted_31$2, toDisplayString(g.desc), 1)) : createCommentVNode("", true),
+                    createBaseVNode("span", _hoisted_32$2, toDisplayString(g.tools.length) + " 工具", 1),
                     !g.allOn ? (openBlock(), createElementBlock("button", {
                       key: 1,
                       class: "pp-btn mini",
                       onClick: ($event) => enableBuiltinGroup(g),
                       title: "整组加入通用集合"
-                    }, "整组启用", 8, _hoisted_33$1)) : createCommentVNode("", true),
+                    }, "整组启用", 8, _hoisted_33$2)) : createCommentVNode("", true),
                     g.anyOn ? (openBlock(), createElementBlock("button", {
                       key: 2,
                       class: "pp-btn mini danger",
                       onClick: ($event) => disableBuiltinGroup(g),
                       title: "整组移出通用集合"
-                    }, "整组移出", 8, _hoisted_34$1)) : createCommentVNode("", true)
+                    }, "整组移出", 8, _hoisted_34$2)) : createCommentVNode("", true)
                   ]),
-                  createBaseVNode("div", _hoisted_35$1, [
+                  createBaseVNode("div", _hoisted_35$2, [
                     (openBlock(true), createElementBlock(Fragment, null, renderList(g.tools, (t) => {
                       return openBlock(), createElementBlock("div", {
                         key: t.name,
                         class: "pp-d-tool",
                         title: t.desc
                       }, [
-                        createBaseVNode("span", _hoisted_37$1, toDisplayString(t.name), 1),
+                        createBaseVNode("span", _hoisted_37$2, toDisplayString(t.name), 1),
                         createBaseVNode("label", {
                           class: "pp-switch",
                           title: t.enabled ? "在通用集合中（agent 可用）；点击移出" : "未加入通用集合；点击加入"
@@ -15439,10 +15523,10 @@
                             type: "checkbox",
                             checked: t.enabled,
                             onChange: ($event) => toggleBuiltinTool(t, $event.target.checked)
-                          }, null, 40, _hoisted_39$1),
+                          }, null, 40, _hoisted_39$2),
                           _cache[17] || (_cache[17] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                        ], 8, _hoisted_38$1)
-                      ], 8, _hoisted_36$1);
+                        ], 8, _hoisted_38$2)
+                      ], 8, _hoisted_36$2);
                     }), 128))
                   ])
                 ]);
@@ -15458,14 +15542,14 @@
               }, null, 8, ["name"]),
               createBaseVNode("span", null, toDisplayString(preferMsg.value), 1)
             ], 2)) : createCommentVNode("", true),
-            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_40$1, [
+            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_40$2, [
               createVNode(SvgIcon, {
                 name: "refresh",
                 size: 16,
                 class: "spinner"
               }),
               _cache[18] || (_cache[18] = createBaseVNode("span", null, "加载插件…", -1))
-            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_41$1, [
+            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_41$2, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
@@ -15476,7 +15560,7 @@
                 class: "pp-btn primary",
                 onClick: refresh
               }, "重试")
-            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_42$1, [
+            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_42$2, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
@@ -15500,7 +15584,7 @@
                   createBaseVNode("span", {
                     class: "pp-name",
                     title: p2.purpose || p2.name
-                  }, toDisplayString(p2.name), 9, _hoisted_44$1),
+                  }, toDisplayString(p2.name), 9, _hoisted_44$2),
                   createBaseVNode("span", {
                     class: normalizeClass(["pp-src", p2.source]),
                     title: srcTitle(p2)
@@ -15540,7 +15624,7 @@
                     size: 12,
                     class: normalizeClass(["pp-chevron", { open: expanded[p2.name] }])
                   }, null, 8, ["class"])
-                ], 8, _hoisted_43$1),
+                ], 8, _hoisted_43$2),
                 expanded[p2.name] ? (openBlock(), createElementBlock("div", _hoisted_52$1, [
                   p2.purpose ? (openBlock(), createElementBlock("div", _hoisted_53$1, toDisplayString(p2.purpose), 1)) : createCommentVNode("", true),
                   p2.defId ? (openBlock(), createElementBlock("div", _hoisted_54$1, [
@@ -15664,31 +15748,31 @@
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["__scopeId", "data-v-cd39b7a9"]]);
-  const _hoisted_1$1 = { class: "tp-panel" };
-  const _hoisted_2$1 = { class: "tp-header" };
-  const _hoisted_3$1 = { class: "tp-title" };
-  const _hoisted_4$1 = { class: "tp-actions" };
-  const _hoisted_5$1 = { class: "tp-body" };
-  const _hoisted_6$1 = { class: "tp-list" };
-  const _hoisted_7$1 = {
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["__scopeId", "data-v-08bc13a6"]]);
+  const _hoisted_1$2 = { class: "tp-panel" };
+  const _hoisted_2$2 = { class: "tp-header" };
+  const _hoisted_3$2 = { class: "tp-title" };
+  const _hoisted_4$2 = { class: "tp-actions" };
+  const _hoisted_5$2 = { class: "tp-body" };
+  const _hoisted_6$2 = { class: "tp-list" };
+  const _hoisted_7$2 = {
     key: 0,
     class: "tp-empty"
   };
-  const _hoisted_8$1 = ["onClick"];
-  const _hoisted_9$1 = { class: "tp-item-main" };
-  const _hoisted_10$1 = { class: "tp-item-name" };
-  const _hoisted_11$1 = { class: "tp-item-count" };
-  const _hoisted_12$1 = { class: "tp-item-desc" };
-  const _hoisted_13$1 = {
+  const _hoisted_8$2 = ["onClick"];
+  const _hoisted_9$2 = { class: "tp-item-main" };
+  const _hoisted_10$2 = { class: "tp-item-name" };
+  const _hoisted_11$2 = { class: "tp-item-count" };
+  const _hoisted_12$2 = { class: "tp-item-desc" };
+  const _hoisted_13$2 = {
     key: 1,
     class: "tp-empty"
   };
-  const _hoisted_14$1 = {
+  const _hoisted_14$2 = {
     key: 0,
     class: "tp-detail"
   };
-  const _hoisted_15$1 = { class: "tp-dhead" };
+  const _hoisted_15$2 = { class: "tp-dhead" };
   const _hoisted_16$1 = { class: "tp-dtitle" };
   const _hoisted_17$1 = {
     key: 0,
@@ -15706,51 +15790,51 @@
   const _hoisted_21$1 = { class: "tp-plugins" };
   const _hoisted_22$1 = { class: "tp-section-title" };
   const _hoisted_23$1 = { class: "tp-prow" };
-  const _hoisted_24 = { class: "tp-pname" };
-  const _hoisted_25 = ["onClick"];
-  const _hoisted_26 = {
+  const _hoisted_24$1 = { class: "tp-pname" };
+  const _hoisted_25$1 = ["onClick"];
+  const _hoisted_26$1 = {
     key: 1,
     class: "tp-muted"
   };
-  const _hoisted_27 = {
+  const _hoisted_27$1 = {
     key: 0,
     class: "tp-ppurpose"
   };
-  const _hoisted_28 = {
+  const _hoisted_28$1 = {
     key: 1,
     class: "tp-tools"
   };
-  const _hoisted_29 = ["title", "onClick"];
-  const _hoisted_30 = {
+  const _hoisted_29$1 = ["title", "onClick"];
+  const _hoisted_30$1 = {
     key: 2,
     class: "tp-muted"
   };
-  const _hoisted_31 = {
+  const _hoisted_31$1 = {
     key: 0,
     class: "tp-muted"
   };
-  const _hoisted_32 = {
+  const _hoisted_32$1 = {
     key: 0,
     class: "tp-add"
   };
-  const _hoisted_33 = {
+  const _hoisted_33$1 = {
     key: 1,
     class: "tp-empty tp-side-empty"
   };
-  const _hoisted_34 = { class: "tp-sheet-head" };
-  const _hoisted_35 = { class: "tp-sheet-body" };
-  const _hoisted_36 = { class: "tp-field" };
-  const _hoisted_37 = { class: "tp-field" };
-  const _hoisted_38 = { class: "tp-field" };
-  const _hoisted_39 = {
+  const _hoisted_34$1 = { class: "tp-sheet-head" };
+  const _hoisted_35$1 = { class: "tp-sheet-body" };
+  const _hoisted_36$1 = { class: "tp-field" };
+  const _hoisted_37$1 = { class: "tp-field" };
+  const _hoisted_38$1 = { class: "tp-field" };
+  const _hoisted_39$1 = {
     key: 0,
     class: "tp-hint"
   };
-  const _hoisted_40 = { class: "tp-sheet-actions" };
-  const _hoisted_41 = ["disabled"];
-  const _hoisted_42 = { class: "tp-sheet-head" };
-  const _hoisted_43 = { class: "tp-sheet-body" };
-  const _hoisted_44 = { class: "tp-file-row" };
+  const _hoisted_40$1 = { class: "tp-sheet-actions" };
+  const _hoisted_41$1 = ["disabled"];
+  const _hoisted_42$1 = { class: "tp-sheet-head" };
+  const _hoisted_43$1 = { class: "tp-sheet-body" };
+  const _hoisted_44$1 = { class: "tp-file-row" };
   const _hoisted_45 = {
     key: 0,
     class: "tp-muted"
@@ -15772,7 +15856,7 @@
     key: 0,
     class: "tp-empty"
   };
-  const _sfc_main$1 = {
+  const _sfc_main$2 = {
     __name: "ToolsetPanel",
     setup(__props) {
       const metas = /* @__PURE__ */ ref([]);
@@ -15968,16 +16052,16 @@
         await Promise.all([loadAll(), loadHostPlugins()]);
       });
       return (_ctx, _cache) => {
-        return openBlock(), createElementBlock("div", _hoisted_1$1, [
-          createBaseVNode("div", _hoisted_2$1, [
-            createBaseVNode("span", _hoisted_3$1, [
+        return openBlock(), createElementBlock("div", _hoisted_1$2, [
+          createBaseVNode("div", _hoisted_2$2, [
+            createBaseVNode("span", _hoisted_3$2, [
               createVNode(SvgIcon, {
                 name: "layers",
                 size: 14
               }),
               _cache[20] || (_cache[20] = createTextVNode(" 工具集", -1))
             ]),
-            createBaseVNode("div", _hoisted_4$1, [
+            createBaseVNode("div", _hoisted_4$2, [
               createBaseVNode("button", {
                 class: "tp-icon-btn",
                 onClick: loadAll,
@@ -16011,9 +16095,9 @@
               ])
             ])
           ]),
-          createBaseVNode("div", _hoisted_5$1, [
-            createBaseVNode("div", _hoisted_6$1, [
-              !metas.value.length && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_7$1, [..._cache[21] || (_cache[21] = [
+          createBaseVNode("div", _hoisted_5$2, [
+            createBaseVNode("div", _hoisted_6$2, [
+              !metas.value.length && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_7$2, [..._cache[21] || (_cache[21] = [
                 createTextVNode(" 暂无工具集。", -1),
                 createBaseVNode("br", null, null, -1),
                 createTextVNode("点右上角 + 新建（描述你的项目用途，AI 分析后模板生成插件集）。 ", -1)
@@ -16024,17 +16108,17 @@
                   class: normalizeClass(["tp-item", { active: m.name === selName.value, builtin: m.scope === "builtin" }]),
                   onClick: ($event) => select(m)
                 }, [
-                  createBaseVNode("div", _hoisted_9$1, [
-                    createBaseVNode("span", _hoisted_10$1, toDisplayString(m.name), 1),
-                    createBaseVNode("span", _hoisted_11$1, toDisplayString(m.pluginCount) + " 插件", 1)
+                  createBaseVNode("div", _hoisted_9$2, [
+                    createBaseVNode("span", _hoisted_10$2, toDisplayString(m.name), 1),
+                    createBaseVNode("span", _hoisted_11$2, toDisplayString(m.pluginCount) + " 插件", 1)
                   ]),
-                  createBaseVNode("div", _hoisted_12$1, toDisplayString(m.description || (m.scope === "builtin" ? "内置工具包（core/git/codegraph/…）" : "—")), 1)
-                ], 10, _hoisted_8$1);
+                  createBaseVNode("div", _hoisted_12$2, toDisplayString(m.description || (m.scope === "builtin" ? "内置工具包（core/git/codegraph/…）" : "—")), 1)
+                ], 10, _hoisted_8$2);
               }), 128)),
-              loading.value ? (openBlock(), createElementBlock("div", _hoisted_13$1, "加载中…")) : createCommentVNode("", true)
+              loading.value ? (openBlock(), createElementBlock("div", _hoisted_13$2, "加载中…")) : createCommentVNode("", true)
             ]),
-            detail.value ? (openBlock(), createElementBlock("div", _hoisted_14$1, [
-              createBaseVNode("div", _hoisted_15$1, [
+            detail.value ? (openBlock(), createElementBlock("div", _hoisted_14$2, [
+              createBaseVNode("div", _hoisted_15$2, [
                 createBaseVNode("div", _hoisted_16$1, [
                   createTextVNode(toDisplayString(detail.value.name) + " ", 1),
                   detail.value.scope === "builtin" ? (openBlock(), createElementBlock("span", _hoisted_17$1, "内置")) : (openBlock(), createElementBlock("span", _hoisted_18$1, "工作区"))
@@ -16074,30 +16158,30 @@
                     class: "tp-plugin"
                   }, [
                     createBaseVNode("div", _hoisted_23$1, [
-                      createBaseVNode("span", _hoisted_24, toDisplayString(pl.name), 1),
+                      createBaseVNode("span", _hoisted_24$1, toDisplayString(pl.name), 1),
                       detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("button", {
                         key: 0,
                         class: "tp-btn tiny danger",
                         onClick: ($event) => rmPlugin(pl),
                         title: "从工具集移出（插件定义仍留在宿主）"
-                      }, "移出", 8, _hoisted_25)) : (openBlock(), createElementBlock("span", _hoisted_26, "内置"))
+                      }, "移出", 8, _hoisted_25$1)) : (openBlock(), createElementBlock("span", _hoisted_26$1, "内置"))
                     ]),
-                    pl.purpose ? (openBlock(), createElementBlock("div", _hoisted_27, toDisplayString(pl.purpose), 1)) : createCommentVNode("", true),
-                    pluginToolsOf(pl.name).length ? (openBlock(), createElementBlock("div", _hoisted_28, [
+                    pl.purpose ? (openBlock(), createElementBlock("div", _hoisted_27$1, toDisplayString(pl.purpose), 1)) : createCommentVNode("", true),
+                    pluginToolsOf(pl.name).length ? (openBlock(), createElementBlock("div", _hoisted_28$1, [
                       (openBlock(true), createElementBlock(Fragment, null, renderList(pluginToolsOf(pl.name), (t) => {
                         return openBlock(), createElementBlock("button", {
                           key: t,
                           class: normalizeClass(["tp-tool", { off: isToolDisabled(pl, t) }]),
                           title: isToolDisabled(pl, t) ? "已摘除（对 agent 不可见），点击恢复" : "点击摘除（插件保留、工具不可见）",
                           onClick: ($event) => toggleTool(pl, t)
-                        }, toDisplayString(t), 11, _hoisted_29);
+                        }, toDisplayString(t), 11, _hoisted_29$1);
                       }), 128))
-                    ])) : (openBlock(), createElementBlock("div", _hoisted_30, "（插件未运行或无工具）"))
+                    ])) : (openBlock(), createElementBlock("div", _hoisted_30$1, "（插件未运行或无工具）"))
                   ]);
                 }), 128)),
-                !(detail.value.plugins || []).length ? (openBlock(), createElementBlock("div", _hoisted_31, "空工具集：点下方「添加插件」加入宿主插件")) : createCommentVNode("", true)
+                !(detail.value.plugins || []).length ? (openBlock(), createElementBlock("div", _hoisted_31$1, "空工具集：点下方「添加插件」加入宿主插件")) : createCommentVNode("", true)
               ]),
-              detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("div", _hoisted_32, [
+              detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("div", _hoisted_32$1, [
                 createBaseVNode("button", {
                   class: "tp-btn tp-add-btn",
                   onClick: _cache[2] || (_cache[2] = ($event) => openAddPlugin.value = true)
@@ -16109,7 +16193,7 @@
                   _cache[24] || (_cache[24] = createTextVNode(" 添加插件", -1))
                 ])
               ])) : createCommentVNode("", true)
-            ])) : (openBlock(), createElementBlock("div", _hoisted_33, "选择左侧工具集查看详情"))
+            ])) : (openBlock(), createElementBlock("div", _hoisted_33$1, "选择左侧工具集查看详情"))
           ]),
           (openBlock(), createBlock(Teleport, { to: "body" }, [
             createVNode(Transition, { name: "tp-fade" }, {
@@ -16124,15 +16208,15 @@
                     onClick: _cache[8] || (_cache[8] = withModifiers(() => {
                     }, ["stop"]))
                   }, [
-                    createBaseVNode("div", _hoisted_34, [
+                    createBaseVNode("div", _hoisted_34$1, [
                       _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tp-sheet-title" }, "新建工具集", -1)),
                       createBaseVNode("button", {
                         class: "tp-cancel",
                         onClick: _cache[3] || (_cache[3] = ($event) => openBuild.value = false)
                       }, "取消")
                     ]),
-                    createBaseVNode("div", _hoisted_35, [
-                      createBaseVNode("label", _hoisted_36, [
+                    createBaseVNode("div", _hoisted_35$1, [
+                      createBaseVNode("label", _hoisted_36$1, [
                         _cache[26] || (_cache[26] = createBaseVNode("span", { class: "tp-field-label" }, "名称（小写字母/数字/-/_）", -1)),
                         withDirectives(createBaseVNode("input", {
                           "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => buildForm.name = $event),
@@ -16142,7 +16226,7 @@
                           [vModelText, buildForm.name]
                         ])
                       ]),
-                      createBaseVNode("label", _hoisted_37, [
+                      createBaseVNode("label", _hoisted_37$1, [
                         _cache[27] || (_cache[27] = createBaseVNode("span", { class: "tp-field-label" }, "描述（可选）", -1)),
                         withDirectives(createBaseVNode("input", {
                           "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => buildForm.description = $event),
@@ -16152,7 +16236,7 @@
                           [vModelText, buildForm.description]
                         ])
                       ]),
-                      createBaseVNode("label", _hoisted_38, [
+                      createBaseVNode("label", _hoisted_38$1, [
                         _cache[28] || (_cache[28] = createBaseVNode("span", { class: "tp-field-label" }, "需求说明（可选，AI 分析项目时参考）", -1)),
                         withDirectives(createBaseVNode("textarea", {
                           "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => buildForm.requirement = $event),
@@ -16163,8 +16247,8 @@
                           [vModelText, buildForm.requirement]
                         ])
                       ]),
-                      buildHint.value ? (openBlock(), createElementBlock("label", _hoisted_39, "检测到同名工具集已存在，勾选后覆盖重建（原插件先卸载）")) : createCommentVNode("", true),
-                      createBaseVNode("div", _hoisted_40, [
+                      buildHint.value ? (openBlock(), createElementBlock("label", _hoisted_39$1, "检测到同名工具集已存在，勾选后覆盖重建（原插件先卸载）")) : createCommentVNode("", true),
+                      createBaseVNode("div", _hoisted_40$1, [
                         createBaseVNode("button", {
                           class: "tp-btn",
                           onClick: _cache[7] || (_cache[7] = ($event) => openBuild.value = false)
@@ -16173,7 +16257,7 @@
                           class: "tp-btn primary",
                           disabled: buildBusy.value || !validName(buildForm.name),
                           onClick: doBuild
-                        }, toDisplayString(buildBusy.value ? "构建中…" : "构建并装载"), 9, _hoisted_41)
+                        }, toDisplayString(buildBusy.value ? "构建中…" : "构建并装载"), 9, _hoisted_41$1)
                       ])
                     ])
                   ])
@@ -16195,15 +16279,15 @@
                     onClick: _cache[14] || (_cache[14] = withModifiers(() => {
                     }, ["stop"]))
                   }, [
-                    createBaseVNode("div", _hoisted_42, [
+                    createBaseVNode("div", _hoisted_42$1, [
                       _cache[29] || (_cache[29] = createBaseVNode("span", { class: "tp-sheet-title" }, "导入工具集", -1)),
                       createBaseVNode("button", {
                         class: "tp-cancel",
                         onClick: _cache[10] || (_cache[10] = ($event) => openImport.value = false)
                       }, "取消")
                     ]),
-                    createBaseVNode("div", _hoisted_43, [
-                      createBaseVNode("div", _hoisted_44, [
+                    createBaseVNode("div", _hoisted_43$1, [
+                      createBaseVNode("div", _hoisted_44$1, [
                         createBaseVNode("input", {
                           ref_key: "fileInput",
                           ref: fileInput,
@@ -16320,7 +16404,351 @@
       };
     }
   };
-  const ToolsetPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-19156019"]]);
+  const ToolsetPanel = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["__scopeId", "data-v-d09e78dd"]]);
+  const _hoisted_1$1 = { class: "stats-rail" };
+  const _hoisted_2$1 = { class: "sr-card" };
+  const _hoisted_3$1 = { class: "sr-head" };
+  const _hoisted_4$1 = ["title"];
+  const _hoisted_5$1 = { class: "sr-summary" };
+  const _hoisted_6$1 = { class: "sr-row" };
+  const _hoisted_7$1 = { class: "sr-v" };
+  const _hoisted_8$1 = { class: "sr-row" };
+  const _hoisted_9$1 = { class: "sr-v" };
+  const _hoisted_10$1 = { class: "sr-row" };
+  const _hoisted_11$1 = { class: "sr-v" };
+  const _hoisted_12$1 = { class: "sr-row" };
+  const _hoisted_13$1 = { class: "sr-v sr-v-ok" };
+  const _hoisted_14$1 = { class: "sr-card" };
+  const _hoisted_15$1 = { class: "sr-head" };
+  const _hoisted_16 = { class: "sr-badge" };
+  const _hoisted_17 = { class: "sr-tokens" };
+  const _hoisted_18 = ["title"];
+  const _hoisted_19 = {
+    class: "cache-ring",
+    viewBox: "0 0 48 48",
+    width: "72",
+    height: "72",
+    "aria-hidden": "true"
+  };
+  const _hoisted_20 = ["stroke-dasharray"];
+  const _hoisted_21 = { class: "cache-ring-label" };
+  const _hoisted_22 = { class: "cache-ring-pct" };
+  const _hoisted_23 = { class: "sr-token-detail" };
+  const _hoisted_24 = { class: "sr-row" };
+  const _hoisted_25 = { class: "sr-v" };
+  const _hoisted_26 = { class: "sr-row" };
+  const _hoisted_27 = { class: "sr-v sr-v-ok" };
+  const _hoisted_28 = { class: "sr-row" };
+  const _hoisted_29 = { class: "sr-v" };
+  const _hoisted_30 = { class: "sr-row" };
+  const _hoisted_31 = { class: "sr-v" };
+  const _hoisted_32 = { class: "sr-row sr-token-total" };
+  const _hoisted_33 = { class: "sr-v" };
+  const _hoisted_34 = { class: "sr-card" };
+  const _hoisted_35 = { class: "sr-head" };
+  const _hoisted_36 = ["title"];
+  const _hoisted_37 = {
+    key: 0,
+    class: "sr-bar"
+  };
+  const _hoisted_38 = {
+    key: 1,
+    class: "sr-empty"
+  };
+  const _hoisted_39 = {
+    key: 2,
+    class: "sr-tasks"
+  };
+  const _hoisted_40 = { class: "sr-task-text" };
+  const _hoisted_41 = { class: "sr-card" };
+  const _hoisted_42 = { class: "sr-segbar" };
+  const _hoisted_43 = { class: "sr-note" };
+  const _hoisted_44 = {
+    key: 0,
+    class: "sr-note"
+  };
+  const _sfc_main$1 = {
+    __name: "StatsRail",
+    setup(__props) {
+      const folded = /* @__PURE__ */ ref(false);
+      const tasks = /* @__PURE__ */ ref([]);
+      const run = computed(() => state.runStatsByConv[state.currentConvId] || null);
+      const runTick = /* @__PURE__ */ ref(0);
+      let runTickTimer = null;
+      const runHasData = computed(() => {
+        const r = run.value;
+        return !!(r && r.startAt && (r.steps > 0 || r.toolCalls > 0 || r.llmCalls > 0 || r.completionTokens > 0));
+      });
+      const runElapsedMs = computed(() => {
+        const r = run.value;
+        void runTick.value;
+        if (!r || !r.startAt) return 0;
+        if (r.endAt || !r.running) return r.durationMs || (r.endAt > r.startAt ? r.endAt - r.startAt : 0);
+        return Math.max(0, Date.now() - r.startAt);
+      });
+      const runSummary = computed(() => {
+        const r = run.value;
+        if (!runHasData.value) return "暂无运行记录";
+        const seg = [r.running ? "运行中" : "已完成"];
+        if (runElapsedMs.value >= 1e3) seg.push(fmtDuration(runElapsedMs.value));
+        if (r.tokensPerSecond > 0) seg.push(fmtSpeed(r.tokensPerSecond));
+        return seg.join(" · ");
+      });
+      const runSteps = computed(() => runHasData.value ? run.value.steps : "—");
+      const runToolCalls = computed(() => runHasData.value ? run.value.toolCalls : "—");
+      const runLLMCalls = computed(() => runHasData.value ? run.value.llmCalls : "—");
+      const runSpeed = computed(() => runHasData.value && run.value.tokensPerSecond > 0 ? fmtSpeed(run.value.tokensPerSecond) : "—");
+      onMounted(() => {
+        runTickTimer = setInterval(() => {
+          runTick.value++;
+        }, 1e3);
+      });
+      onUnmounted(() => {
+        if (runTickTimer) clearInterval(runTickTimer);
+      });
+      const EMPTY = {
+        promptTokens: 0,
+        completionTokens: 0,
+        cacheHitTokens: 0,
+        cacheMissTokens: 0,
+        systemTokens: 0,
+        skillsTokens: 0,
+        mcpTokens: 0,
+        toolTokens: 0,
+        historyTokens: 0,
+        otherTokens: 0,
+        contextMaxTokens: 0
+      };
+      const ctx = computed(() => state.convCtxStatsByConv[state.currentConvId] || EMPTY);
+      const ctxMax = computed(() => ctx.value.contextMaxTokens || 0);
+      const ctxUsed = computed(() => ctx.value.promptTokens || 0);
+      const parts = computed(() => {
+        const c = ctx.value;
+        return {
+          prompt: (c.systemTokens || 0) + (c.skillsTokens || 0) + (c.mcpTokens || 0),
+          history: c.historyTokens || 0,
+          tool: c.toolTokens || 0,
+          other: c.otherTokens || 0
+        };
+      });
+      const segs = computed(() => {
+        const p2 = parts.value;
+        const tot = p2.prompt + p2.history + p2.tool + p2.other;
+        if (tot <= 0) return [{ pct: 100, color: "var(--border-color)" }];
+        return [
+          { pct: p2.prompt / tot * 100, color: "var(--accent)" },
+          { pct: p2.history / tot * 100, color: "var(--success, #4FD8A4)" },
+          { pct: p2.tool / tot * 100, color: "var(--warning, #F0C158)" },
+          { pct: p2.other / tot * 100, color: "var(--bg-active)" }
+        ];
+      });
+      const composeText = computed(() => {
+        const p2 = parts.value;
+        return `提示词 ${fmt(p2.prompt)} · 历史 ${fmt(p2.history)} · 工具 ${fmt(p2.tool)} · 其他 ${fmt(p2.other)}`;
+      });
+      const remainTokens = computed(() => Math.max(0, ctxMax.value - ctxUsed.value));
+      const remainPct = computed(() => ctxMax.value > 0 ? Math.round(remainTokens.value / ctxMax.value * 100) : 0);
+      const EMPTY_WS_TOKENS = { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 };
+      const wsStats = computed(() => state.wsTokenStatsByWs[state.workspaceRoot] || EMPTY_WS_TOKENS);
+      const cacheDenom = computed(() => (wsStats.value.cacheHitTokens || 0) + (wsStats.value.cacheMissTokens || 0));
+      const cacheRate = computed(() => cacheDenom.value > 0 ? (wsStats.value.cacheHitTokens / cacheDenom.value * 100).toFixed(1) : "0.0");
+      const cacheRingDash = computed(() => {
+        const circ = 2 * Math.PI * 18;
+        if (cacheDenom.value <= 0) return `0 ${circ}`;
+        const hit = circ * (wsStats.value.cacheHitTokens / cacheDenom.value);
+        return `${hit} ${circ - hit}`;
+      });
+      const doneCount = computed(() => tasks.value.filter((t) => t.status === "completed").length);
+      const donePct = computed(() => tasks.value.length > 0 ? doneCount.value / tasks.value.length * 100 : 0);
+      const statusText = (s) => s === "completed" ? "完成" : s === "in_progress" ? "进行中" : s === "cancelled" ? "已取消" : "待执行";
+      const statusClass = (s) => s === "completed" ? "sr-v-ok" : s === "in_progress" ? "sr-v-run" : "sr-v-dim";
+      async function loadTasks() {
+        const convId = state.currentConvId;
+        if (!convId) {
+          tasks.value = [];
+          return;
+        }
+        try {
+          const data = await api.apiGet("/tasks", { convId });
+          if (state.currentConvId !== convId) return;
+          const list = data && Array.isArray(data.tasks) ? data.tasks : [];
+          tasks.value = list.map((t) => ({ subject: t.subject || t.step || "", status: t.status || "pending" }));
+        } catch (e) {
+          if (state.currentConvId === convId) tasks.value = [];
+        }
+      }
+      onMounted(loadTasks);
+      watch(() => state.currentConvId, loadTasks);
+      function fmt(n) {
+        const v = Number(n) || 0;
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+        if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+        return String(v);
+      }
+      function fmtDuration(ms) {
+        const sec = Math.floor((Number(ms) || 0) / 1e3);
+        if (sec < 60) return sec + "s";
+        const min = Math.floor(sec / 60);
+        if (min < 60) return min + "m " + String(sec % 60).padStart(2, "0") + "s";
+        return Math.floor(min / 60) + "h " + String(min % 60).padStart(2, "0") + "m";
+      }
+      function fmtSpeed(tps) {
+        const v = Number(tps) || 0;
+        return (v >= 100 ? Math.round(v) : v.toFixed(1)) + " t/s";
+      }
+      return (_ctx, _cache) => {
+        return openBlock(), createElementBlock("aside", _hoisted_1$1, [
+          createBaseVNode("section", _hoisted_2$1, [
+            createBaseVNode("div", _hoisted_3$1, [
+              _cache[1] || (_cache[1] = createBaseVNode("span", { class: "sr-title" }, "运行统计", -1)),
+              createBaseVNode("button", {
+                class: "sr-icon-btn",
+                title: folded.value ? "展开明细" : "收起明细",
+                onClick: _cache[0] || (_cache[0] = ($event) => folded.value = !folded.value)
+              }, [
+                createVNode(SvgIcon, {
+                  name: folded.value ? "chevron-down" : "chevron-up",
+                  size: 16
+                }, null, 8, ["name"])
+              ], 8, _hoisted_4$1)
+            ]),
+            createBaseVNode("div", _hoisted_5$1, toDisplayString(runSummary.value), 1),
+            !folded.value ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
+              _cache[6] || (_cache[6] = createBaseVNode("div", { class: "sr-divider" }, null, -1)),
+              createBaseVNode("div", _hoisted_6$1, [
+                _cache[2] || (_cache[2] = createBaseVNode("span", { class: "sr-k" }, "步数", -1)),
+                createBaseVNode("span", _hoisted_7$1, toDisplayString(runSteps.value), 1)
+              ]),
+              createBaseVNode("div", _hoisted_8$1, [
+                _cache[3] || (_cache[3] = createBaseVNode("span", { class: "sr-k" }, "工具调用", -1)),
+                createBaseVNode("span", _hoisted_9$1, toDisplayString(runToolCalls.value), 1)
+              ]),
+              createBaseVNode("div", _hoisted_10$1, [
+                _cache[4] || (_cache[4] = createBaseVNode("span", { class: "sr-k" }, "LLM 调用", -1)),
+                createBaseVNode("span", _hoisted_11$1, toDisplayString(runLLMCalls.value), 1)
+              ]),
+              createBaseVNode("div", _hoisted_12$1, [
+                _cache[5] || (_cache[5] = createBaseVNode("span", { class: "sr-k" }, "输出速度", -1)),
+                createBaseVNode("span", _hoisted_13$1, toDisplayString(runSpeed.value), 1)
+              ])
+            ], 64)) : createCommentVNode("", true)
+          ]),
+          createBaseVNode("section", _hoisted_14$1, [
+            createBaseVNode("div", _hoisted_15$1, [
+              _cache[7] || (_cache[7] = createBaseVNode("span", { class: "sr-title" }, "Token 统计", -1)),
+              createBaseVNode("span", _hoisted_16, "命中 " + toDisplayString(cacheRate.value) + "%", 1)
+            ]),
+            createBaseVNode("div", _hoisted_17, [
+              createBaseVNode("div", {
+                class: "cache-ring-wrap",
+                title: "缓存命中率 " + cacheRate.value + "%（命中 " + fmt(wsStats.value.cacheHitTokens) + " / 未命中 " + fmt(wsStats.value.cacheMissTokens) + "）"
+              }, [
+                (openBlock(), createElementBlock("svg", _hoisted_19, [
+                  _cache[8] || (_cache[8] = createBaseVNode("circle", {
+                    cx: "24",
+                    cy: "24",
+                    r: "18",
+                    fill: "none",
+                    stroke: "var(--border-color)",
+                    "stroke-width": "4"
+                  }, null, -1)),
+                  createBaseVNode("circle", {
+                    cx: "24",
+                    cy: "24",
+                    r: "18",
+                    fill: "none",
+                    stroke: "var(--accent)",
+                    "stroke-width": "4",
+                    "stroke-dasharray": cacheRingDash.value,
+                    "stroke-linecap": "round",
+                    transform: "rotate(-90 24 24)",
+                    style: { "transition": "stroke-dasharray 0.3s" }
+                  }, null, 8, _hoisted_20)
+                ])),
+                createBaseVNode("div", _hoisted_21, [
+                  createBaseVNode("span", _hoisted_22, toDisplayString(cacheRate.value) + "%", 1),
+                  _cache[9] || (_cache[9] = createBaseVNode("span", { class: "cache-ring-text" }, "缓存命中", -1))
+                ])
+              ], 8, _hoisted_18),
+              createBaseVNode("div", _hoisted_23, [
+                createBaseVNode("div", _hoisted_24, [
+                  _cache[10] || (_cache[10] = createBaseVNode("span", { class: "sr-k" }, "输入", -1)),
+                  createBaseVNode("span", _hoisted_25, toDisplayString(fmt(wsStats.value.promptTokens)), 1)
+                ]),
+                createBaseVNode("div", _hoisted_26, [
+                  _cache[11] || (_cache[11] = createBaseVNode("span", { class: "sr-k" }, "● 缓存命中", -1)),
+                  createBaseVNode("span", _hoisted_27, toDisplayString(fmt(wsStats.value.cacheHitTokens)), 1)
+                ]),
+                createBaseVNode("div", _hoisted_28, [
+                  _cache[12] || (_cache[12] = createBaseVNode("span", { class: "sr-k" }, "● 未命中", -1)),
+                  createBaseVNode("span", _hoisted_29, toDisplayString(fmt(wsStats.value.cacheMissTokens)), 1)
+                ]),
+                createBaseVNode("div", _hoisted_30, [
+                  _cache[13] || (_cache[13] = createBaseVNode("span", { class: "sr-k" }, "输出", -1)),
+                  createBaseVNode("span", _hoisted_31, toDisplayString(fmt(wsStats.value.completionTokens)), 1)
+                ]),
+                _cache[15] || (_cache[15] = createBaseVNode("div", { class: "sr-divider" }, null, -1)),
+                createBaseVNode("div", _hoisted_32, [
+                  _cache[14] || (_cache[14] = createBaseVNode("span", { class: "sr-k" }, "总 Token", -1)),
+                  createBaseVNode("span", _hoisted_33, toDisplayString(fmt(wsStats.value.totalTokens)), 1)
+                ])
+              ])
+            ])
+          ]),
+          createBaseVNode("section", _hoisted_34, [
+            createBaseVNode("div", _hoisted_35, [
+              _cache[16] || (_cache[16] = createBaseVNode("span", { class: "sr-title" }, "任务进度", -1)),
+              createBaseVNode("span", {
+                class: "sr-badge",
+                title: "已完成 " + doneCount.value + " 项 / 共 " + tasks.value.length + " 项"
+              }, toDisplayString(doneCount.value) + " / " + toDisplayString(tasks.value.length), 9, _hoisted_36)
+            ]),
+            tasks.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_37, [
+              createBaseVNode("div", {
+                class: "sr-bar-fill",
+                style: normalizeStyle({ width: donePct.value + "%" })
+              }, null, 4)
+            ])) : createCommentVNode("", true),
+            tasks.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_38, "暂无任务")) : (openBlock(), createElementBlock("div", _hoisted_39, [
+              (openBlock(true), createElementBlock(Fragment, null, renderList(tasks.value, (t, i) => {
+                return openBlock(), createElementBlock("div", {
+                  key: i,
+                  class: "sr-task"
+                }, [
+                  createBaseVNode("span", _hoisted_40, toDisplayString(t.subject), 1),
+                  createBaseVNode("span", {
+                    class: normalizeClass(["sr-task-st", statusClass(t.status)])
+                  }, toDisplayString(statusText(t.status)), 3)
+                ]);
+              }), 128))
+            ]))
+          ]),
+          createBaseVNode("section", _hoisted_41, [
+            _cache[17] || (_cache[17] = createBaseVNode("div", { class: "sr-head" }, [
+              createBaseVNode("span", { class: "sr-title" }, "上下文构成")
+            ], -1)),
+            createBaseVNode("div", _hoisted_42, [
+              (openBlock(true), createElementBlock(Fragment, null, renderList(segs.value, (s, i) => {
+                return openBlock(), createElementBlock("span", {
+                  key: i,
+                  class: "sr-seg",
+                  style: normalizeStyle({ width: s.pct + "%", background: s.color })
+                }, null, 4);
+              }), 128))
+            ]),
+            createBaseVNode("div", _hoisted_43, toDisplayString(composeText.value), 1),
+            ctxMax.value > 0 ? (openBlock(), createElementBlock("div", _hoisted_44, "剩余 " + toDisplayString(fmt(remainTokens.value)) + "（" + toDisplayString(remainPct.value) + "%）", 1)) : createCommentVNode("", true)
+          ]),
+          _cache[18] || (_cache[18] = createBaseVNode("div", { class: "sr-filler" }, null, -1)),
+          _cache[19] || (_cache[19] = createBaseVNode("section", { class: "sr-card sr-card-tip" }, [
+            createBaseVNode("div", { class: "sr-tip-main" }, "外观可在「设置 → 外观」调整"),
+            createBaseVNode("div", { class: "sr-tip-sub" }, "主题 / 背景图 / 面板不透明度")
+          ], -1))
+        ]);
+      };
+    }
+  };
+  const StatsRail = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-f8d7be09"]]);
   const _hoisted_1 = {
     key: 0,
     class: "slot-empty plugin-area-titlebar"
@@ -16333,50 +16761,39 @@
     key: 4,
     class: "slot-empty plugin-area-sidebar"
   };
-  const _hoisted_4 = {
-    key: 0,
-    class: "main-tabs"
-  };
-  const _hoisted_5 = ["title", "onClick"];
-  const _hoisted_6 = ["onClick"];
-  const _hoisted_7 = { class: "main-tab-tools" };
-  const _hoisted_8 = ["disabled", "title"];
-  const _hoisted_9 = ["checked", "onChange"];
-  const _hoisted_10 = { class: "view-menu-title" };
-  const _hoisted_11 = { class: "view-menu-src" };
-  const _hoisted_12 = {
-    key: 0,
-    class: "view-menu-empty"
-  };
-  const _hoisted_13 = { class: "view-pane view-pane-chat" };
-  const _hoisted_14 = {
+  const _hoisted_4 = { class: "view-pane view-pane-chat" };
+  const _hoisted_5 = {
     key: 0,
     class: "view-pane"
   };
-  const _hoisted_15 = {
+  const _hoisted_6 = {
     key: 0,
     class: "slot-empty editor-container"
   };
-  const _hoisted_16 = {
+  const _hoisted_7 = {
     key: 1,
     class: "view-pane"
   };
-  const _hoisted_17 = {
+  const _hoisted_8 = {
     key: 2,
     class: "view-pane"
   };
-  const _hoisted_18 = { class: "plugin-slot-host toolsets-container" };
-  const _hoisted_19 = {
+  const _hoisted_9 = { class: "plugin-slot-host toolsets-container" };
+  const _hoisted_10 = {
     key: 6,
+    class: "right-rail-host"
+  };
+  const _hoisted_11 = {
+    key: 7,
     class: "slot-empty app-statusbar-host"
   };
-  const _hoisted_20 = {
-    key: 8,
+  const _hoisted_12 = {
+    key: 9,
     class: "modals-empty"
   };
-  const _hoisted_21 = { class: "plugin-escape-panel" };
-  const _hoisted_22 = { class: "plugin-escape-head" };
-  const _hoisted_23 = { class: "plugin-escape-body" };
+  const _hoisted_13 = { class: "plugin-escape-panel" };
+  const _hoisted_14 = { class: "plugin-escape-head" };
+  const _hoisted_15 = { class: "plugin-escape-body" };
   const _sfc_main = {
     __name: "ShellApp",
     setup(__props) {
@@ -16443,7 +16860,6 @@
         }
       }
       const views = /* @__PURE__ */ ref([]);
-      const viewMenuOpen = /* @__PURE__ */ ref(false);
       const viewHostEls = /* @__PURE__ */ new Map();
       const viewMounts = /* @__PURE__ */ new Map();
       let viewUnsub = null;
@@ -16474,7 +16890,6 @@
         }
       }
       const openViews = computed(() => views.value.filter((v) => v.open));
-      const canSplit = computed(() => mainView.value !== "conversation" || state.panels.splitView);
       const splitActive = computed(() => layout.isSplitActive());
       function setViewHostEl(key, el) {
         if (el) viewHostEls.set(key, el);
@@ -16497,13 +16912,6 @@
           el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">视图「' + v.title + "」挂载失败: " + (e && e.message || e) + "</div>";
         }
       }
-      function onToggleView(v, checked) {
-        if (checked) layout.openViewTab(v.pluginName, v.id, { activate: false });
-        else layout.closeViewTab(v.pluginName, v.id);
-      }
-      function swapSplitSide() {
-        layout.setSplitChatSide(state.panels.splitChatSide === "left" ? "right" : "left");
-      }
       watch(mainView, (v) => {
         if (v === "market" && state.marketTabOpen) nextTick(mountMarketPanel);
         else unmountMarketPanel();
@@ -16515,9 +16923,13 @@
       const gridStyle = computed(() => {
         if (panelMode) return { gridTemplateColumns: "1fr", gridTemplateRows: "1fr" };
         const sidebarW = state.sidebarVisible ? sidebarWidth.value + "px" : "0px";
+        const railW = state.statsRailVisible === false ? "0px" : "288px";
         return {
-          gridTemplateColumns: `48px ${sidebarW} minmax(0, 1fr)`,
-          gridTemplateRows: "30px 1fr 22px"
+          gridTemplateColumns: `48px ${sidebarW} minmax(0, 1fr) ${railW}`,
+          //   注意此处是内联 style，优先级高于 <style> 里的 .app-root 规则 —— 改行高必须改这里，
+          //   否则 CSS 改了也不生效（曾实测 gridTemplateRows 仍为 30px）。
+          // ★ 2026-09-25 对齐设计稿 shell-midnight：底栏 28px（th219 row h=28）。
+          gridTemplateRows: "40px 1fr 28px"
         };
       });
       onMounted(async () => {
@@ -16559,7 +16971,7 @@
             style: normalizeStyle(gridStyle.value)
           }, [
             !unref(panelMode) && !slots.titlebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_1, [
-              _cache[21] || (_cache[21] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
+              _cache[9] || (_cache[9] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[0] || (_cache[0] = ($event) => pluginsOpen.value = true)
@@ -16570,7 +16982,7 @@
               class: "plugin-slot-host plugin-area-titlebar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.activitybar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_2, [
-              _cache[22] || (_cache[22] = createBaseVNode("span", null, "⦿", -1)),
+              _cache[10] || (_cache[10] = createBaseVNode("span", null, "⦿", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[1] || (_cache[1] = ($event) => pluginsOpen.value = true)
@@ -16581,7 +16993,7 @@
               class: "plugin-slot-host plugin-area-activitybar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.sidebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_3, [
-              _cache[23] || (_cache[23] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
+              _cache[11] || (_cache[11] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[2] || (_cache[2] = ($event) => pluginsOpen.value = true)
@@ -16594,121 +17006,18 @@
             createBaseVNode("div", {
               class: normalizeClass(["main-area", { "panel-only": unref(panelMode) }])
             }, [
-              !unref(panelMode) ? (openBlock(), createElementBlock("div", _hoisted_4, [
-                createBaseVNode("button", {
-                  class: normalizeClass(["main-tab", { active: mainView.value === "conversation" }]),
-                  onClick: _cache[3] || (_cache[3] = ($event) => unref(layout).setMainView("conversation"))
-                }, "对话", 2),
-                createBaseVNode("button", {
-                  class: normalizeClass(["main-tab", { active: mainView.value === "editor" }]),
-                  onClick: _cache[5] || (_cache[5] = ($event) => unref(layout).setMainView("editor"))
-                }, [
-                  _cache[24] || (_cache[24] = createTextVNode("编辑器", -1)),
-                  createBaseVNode("span", {
-                    class: "main-tab-close",
-                    title: "关闭",
-                    onClick: _cache[4] || (_cache[4] = withModifiers(($event) => unref(layout).closeEditor(), ["stop"]))
-                  }, "×")
-                ], 2),
-                unref(state).marketTabOpen ? (openBlock(), createElementBlock("button", {
-                  key: 0,
-                  class: normalizeClass(["main-tab", { active: mainView.value === "market" }]),
-                  onClick: _cache[7] || (_cache[7] = ($event) => unref(layout).setMainView("market"))
-                }, [
-                  _cache[25] || (_cache[25] = createTextVNode("市场", -1)),
-                  createBaseVNode("span", {
-                    class: "main-tab-close",
-                    title: "关闭",
-                    onClick: _cache[6] || (_cache[6] = withModifiers(($event) => unref(closeMarketTab)(), ["stop"]))
-                  }, "×")
-                ], 2)) : createCommentVNode("", true),
-                unref(state).toolsetsTabOpen ? (openBlock(), createElementBlock("button", {
-                  key: 1,
-                  class: normalizeClass(["main-tab", { active: mainView.value === "toolsets" }]),
-                  onClick: _cache[9] || (_cache[9] = ($event) => unref(layout).setMainView("toolsets"))
-                }, [
-                  _cache[26] || (_cache[26] = createTextVNode("工具集", -1)),
-                  createBaseVNode("span", {
-                    class: "main-tab-close",
-                    title: "关闭",
-                    onClick: _cache[8] || (_cache[8] = withModifiers(($event) => unref(closeToolsetsTab)(), ["stop"]))
-                  }, "×")
-                ], 2)) : createCommentVNode("", true),
-                (openBlock(true), createElementBlock(Fragment, null, renderList(openViews.value, (v) => {
-                  return openBlock(), createElementBlock("button", {
-                    key: v.key,
-                    class: normalizeClass(["main-tab", { active: mainView.value === v.key }]),
-                    title: v.pluginName,
-                    onClick: ($event) => unref(layout).activateViewTab(v.pluginName, v.id)
-                  }, [
-                    createTextVNode(toDisplayString(v.title), 1),
-                    createBaseVNode("span", {
-                      class: "main-tab-close",
-                      title: "关闭",
-                      onClick: withModifiers(($event) => unref(layout).closeViewTab(v.pluginName, v.id), ["stop"])
-                    }, "×", 8, _hoisted_6)
-                  ], 10, _hoisted_5);
-                }), 128)),
-                createBaseVNode("div", _hoisted_7, [
-                  createBaseVNode("button", {
-                    class: normalizeClass(["main-tab-tool", { active: viewMenuOpen.value }]),
-                    title: "视图列表（插件注册的中间区域视图）",
-                    onClick: _cache[10] || (_cache[10] = withModifiers(($event) => viewMenuOpen.value = !viewMenuOpen.value, ["stop"]))
-                  }, "视图", 2),
-                  createBaseVNode("button", {
-                    class: normalizeClass(["main-tab-tool", { active: splitActive.value }]),
-                    disabled: !canSplit.value,
-                    title: canSplit.value ? splitActive.value ? "取消并排（回到单栏）" : "与对话并排显示" : "对话本身已是当前视图（无需并排）",
-                    onClick: _cache[11] || (_cache[11] = withModifiers(($event) => unref(layout).toggleSplit(), ["stop"]))
-                  }, toDisplayString(splitActive.value ? "取消并排" : "并排对话"), 11, _hoisted_8),
-                  splitActive.value ? (openBlock(), createElementBlock("button", {
-                    key: 0,
-                    class: "main-tab-tool",
-                    title: "切换对话所在侧",
-                    onClick: _cache[12] || (_cache[12] = withModifiers(($event) => swapSplitSide(), ["stop"]))
-                  }, "换边")) : createCommentVNode("", true),
-                  viewMenuOpen.value ? (openBlock(), createElementBlock("div", {
-                    key: 1,
-                    class: "view-menu",
-                    onClick: _cache[13] || (_cache[13] = withModifiers(() => {
-                    }, ["stop"]))
-                  }, [
-                    _cache[27] || (_cache[27] = createBaseVNode("div", { class: "view-menu-head" }, "中间区域视图（插件注册）", -1)),
-                    (openBlock(true), createElementBlock(Fragment, null, renderList(views.value, (v) => {
-                      return openBlock(), createElementBlock("label", {
-                        key: v.key,
-                        class: "view-menu-item"
-                      }, [
-                        createBaseVNode("input", {
-                          type: "checkbox",
-                          checked: v.open,
-                          onChange: ($event) => onToggleView(v, $event.target.checked)
-                        }, null, 40, _hoisted_9),
-                        createBaseVNode("span", _hoisted_10, toDisplayString(v.title), 1),
-                        createBaseVNode("span", _hoisted_11, toDisplayString(v.pluginName), 1)
-                      ]);
-                    }), 128)),
-                    views.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_12, "暂无插件注册视图")) : createCommentVNode("", true)
-                  ])) : createCommentVNode("", true)
-                ])
-              ])) : createCommentVNode("", true),
-              viewMenuOpen.value && !unref(panelMode) ? (openBlock(), createElementBlock("div", {
-                key: 1,
-                class: "view-menu-backdrop",
-                onClick: _cache[14] || (_cache[14] = ($event) => viewMenuOpen.value = false)
-              })) : createCommentVNode("", true),
               createBaseVNode("div", {
                 class: normalizeClass(["main-views", { split: splitActive.value, "split-chat-right": unref(state).panels.splitChatSide === "right" }])
               }, [
-                withDirectives(createBaseVNode("div", _hoisted_13, [
+                withDirectives(createBaseVNode("div", _hoisted_4, [
                   (unref(state).rightPanelVisible || unref(panelMode)) && !slots.conversation.owner.value ? (openBlock(), createElementBlock("div", {
                     key: 0,
                     class: normalizeClass(["slot-empty conversation-container", { "panel-only": unref(panelMode) }])
                   }, [
-                    _cache[28] || (_cache[28] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
+                    _cache[12] || (_cache[12] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
                     createBaseVNode("button", {
                       class: "escape-link",
-                      onClick: _cache[15] || (_cache[15] = ($event) => pluginsOpen.value = true)
+                      onClick: _cache[3] || (_cache[3] = ($event) => pluginsOpen.value = true)
                     }, "打开插件面板")
                   ], 2)) : unref(state).rightPanelVisible || unref(panelMode) ? (openBlock(), createElementBlock("div", {
                     key: 1,
@@ -16718,12 +17027,12 @@
                 ], 512), [
                   [vShow, mainView.value === "conversation" || splitActive.value]
                 ]),
-                !unref(panelMode) ? withDirectives((openBlock(), createElementBlock("div", _hoisted_14, [
-                  !slots.editor.owner.value ? (openBlock(), createElementBlock("div", _hoisted_15, [
-                    _cache[29] || (_cache[29] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
+                !unref(panelMode) ? withDirectives((openBlock(), createElementBlock("div", _hoisted_5, [
+                  !slots.editor.owner.value ? (openBlock(), createElementBlock("div", _hoisted_6, [
+                    _cache[13] || (_cache[13] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
                     createBaseVNode("button", {
                       class: "escape-link",
-                      onClick: _cache[16] || (_cache[16] = ($event) => pluginsOpen.value = true)
+                      onClick: _cache[4] || (_cache[4] = ($event) => pluginsOpen.value = true)
                     }, "打开插件面板")
                   ])) : (openBlock(), createElementBlock("div", {
                     key: 1,
@@ -16733,7 +17042,7 @@
                 ], 512)), [
                   [vShow, mainView.value === "editor"]
                 ]) : createCommentVNode("", true),
-                !unref(panelMode) && unref(state).marketTabOpen ? withDirectives((openBlock(), createElementBlock("div", _hoisted_16, [
+                !unref(panelMode) && unref(state).marketTabOpen ? withDirectives((openBlock(), createElementBlock("div", _hoisted_7, [
                   createBaseVNode("div", {
                     ref_key: "marketHost",
                     ref: marketHost,
@@ -16742,8 +17051,8 @@
                 ], 512)), [
                   [vShow, mainView.value === "market"]
                 ]) : createCommentVNode("", true),
-                !unref(panelMode) && unref(state).toolsetsTabOpen ? withDirectives((openBlock(), createElementBlock("div", _hoisted_17, [
-                  createBaseVNode("div", _hoisted_18, [
+                !unref(panelMode) && unref(state).toolsetsTabOpen ? withDirectives((openBlock(), createElementBlock("div", _hoisted_8, [
+                  createBaseVNode("div", _hoisted_9, [
                     createVNode(ToolsetPanel)
                   ])
                 ], 512)), [
@@ -16761,19 +17070,22 @@
                 }), 128))
               ], 2)
             ], 2),
-            !unref(panelMode) && !slots.statusbar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_19, [
-              _cache[30] || (_cache[30] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
+            !unref(panelMode) && unref(state).statsRailVisible !== false ? (openBlock(), createElementBlock("div", _hoisted_10, [
+              createVNode(StatsRail)
+            ])) : createCommentVNode("", true),
+            !unref(panelMode) && !slots.statusbar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_11, [
+              _cache[14] || (_cache[14] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
-                onClick: _cache[17] || (_cache[17] = ($event) => pluginsOpen.value = true)
+                onClick: _cache[5] || (_cache[5] = ($event) => pluginsOpen.value = true)
               }, "打开插件面板")
             ])) : !unref(panelMode) ? (openBlock(), createElementBlock("div", {
-              key: 7,
+              key: 8,
               ref: slots.statusbar.hostRef,
               class: "plugin-slot-host app-statusbar-host"
             }, null, 512)) : createCommentVNode("", true),
-            !slots.modals.owner.value ? (openBlock(), createElementBlock("div", _hoisted_20)) : (openBlock(), createElementBlock("div", {
-              key: 9,
+            !slots.modals.owner.value ? (openBlock(), createElementBlock("div", _hoisted_12)) : (openBlock(), createElementBlock("div", {
+              key: 10,
               ref: slots.modals.hostRef,
               class: "plugin-slot-host modals-host"
             }, null, 512))
@@ -16783,8 +17095,8 @@
               key: 0,
               class: "plugin-escape-btn",
               title: "插件面板（壳级入口，不受插件停用影响）",
-              onClick: _cache[18] || (_cache[18] = ($event) => pluginsOpen.value = true)
-            }, [..._cache[31] || (_cache[31] = [
+              onClick: _cache[6] || (_cache[6] = ($event) => pluginsOpen.value = true)
+            }, [..._cache[15] || (_cache[15] = [
               createBaseVNode("svg", {
                 viewBox: "0 0 16 16",
                 width: "15",
@@ -16806,18 +17118,18 @@
             pluginsOpen.value ? (openBlock(), createElementBlock("div", {
               key: 1,
               class: "plugin-escape-overlay",
-              onClick: _cache[20] || (_cache[20] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
+              onClick: _cache[8] || (_cache[8] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
             }, [
-              createBaseVNode("div", _hoisted_21, [
-                createBaseVNode("div", _hoisted_22, [
-                  _cache[32] || (_cache[32] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
+              createBaseVNode("div", _hoisted_13, [
+                createBaseVNode("div", _hoisted_14, [
+                  _cache[16] || (_cache[16] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
                   createBaseVNode("button", {
                     class: "plugin-escape-close",
                     title: "关闭",
-                    onClick: _cache[19] || (_cache[19] = ($event) => pluginsOpen.value = false)
+                    onClick: _cache[7] || (_cache[7] = ($event) => pluginsOpen.value = false)
                   }, "✕")
                 ]),
-                createBaseVNode("div", _hoisted_23, [
+                createBaseVNode("div", _hoisted_15, [
                   createVNode(PluginPanel)
                 ])
               ])
@@ -16827,7 +17139,7 @@
       };
     }
   };
-  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-7b7fd08b"]]);
+  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-19660edb"]]);
   window.__PAIRCODE_CORE = {
     Vue,
     api,
@@ -16840,5 +17152,6 @@
     version: "1.0.0"
     // ★ 共享核心契约版本锚（region 包兼容检测）
   };
+  initTheme();
   createApp(ShellApp).mount("#app");
 })();

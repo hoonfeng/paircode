@@ -46,6 +46,28 @@ type Segment struct {
 	//   保留序列化兼容——旧前端/历史数据不受影响）
 	Questions []SegmentQuestion `json:"questions,omitempty"`
 	Answers   []SegmentAnswer   `json:"answers,omitempty"`
+	// ★ 2026-09-25 性能（段级惰性加载）：slim 响应中，折叠态不消费的字段
+	//   （thinking.content / tool_call.argsRaw / tool_call.result）只回前 N 个字符的
+	//   预览，本字段标记「该段有字段被裁断」并记录裁断前**首个被裁字段**的字符数
+	//   （0 = 该段未裁断）→ 前端据此判断「展开时需取全文」，经
+	//   GET /api/conversations/<id>/messages/segment?idx=&seg= 取回该段的全部原始字段。
+	//   ★ 一个 tool_call 段可能 argsRaw 与 result 同时被裁：此时记 argsRaw 的原始字符数
+	//   （argsRaw 先判）。前端只用它判真假（`if (!seg._trunc) return`），故值取自哪个
+	//   字段不影响正确性 —— 取全文时接口返回所有字段的完整值。
+	//   实测（2026-09-25，该会话 limit=50）：2838 段带本标记，其中 argsRaw+result 双裁
+	//   467 段、仅 argsRaw 被裁 381 段、仅 result 被裁 613 段、仅 thinking 被裁 1377 段；
+	//   按「等于任一被裁字段原文长度」校验 2838/2838 全部吻合。
+	//   仅作用于 HTTP 响应，磁盘 JSONL 始终完整（同 Message.Reasoning 的处理原则）。
+	TruncLen int `json:"_trunc,omitempty"`
+	// Err ★ 2026-09-25 性能（tool_call.result 裁断）：result 同样只回预览时，
+	//   工具胶囊的「错误色」判定（前端 /错误|失败|error|Error|✗|Exception/）必须
+	//   按**全文**进行 —— 而前端只看得到预览片段，故由后端在裁断**之前**用全文
+	//   预计算并写入本字段。
+	//   指针语义：nil = result 未被裁断（前端照旧自跑正则，正则看的是完整内容）；
+	//   非 nil = 已裁断，前端必须以此为准。实测（2026-09-25 该会话 limit=50）：
+	//   含错误关键词的 result 有 411 段，其中 **156 段的关键词只落在 400 字符之后**
+	//   → 只留预览会让这 156 段的错误色胶囊误判为成功色。
+	Err *bool `json:"_err,omitempty"`
 }
 
 // StoredMessage JSONL 中的一行。

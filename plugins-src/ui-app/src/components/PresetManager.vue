@@ -282,50 +282,50 @@ defineExpose({ load })
 <style scoped>
 /* 复用 mgm-* 样式前缀保证设置面板整体一致 */
 .pm-manager { font-size: 13px; }
-.mgm-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--bd, #333); }
-.mgm-count { color: var(--txt-dim, #8a8f98); font-size: 12px; }
-.mgm-btn { padding: 4px 10px; border: 1px solid var(--bd, #333); border-radius: 4px; background: transparent; color: var(--txt, #ccc); cursor: pointer; font-size: 12px; }
-.mgm-btn:hover { background: var(--bd-hover, #2a2a2a); }
-.mgm-primary { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
-.mgm-primary:hover { background: var(--accent-hover, #2f6fe0); }
-.mgm-danger { color: #e05555; border-color: #5a3333; }
+.mgm-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--bd); }
+.mgm-count { color: var(--txt-dim); font-size: 12px; }
+.mgm-btn { padding: 4px 10px; border: 1px solid var(--bd); border-radius: 4px; background: transparent; color: var(--txt); cursor: pointer; font-size: 12px; }
+.mgm-btn:hover { background: var(--bd-hover); }
+.mgm-primary { background: var(--accent); border-color: var(--accent); color: var(--color-accent-fg); }
+.mgm-primary:hover { background: var(--accent-hover); }
+.mgm-danger { color: var(--color-danger); border-color: var(--color-danger); }
 .mgm-small { padding: 2px 8px; font-size: 12px; }
-.mgm-edit { border: 1px solid var(--bd, #333); border-radius: 6px; padding: 12px; margin-bottom: 12px; background: var(--bg-2, #1a1a1f); }
+.mgm-edit { border: 1px solid var(--bd); border-radius: 6px; padding: 12px; margin-bottom: 12px; background: var(--bg-2); }
 .mgm-edit-title { font-weight: 600; margin-bottom: 10px; }
 .mgm-field { margin-bottom: 10px; }
-.mgm-field-label { display: block; font-size: 12px; color: var(--txt-dim, #8a8f98); margin-bottom: 6px; }
-.mgm-required { color: #e05555; margin-left: 2px; }
-.mgm-field-hint { display: block; font-size: 11px; color: var(--txt-dim, #8a8f98); margin-top: 4px; }
+.mgm-field-label { display: block; font-size: 12px; color: var(--txt-dim); margin-bottom: 6px; }
+.mgm-required { color: var(--color-danger); margin-left: 2px; }
+.mgm-field-hint { display: block; font-size: 11px; color: var(--txt-dim); margin-top: 4px; }
 /* ★ 用元素选择器（不用 input[type=…] 属性选择器）：模板部分输入框无显式 type 时
    属性选择器匹配不上（CSS 属性选择器只匹配显式属性）→ 输入框丢失全部样式 */
 .mgm-field input, .mgm-field select {
-  width: 100%; padding: 6px 8px; border: 1px solid var(--bd, #333); border-radius: 4px;
-  background: var(--bg, #111); color: var(--txt, #ccc); box-sizing: border-box;
+  width: 100%; padding: 6px 8px; border: 1px solid var(--bd); border-radius: 4px;
+  background: var(--bg); color: var(--txt); box-sizing: border-box;
   font-size: 13px; font-family: inherit;
 }
 .mgm-field select { appearance: auto; }
 .mgm-field input:focus, .mgm-field select:focus {
-  border-color: var(--accent, #3b82f6); outline: none;
+  border-color: var(--accent); outline: none;
 }
 .mgm-edit-actions { display: flex; gap: 8px; }
 
 .mgm-cards { display: flex; flex-direction: column; gap: 8px; }
-.mgm-card { border: 1px solid var(--bd, #333); border-radius: 6px; padding: 10px 12px; }
-.mgm-card.pm-active { border-color: var(--accent, #3b82f6); }
+.mgm-card { border: 1px solid var(--bd); border-radius: 6px; padding: 10px 12px; }
+.mgm-card.pm-active { border-color: var(--accent); }
 .mgm-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .mgm-name { font-weight: 600; }
-.pm-active-badge { margin-left: 8px; font-size: 11px; color: var(--accent, #3b82f6); border: 1px solid var(--accent, #3b82f6); border-radius: 3px; padding: 0 4px; }
+.pm-active-badge { margin-left: 8px; font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 4px; }
 .mgm-ops { display: flex; gap: 6px; }
 .mgm-empty { display: flex; justify-content: center; }
 .mgm-empty-box {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   margin: 18px 0; padding: 26px 24px; max-width: 340px; width: 100%;
-  border: 1px dashed var(--bd, #333); border-radius: 8px; text-align: center;
+  border: 1px dashed var(--bd); border-radius: 8px; text-align: center;
 }
-.mgm-empty-title { font-size: 13px; font-weight: 600; color: var(--txt, #ccc); }
-.mgm-empty-sub { font-size: 12px; color: var(--txt-dim, #8a8f98); line-height: 1.5; }
-.mgm-error { color: #e05555; margin-top: 8px; font-size: 12px; }
-.pm-preview { border: 1px dashed var(--bd, #333); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mgm-empty-title { font-size: 13px; font-weight: 600; color: var(--txt); }
+.mgm-empty-sub { font-size: 12px; color: var(--txt-dim); line-height: 1.5; }
+.mgm-error { color: var(--color-danger); margin-top: 8px; font-size: 12px; }
+.pm-preview { border: 1px dashed var(--bd); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
 .pm-snap-row { display: flex; justify-content: space-between; font-size: 12px; }
-.pm-snap-row span { color: var(--txt-dim, #8a8f98); }
+.pm-snap-row span { color: var(--txt-dim); }
 </style>
