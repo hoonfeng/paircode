@@ -10,11 +10,75 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
-const jsNativeWorkspace = `F:\syproject\gou-ide`
+// jsNativeWorkspace 测试工作区根：磁盘插件（.pair/plugins / plugins-dist）所在目录。
+// ★ 2026-09-24 自动探测（替代写死的原开发机路径——该路径在其他机器上不存在，
+//   导致 JSNative/Landing/Embedded 系列测试整体失败）。解析顺序：
+//  1. 环境变量 PAIR_TEST_WORKSPACE（显式覆盖，CI/自定义环境）
+//  2. 原开发机路径（★ 须真含插件源才采用——实测 F: 上存在历史残留空壳目录
+//     （仅 .pair/assets 与 _temp），仅「目录存在」不足以判定该工作区可用）
+//  3. 自动推断仓库根（本仓库自带 .pair/plugins + plugins-dist，即插件真源）
+//  4. 保底原路径（保留原有报错形态，便于诊断）
+var jsNativeWorkspace = resolveJSNativeWorkspace()
+
+// jsNativeProject 测试用「项目名」：= 工作区 basename。多项目路由解析为
+// ../<project>，传 basename 时归一回工作区自身——测试在任何机器/路径下都
+// 落在工作区内（通过越界守卫），替代原写死的原开发机工作区名 "gou-ide"。
+// 边缘防御：工作区位于盘根等 basename 无效场景时回退中性名（行为确定、
+// 错误可读，不产生 "..//" 畸形路径）。
+var jsNativeProject = normalizeTestProject(filepath.Base(filepath.Clean(jsNativeWorkspace)))
+
+func normalizeTestProject(b string) string {
+	if b == "" || b == "." || b == `\` || b == "/" || strings.HasSuffix(b, ":") {
+		return "jsnative-workspace"
+	}
+	return b
+}
+
+const jsNativeWorkspaceLegacy = `F:\syproject\gou-ide`
+
+func resolveJSNativeWorkspace() string {
+	if v := strings.TrimSpace(os.Getenv("PAIR_TEST_WORKSPACE")); v != "" {
+		return v
+	}
+	if hasPluginSources(jsNativeWorkspaceLegacy) {
+		return jsNativeWorkspaceLegacy
+	}
+	if root := inferRepoRoot(); root != "" {
+		return root
+	}
+	return jsNativeWorkspaceLegacy
+}
+
+// inferRepoRoot 从本测试源文件位置（runtime.Caller）或工作目录推断仓库根，
+// 须含 .pair/plugins 或 plugins-dist（go test 的 cwd 为 <repo>/internal/agent）。
+func inferRepoRoot() string {
+	if _, file, _, ok := runtime.Caller(0); ok && filepath.IsAbs(file) {
+		repo := filepath.Dir(filepath.Dir(filepath.Dir(file))) // <repo>/internal/agent/x_test.go → <repo>
+		if hasPluginSources(repo) {
+			return repo
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		repo := filepath.Dir(filepath.Dir(cwd))
+		if hasPluginSources(repo) {
+			return repo
+		}
+	}
+	return ""
+}
+
+func hasPluginSources(root string) bool {
+	if _, err := os.Stat(filepath.Join(root, ".pair", "plugins")); err == nil {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(root, "plugins-dist"))
+	return err == nil
+}
 
 // loadDiskPluginForTest 读取 .pair/plugins/<name>/index.js 并装载到新 host。
 // 返回 host + registry（注册工具可直接 Execute）。
@@ -113,7 +177,7 @@ func TestToolMemoryJSNative(t *testing.T) {
 		t.Error("op=read 不应需批准")
 	}
 	const name = "jsnative测试条目"
-	out := execJSTool(t, reg, "memory", `{"op":"write","name":"`+name+`","type":"project","description":"JS 原生化验证条目","content":"验证 memory 工具的 JS 实现读写。","project":"gou-ide"}`)
+	out := execJSTool(t, reg, "memory", `{"op":"write","name":"`+name+`","type":"project","description":"JS 原生化验证条目","content":"验证 memory 工具的 JS 实现读写。","project":"`+jsNativeProject+`"}`)
 	if !strings.Contains(out, "已新建记忆") && !strings.Contains(out, "已记忆") {
 		t.Fatalf("memory(op=write) 输出异常: %q", out)
 	}
@@ -139,7 +203,7 @@ func TestToolProjectInfoJSNative(t *testing.T) {
 	}
 	reg.SetToolEnabled("project_info", true)
 	const p = "实现/jsnative验证"
-	out := execJSTool(t, reg, "project_info", `{"op":"write","path":"`+p+`","content":"# JS 原生验证\n\n内容正文。","project":"gou-ide"}`)
+	out := execJSTool(t, reg, "project_info", `{"op":"write","path":"`+p+`","content":"# JS 原生验证\n\n内容正文。","project":"`+jsNativeProject+`"}`)
 	if !strings.Contains(out, "已写入知识库") && !strings.Contains(out, "已更新知识库") {
 		t.Fatalf("project_info(op=write) 输出异常: %q", out)
 	}

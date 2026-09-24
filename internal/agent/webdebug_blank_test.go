@@ -92,6 +92,21 @@ func TestWebDebugLiveIDEPage(t *testing.T) {
 	}
 	_ = conn.Close()
 
+	// ★ 2026-09-24：仅 TCP 可连通不足以认定「IDE 实例在跑」——实测本机 9097
+	//   被 wxbridge.exe 的 HTTP 服务占用（首页 404 text/plain），原判定会继续
+	//   探测后在「文字长度 18 < 100」处误报失败。加强判定：首页须返回
+	//   200 + text/html 才继续；否则跳过（不弱化对真实 IDE 页面的白屏回归检测）。
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Get("http://" + addr + "/")
+	if err != nil {
+		t.Skipf("本地 IDE 测试实例（%s）HTTP 不可用，跳过：%v", addr, err)
+	}
+	status := resp.StatusCode
+	ct := resp.Header.Get("Content-Type")
+	resp.Body.Close()
+	if status != http.StatusOK || !strings.HasPrefix(ct, "text/html") {
+		t.Skipf("本地 %s 服务不是 IDE 页面（HTTP %d, Content-Type: %q），跳过", addr, status, ct)
+	}
+
 	rep, err := webDebugRun(context.Background(), t.TempDir(), "http://"+addr+"/", webDebugOpts{
 		waitMs:    3000,
 		timeoutMs: 60000,
