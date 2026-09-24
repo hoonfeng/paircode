@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -315,7 +316,10 @@ func npmMarketInstall(pkg string) (string, error) {
 	defer os.RemoveAll(dir)
 
 	mainFile := npmPackageMain(manifest)
-	mainPath := filepath.Join(dir, mainFile)
+	mainPath, err := safeJoinUnder(dir, mainFile)
+	if err != nil {
+		return "", fmt.Errorf("包 %s 主入口路径非法（%s）: %v", pkg, mainFile, err)
+	}
 	codeBytes, err := os.ReadFile(mainPath)
 	if err != nil {
 		// 兜底：尝试 index.js
@@ -326,6 +330,30 @@ func npmMarketInstall(pkg string) (string, error) {
 		}
 	}
 	code := string(codeBytes)
+	// ★ 2026-09-18 完整落盘①：读 client 半与 scope（对齐官方发布包白名单
+	//   index.js/client.js/assets/bin；旧逻辑只固化 main→index.js，带 UI 半或
+	//   平台二进制的插件装后缺件——实测 @paircode/tool-art 仅剩 index.js）。
+	//   client 仅接受包根纯文件名（生态约定 client.js），拒绝任何路径穿越。
+	clientCode := ""
+	if cf, ok := manifest["client"].(string); ok {
+		cf = strings.TrimSpace(cf)
+		if cf != "" && filepath.Base(cf) == cf && cf != "." && cf != ".." && !strings.ContainsAny(cf, `/\`) {
+			if cb, rerr := os.ReadFile(filepath.Join(dir, cf)); rerr == nil {
+				clientCode = string(cb)
+			} else {
+				log.Printf("[npm-install] %s client 半读取失败（%s）: %v", pkg, cf, rerr)
+			}
+		} else if cf != "" {
+			log.Printf("[npm-install] %s client 字段非法（%q），跳过 client 半", pkg, cf)
+		}
+	}
+	scope := "project"
+	if sc, ok := manifest["scope"].(string); ok && strings.TrimSpace(sc) == "global" {
+		scope = "global"
+	}
+	if scope != "global" && scope != "project" { // 防御：下游按两态读取
+		scope = "project"
+	}
 	purpose := info.Description
 	if purpose == "" {
 		purpose = "npm cordis 插件 " + pkg
@@ -335,12 +363,22 @@ func npmMarketInstall(pkg string) (string, error) {
 	//   <InstallDir>/.pair/plugins/<name>/（与 cordis(op=define) 固化路径一致，
 	//   重启 LoadGlobalPlugins 自动装配）；不再写 .pair/cordis.patch.json。
 	pluginName := npmPluginDiskName(pkg)
+	// 磁盘落盘名白名单校验：作为 <InstallDir>/.pair/plugins/ 下的目录名，
+	// 必须是单段安全名（拒绝空、"."、".."、路径分隔符——防目录穿越）。
+	if pluginName == "" || pluginName == "." || pluginName == ".." || strings.ContainsAny(pluginName, `/\`) {
+		return "", fmt.Errorf("npm 包名 %q 无法安全落盘（非法目录名）", pkg)
+	}
 
 	// 先装载（成功才固化；防重启后依旧装载失败的状态不一致）
 	ph := GetGlobalPluginHost()
 	var defID string
 	if ph != nil {
-		defID, err = ph.DefineJSCodeDir(code, "js", purpose, dir)
+		// client 半随定义登记（立即装载会话前端即可取内联源码，不等重启）。
+		// DefineJSCodeDir 即 clientCode 空的 DefineJSCodeFull（jsplugin.go 包装），
+		// 此为既有接口的超集升级：仅新增 client 语法预检与登记，装载/回滚语义不变；
+		// clientCode 与 host 半 code 同信任模型（均为包作者的源码文本，非拼接数据），
+		// 无注入面。
+		defID, err = ph.DefineJSCodeFull(code, "js", purpose, dir, clientCode)
 		if err != nil {
 			return "", fmt.Errorf("插件编译失败（可能依赖 node 模块）: %v", err)
 		}
@@ -348,16 +386,20 @@ func npmMarketInstall(pkg string) (string, error) {
 		if def != nil {
 			// 打卸载锚点（新磁盘插件形态无 config.npm；removeNPMPluginDefs 靠它匹配）
 			ph.SetJSDefConfig(defID, "npm", pkg)
+			def.scope = scope // 磁盘包 scope 对齐（重启装配按磁盘包同源读取）
 			if err := ph.LoadJSDynamic(def); err != nil {
 				return "", fmt.Errorf("插件装载失败（可能依赖 node 模块）: %v", err)
 			}
 		}
 	}
 
-	// 固化为磁盘插件包（package.json + index.js，重启自动装配）
+	// 固化为磁盘插件包（package.json + index.js + client.js，重启自动装配）
 	// ★ config.npm 记录 npm 来源与版本（更新机制元数据：checkUpdates 扫描它）
+	// ★ scope 透传（值域 {project, global}，上游已白名单收敛；旧逻辑硬编码
+	//   project 会丢失包声明的 global——UI 类插件跨工作区语义）。manifest 无
+	//   scope 字段时默认 project，与历史安装行为一致（向后兼容）。
 	if err := syncGlobalPlugin(ToolsetPlugin{
-		Name: pluginName, Purpose: purpose, Code: code, Scope: "project",
+		Name: pluginName, Purpose: purpose, Code: code, Client: clientCode, Scope: scope,
 		Config: map[string]any{"npm": map[string]any{"pkg": pkg, "version": info.Version}},
 	}); err != nil {
 		if ph != nil && defID != "" {
@@ -367,6 +409,27 @@ func npmMarketInstall(pkg string) (string, error) {
 		return "", fmt.Errorf("固化插件包 %s 失败: %v", pluginName, err)
 	}
 
+	// ★ 2026-09-24 完整落盘②：assets/bin/README 附加文件写盘入插件包。
+	//   ①（见上方 client/scope 读取校验）只打通了读取环节与 main/client 固化；
+	//   附加文件此前无人落盘——带平台二进制的插件（如 wechat-bridge 的
+	//   bin/wxbridge.exe）装后缺件，运行时按插件目录定位不到。
+	//   安全：目标路径 = globalPluginsDir()（固定系统目录）+ pluginName（上方
+	//   已白名单校验：非空/非"."/".."/无路径分隔符）；copyPluginExtras 内部
+	//   自带目标收敛（绝对路径+非根校验）、Lstat 防 symlink 逃逸、原子换入，
+	//   路径穿越风险已覆盖。失败回滚：磁盘插件包 + 宿主定义一并清理（与上方
+	//   syncGlobalPlugin 失败回滚语义对齐），保证「安装成功 = 完整落盘」，
+	//   防重启装配出现「目录在但残缺」的插件。
+	//   兼容：仅新增落盘调用，不改任何既有 API/package.json 格式。
+	extrasDst := filepath.Join(globalPluginsDir(), pluginName)
+	if err := copyPluginExtras(dir, extrasDst); err != nil {
+		_ = removeGlobalPluginPackage(extrasDst)
+		if ph != nil && defID != "" {
+			_ = ph.Unload(defID)
+			_ = ph.RemoveJSDef(defID)
+		}
+		return "", fmt.Errorf("插件附加文件（assets/bin/README）落盘失败（未安装）: %v", err)
+	}
+
 	msg := fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（插件目录 .pair/plugins/%s/，重启自动装配）", pkg, info.Version, pluginName)
 	if ph == nil {
 		msg += "。已保存。"
@@ -374,6 +437,106 @@ func npmMarketInstall(pkg string) (string, error) {
 		msg += "。已立即装载可用。"
 	}
 	return msg, nil
+}
+
+// safeJoinUnder 拼接 base 下的相对路径并拒绝路径穿越（tarball/manifest 内容安全）：
+// 绝对路径、（任意段）".."、以及拼接后越界 base 的路径一律报错。
+// 允许子目录（如 main="lib/index.js"），但不允许逃出解压根目录。
+func safeJoinUnder(base, rel string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return "", fmt.Errorf("空路径")
+	}
+	if filepath.IsAbs(rel) || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, `\`) {
+		return "", fmt.Errorf("绝对路径不允许: %q", rel)
+	}
+	for _, seg := range strings.FieldsFunc(rel, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg == ".." {
+			return "", fmt.Errorf("路径含 .. 穿越: %q", rel)
+		}
+	}
+	p := filepath.Join(base, filepath.FromSlash(rel))
+	if !strings.HasPrefix(filepath.Clean(p), filepath.Clean(base)+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径越界: %q", rel)
+	}
+	return p, nil
+}
+
+// copyDirAtomic 将 src 目录完整拷贝到 dst（先拷贝到同级临时目录，再整目录换入）：
+// 拷贝失败时目标保持原状（不出现半拷贝），临时目录被清理。
+// Windows 兼容：目录 os.Rename 需目标不存在——换入前先移除旧目标。
+func copyDirAtomic(src, dst string) (err error) {
+	tmp := dst + ".tmp-copy"
+	_ = os.RemoveAll(tmp) // 清理上次残留
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(tmp) // 失败不留临时目录
+		}
+	}()
+	if cerr := copyDir(src, tmp); cerr != nil {
+		return cerr
+	}
+	if rerr := os.RemoveAll(dst); rerr != nil {
+		return rerr
+	}
+	return os.Rename(tmp, dst)
+}
+
+// copyPluginExtras 把 npm 包解压目录中的插件附加文件完整落盘到磁盘插件包：
+// assets/、bin/（目录递归、原子换入）与 README.md（源不存在则跳过——纯 JS 插件
+// 属正常形态，静默兼容旧插件；client.js 由 syncGlobalPlugin 依 Client 参数写入）。
+// 与 scripts/publish-official-plugins.mjs 的打包白名单保持对称（发布↔安装）。
+// 失败语义：仅回滚本函数新增内容（临时目录清理）；已存在的目标目录不被半写破坏。
+func copyPluginExtras(srcDir, dstDir string) error {
+	// 目标路径收敛校验：必须为干净绝对目录（非根），防异常拼接造成越界写。
+	base := filepath.Clean(dstDir)
+	if !filepath.IsAbs(base) || base == filepath.Clean(string(filepath.Separator)) {
+		return fmt.Errorf("插件目录非法: %q", dstDir)
+	}
+	for _, sub := range []string{"assets", "bin"} {
+		src := filepath.Join(srcDir, sub)
+		fi, err := os.Lstat(src) // Lstat：不跟随链接（防链接逃逸写出 base 之外）
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // 无该目录（纯 JS 插件常见）——静默跳过
+			}
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return fmt.Errorf("%s 形态异常（链接/非目录）: %s", sub, src)
+		}
+		// 落点收敛（filepath.Rel 语义判断越界，防 ../ 逃逸）
+		dst := filepath.Join(base, sub)
+		if rel, rerr := filepath.Rel(base, dst); rerr != nil || rel == ".." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, `..\`) {
+			return fmt.Errorf("落点越界: %q", dst)
+		}
+		if cerr := copyDirAtomic(src, dst); cerr != nil {
+			return fmt.Errorf("拷贝 %s/ 失败: %v", sub, cerr)
+		}
+		// bin/ 为可执行产物：Unix 上补可执行位（Windows 无该语义，调用无害——
+		// 仅影响只读位；实际执行以扩展名判定）。
+		if sub == "bin" {
+			_ = filepath.Walk(dst, func(p string, fi os.FileInfo, werr error) error {
+				if werr == nil && !fi.IsDir() {
+					_ = os.Chmod(p, 0o755)
+				}
+				return nil
+			})
+		}
+	}
+	// README.md（npm 自动入包文件；临时文件 + rename 原子写）
+	if b, rerr := os.ReadFile(filepath.Join(srcDir, "README.md")); rerr == nil {
+		dstFile := filepath.Join(dstDir, "README.md")
+		tmpFile := dstFile + ".tmp"
+		if werr := os.WriteFile(tmpFile, b, 0o644); werr != nil {
+			return fmt.Errorf("写入 README.md 失败: %v", werr)
+		}
+		if rerr := os.Rename(tmpFile, dstFile); rerr != nil {
+			_ = os.Remove(tmpFile)
+			return fmt.Errorf("换入 README.md 失败: %v", rerr)
+		}
+	}
+	return nil
 }
 
 // uninstallNPMPlugin 卸载 npm 插件：
