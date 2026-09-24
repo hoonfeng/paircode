@@ -1,7 +1,7 @@
 {
   "name": "tool-harness",
   "purpose": "harness 核心协议工具（read/write/apply_patch/glob/grep/run_code）——文件与工作区工具；执行工具由 tool-exec 承载（2026-09 工具重构；Round5 编辑面统一 apply_patch）",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js"

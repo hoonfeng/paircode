@@ -68,11 +68,19 @@ const ONLY = onlyIdx >= 0 ? args[onlyIdx + 1].split(',').map((s) => s.trim()).fi
 //   背景：tool-voice 是第一个使用 lib/（wav/dsp/ops/verify/…）的插件，此前白名单
 //   只放行 index.js/client.js/assets/bin，会导致发布包缺模块、市场安装后运行即失败。
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'README.md']
+// ★ 2026-09-25 补：顶层主题 CSS 放行。
+//   ui-appearance 的 8 套主题以 theme-<id>.css 存在插件包**顶层**（client.js 注入
+//   /plugins-assets/ui-appearance/theme-<id>.css 加载），此前不在 PUBLISH_FILES 白名单
+//   → 发布包把主题整个丢掉（npm 上 @paircode/ui-appearance@0.1.1 仅 1 个文件，主题
+//   从未下发成功；本地 IDE 直读真源所以掩盖了这个缺陷）。
+//   规则收紧为「theme-<id>.css」精确形态，不放行任意顶层 css（避免开发用样式混入发布包）。
+const PUBLISH_EXTRA_RE = /^theme-[a-z0-9-]+\.css$/
+const isPublishableTop = (name) => PUBLISH_FILES.includes(name) || PUBLISH_EXTRA_RE.test(name)
 function copyDir(src, dst, topLevel = true) {
   fs.mkdirSync(dst, { recursive: true })
   for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
     if (ent.name === 'node_modules' || ent.name === '.git') continue
-    if (topLevel && !PUBLISH_FILES.includes(ent.name)) continue
+    if (topLevel && !isPublishableTop(ent.name)) continue
     const s = path.join(src, ent.name)
     const d = path.join(dst, ent.name)
     if (ent.isDirectory()) copyDir(s, d, false)
@@ -125,7 +133,9 @@ function dirHashSplit(dir) {
   ;(function walk(p, rel) {
     for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
       if (ent.name === 'node_modules' || ent.name === '.git') continue
-      if (rel === '' && !PUBLISH_FILES.includes(ent.name)) continue
+      // ★ 与 copyDir 同一口径（isPublishableTop）：打包放行的文件必须计入指纹，
+      //   否则「主题 CSS 改了」不会被检出 → 源码变化学不到 → 该发的不发。
+      if (rel === '' && !isPublishableTop(ent.name)) continue
       const s = path.join(p, ent.name)
       const r = rel ? path.join(rel, ent.name) : ent.name
       if (ent.isDirectory()) walk(s, r)
@@ -400,18 +410,25 @@ function main() {
       console.log(`  🆕 ${pkgName} 未发布，准备打包${DO_PUBLISH ? '并发布' : '验证'}`)
     }
     try {
-      // 1. 整目录拷贝（保留 index.js/client.js/assets/bin/）
+      // 1. 清空目标快照再拷贝 —— 根治「快照残留污染发布包」：
+      //    真源里被删除/改名的文件（如 ui-statusbar-conn 的 client.js → client.js.disabled）
+      //    若不清理，旧快照文件会被 npm pack 一并打进 tarball（2026-09-25 实测命中）。
+      //    快照目录纯由本脚本生成，清空安全（.npmrc / .content-hashes.json 在 publishDir 层，不受影响）。
+      fs.rmSync(dst, { recursive: true, force: true })
+      // 2. 整目录拷贝（保留 index.js/client.js/assets/bin/）
       copyDir(p.dir, dst)
-      // 2. package.json 改造为 npm 官方包
+      // 3. package.json 改造为 npm 官方包
       const pkg = { ...p.pkg, name: pkgName }
       pkg.description = pkg.purpose || pkg.description || `PairCode 官方插件 ${p.name}`
       delete pkg.purpose
       pkg.keywords = ['paircode']
       pkg.license = pkg.license || 'MIT'
       pkg.publishConfig = { access: 'public' }
-      pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json']
+      // ★ 'theme-*.css' 必须在列：npm publish <dir> 会**再按 files 字段过滤一遍**，
+      //   只改 copyDir 白名单而漏掉这里，主题 CSS 照样进不了 tarball（同 lib/ 的历史坑）。
+      pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'theme-*.css']
       fs.writeFileSync(path.join(dst, 'package.json'), JSON.stringify(pkg, null, 2))
-      // 3. 验证/发布（支持代理：npm --proxy / --https-proxy）
+      // 4. 验证/发布（支持代理：npm --proxy / --https-proxy）
       // ★ stderr 必须 pipe 捕获——否则 npm 真实错误（401/网络/权限）被丢弃，只剩 "Command failed" 外壳
       const cmd = DO_PUBLISH
         ? `npm publish ${path.join(dst, 'package.json').replace(/package\.json$/, '').replace(/\\/g, '/')} --registry=${REGISTRY} --access public --userconfig=${npmrcPath}${OTP ? ` --otp=${OTP}` : ''}${proxyArgs}`
