@@ -1,7 +1,7 @@
 {
   "name": "ui-modals",
   "purpose": "6 个全局模态框 + GlobalDialogs + overlay 叠加挂载",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
