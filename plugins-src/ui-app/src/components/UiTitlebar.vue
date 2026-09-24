@@ -2,7 +2,7 @@
   <!-- ═══ 顶栏（设计稿 shell-midnight th206 / th199）══════════════════════════
        整条 grid-row:1 全宽 40px，bg=surface，pad=space.sm(8)：
          th182 [icon accent 18] + 「PairCode」(fg sm 600)
-         th198 [「对话」(选中) 「编辑器」「设计」「市场」]  ← 4 个导航胶囊，h=24 r=full
+         th198 [「对话」(选中) 「编辑器」「设计」「市场」]  ← 导航胶囊组，h=24 r=full
          左段 = [品牌] │ 「帮助」菜单；右段 = 插件叠加槽位 titlebar-right
        ★ 2026-09-25 按设计稿重建：移除旧 main-tabs（8 个 tab + 视图/并排工具），
          导航胶囊收敛为设计稿的 4 项；其余视图（工具集/画板/3D/音乐…）改由活动栏图标进入。
@@ -29,7 +29,7 @@
       <MenuBar />
     </div>
 
-    <!-- ── 中右：4 个导航胶囊（点击切主区视图）── -->
+    <!-- ── 中右：导航胶囊（内置对话/编辑器/市场 + 插件注册视图，点击切主区视图）── -->
     <nav class="tb-nav">
       <button v-for="n in navs" :key="n.key" class="tb-nav-pill"
               :class="{ active: isNavActive(n) }" :title="n.title"
@@ -60,10 +60,13 @@
 //   ★ 2026-09-24（用户指令）：th188 项目/分支胶囊（与底栏重复）与 th205 右上 4 图标
 //     均已移除；「帮助」菜单（MenuBar）回归顶栏。
 //   ★ 2026-09-25（本轮用户指令）：帮助菜单由右段移到左段（品牌之后）。
+//   ★ 2026-09-25（本轮用户指令）：导航胶囊改为**按插件自动注册** —— 除内置
+//     「对话/编辑器/市场」三项外，每一项都来自插件的 ui.registerView 注册表
+//     （clientViews），插件装载/卸载 → 胶囊自动增删（详见下方 navs）。
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { state, layout, showSettings } from '../ui-state.js'
 import MenuBar from './MenuBar.vue'
-import { clientViews, mountListSlot } from '../plugin-runtime.js'
+import { clientViews, setViewMount, mountListSlot } from '../plugin-runtime.js'
 import { switchActivity } from '../app-actions.js'
 import api from '../api.js'
 import logoUrl from '../assets/logo.svg'
@@ -71,34 +74,54 @@ import logoUrl from '../assets/logo.svg'
 // titlebar-right 槽位宿主（右段）：插件入口渲染目标 + 退订句柄
 const tbRightEl = ref(null)
 let tbRightUnsub = null
+let navSubUnsub = null   // 视图注册表订阅退订句柄（胶囊自动增删）
 
-// ── 4 个导航胶囊（设计稿 th191/193/195/197：对话 / 编辑器 / 设计 / 市场）──
-const navs = [
+// ── 导航胶囊：内置 3 项 + 插件注册视图（动态，2026-09-25 用户指令）──────────
+//   设计稿 th191/193/195/197 只给了 4 个胶囊（对话/编辑器/设计/市场），此前实现
+//   把它们写死，并**单独猜名**认领「设计」一个插件视图（title/id 命中即算）。
+//   问题：插件不止「设计」一个 —— 六域（画板/设计/3D 模型/音乐/角色/人声）与
+//   autopilot 看板都注册了主区视图，却只有「设计」在标题栏有入口，其余只能去
+//   主区 tab 栏/视图菜单里找，可发现性差且每加一个插件都要改壳代码。
+//   现方案：胶囊 = 内置「对话/编辑器」+ **全部** registerView 注册视图 + 内置「市场」，
+//   数据源是 plugin-runtime 的 clientViews（跨 bundle 共享的同一数组）。
+//     · 刷新：setViewMount(订阅) → 插件注册/卸载视图时 emitViewChanged → viewTick++；
+//     · 顺序：注册表已按 order 排序（六域 10..60、autopilot 90、默认 100），
+//       插件视图排在「编辑器」与「市场」之间，与设计稿四项的相对次序一致；
+//     · 点击：layout.openViewTab(pluginName, id)（未打开则打开并激活，与主区 tab
+//       栏、视图菜单同源，状态存 plugin-runtime 的 viewOpen:* 持久化）。
+const viewTick = ref(0)   // 注册表版本号：computed 依赖它才能在插件增删时重算
+
+const pluginNavs = computed(() => {
+  viewTick.value   // 显式读一次建立依赖（clientViews 是普通数组，本身非响应式）
+  return (clientViews || []).map(v => ({
+    key: layout.viewTabKey(v.pluginName, v.id),   // 'view:<插件名>:<视图 id>'
+    label: v.title,
+    title: '插件视图 · ' + v.pluginName,
+    pluginName: v.pluginName,
+    id: v.id,
+  }))
+})
+
+const navs = computed(() => [
   { key: 'conversation', label: '对话', title: '对话主视图' },
   { key: 'editor', label: '编辑器', title: '代码编辑器' },
-  { key: 'design', label: '设计', title: '设计画板视图' },
+  ...pluginNavs.value,
   { key: 'market', label: '市场', title: '插件市场' },
-]
-
-// 设计视图来自插件注册表（registerView）：title/id 命中「设计」即认领该胶囊
-const designView = computed(() =>
-  (clientViews || []).find(v => v && (v.title === '设计' || v.id === 'design' || v.id === 'art')) || null)
+])
 
 const mainTab = computed(() => state.panels.mainTab)
 
 function isNavActive(n) {
-  if (n.key === 'design') {
-    const v = designView.value
-    return !!v && mainTab.value === layout.viewTabKey(v.pluginName, v.id)
-  }
+  // 插件视图的 key 就是 viewTabKey（'view:<插件名>:<id>'），与 mainTab 同一取值
+  // 空间 → 内置项与插件项可统一比较（mainTab 是主视图单一事实源）。
   return mainTab.value === n.key
 }
 
 function onNav(n) {
-  if (n.key === 'design') {
-    const v = designView.value
-    if (!v) { window.$toast && window.$toast('设计视图未注册（插件未装配）', 'info'); return }
-    layout.openViewTab(v.pluginName, v.id)   // 未打开则后台打开再激活
+  if (n.pluginName && n.id) {
+    // 插件视图：未打开则打开并激活（activate 默认 true）。插件被卸载后该胶囊随
+    // 注册表消失，故此处无需再判空；仍保留注册表项时 openViewTab 必能命中。
+    layout.openViewTab(n.pluginName, n.id)
     return
   }
   if (n.key === 'market') { state.marketTabOpen = true; layout.setMainView('market'); return }
@@ -131,9 +154,14 @@ function showHelp() {
 //   list 占用者渲染 —— 故**同一 slotId 只能有一处宿主**，与 StatusBar 不得并存（会重复渲染）。
 onMounted(() => {
   tbRightUnsub = mountListSlot(tbRightEl, 'titlebar-right')
+  // ★ 视图注册表订阅（registerView）：插件注册/卸载视图 → pluginNavs 重算。
+  //   setViewMount 为多订阅者（ShellApp 的视图 tab 栏亦订阅同一事件），
+  //   返回退订函数；此处无需初始回调 —— 首帧渲染时 computed 直接读注册表现状。
+  navSubUnsub = setViewMount(() => { viewTick.value++ })
 })
 onUnmounted(() => {
   if (tbRightUnsub) { tbRightUnsub(); tbRightUnsub = null }
+  if (navSubUnsub) { navSubUnsub(); navSubUnsub = null }
 })
 </script>
 
@@ -170,9 +198,18 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 4px;
   position: absolute; left: 50%; transform: translateX(-50%);
   flex: 0 0 auto; -webkit-app-region: no-drag;
+  /* ★ 2026-09-25（动态 tag）：胶囊数 = 内置 3 + 每个插件注册视图 1（插件可增删，
+     六域 + autopilot 已达 7 个）→ 限宽 + 横向滚动兜底，避免绝对居中的胶囊组
+     压住左段（品牌/帮助菜单）与右段（titlebar-right 插件槽位）。
+     滚动条隐藏：顶栏内出现横向滚动条会撑高整条顶栏、视觉跳动。 */
+  max-width: min(60vw, 760px);
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
 }
+.tb-nav::-webkit-scrollbar { display: none; }
 .tb-nav-pill {
   display: inline-flex; align-items: center;
+  flex: 0 0 auto; white-space: nowrap;   /* 滚动容器内不被压缩、文字不换行 */
   height: 24px; padding: 0 10px; border-radius: 999px;
   border: none; background: none; cursor: pointer;
   font-size: 11px; font-weight: 600; color: var(--text-muted);
