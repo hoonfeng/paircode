@@ -3,9 +3,12 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 )
 
 // ProviderEntry 一个服务商的信息，含 API 基地址和可用模型列表。
@@ -19,6 +22,13 @@ type ProviderEntry struct {
 	//   BaseURL 此时为「基础地址」（不含协议路径，如 https://api.deepseek.com/v1），
 	//   完整请求端点由内部按协议拼接；兼容旧数据：BaseURL 已含协议路径后缀时直接使用。
 	Protocol string `json:"protocol,omitempty"`
+	// ★ 2026-09-19 生成参数唯一来源（models.json）：
+	//   温度与最大输出此前只存 settings.json（顶层 + modelParams），运行时取的是 settings 值，
+	//   「服务商」面板里配的参数不生效。现改为服务商级默认值存这里，模型级经 ModelParams 覆盖；
+	//   settings.json 同名字段不再参与运行期取值（一次性迁移见 MigrateParamSettingsToModels）。
+	Temperature string                     `json:"temperature,omitempty"` // 服务商级默认温度（"0"~"2.0"；空=不设）
+	MaxTokens   int                        `json:"maxTokens,omitempty"`   // 服务商级默认最大输出 token（0=不设）
+	ModelParams map[string]ModelParamEntry `json:"modelParams,omitempty"` // 模型级参数（模型名 → 参数；覆盖服务商级）
 }
 
 // ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
@@ -193,6 +203,45 @@ func GetProviderContextMaxToken(provider string) int {
 	return 0
 }
 
+// GetProviderTemperatures 返回各服务商默认温度（前端面板读取用）。
+func GetProviderTemperatures() map[string]string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]string, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.Temperature
+	}
+	return out
+}
+
+// GetProviderMaxTokens 返回各服务商默认最大输出 token（0=未配置）。
+func GetProviderMaxTokens() map[string]int {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]int, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.MaxTokens
+	}
+	return out
+}
+
+// GetProviderModelParams 返回 服务商 → 模型 → 参数（前端面板读取用）。
+// ★ 2026-09-19 生成参数的唯一来源（models.json）；settings.modelParams 仅作迁移来源。
+func GetProviderModelParams() map[string]map[string]ModelParamEntry {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]map[string]ModelParamEntry, len(ModelList))
+	for k, v := range ModelList {
+		if len(v.ModelParams) > 0 {
+			out[k] = v.ModelParams
+		}
+	}
+	return out
+}
+
 // GetProviderAPIKey 返回指定服务商的 API Key（空=未配置）。
 func GetProviderAPIKey(provider string) string {
 	if ModelList == nil {
@@ -292,7 +341,9 @@ func UpdateProviderModels(name string, baseURL string, models []string) error {
 	return SaveModelList()
 }
 
-// RenameProvider 重命名服务商（同时更新 settings 中引用的 provider 名）
+// RenameProvider 重命名服务商（同时更新 AI 配置中引用的 provider 名）。
+// ★ 2026-09-20：引用改在 ai-presets.json 里更新——连接信息唯一来源是 AI 配置，
+// settings.Provider 已退出核心（见 settings_connection.go），此前只改它等于没改。
 func RenameProvider(oldName, newName string) error {
 	if ModelList == nil {
 		LoadModelList()
@@ -309,11 +360,10 @@ func RenameProvider(oldName, newName string) error {
 	}
 	delete(ModelList, oldName)
 	ModelList[newName] = entry
-	// 更新 settings 中的 provider 引用
-	if Settings.Provider == oldName {
-		Settings.Provider = newName
+	// 更新 AI 配置中的 provider 引用（改名后配置仍指向有效服务商）
+	if n := RenamePresetProvider(oldName, newName); n > 0 {
+		log.Printf("[config] 服务商改名 %q → %q：已同步 %d 条 AI 配置", oldName, newName, n)
 	}
-	Save()
 	return SaveModelList()
 }
 
@@ -335,4 +385,79 @@ func WriteDefaultModels() error {
 func EnsureModelList() {
 	WriteDefaultModels()
 	LoadModelList()
+}
+
+// MigrateParamSettingsToModels 把 settings.json 里的生成参数（温度/最大输出/上下文窗口）一次性
+// 迁移进 models.json（模型级 + 服务商级），使「服务商配置」成为这三个参数的唯一来源。
+//
+// ★ 2026-09-19 缺陷修复：此前这三个参数只存 settings.json——温度/最大输出存在顶层与 modelParams
+// （模型级），上下文窗口在运行期直接取 settings 顶层值（web 层压缩/交接/Loop 装配），
+// models.json 里的服务商级配置不生效（装配结果无人消费）。现改为取值一律以 models.json 为准
+// （模型级 > 服务商级），settings 同名字段保留但不再参与取值。
+//
+// 迁移策略（幂等；标记文件 config/.params-migrated，迁过即跳过）：
+//   - settings.modelParams[服务商][模型] → models.json 该服务商的 modelParams[模型]（已有值不覆盖）
+//   - settings 顶层 temperature/maxTokens/contextMaxTokens → 当前服务商的服务商级字段
+//     （仅当非内置默认值、且目标字段空缺时填充）
+func MigrateParamSettingsToModels() {
+	marker := filepath.Join(ConfigDir(), ".params-migrated")
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+	if ModelList == nil {
+		LoadModelList()
+	}
+	def := Default()
+	changed := false
+
+	// ① 模型级参数：settings.modelParams → 服务商 modelParams（同名模型已有配置则不覆盖）
+	for prov, byModel := range Settings.ModelParams {
+		entry, ok := ModelList[prov]
+		if !ok || len(byModel) == 0 {
+			continue
+		}
+		if entry.ModelParams == nil {
+			entry.ModelParams = make(map[string]ModelParamEntry, len(byModel))
+		}
+		for m, mp := range byModel {
+			if strings.TrimSpace(m) == "" {
+				continue
+			}
+			if _, exists := entry.ModelParams[m]; exists {
+				continue
+			}
+			if mp == (ModelParamEntry{}) {
+				continue
+			}
+			entry.ModelParams[m] = mp
+			changed = true
+		}
+		ModelList[prov] = entry
+	}
+
+	// ② 服务商级默认：settings 顶层值 → 当前服务商（仅非默认值、且目标字段空缺）
+	if prov := strings.TrimSpace(Settings.Provider); prov != "" {
+		if entry, ok := ModelList[prov]; ok {
+			if entry.Temperature == "" && strings.TrimSpace(Settings.Temperature) != "" && Settings.Temperature != def.Temperature {
+				entry.Temperature = Settings.Temperature
+				changed = true
+			}
+			if entry.MaxTokens == 0 && Settings.MaxTokens > 0 && Settings.MaxTokens != def.MaxTokens {
+				entry.MaxTokens = Settings.MaxTokens
+				changed = true
+			}
+			if entry.ContextMaxTokens == 0 && Settings.ContextMaxTokens > 0 && Settings.ContextMaxTokens != def.ContextMaxTokens {
+				entry.ContextMaxTokens = Settings.ContextMaxTokens
+				changed = true
+			}
+			ModelList[prov] = entry
+		}
+	}
+
+	if changed {
+		if err := SaveModelList(); err == nil {
+			log.Printf("[config] 已把 settings.json 的生成参数（温度/最大输出/上下文窗口）迁移进 models.json（此后服务商配置为准）")
+		}
+	}
+	_ = os.WriteFile(marker, []byte(time.Now().Format(time.RFC3339)+"\n"), 0o644)
 }

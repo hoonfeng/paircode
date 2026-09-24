@@ -527,10 +527,12 @@ export function processAgentEvent(convId, data) {
     return
   } else if (data.type === 'usage' && data.usage) {
     const u = data.usage
-    // ★ 运行统计一律由后端累计（GET /api/conversations/{id}/run-stats，前端只拉取渲染）。
-    //   此前「后端权威改造」后残留的本地累加代码引用了未定义变量 runStat——
-    //   每条 usage 事件都抛 ReferenceError 并中断本分支后续的 convCtxStats 更新
-    //   （2026-09-17 修复：删除残留）。
+    // ★ 2026-09-21 修复：此处原有前端本地累加（runStat.promptTokens += … / runStat.llmCalls++），
+    //   但运行统计已改为「后端唯一真源」（见本文件 getRunStat/fetchRunStats 段注释：
+    //   前端本地累加与 localStorage 持久化已删除）→ 变量 runStat 不复存在，
+    //   每次 usage 事件都抛 ReferenceError: runStat is not defined，中断该事件后续处理。
+    //   本地累加不再需要：token 用量由后端埋点累加，前端经
+    //   GET /api/conversations/{id}/run-stats 拉取（beginRun/endRun/运行中轮询）。
     // wsTokenStats 从 API /api/tokens/stats 加载（工作区级累积），不被 per-call 值覆盖
     // 仅当前对话才更新 convCtxStats（避免跨对话串扰）
     if (isCurrent) {

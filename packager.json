@@ -1,5 +1,5 @@
 {
-  "version": "1.6.1",
+  "version": "1.6.6",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -14,6 +14,10 @@
     "targets": "windows/amd64,linux/amd64,darwin/arm64"
   },
   "pipeline": [
+    {
+      "name": "verify-dist-isolation",
+      "command": "node scripts/verify-dist-isolation.mjs"
+    },
     {
       "name": "build-ui-plugins",
       "command": "node scripts/build-ui.mjs"
@@ -129,7 +133,15 @@
         "src": ".pair/plugins",
         "dst": ".pair/plugins",
         "optional": true,
-        "recursive": true
+        "recursive": true,
+        "exclude": [
+          "tool-art",
+          "tool-design",
+          "tool-model",
+          "tool-music",
+          "tool-rig",
+          "tool-voice"
+        ]
       },
       {
         "src": "plugins-src/ui-app",

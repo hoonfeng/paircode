@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -65,5 +66,72 @@ func TestEmbeddedToolRegistryCoverage(t *testing.T) {
 		if _, ok := reg.Get(name); !ok {
 			t.Errorf("内嵌内核应注册 %s", name)
 		}
+	}
+}
+
+// TestEmbeddedToolRegistryFollowsRoot 多工作区「串根」回归（2026-09-17）：
+// 用户实测反馈的「截图不落盘」，根因是内嵌内核注册表曾「首次 root 永久缓存」——
+// 切换工作区/新会话后仍把 screenshot / web_debug / codegraph 的产物写到旧 root。
+// 本测试锁定修复后的不变量：同 root 幂等（同实例）；root 变化或回切 → 重建。
+func TestEmbeddedToolRegistryFollowsRoot(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+
+	ra1 := InitEmbeddedToolRegistry(rootA)
+	ra2 := InitEmbeddedToolRegistry(rootA)
+	if ra1 != ra2 {
+		t.Fatal("同 root 应幂等复用（同实例）")
+	}
+
+	rb := InitEmbeddedToolRegistry(rootB)
+	if rb == ra1 {
+		t.Fatal("root 变化必须重建注册表 —— 否则跨工作区串根（落盘产物写进旧工作区）")
+	}
+
+	// 回切旧工作区同样必须重建（不得沿用 B 的实例，否则又串到 B）
+	ra3 := InitEmbeddedToolRegistry(rootA)
+	if ra3 == rb {
+		t.Fatal("root 回切应重建，不得沿用其他 root 的实例")
+	}
+	// 重建后注册面完整（重建不丢工具）
+	for _, name := range []string{"screenshot_desktop", "web_debug", "inspect_binary", "run_code"} {
+		if _, ok := ra3.Get(name); !ok {
+			t.Errorf("重建后的注册表应仍注册 %s", name)
+		}
+	}
+}
+
+// TestScreenshotLandsInCallingRoot 端到端：截图必须落在「本次调用传入的 root」。
+// ★ 2026-09-17 多工作区串根的真实验收（用户反馈「截图不落盘」）：先用 rootA 初始化
+// （模拟第一个工作区已用过内核），再以 rootB 调用 screenshot_area —— 产物必须出现在
+// rootB/screenshots 下。修复前会落到 rootA/screenshots（新工作区里「看不到文件」）。
+// 无桌面环境（CI）截图失败时跳过（不误报）。
+func TestScreenshotLandsInCallingRoot(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("桌面截图仅 Windows 支持")
+	}
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	InitEmbeddedToolRegistry(rootA) // 模拟：第一个工作区先用过内嵌内核
+
+	text, found, err := callEmbeddedTool(context.Background(), rootB, "screenshot_area", map[string]any{
+		"left": "0", "top": "0", "right": "20", "bottom": "20",
+	})
+	if !found {
+		t.Fatal("screenshot_area 应注册在内嵌内核中")
+	}
+	if err != nil {
+		t.Skipf("无桌面环境（跳过落盘断言）：%v", err)
+	}
+
+	entriesB, _ := os.ReadDir(filepath.Join(rootB, "screenshots"))
+	if len(entriesB) == 0 {
+		t.Fatalf("截图未落在调用方 root（%s/screenshots 为空）——多工作区串根回归！工具输出: %s", rootB, text)
+	}
+	if !strings.Contains(text, rootB) {
+		t.Errorf("工具返回路径应指向调用方 root：%q", text)
+	}
+	if _, err := os.Stat(filepath.Join(rootA, "screenshots")); err == nil {
+		t.Errorf("截图误落入旧工作区 %s/screenshots（串根未修复）", rootA)
 	}
 }

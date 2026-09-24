@@ -71,13 +71,6 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if store := AgentMgr.Store(); store != nil {
-		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
-			if tr := agent.GetTracker(); tr != nil {
-				tr.SetCurrentMsg(req.ConvID, count-1)
-			}
-		}
-	}
 	opts := BuildLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 	opts.ReviewMode = core.Settings.ReviewMode
@@ -171,36 +164,6 @@ func HandleChatFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	AgentMgr.SendFeedback(req.ConvID, req.Content)
 	jsonResp(w, map[string]any{"ok": true})
-}
-
-func HandleChatRollback(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ConvID string `json:"convId"`
-		MsgIdx int    `json:"msgIdx"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "工作区未设置")
-		return
-	}
-	var store agent.ConversationStore
-	if AgentMgr != nil {
-		store = AgentMgr.Store()
-	}
-	if err := agent.RollbackToMsg(root, req.ConvID, req.MsgIdx, store); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	AgentMgr.Stop(req.ConvID)
-	jsonResp(w, map[string]any{"ok": true, "msgIdx": req.MsgIdx})
 }
 
 // ─── 对话列表 ──────────────────────────────────────────────
@@ -487,6 +450,63 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		"providerKeys":     core.GetProviderAPIKeys(),          // ★ 服务商独立 API Key（切服务商自动带出）
 		"providerContexts": core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
 		"providerProtocols": core.GetProviderProtocols(),       // ★ 2026-09-02 服务商 LLM 协议（前端联动下拉）
+		"providerTemperatures": core.GetProviderTemperatures(), // ★ 2026-09-19 服务商级默认温度（models.json = 生成参数唯一来源）
+		"providerMaxTokens":    core.GetProviderMaxTokens(),    // ★ 2026-09-19 服务商级默认最大输出 token
+		"providerModelParams":  core.GetProviderModelParams(),  // ★ 2026-09-19 模型级参数（模型名 → 参数；覆盖服务商级）
+	})
+}
+
+// HandleModelsRename 服务商改名（POST /api/models/rename；body: {"old":"…","new":"…"}）。
+//
+// ★ 2026-09-20 接线：服务商名既是 models.json 的键，也是 ai-presets.json 里 AI 配置的
+// 连接引用（连接信息唯一来源 = AI 配置）。改名必须同时改这两处，否则配置仍指向旧名
+// ——装配时查不到 models.json 条目就丢了地址/协议/参数。core.RenameProvider 早已实现该
+// 语义，但没有任何调用方（前端名称输入框 disabled、也无 API 端点），改名只能「删 + 新增」，
+// 而删除会让引用它的配置在面板上失去模型分组。本端点把这条链路接上。
+//
+// 返回 {ok, renamed, old, new, updatedPresets, presets}：
+//   - renamed=false（old == new）表示同名幂等，未改动任何数据；
+//   - updatedPresets = 被同步改写的 AI 配置名清单（前端可直接告知用户）。
+func HandleModelsRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonErr(w, "仅支持 POST")
+		return
+	}
+	var req struct {
+		Old string `json:"old"`
+		New string `json:"new"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "无效 JSON: "+err.Error())
+		return
+	}
+	oldName := strings.TrimSpace(req.Old)
+	newName := strings.TrimSpace(req.New)
+	if oldName == "" {
+		jsonErr(w, "原服务商名称不能为空")
+		return
+	}
+	if newName == "" {
+		jsonErr(w, "新服务商名称不能为空")
+		return
+	}
+	if oldName == newName {
+		jsonResp(w, map[string]any{
+			"ok": true, "renamed": false, "old": oldName, "new": newName,
+			"updatedPresets": []string{}, "presets": core.GetAiPresets(),
+		})
+		return
+	}
+	// 先统计受影响的 AI 配置（改名后它们就指向新名了，无法再按旧名筛选）
+	affected := core.PresetsReferencing(oldName)
+	if err := core.RenameProvider(oldName, newName); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{
+		"ok": true, "renamed": true, "old": oldName, "new": newName,
+		"updatedPresets": affected,
+		"presets":        core.GetAiPresets(), // 回带最新配置，前端免二次请求
 	})
 }
 

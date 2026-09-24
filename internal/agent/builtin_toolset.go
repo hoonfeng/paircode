@@ -249,7 +249,7 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	//    ★ 2026-08-17：builtin.json 独立机制废除，加入状态就是工具集条目，
 	//      扫描全部工具集收集（default.json 等）。
 	//    ★ 2026-09-04：工具集全局化——扫描全局工具集目录，不再区分工作区。
-	//    ★ 2026-09：快照工具若已有插件归属（tool-harness 等磁盘插件承载），
+	//    ★ 2026-09：工具若已有插件归属（tool-harness 等磁盘插件承载），
 	//      展示时跳过——内置组不再与插件组重复列出同一工具。
 	//      条目 Tools 快照（可见性白名单真相源）原样保留，仅展示层过滤。
 	joinedEntries := map[string][]string{}

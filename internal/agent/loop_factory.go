@@ -75,8 +75,101 @@ func LoopFactoryNow() LoopFactory {
 }
 
 // CreateLoop 走当前全局工厂创建循环句柄（会话/自闭环统一入口）。
+//
+//   - 默认：先按注册顺序应用全部插件装配器（applyLoopAssemblers），再走全局工厂；
+//   - opts.SkipPluginAssembly=true（子 agent 回合）：跳过装配器链——子 agent 由
+//     插件 JS 回调栈内的宿主能力创建（如 autopilot 决策器经 ctx.subagent.run），
+//     此时调用装配器要取所属插件的 VM 锁；若该插件正是当前持锁者即**自死锁**
+//     （goja VM 锁非重入）。子 agent 的装配参数已由宿主显式给出，无需插件装配。
 func CreateLoop(opts LoopOpts) (LoopHandle, error) {
+	if !opts.SkipPluginAssembly {
+		opts = applyLoopAssemblers(opts)
+	}
 	return LoopFactoryNow().Create(opts)
+}
+
+// ── 插件装配器链（LoopAssembler）──────────────────────────────
+
+// LoopAssembler 循环装配器：读插件设置 → 返回覆盖后的装配参数（Go 值语义）。
+//
+// ★ 2026-09-21 语义修正：装配器是**多插件叠加**的（按注册顺序依次应用），不再
+// 沿用旧的「单槽位后注册覆盖」——后者会让后装载插件（如 autopilot）把先装载
+// 插件（如 agentloop：systemAppend / 分段预算 / 审核模式…）的装配参数整体吃掉
+// （实测真 bug：autopilot 装载后 agentloop 的装配全部失效）。
+// 同键（插件名）重复注册 = 替换该项（插件重装载不叠加）。
+type LoopAssembler func(LoopOpts) LoopOpts
+
+type namedLoopAssembler struct {
+	name string
+	fn   LoopAssembler
+}
+
+var (
+	loopAssemblersMu sync.RWMutex
+	loopAssemblers   []namedLoopAssembler
+)
+
+// RegisterLoopAssembler 注册装配器（name = 插件名，同键替换），返回还原函数。
+func RegisterLoopAssembler(name string, fn LoopAssembler) (restore func()) {
+	if fn == nil {
+		return func() {}
+	}
+	loopAssemblersMu.Lock()
+	for i := range loopAssemblers {
+		if loopAssemblers[i].name == name {
+			prev := loopAssemblers[i].fn
+			loopAssemblers[i].fn = fn
+			loopAssemblersMu.Unlock()
+			return func() {
+				loopAssemblersMu.Lock()
+				for j := range loopAssemblers {
+					if loopAssemblers[j].name == name {
+						loopAssemblers[j].fn = prev
+						break
+					}
+				}
+				loopAssemblersMu.Unlock()
+			}
+		}
+	}
+	loopAssemblers = append(loopAssemblers, namedLoopAssembler{name: name, fn: fn})
+	loopAssemblersMu.Unlock()
+	return func() {
+		loopAssemblersMu.Lock()
+		for i := range loopAssemblers {
+			if loopAssemblers[i].name == name {
+				loopAssemblers = append(loopAssemblers[:i], loopAssemblers[i+1:]...)
+				break
+			}
+		}
+		loopAssemblersMu.Unlock()
+	}
+}
+
+// LoopAssemblerNames 当前装配器注册顺序（诊断/测试用）。
+func LoopAssemblerNames() []string {
+	loopAssemblersMu.RLock()
+	defer loopAssemblersMu.RUnlock()
+	out := make([]string, 0, len(loopAssemblers))
+	for _, a := range loopAssemblers {
+		out = append(out, a.name)
+	}
+	return out
+}
+
+// applyLoopAssemblers 按注册顺序应用全部装配器（快照遍历：应用期间的增删不生效于本次）。
+func applyLoopAssemblers(opts LoopOpts) LoopOpts {
+	loopAssemblersMu.RLock()
+	snapshot := make([]namedLoopAssembler, len(loopAssemblers))
+	copy(snapshot, loopAssemblers)
+	loopAssemblersMu.RUnlock()
+	for _, a := range snapshot {
+		if a.fn == nil {
+			continue
+		}
+		opts = a.fn(opts)
+	}
+	return opts
 }
 
 // newLoop 用 LoopOpts 构建 *Loop 内核（从 session_manager/agent 两个创建点提取的
@@ -94,6 +187,7 @@ func newLoop(opts LoopOpts) *Loop {
 		MaxContextTokens:      opts.MaxContextTokens,
 		Compressor:            opts.Compressor,
 		Autonomous:            opts.Autonomous,
+		MaxSuperviseRounds:    opts.MaxSuperviseRounds,
 		maxAutonomousMinutes:  opts.MaxAutonomousMinutes,
 		checkpointInterval:    opts.CheckpointInterval,
 		History:               CopyHistory(opts.History),

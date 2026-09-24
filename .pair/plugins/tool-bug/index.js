@@ -227,7 +227,7 @@ const impls = {
 return {
   name: 'tool-bug',
   inject: ['fs', 'bash'],
-  purpose: 'BUG 检测与修复（bug_detect/bug_analyze/bug_fix）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs/ctx.bash）完全在插件内（Round2 JS 原生化）',
+  purpose: 'BUG 检测与修复（bug_detect/bug_fix）——迁移自内置 Go 工具组；调用实现（JS 编排 ctx.fs/ctx.bash）完全在插件内（Round2 JS 原生化；bug_analyze 已于 Round4 削减）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

@@ -1,0 +1,8 @@
+{
+  "name": "app-update",
+  "purpose": "软件更新设置段（更新源/频道/镜像/自动检查/校验开关）——引擎与 /api/update/* 在 Go 内核",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js"
+}

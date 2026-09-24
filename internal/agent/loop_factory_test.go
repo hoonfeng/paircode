@@ -101,8 +101,9 @@ func TestJSLoopFactoryAssembler(t *testing.T) {
 		t.Fatalf("LoadJSDynamic: %v", err)
 	}
 	// 插件装载后：全局工厂应为 JS 桥（装配器已注册）
-	if _, ok := LoopFactoryNow().(*jsLoopFactoryBridge); !ok {
-		t.Fatalf("注册后工厂 = %T, want *jsLoopFactoryBridge", LoopFactoryNow())
+	// ★ 2026-09-21 装配器链：注册进入装配器链（不再替换全局 LoopFactory 单槽位）。
+	if names := LoopAssemblerNames(); len(names) == 0 {
+		t.Fatalf("注册后装配器链为空，want 含插件 'loop-assembler'，实际=%v", names)
 	}
 
 	// CreateLoop 走 JS 装配器：overrides 生效
@@ -130,6 +131,10 @@ func TestJSLoopFactoryAssembler(t *testing.T) {
 	}
 	if _, ok := LoopFactoryNow().(goLoopFactory); !ok {
 		t.Fatalf("卸载后工厂 = %T, want goLoopFactory（还原默认）", LoopFactoryNow())
+	}
+	// ★ 装配器链：卸载后该项移除（链为空）
+	if names := LoopAssemblerNames(); len(names) != 0 {
+		t.Fatalf("卸载后装配器链 = %v, want 空（已还原）", names)
 	}
 	h2, err := CreateLoop(LoopOpts{ToolCallBudget: 7, System: "plain"})
 	if err != nil {

@@ -72,13 +72,13 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 	//   存档条目同步摘除）；其余孤儿组工具存档保持。
 	for _, name := range []string{"asset_list", "asset_search", "asset_delete",
 		"evolution_status", "progress_checker",
-		"resource_list", "list_snapshots", "bridge_status"} {
+		"resource_list", "bridge_status"} {
 		if _, ok := HostToolMeta(name); !ok {
 			t.Fatalf("孤儿工具 %s 未存档为宿主能力", name)
 		}
 	}
 	// ② 未注册进任何 Registry（agent 可见面由插件决定）
-	for _, name := range []string{"asset_list", "progress_checker", "list_snapshots"} {
+	for _, name := range []string{"asset_list", "progress_checker"} {
 		if _, ok := reg.Get(name); ok {
 			t.Fatalf("%s 不应直接注册进宿主 Registry（可见面应由插件决定）", name)
 		}

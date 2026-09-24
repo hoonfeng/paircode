@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/hoonfeng/paircode/goja"
 )
@@ -20,8 +20,12 @@ type jsLoopFactoryBridge struct {
 	plugin *jsPluginAdapter
 }
 
-// Create 实现 LoopFactory：JS 装配 → 参数合并 → 默认工厂。
-func (b *jsLoopFactoryBridge) Create(opts LoopOpts) (LoopHandle, error) {
+// applyAssembly 执行 JS 装配器（持插件 VM 锁）并合并 overrides，返回装配后的参数。
+// 装配器未返回/执行失败 → 原样返回（保持宿主默认装配，不中断会话创建）。
+//
+// ★ 2026-09-21：不再实现 LoopFactory（旧实现经 ReplaceLoopFactory 单槽位替换全局
+// 工厂，会被后注册插件整体覆盖）；现由 loop_factory.go 的装配器链按序调用。
+func (b *jsLoopFactoryBridge) applyAssembly(opts LoopOpts) LoopOpts {
 	snap := b.buildSnapshot(opts)
 	var (
 		ret     goja.Value
@@ -33,13 +37,13 @@ func (b *jsLoopFactoryBridge) Create(opts LoopOpts) (LoopHandle, error) {
 		ret, callErr = v, err
 	})
 	if callErr != nil {
-		return nil, fmt.Errorf("loop 装配器执行失败: %w", callErr)
+		log.Printf("[loop-assembler] 装配器执行失败（保持宿主默认装配）: %v", callErr)
+		return opts
 	}
-	merged := opts
-	if ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
-		merged = b.applyOverrides(opts, ret.ToObject(b.vm))
+	if ret == nil || goja.IsUndefined(ret) || goja.IsNull(ret) {
+		return opts
 	}
-	return goLoopFactory{}.Create(merged)
+	return b.applyOverrides(opts, ret.ToObject(b.vm))
 }
 
 // buildSnapshot 构造 JS 可见的可装配参数快照（内部字段 Provider/Registry/回调等
@@ -56,6 +60,9 @@ func (b *jsLoopFactoryBridge) buildSnapshot(opts LoopOpts) map[string]any {
 		"maxToolBudgetSegments": opts.MaxToolBudgetSegments,
 		"maxContextTokens":      opts.MaxContextTokens,
 		"autonomous":            opts.Autonomous,
+		// ★ 2026-09-21 自主模式（插件化）：监督轮数上限对装配器可见（插件可覆盖；
+		//   0 = 内核默认 DefaultMaxSuperviseRounds，见 autopilot.go）。
+		"maxSuperviseRounds":    opts.MaxSuperviseRounds,
 		"maxAutonomousMinutes":  opts.MaxAutonomousMinutes,
 		"checkpointInterval":    opts.CheckpointInterval,
 		"workspaceRoot":         opts.WorkspaceRoot,
@@ -103,6 +110,7 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 	setInt("maxToolBudgetSegments", &out.MaxToolBudgetSegments)
 	setInt("maxContextTokens", &out.MaxContextTokens)
 	setBool("autonomous", &out.Autonomous)
+	setInt("maxSuperviseRounds", &out.MaxSuperviseRounds)
 	setInt("maxAutonomousMinutes", &out.MaxAutonomousMinutes)
 	setInt("checkpointInterval", &out.CheckpointInterval)
 	setStr("workspaceRoot", &out.WorkspaceRoot)

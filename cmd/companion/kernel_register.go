@@ -31,6 +31,14 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("system.info", "GET", "/api/system/info", "系统信息", s.handleSysInfo)
 	_ = agent.KernelAPIRegister("system.exec", "POST", "/api/system/exec", "执行 shell 命令", s.handleExec)
 
+	// ── 在线更新（GitHub Releases 分发：检查 → 下载 → 校验 → 替换 → 重启）──
+	_ = agent.KernelAPIRegister("update.check", "GET", "/api/update/check", "检查更新（拉取发布清单并比较版本）", s.handleUpdateCheck)
+	_ = agent.KernelAPIRegister("update.status", "GET", "/api/update/status", "更新状态快照（含下载进度）", s.handleUpdateStatus)
+	_ = agent.KernelAPIRegister("update.download", "POST", "/api/update/download", "下载更新包（断点续传 + sha256 校验）", s.handleUpdateDownload)
+	_ = agent.KernelAPIRegister("update.apply", "POST", "/api/update/apply", "应用更新（替换安装目录文件，可 dryRun / 随后重启）", s.handleUpdateApply)
+	_ = agent.KernelAPIRegister("update.cancel", "POST", "/api/update/cancel", "取消进行中的检查/下载", s.handleUpdateCancel)
+	_ = agent.KernelAPIRegister("update.config", "GET", "/api/update/config", "更新生效配置（源/镜像/安装目录）", s.handleUpdateConfig)
+
 	// ── 文件系统 ──
 	_ = agent.KernelAPIRegister("fs.image", "GET", "/api/fs/image", "图片读取（原始字节）", s.handleFSImage)
 
@@ -45,7 +53,6 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("chat.answer", "POST", "/api/chat/answer", "ask_user 回答", s.handleChatAnswer)
 	_ = agent.KernelAPIRegister("chat.approve", "POST", "/api/chat/approve", "审批结果", s.handleChatApprove)
 	_ = agent.KernelAPIRegister("chat.feedback", "POST", "/api/chat/feedback", "运行时反馈", s.handleChatFeedback)
-	_ = agent.KernelAPIRegister("chat.rollback", "POST", "/api/chat/rollback", "回滚到指定消息", s.handleChatRollback)
 	_ = agent.KernelAPIRegister("chat.compact", "POST", "/api/chat/compact", "会话压缩", s.handleChatCompact)
 
 	// ── Slash 命令（Round3 ④.2：ctx.commands 面 HTTP 出口）──
@@ -61,6 +68,7 @@ func registerKernelAPIs(s *webServer) {
 
 	// ── 模型 / 指令 / 思想 ──
 	_ = agent.KernelAPIRegister("models", "GET,POST,PUT", "/api/models", "模型列表读取/全量保存", s.handleModels)
+	_ = agent.KernelAPIRegister("models.rename", "POST", "/api/models/rename", "服务商改名（同步 AI 配置里的 provider 引用）", s.handleModelsRename)
 	_ = agent.KernelAPIRegister("ai-presets", "GET,POST,PUT", "/api/ai-presets", "AI 配置预设：保存/应用/删除/全量（多套配置对话快速切换）", s.handleAiPresets)
 	_ = agent.KernelAPIRegister("instructions", "GET,PUT", "/api/instructions", "指令读取/保存", s.handleInstructions)
 

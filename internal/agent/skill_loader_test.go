@@ -288,6 +288,91 @@ func TestFindSkill(t *testing.T) {
 	}
 }
 
+// TestDedupeSkills_LevelPriority 同名技能层级优先级：project > global > system（★ 2026-09-21 修复）。
+func TestDedupeSkills_LevelPriority(t *testing.T) {
+	in := []Skill{
+		{Name: "dup", Level: LevelSystem, Description: "system 版"},
+		{Name: "keep", Level: LevelSystem, Description: "独立技能"},
+		{Name: "dup", Level: LevelProject, Description: "project 版"},
+		{Name: "dup", Level: LevelGlobal, Description: "global 版"},
+	}
+	out := dedupeSkills(in)
+	if len(out) != 2 {
+		t.Fatalf("同名应去重为 2 条，实际 %d：%+v", len(out), out)
+	}
+	if out[0].Name != "dup" {
+		t.Errorf("应保持首次出现的位置，实际 %s", out[0].Name)
+	}
+	s := FindSkill(out, "dup")
+	if s == nil || s.Level != LevelProject {
+		t.Fatalf("同名应保留 project 层，实际 %+v", s)
+	}
+	if s.Description != "project 版" {
+		t.Errorf("描述被覆盖错误：%q", s.Description)
+	}
+	if k := FindSkill(out, "keep"); k == nil {
+		t.Error("非同名的 system 技能不应被丢掉")
+	}
+	// 同层保留先出现者
+	same := dedupeSkills([]Skill{
+		{Name: "p", Level: LevelProject, Description: "第一个 project"},
+		{Name: "p", Level: LevelProject, Description: "第二个 project"},
+	})
+	if len(same) != 1 || same[0].Description != "第一个 project" {
+		t.Errorf("同层应保留先出现者，实际 %+v", same)
+	}
+	// global 胜 system
+	g := dedupeSkills([]Skill{
+		{Name: "g", Level: LevelSystem, Description: "system"},
+		{Name: "g", Level: LevelGlobal, Description: "global"},
+	})
+	if len(g) != 1 || g[0].Level != LevelGlobal {
+		t.Errorf("global 应胜 system，实际 %+v", g)
+	}
+}
+
+// TestLoadAllSkillsFromRoot_ProjectOverridesSystem 工作区技能覆盖同名内置技能。
+// 回归：此前 loadAllFrom 按 system→project→global 顺序 append 而 FindSkill 取首个，
+// 导致 load_skill 永远返回内置旧版正文（工作区改动不生效、skill_list 出现两条同名）。
+func TestLoadAllSkillsFromRoot_ProjectOverridesSystem(t *testing.T) {
+	const name = "dup-priority-test"
+	sysDir := t.TempDir()
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(sysDir, name, "SKILL.md"),
+		"---\nname: "+name+"\ndescription: 内置版\n---\n\n# 内置正文\n")
+	writeTestFile(t, filepath.Join(root, ".pair", "skills", name, "SKILL.md"),
+		"---\nname: "+name+"\ndescription: 工作区版\n---\n\n# 工作区正文\n")
+
+	skills := LoadAllSkillsFromRoot(root, sysDir, nil)
+	n := 0
+	for _, s := range skills {
+		if s.Name == name {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("同名技能应只加载一次（去重后），实际 %d 次", n)
+	}
+	s := FindSkill(skills, name)
+	if s == nil {
+		t.Fatalf("未找到技能 %s", name)
+	}
+	if s.Level != LevelProject {
+		t.Errorf("应加载工作区级，实际 %s（description=%q）", s.Level, s.Description)
+	}
+	if !strings.Contains(s.Description, "工作区版") {
+		t.Errorf("应读到工作区版内容，实际 %q", s.Description)
+	}
+	// L2 正文（load_skill 工具路径）同样应取工作区版
+	full, err := loadSkillFull(name, root)
+	if err != nil {
+		t.Fatalf("loadSkillFull: %v", err)
+	}
+	if !strings.Contains(full, "# 工作区正文") || strings.Contains(full, "# 内置正文") {
+		t.Errorf("load_skill 应返回工作区版正文，实际:\n%s", full)
+	}
+}
+
 // ─── 写入/删除往返 ──
 
 func TestWriteAndDeleteSkill(t *testing.T) {

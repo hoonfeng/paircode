@@ -92,6 +92,7 @@ type presetMode struct {
 // ★ 2026-09-09 v4 最小满足瘦身：按「场景内必要」原则裁剪——
 //   - 文件快照（tool-snapshot）只在会编辑文件的场景保留（全栈/调试）；
 //     纯讨论/办公（不写代码）不需要文件回滚安全网；
+//     ★ 2026-09-21：文件快照能力已整体移除，本行仅存历史注记。
 //   - 基础集回归真·极简（去 web/vision/snapshot——检索/截图按需加入）；
 //   - 全栈开发去低频重叠项（tool-entryconfig 与 project-info/codegraph 重叠、
 //     tool-asset 低频）；视觉依赖工具由多模态门控（multimodal_gate.go）运行时
@@ -336,7 +337,8 @@ func presetAllToolPlugins() []string {
 	var out []string
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || !strings.HasPrefix(name, "tool-") || !diskPluginCodeAvailable(name) {
+		// ★ 2026-09-17：含 junction/symlink 挂载的插件包（见 isPluginDirEntry）。
+		if !isPluginDirEntry(globalPluginsDir(), e) || !strings.HasPrefix(name, "tool-") || !diskPluginCodeAvailable(name) {
 			continue
 		}
 		out = append(out, name)

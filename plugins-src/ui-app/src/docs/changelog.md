@@ -4,7 +4,154 @@
 
 ---
 
-## 未发布（开发中）
+## 1.6.6 — 2026-09-22
+
+### 变更 / 改进
+
+- **移除「文件快照」能力（编辑文件不再产生快照）** — 此前 `write` / `apply_patch` 在改文件前会把原文件复制到 `.pair/snapshots/<相对路径>/<时间戳>`，超量时按文件保留最近 20 份，并注册 `restore_snapshot` / `list_snapshots` 两个工具供查询与恢复（`.pair/rollback/msg-snapshots.json` 记录快照与用户消息的关联）。该能力整体下线：内核 `internal/agent/snapshot.go` / `rollback.go` 删除，写前快照调用点（`write` / `apply_patch` 内核 / harness 辅助）清除，插件 `tool-harness` 中两个工具声明同步摘除；启动时不再创建 `.pair/snapshots/` 目录，编辑文件不再写入任何快照文件。
+- **移除「回退到消息」** — 该功能依赖文件快照（恢复该消息关联的文件 + 截断其后对话历史），随快照下线：消息气泡悬停出现的「回退」按钮、会话回滚接口（HTTP 端点与内核 API 注册）一并移除。需要回溯文件改动请使用 git 历史；已有 `.pair/snapshots/` 与 `.pair/rollback/` 残留数据不再被读取，可自行删除。
+
+### 修复
+
+- **应用内「API 文档」残留已移除接口** — `HelpModal` 经 `api-docs.md?raw` 打进 **UI 区域包**（`.pair/plugins/ui-modals/assets/ui-modals.js`），与 vite 主壳是**两条独立产物链**；上一轮只重建了主壳，导致「帮助 → API 文档」仍显示 7.14 回滚接口。现 `node scripts/build-ui.mjs` 全量重建 15 个区域包（并 `--region modals` 复建），包内检索该接口路径与回退提示文案均为 0。
+
+### 文档
+
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.6`。
+
+### 验证
+
+- `go build ./...` / `go vet` 通过；`go test ./internal/agent/ ./internal/server/handler` 全绿。
+- UI 区域包重建后检索：`ui-modals.js` / `ui-right-panel.js` 回滚残留 = 0，`ui-modals.js` 含 `### 7.14 压缩上下文`；同步 `bin/.pair/plugins` 镜像后复验同为 0。
+- 遗留数据清理：`.pair/snapshots`（56MB）与 `.pair/rollback`（404KB）已删除，`ls` 确认不存在（本机 9090 仍为旧二进制，安装新版前该目录可能被旧逻辑重建，属预期）。
+- 发布包冒烟：解压 `release/PairCode-1.6.6.zip` 以独立端口启动，`/api/system/info` 返回 `1.6.6`，首屏控制台 0 错误。
+
+---
+
+## 1.6.5 — 2026-09-21
+
+> 本版把「自主模式」重做为**监督者（「人」）驱动**：工作 agent 每次自然结束，由一个独立的
+> 监督者回合审核产出、评判质量、决定下一步——监督者自己能调工具核查证据（读文件 / 搜索 /
+> git / 跑命令），裁决与完整轨迹实时进看板、刷新后仍可回放。插件面同时开放
+> `registerAutopilot` 与 `ctx.subagent.run`（策略在插件、能力在宿主）。另把**生成参数与连接
+> 信息从内核剥离**（改由 AI 配置 / 服务商配置 / 插件注册段提供），并修复工作区级技能被内置
+> 技能压制的问题。
+
+### 新增
+
+- **自主模式：监督者（autopilot）插件** — 新增 `.pair/plugins/autopilot`（策略全在插件：角色提示词 / 任务书 / 裁决语义 / 记录落盘 / 看板数据），宿主提供能力 `ctx.loopFactory.registerAutopilot({id, decide})`：工作 agent 每次自然结束（无 tool_call + 有正文）时，宿主在会话续轮处调用 `decide(req)`——任务书含用户目标 / 工作 agent 本轮汇报 / 运行统计 / 最近工作记录；返回 `continue + task` 则把指令作为新任务唤醒工作 agent，`done` 则整轮收尾。监督者是**具备全部工具的独立回合**（自行核查证据后经 `submit_result` 提交裁决：评判 + 下一步指令 + 证据），同一插件名重复注册即替换策略。
+- **子 agent 能力 `ctx.subagent.run(spec)`** — 插件可发起「子 agent 回合」：独立系统提示 / 任务书 / 模型 / 工具白名单与黑名单 / 独立历史 / 超时与轮次上限；事件带来源标注（`agentName`）供前端分区渲染，返回轨迹分段、工具调用、用量、耗时与结束方式。同步阻塞式调用（异步插件同样可用），未注册 provider 或能力不可用时给出明确错误。
+- **自主模式看板** — 右侧面板新增「监督者」折叠面板（对话区下方）：头部显示监督者轮次与末次裁决，每轮卡片含序号 / 裁决徽标 / 耗时·步数·工具数·tokens / 评判 / 下一步指令 / 证据·轨迹·工作 agent 侧记录（可折叠）。数据双通道：`GET /api/autopilot/rounds?convId=…`（切会话、刷新、WS 重连、会话结束补拉）+ `ui:autopilot:round` 实时事件；监督者回合的实时事件经 WS 下发并带 `agentName=supervisor`，前端按来源分区。记录落盘 `.pair/autopilot/<convId>.jsonl`（单会话滚动保留 200 轮），可溯源回放。
+- **服务商改名与删除引用提示** — 设置面板「服务商」tab 名称框解除禁用；保存时先调 `POST /api/models/rename`（同步迁移 `models.json` 键**并**更新 `ai-presets.json` 里引用旧名的 AI 配置，避免连接信息丢失），失败即中止；删除服务商时确认框列出仍引用它的 AI 配置名，并说明「仍可继续聊天（配置是完整快照），但对话面板会失去模型分组」。
+- **主界面可消费插件事件** — 插件运行时在分发宿主 `ui:` 事件时于 window 广播 `pair-plugin-event`：主界面组件（不是插件实例，原本收不到）也能消费插件事件，无监听者时零副作用。
+
+### 变更 / 改进
+
+- **循环装配器改为「链」语义** — `ctx.loopFactory.register` 从「单槽位后注册整体覆盖」改为**装配器链**：多插件按注册顺序依次叠加，仅「同一插件名重复注册」替换该项（卸载自动摘除）。修复此前后装载插件会把先装载插件（agentloop 的系统提示追加 / 分段预算 / 审核模式）装配参数整体吃掉的问题。
+- **生成参数来源唯一化** — 优先级：模型级（`models.json` 的 `modelParams[模型]`）> 服务商级（`models.json` 服务商条目）> AI 配置（`ai-presets.json`）> 全局默认（插件注册段 `generation`，存 `pluginSettings.generation`）。Go 内核零直读（原 `core.Temperature()` / `Settings.{MaxTokens,ThinkingMode,ContextMaxTokens}` 直读取消），设置面板新增由 agentloop 插件注册的「生成参数」页；插件侧一律 `ctx.getSettings('generation')` 实时读取（改设置即时生效）。
+- **连接信息退出内核** — AI 连接字段（provider / baseURL / apiKey / model / executeModel / planModel / reviewModel）此前在 `settings.json` 顶层与 `ai-presets.json` 双份存储；现唯一来源 = **AI 配置**，`settings` 只保留激活配置名 `preset`。旧值由 `core.MigrateLegacyConnectionToPreset()` 一次性迁移（只补空字段、不覆盖已有配置），`core.MainModel()` / `core.Configured()` 删除（启动日志改打印激活配置名）。
+- **旧自主控制器退役** — 删除 `internal/agent/autonomous_controller.go`（「任务队列驱动下一阶段」实现）；自主模式唯一入口 = 监督者裁决，会话管理 / 任务管理 / 循环随之收敛。
+
+### 修复
+
+- **工作区级技能不再被内置技能压制** — 同名技能同时存在于系统 / 工作区 / 全局时，此前 `load_skill` 永远返回**内置旧版**（`skill_list` 还会出现两条同名条目、提示词重复注入）。现按 **工作区 > 全局 > 内置** 归并去重后返回。
+- **磁盘 Node 桥轨插件的可见性** — 修复 `tool-voice` 等桥轨插件在插件列表 / 工具集中不可见（磁盘插件正确交接给 Node 桥）。
+- **前端事件处理残留** — `agent-events.js` 的 usage 分支删除本地累加残留（运行统计唯一真源在后端），消除每次 usage 事件的 `ReferenceError`；自主模式收尾后前端「运行中」状态残留一并修正。
+
+### 文档
+
+- `docs/plugin-development.md`（774 → 934 行）：新增 `ctx.commands`（§4.7）、自主模式与 `ctx.subagent.run`（§4.8，含决策器返回契约与最小骨架）；inject 服务清单 9 → **25 个**；循环装配器链语义与坑表补充 5 条。
+- 技能 `cordis-plugin-development`（工作区版 / 内置版同步为 283 行）：补铁律、自主模式骨架、UI 插件实战要点、坑表。
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.5`。
+
+### 验证
+
+- `go test ./internal/agent/` 全绿（含自主模式 / 装配器链 / 会话监督 / 技能层级新增用例与整包回归）。
+- 技能层级探针（真实目录：工作区 `.pair/skills` + 安装目录 `config/skills`）：同名归并后选中**工作区版**。
+- 前端：`npm run build` + `node scripts/build-ui.mjs` 重建主壳与区域包，看板在真实会话下实时追加、刷新后经接口回放，控制台 0 错误。
+- 发布包冒烟：解压 `release/PairCode-1.6.5.zip` 以独立端口启动，`/api/system/info` 返回 `1.6.5`，插件与工具集装载正常、首屏控制台 0 错误。
+
+---
+
+## 1.6.4 — 2026-09-19
+
+> 本版新增**应用内在线更新**：直接对接 GitHub Releases，一键完成「检查 → 下载 → 校验 → 替换 →
+> 重启」，用户不再需要手动下载整包。更新源为 `releases/latest`（stable）或 prerelease 频道，
+> 用 release 元数据自带的 `digest` 做 SHA-256 校验，替换时**用户数据与配置永不被覆盖**。
+
+### 新增
+
+- **在线更新（GitHub Releases 直连）** — 新增引擎 `internal/update`（可脱离宿主单测）：清单解析支持三条通道（GitHub `/releases/latest` stable、`/releases` 列表 prerelease、自定义 feed 的 http/file 路径），按平台匹配资产（`PairCode-<版本>.zip` / `-linux-` / `-darwin-`）；校验优先用 release 元数据 `assets[].digest`（`sha256:…`），无需额外校验资产。下载走**镜像 → `api.github.com` 资产端点 → 直链**三级降级（`github.com` 直连常超时：实测 HEAD 21s 无响应而 API 资产端点 206 正常），支持 `.part` 断点续传、流式 sha256 与停滞看门狗；解压带 zip-slip / zip bomb 防护，并做包结构冒烟（主程序必须存在）。替换按**保护名单**过滤（`config/**`、`.pair` 用户数据、`logs` / `screenshots` / `_temp` / `release` 一律不覆盖）；Windows 上先用同卷 `rename` 在线替换运行中的 exe（失败降级为写 `.new`，退出后由脚本 `move`），保留 `.old` 备份并落盘 `last-apply.json`；重启脚本（`restart-<ts>.bat` / `.sh`）以脱离进程方式等待退出 → 清备份 → 启动新程序 → 自删。
+- **更新接口与设置项** — 宿主新增 `cmd/companion/update_api.go`（引擎单例 + 配置装配 + 6 个 handler）与内核路由 `update.check` / `update.download` / `update.apply` / `update.status` / `update.cancel` / `update.config`；设置段插件 `.pair/plugins/app-update` 提供更新源（github/custom）、仓库、频道（stable/prerelease）、自定义清单地址、镜像前缀、自动检查与间隔、强制校验、保留备份等开关。
+- **「关于」弹窗更新卡片** — 前端 `UpdateCard.vue` 接入关于弹窗：显示当前/最新版本与检查按钮，下载阶段展示进度（速率/总量/阶段），就绪态展示包内文件数并支持「安装并重启」；可**预览替换清单**（将写 N 个文件 / 保护名单跳过 M 个）。就绪态复用已下载缓存，不重复下载。
+
+### 文档
+
+- `docs/online-update-design.md`（新增）：完整设计（分发端点、清单与校验、下载降级链、解压与替换安全、重启机制、API 契约、配置项、UI 形态、失败路径），含 §10 验证方案与 §11 **真实 GitHub 源端到端验证记录**。
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.4`。
+
+### 验证
+
+- 单测 `go test ./internal/update`：11 项（版本比较 / 资产匹配 / digest 比对 / 保护名单 / zip-slip / 解压冒烟 / 端到端下载校验 / 断点续传 / 篡改拒绝 / 替换与备份 / 取消）。
+- **真实 GitHub 源端到端**（临时 `v9.9.9` prerelease + 真实资产，测毕已删除并确认 `releases/latest` 回到 v1.6.3）：检查 0.83s 发现新版本 → 下载 86 MB（峰值 10.3 MB/s）且 sha256 落盘/远端/本地**三方一致** → 解压 243 文件 → 预演 240 写 / 3 跳过 / 0 失败 → 真实替换成功且进程存活 → `restart=true` 自重启接管（新进程约 2s 起来，接口随二进制切换）→ 保护名单强证明（篡改包内同名的受保护文件后重跑 apply，用户内容原样保留）。
+- CDP 浏览器端到端：关于弹窗 → 更新卡片 → 预览替换清单，控制台 0 错误（`screenshots/update-*.png`）。
+
+---
+
+## 1.6.3 — 2026-09-19
+
+> 本版为创作域插件体系落地：六大创作域（画板 / UI 设计 / 3D 建模 / 音乐 / 2D 角色 / 人声）以
+> 「一域一包」形态上线，新增独立发布插件渠道 `plugins-dist/`，建模内核补齐带孔挤出 / 倒角 /
+> 圆角 / 扭转 / 扫掠与多边形 BSP 布尔路径（严格水密）；插件工作区根解析统一，市场恢复版本号与
+> 更新提示，已安装页支持按类型筛选。
+
+### 新增
+
+- **六大创作域插件（画板 / UI 设计 / 3D 模型 / 音乐 / 2D 角色 / 人声）** — 六个创作领域插件落地，每个领域一个插件包，含工具面（host 半：注册模型可直接调用的工具）+ 客户端面板（client 半）+ 前端资产。UI 与工具**同包**分发：面板不再作为独立插件包发布，`ui-art` / `ui-design` / `ui-model` / `ui-music` / `ui-rig` / `ui-voice` 的 UI 半已并入对应的 `@paircode/tool-{art,design,model,music,rig,voice}`（版本 `0.2.0`）；npm 上的旧 `@paircode/ui-*` 仍可安装，但已标记**废弃**（安装时提示「已并入 `@paircode/tool-<x>`」），请改用 `tool-*` 包。
+- **独立发布插件渠道 `plugins-dist/`** — 创作域插件采用「随市场独立分发、不随 IDE 发版」的节奏，此前与 IDE 基线插件同处 `.pair/plugins` 无法区分。新增 `plugins-dist/` 作为独立发布插件真源（与 `.pair/plugins` 同权：区域发现、发布扫描、UI 构建都会扫描它，但**不进 IDE 发布包**），本地开发与验收以 junction 挂载（挂载态天然不进包）；新增护栏脚本 `scripts/verify-dist-isolation.mjs` 校验「独立发布包 ↔ 打包排除项」逐项一致。
+- **主内容区视图 `registerView`（插件在主内容区开 tab）** — 插件可在主内容区 tab 栏开一个与对话 / 编辑器 / 市场 / 工具集同级的视图 tab（`ui.registerView({id,title,icon,order,open,href,render})`），与既有 `registerPanel`（藏在插件面板里的客户端面板）分工见 `docs/plugin-development.md` 新增对照表。挂载策略为**懒挂载 + 保持**：首次激活才渲染，切 tab 不卸载（保住 3D 视角 / 滚动位置等状态），关闭 tab 或卸载插件才清理，开启状态持久化；同时新增「并排对话」布局（主区分左右两栏：对话 + 当前视图，可换边）。
+- **建模工具（tool-model）能力补齐**：
+  - **2D 带孔轮廓挤出** — `extrude` 新增 `holes`（与 `profile` 同口径的孔轮廓数组），一步生成带孔板，不再需要 `subtract` 布尔（同尺寸挖 2 孔：276 面 / 4 ms，对比布尔 5763 面 / 218 ms）；洞方向统一、越界与相交明确报错，不静默降级；`center` 偏移对 circle / star / polygon 一致生效（偏心孔定位）。
+  - **扭转挤出（`twist` + `segments`）与扫掠（`type:"sweep"` + `along`/`closed`/`twist`/`scale`/`up`）** — 按层刚体旋转，洞随外形同步转（带孔即内螺旋槽），每层扭转角 < 180° 校验防自交；扫掠框架用平行传输（Rodrigues，等价 RMF），规避 Frenet 在直线段无定义、拐点翻转导致的自交。
+  - **倒角（chamfer）与圆角（fillet）** — 网格级边重建；凸体走 H-rep 精确构造（面平面 ∩ 斜面 / 球面半空间 → 三平面交点枚举 → 面内角度排序 → 扇形三角化 → 统一外向化），完全绕开布尔。同场景对照：H-rep 60 面 / 开边界 0 / χ=2，走 BSP intersect 则 1274 面 / 1274 条开边界 / χ=−126。
+  - **圆角顶点混合（rolling-ball）** — 关键认识是换表示而非补面：圆角的几何本质是**形态学开运算**（先按球磨小再滚回），凸体可解析构造，于是立方体 12 棱全圆角不再依赖「逐边补面 + 顶点补片」（该路线实测开边界 206~554，顶点相交是死结）。
+  - **多边形 BSP 布尔路径（I.6-2）并接线为默认** — BSP 全程保留凸多边形、导出前才三角化，共面分组天然免费（节点平面即其平面）。默认路径切换后**面数 −71%、M4 真缺口 −52.5%**；三角路径保留为回退 / 对照（`setMeshBooleanLegacy(true)` 或插件 `config.legacyMeshBoolean=true`），`statsOut.path` 回填实际所走路径。
+  - **文件注册式实时预览** — 工具写出模型文件即登记并广播，面板列出工作区识别到的文件、点击当场预览（STL bin/ascii、OBJ、glTF、GLB），外部改动自动重绘（事件 + 定时复核）。
+- **五域批量方法与「建工程即带内容」（`*_add`）** — 新增 `art_add(shapes)` / `design_add(nodes)` / `music_add(notes)` / `rig_add(parts)` / `voice_add(edits)`，统一形态：单件写法兼容（同层参数）+ 数组批量 + **整批校验通过才落盘**（复用各域既有 op 引擎，与 `*_edit` 同源）；建工程可一次带内容（`art_project` shapes、`design_project` screens[].root、`music_project` tracks[].notes、`rig_model` parts、`voice_import` paths/ids/edits）。`art` / `design` / `music` 的 `*_edit` 改为返回结构化 JSON（`ok` / `applied` / `log` / `summary`[/`tokensChanged`]），失败定位到具体条目（「第 N 条 op（名）失败，整批未写入任何改动」）。验证：Node 层每域 6~7 项（批量 / 事务性 / 单件兼容 / 失败定位）+ goja 宿主探针 + `voice` Node 侧 7 项 + `/api/tools` 可见 `*_add`。
+- **建模面板「登记并预览」（登记表驱动）** — 面板不再扫描工作区（旧口径会把工作区里任意 `*.json` 也列进来）：host 半删除 `scanWorkspaceArtifacts` 与 `SCAN_SKIP_DIRS`，`listArtifacts` 只列**登记表**（工具产出 + 面板手动登记，最新在前），返回 `scanned:false` / `scanRemoved:true`；顶栏路径框改为「登记并预览」（走 `claimArtifact`），移除「扫描工作区：开/关」切换与扫描来源合并逻辑，空态与帮助文案同步。
+- **市场显示版本号与更新提示、已安装页类型筛选** — 市场列表条目在类型标签旁显示 `v{latest}`，已安装插件条目补一行「有更新：vX → vY」或「已装 vX · 已是最新」，可更新时右侧出现「更新到 vY」（复用 `updatePlugin`）；已安装页插件条目显示**本地版本**（不再依赖 `config.npm` 是否存在）、可更新时给「有新版 vY」徽标 + 更新按钮；已安装页新增一排类型筛选 tag（**全部 / 插件 / MCP / 技能** + 计数，计数为 0 也可点击 → 显示空态提示，故不禁用）。版本对照由 `ensureUpdates()` 静默拉取 `/marketplace/check-update` 并 60s 复用，市场与已安装页共用同一份；宿主 `searchNpmMCP` 的 MCP 条目补 `version`（市场里 MCP 也显示版本号）。验证：CDP 端到端两脚本 PASS（市场 57 条中 37 条带版本号；搜 `tool-bug` → `v1.0.3` / 「有更新：v1.0.2 → v1.0.3」；已安装 tag 全部 52 / 插件 35 / MCP 0 / 技能 17），控制台 0 错误。
+
+### 修复
+
+- **布尔输出达成严格水密（M4 真缺口归零）** — 根因是各次布尔用各自的容差（随输入精度递增），同一条长边在相邻两侧的分割点跨次错开约 1~1.4 eps，任何焊接容差都合并不掉，严格半边上永远找不到配对。现按四项消解 T 缝：落在未配对边内部且贴近端点的顶点**吸附到端点**、真分割点**拓扑分割**插入未配对边、焊接比 0.5×→**1.5×eps**、**不劣化保护**（消解后若指标变差即回退）。结果：严格未配对 0 / 真缺口 0 / 缝总长 0 mm（此前 208 条真缺口），`meshRepair` 与 `meshWatertightReport` 同容差。踩坑已写入注释：T 缝插入必须**从该边的对顶点出发逐边分割并递归**（对整条边界链扇形分割会把「插入点 + 边两端点」三点共线拼成零面积三角形 → 非流形），插入点排序必须稳定（否则同向重复边）。
+- **带孔挤出 cap 出现反向三角形** — 自研「earcut 风格」耳切把 earcut 的两处兜底换成了「对角线可见性硬拦」，拦过狠时一轮找不到耳即退化为「取最大凸角强切」，强切切穿零宽桥接通道（3 洞场景 70 个 cap 三角形中 19 个负面积）。现完整移植 mapbox/earcut（filterPoints → cureLocalIntersections → splitEarcut 三级递进兜底），并修正连带回归：earcut 的 filterPoints 会删共线点，而轮廓上的共线中间点正是侧壁顶点，删掉会使 cap 边界比侧壁少边 — 改为只删重复点，并新增边界一致性校验（面积守恒抓不住「重叠 + 缺失互相抵消」）。
+- **布尔真缺口根因修复（BSP 平面容差与量化坐标）** — 共面判定阈值 `EPS_PLANE` 固定为 1e-6，比本场景空间分辨率（meshEpsilon ≈ 3.5e-4）小 350 倍，把「近共面」误判为「跨平面」，同一几何平面被拆进多个 BSP 节点、在远处切出 1e-2 量级坐标偏差（反向三角形 11 → 0）。同时量化顶点表原按平面节点独立建立，板面与孔壁节点对「同一个几何顶点」各取各的代表坐标（边界错开约 1 格），改为跨节点共享；环边跨节点对齐继续收尾（三项修复后真缺口 893 → 726，零回退）。
+- **Node 桥轨插件的面板在装载后被静默清掉** — 前端 `plugin-runtime.js` 的 `syncClientHalves` 在清理孤儿 client 半时会连带卸载由 boot 图（`dsh.ui` 区域包）装载的实例；声明了运行期 npm 依赖的 Node 桥轨插件（如 `tool-voice`）不出现在 `/api/plugins` 清单里，其 client 半只经 `/api/ui-boot` 下发，于是「人声」面板 / 视图在 boot 之后被静默移除。现按来源区分卸载对象。
+- **多工作区 / 新会话下截图等产物落错盘** — 内嵌工具注册表原为「首次 root 永久缓存」的单例，第二个工作区或新会话仍复用第一个 root，导致 `screenshot_stage` / `web_debug` 等落盘工具的产物写进**旧工作区**（新工作区里找不到文件，被误判为「截图不落盘」）。现改为按 root 键控缓存（互斥保护），截图目录兜底绝对化。
+
+- **更新检查对「手动放置的插件包」恒为空（市场永远不提示更新）** — 根因：更新检查只认磁盘插件包 `package.json` 里的 `config.npm`，而**只有市场安装链路会写该字段**，本仓库 36 个插件包全部是手动放置 / 同步的，于是 `/api/marketplace/check-update` **恒返回 `[]`**，已安装面板永远显示「无 npm 来源插件」、市场也永远不提示更新。现按官方约定**推断** `@paircode/<磁盘插件名>`（`manifest.name` 含 `/` 时直接作包名），registry 校验存在才判为 npm 来源、`current` 取包内 `version`，校验失败静默跳过（只回本地版本，不误报更新）；新增 `fetchNPMInfoChecked` 区分「包不存在（404）」与瞬时网络错误，**只对确定的 404 做 10 分钟负缓存**（否则每次「检查更新」都要对几十个非官方包打无用往返），成功结果不缓存以保证 latest 实时；`checkUpdates` 改为返回**全部磁盘插件包**（含非 npm 来源，供前端显示本地版本）+ 6 路并发 + 按名排序，`metaByPkg` 补推断使「更新」动作对这类包同样生效（否则 `/marketplace/update` 报「非 npm 来源」）。实测：`check-update` 由 `[]` → 36 条（36/36 识别为 npm 来源）；`tool-bug` 本地版本临时改 1.0.2 → 立即 `updateable:true`（latest 1.0.3），改回 → 可更新数归 0。测试：`internal/agent/npm_plugin_update_test.go`（3 例，httptest 桩 registry）。
+- **动态插件 `ctx.fs` 写错工作区（切工作区后仍写旧根）** — 根因：动态插件在 define 阶段把宿主根固化为闭包 / 上下文快照，装载期又拿不到触发者会话根，于是 `define` 探针写进了上一个工作区目录。新增 `PluginHost.SetWorkspaceRoot` / `WorkspaceRoot`（同步 `h.root`、根上下文、`workspaceRoot` 服务值与各已注册插件上下文），主工作区变更时由 `OnSyncWorkspace` 调用（主工作区被移除 → 同步空串，插件内解析**显式报错**而非静默写回旧根）；`ctxServiceRoot` 收敛为单一真相源五档（工具调用会话根 > UI invoke 根 > 装载期会话根 > 插件上下文根（实时）> 全局主根，全空报错），`buildFSService` 删除手写根解析副本与闭包快照，并顺带修复 `fs.roots` 把根写回闭包污染后续调用的问题。回归测试 `internal/agent/wsroot_probe_test.go` 3 项 PASS；端到端（独立实例 9098）：wsA 生成探针文件 → 切 wsB 再 define → wsB 落盘且 wsA 不再被写。
+- **`plugin-publisher` 扫不到 junction 插件** — `Dirent.isDirectory()` 对 Windows junction 返回 `false`（既非目录也非 symlink），改用 `statSync` 跟随重解析点复核；现象是开发态把 `.pair/plugins/tool-<x>` 以 junction 挂到 `plugins-dist/tool-<x>` 后，`--list`、交互式菜单与 Web UI 的插件列表里都看不到六个创作域插件（发布工具漏扫，不是插件本身问题）。与 Go 端 `isPluginDirEntry` 同口径。
+- **`tool-voice` 发布包缺实现模块（装上即报错）** — `tool-voice@0.3.2` 的 tarball 里没有 `lib/`，而 `index.js` 有 8 处 `require('./lib/...')`；双保险都漏了 `lib`：`PUBLISH_FILES`（拷贝白名单）与 `buildPackage` 覆写的 `pkg.files`（`npm publish <dir>` 仍按 `files` 字段过滤）。修复后重发 0.3.3（含 `lib`，15 个文件）已进 registry。教训：判定发布结果不能只看 `npm publish` 退出码，须等 registry 版本端点 200 / dist-tags 落实（本次因读取端传播延迟 + 409 `previously staged version` 语义误判，另 bump 出内容相同的 0.3.4）。
+
+### 变更 / 改进
+
+- **插件版本与分发收口** — 六个创作域包统一 `0.2.0`；IDE 发布包的插件排除项由 11 项收敛为 6（独立发布包 = `tool-{art,design,model,music,rig,voice}`）；`tool-voice` 包名规范化为 `tool-voice`（原名带 scope 会让 `/api/ui-boot` 的入口 URL 带 `@`，导致 `/plugins-assets` 静态路由 404）。
+- **旧 `ui-*` 引用清理** — 清除代码注释、工具提示、CI 示例、文档中残留的 `ui-*` 包引用（面板名改以 `client.js` 注册标题为准，如「ui-art 面板」→「**画板**」面板）；发布脚本的孤儿包废弃文案（`ORPHAN_HINTS`）补上六域映射，`--deprecate-orphans` 会给出「已并入 `@paircode/tool-<x>`（UI 与工具同包）」的准确说明。
+- **建模面数口径更正** — 上一轮报告的面数对比取自不同焊接 eps 的诊断网格，两者不可比；同口径实测为 4416 → 4536 面（**+2.7%**，表面积变化 −4.7e-6%）。并给出结论：对已水密的网格再做共面合并是**以水密换面数**（4536 → 1187 面，但非流形 1 / 缝长 7.86，再修也回不来），两者同时追求必然振荡，故默认布尔路径不做共面合并（共面合并只保留在 legacy 对照分支）。
+- **六域移除插件面板注册，统一面板外壳** — 六域 `client.js` 移除 `ui.registerPanel`，只保留 `ui.registerView`（主内容区 tab；`assets` bundle 与 `dsh.ui` / `client` 字段保留——`registerView` 共用同一 bundle、`/api/ui-boot` 靠它算 rev、npm 安装需保整包）；面板统一外壳新增 `PanelShell.vue`，六个 `Panel.vue` 改用它并重建 `assets/*-panel.{js,css}`；六个 `index.js` 共 49 处工具参数描述补「相对主项目根解析」基准；新增审计脚本 `scripts/audit-plugin-ui-register.cjs`（客户端注册面，6/6 通过）与 `scripts/audit-plugin-tool-desc.cjs`（工具参数描述基准）。线上 tarball 核验 `registerPanel` 调用为 0。
+- **六创作域包版本对齐 registry** — `plugins-dist` 六包（`@paircode/tool-{art,design,model,music,rig,voice}`）发布时由 `plugin-publisher` 按内容指纹自动升 patch，本版把提升后的版本号回写仓库：统一 `0.3.2`（`tool-voice` 另含 `lib`）。
+
+### 文档
+- `docs/creative-domain-landing-plan.md`：落地形态改为「一域一包」，补五域推广与两条踩坑（scope 包名导致静态路由 404、boot 图与孤儿卸载冲突）；`.pair/project.md` 同步创作域插件目录关系。
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.3`。
+- `docs/plugin-development.md` 新增 §5.1「相对路径的根从哪来」五档优先级表；`config/skills/cordis-plugin-development/SKILL.md` 新增 §0 铁律（仅用户明确要求才 `define`、优先复用磁盘插件、临时插件用完清理）与 §2.5 工作区根解析纪律，并修正过时描述「插件只存在于内存不落盘」（`define` 实际会固化到安装目录）。
+
+---
+
+## 1.6.2 — 2026-09-13
+
+> 本版修复会话历史展示与上下文注入两类问题（`v1.6.2` 已于 2026-09-13 打 tag 并推送，更新日志条目随本版一并补齐）。
 
 ### 修复
 

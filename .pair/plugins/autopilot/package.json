@@ -1,0 +1,9 @@
+{
+  "client": "client.js",
+  "main": "index.js",
+  "name": "autopilot",
+  "purpose": "自主模式（监督者/「人」角色）：工作 agent 每次自然结束→本插件审核/评判/决定下一步（可派生带全部工具的监督者回合自行核查）；记录落盘 + 看板数据接口（策略在插件，能力在宿主 registerAutopilot/subagent）；UI 面（client 半）= 标题栏状态徽标（titlebar-right 槽位）+ 独立看板视图（registerView）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}

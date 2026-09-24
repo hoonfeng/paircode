@@ -22,7 +22,7 @@
 //   - Update 的 @@ 段按序定位：从上一段结束处向后搜索（顺序敏感，对齐 codex）；
 //   - 匹配容差：行尾空白（含 \r）忽略；找不到给出行号级诊断；
 //   - Move to：先应用变更再移动（对齐 codex）；Delete 不存在文件报错；
-//   - 逐文件写前快照 + 变更回调（与 write/edit 行为一致）；
+//   - 变更回调（与 write/edit 行为一致）；
 //   - 换行风格保留（CRLF 文件应用后仍 CRLF）。
 package agent
 
@@ -222,7 +222,6 @@ func ApplyPatchText(root, patchText string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWriteWithTracking(root, p)
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return "", err
 			}
@@ -246,7 +245,6 @@ func ApplyPatchText(root, patchText string) (string, error) {
 			if _, statErr := os.Stat(p); statErr != nil {
 				return "", fmt.Errorf("Delete File 失败：%s 不存在", h.path)
 			}
-			SnapshotBeforeWriteWithTracking(root, p)
 			if err := os.Remove(p); err != nil {
 				return "", err
 			}
@@ -269,7 +267,6 @@ func ApplyPatchText(root, patchText string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("%s: %w", h.path, err)
 			}
-			SnapshotBeforeWriteWithTracking(root, p)
 			if err := os.WriteFile(p, []byte(newStr), 0o644); err != nil {
 				return "", err
 			}

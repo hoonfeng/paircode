@@ -666,7 +666,8 @@ func (h *PluginHost) InvokeClientMethod(plugin, method string, args any) (any, e
 	adapter.mu.Lock()
 	// ★ 2026-08-27 双上下文：先查 UI handler 存储（client 半 invoke 专用，
 	//   执行期间绑定当前主根）；未注册则回退通用 handlers（向后兼容早期用
-	//   harness.handle 暴露的 UI 方法——无 UI 根绑定，遵循装载根语义）。
+	//   harness.handle 暴露的 UI 方法——无 UI 根绑定，根由 ctxServiceRoot 兜底
+	//   决定，2026-09-20 起 = 实时主工作区，不再沿用宿主装载快照）。
 	fn, ok := adapter.handlersUI[method]
 	if !ok {
 		fn, ok = adapter.handlers[method]
@@ -788,6 +789,58 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	//   不注册进 Registry，agent 可见面由插件决定）。
 	ArchiveHostLegacyTools(root)
 	return h
+}
+
+// WorkspaceRoot 返回插件宿主当前的工作区根（实时；未设置返回空串）。
+func (h *PluginHost) WorkspaceRoot() string {
+	if h == nil {
+		return ""
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.root
+}
+
+// SetWorkspaceRoot 更新插件宿主的工作区根（主工作区切换时由 OnSyncWorkspace 调用）。
+//
+// ★ 2026-09-20 修复（「插件不按工作区切路径 / 文件写进别的工作区」根因之一）：
+// 宿主 root、根上下文 WorkspaceRoot、workspaceRoot 服务值、各已注册插件上下文
+// WorkspaceRoot 原先只在 NewPluginHost 时快照一次——主工作区切换后不再更新，
+// 于是插件 ctx 基础服务（fs/binary/bash/…，经 ctxServiceRoot 兜底）与宿主能力
+// 仍按「宿主创建时那个工作区」解析路径（长期运行的 IDE 里就是最早打开/启动工作
+// 区），把产物写进了用户当前没在用的工作区。此处统一同步四处来源，使无会话绑定
+// 的插件调用回落到「当前主工作区」。
+//
+// 语义：root 为空 = 当前无主工作区（插件内的路径解析将显式报错，而不是静默沿用
+// 旧工作区）——显式失败优于写错工作区。
+func (h *PluginHost) SetWorkspaceRoot(root string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	changed := h.root != root
+	h.root = root
+	if h.ctx != nil {
+		h.ctx.WorkspaceRoot = root
+	}
+	for _, pc := range h.contexts {
+		if pc != nil {
+			pc.WorkspaceRoot = root
+		}
+	}
+	ctx := h.ctx
+	h.mu.Unlock()
+	// workspaceRoot 服务值同步（services 为跨插件共享的同一 map，改一处即全插件可见）
+	if ctx != nil {
+		ctx.servicesMu.Lock()
+		if ctx.services != nil {
+			ctx.services["workspaceRoot"] = root
+		}
+		ctx.servicesMu.Unlock()
+	}
+	if changed {
+		log.Printf("[plugin] 插件宿主工作区根已同步: %q", root)
+	}
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────
@@ -1549,6 +1602,35 @@ func (h *PluginHost) PluginToolsByPlugin() map[string][]string {
 		out[k] = append([]string(nil), v...)
 	}
 	return out
+}
+
+// PluginToolsByName 按「插件名」取该插件注册的工具清单（快照）：
+// 先直接命中 pluginTools 键；未命中则回退 Node 桥归属键 "node-bridge:<name>"。
+// ★ 2026-09-19：Node 桥装载的插件（含磁盘桥轨插件交接）在 pluginTools 里的键是
+//   "node-bridge:<name>"，而插件记录（/api/plugins）、工具集条目、前端「工具集 → 添加」
+//   提交用的都是不带前缀的 <name>——不做回退会导致：添加报「宿主未定义插件」、
+//   加入后工具也进不了 agent 可见白名单（现象：插件列表有它，工具集里却加不进/不生效）。
+func (h *PluginHost) PluginToolsByName(name string) []string {
+	if name == "" {
+		return nil
+	}
+	snapshot := h.PluginToolsByPlugin()
+	if tns := snapshot[name]; len(tns) > 0 {
+		return tns
+	}
+	return snapshot["node-bridge:"+name]
+}
+
+// HasPluginByName 插件是否「已装载可用」：JS 插件 running，或已注册工具（含 Node 桥
+// 归属键回退，见 PluginToolsByName）。
+func (h *PluginHost) HasPluginByName(name string) bool {
+	if name == "" {
+		return false
+	}
+	if h.State(name) == PluginRunning {
+		return true
+	}
+	return len(h.PluginToolsByName(name)) > 0
 }
 
 // PluginToolOwners 工具名 → 归属插件（快照；toolOwner 反向表）。

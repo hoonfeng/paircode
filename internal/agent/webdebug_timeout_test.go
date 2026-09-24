@@ -20,7 +20,15 @@ import (
 func TestWebDebugTimeoutMs(t *testing.T) {
 	pageDelay := 8 * time.Second
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(pageDelay)
+		// ★ 慢页面必须响应请求取消：客户端（导航超时放弃 / 浏览器关闭）断开后立即返回。
+		//   否则 httptest.Server.Close 会一直等待这个 in-flight 请求（连接 state active），
+		//   打印 "httptest.Server blocked in Close after 5 seconds"——实测 -count=2 每轮必现，
+		//   每轮白等 5s。语义不变：客户端不放弃时仍等满 pageDelay（= 「页面慢」）。
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(pageDelay):
+		}
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<html><head><title>T-OK</title></head><body><h1 id='done'>PAGE-READY</h1></body></html>")
 	}))

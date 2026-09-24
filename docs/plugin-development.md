@@ -96,7 +96,22 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 
 ## 4. ctx 能力全表
 
-`ctx` 是插件可用的全部宿主能力入口。**无条件注入**的成员（29 个）：
+`ctx` 是插件可用的全部宿主能力入口。**无条件注入**的成员（31 个），另有按需注入的服务（见 §5）。
+
+★ 2026-09 新增能力面（旧文档缺失，务必先知）：
+
+| 新增 | 位置 | 一句话 |
+|---|---|---|
+| `ctx.subagent` | §4.8 | 派生「独立 agent 回合」（独立系统提示 / 工具白名单 / 来源标注） |
+| `ctx.loopFactory.registerAutopilot` | §4.8 | 自主模式决策器（工作 agent 自然结束时宿主回调） |
+| `ctx.loopFactory.registerLoop` / `registerHandoff` | §4.5 | JS 循环内核 / JS 会话交接策略 |
+| `ctx.commands` | §4.7 | slash 命令注册面（需 `inject:['commands']`） |
+| `ctx.llmtrace` | §4.5 | LLM 请求/响应完整追踪 |
+| `ctx.hooks` | §4.5 | 循环钩子（PreToolUse / PostToolUse / UserPromptSubmit / Stop） |
+| `ctx.activation` | §4.5 | 按需激活入口声明 |
+
+并且**语义已变**：`ctx.loopFactory.register` 从「单槽位后注册覆盖」改为**装配器链（多插件按序叠加）**——
+后装载插件不再吃掉先装载插件的装配参数（§4.5 有详解，写装配器前必读）。
 
 ### 4.1 生命周期与协作（核心）
 
@@ -166,11 +181,22 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 | `ctx.setSettings(key, value)` | `→ true` | 写插件设置（持久化到 core settings） |
 | `ctx.systemPrompt.section({name, order, text})` | `→ void` | 注入系统提示片段（order 默认 100，排序组装） |
 | `ctx.systemPrompt.variable({name, provider})` | `→ void` | 注册 `{{name}}` 提示词变量（组装时调用 provider 求值） |
-| `ctx.loopFactory.register(apply)` | `register((opts) => overrides\|null)` | 注册 Agent 循环装配器（单槽位，对齐 harness setFactory）；返回同形状对象则非空覆盖 |
-| `ctx.toolset.registerTemplate({id, title, match?, generate})` | `→ void` | 注册工具集构建模板（`generate(profile, requirement)` 返回插件定义数组） |
+| `ctx.loopFactory.register(apply)` | `register((opts) => overrides\|null)` | ★ 循环装配器**链**：多插件按注册顺序**依次叠加**；同一插件名重复注册 = 替换该项（插件重装载不叠加）；卸载自动摘除。<br>`opts = {system, stepBudget, toolCallBudget, maxToolBudgetSegments, maxContextTokens, autonomous, maxAutonomousMinutes, checkpointInterval, workspaceRoot, reviewMode}`（`maxIterations` 已移除）；返回同形状对象 → 非空字段覆盖，返回 `null`/`undefined` → 不改动。<br>⚠️ 历史语义（2026-09-21 废弃）：单槽位「后注册整体覆盖」——会让后装载插件把先装载插件（agentloop 的 systemAppend / 分段预算 / 审核模式）的装配参数全部吃掉 |
+| `ctx.loopFactory.registerLoop(impl)` | `registerLoop({...})` | JS 循环内核（宿主 Run 委托 JS 驱动；`agentloop` 插件即此形态）。未注册 → Go 默认循环 |
+| `ctx.loopFactory.registerHandoff({id?, onUserTurn?, onSegment?})` | `→ {id, ok}` | JS 会话交接策略（用户输入 / 段续跑两个跨轮边界：判断 / 生成 / 复用刷新 / 锚点定位 / 视图组装）；未注册或执行失败 → Go 默认实现；卸载自动还原 |
+| `ctx.loopFactory.registerAutopilot({id?, decide})` | `decide(req) → {action, task?, assessment?}` | ★ 自主模式决策器（§4.8）：工作 agent 自然结束时宿主调用它决定「继续 / 收尾」；未注册 → 无监督 |
+| `ctx.toolset.registerTemplate({id, title, match?, generate})` | `→ void` | 注册工具集构建模板（`generate(profile, requirement)` 返回插件定义数组）。⚠️ 一旦声明 `inject:['toolset']`，本键被工具集服务（§5）**覆盖**（同名 `ctx.toolset`，服务形态后写优先）——要模板注册就别 inject toolset |
 | `ctx.market.register({kind, source, name, desc})` | `→ true` | 注册市场源（kind: skill/mcp/plugin）；另有 `unregister(kind)` / `list()` |
 | `ctx.registerClientMethod(method, fn)` | `→ void` | host 半暴露方法给浏览器 client 半（`ui.invoke(plugin, method, args)` 远程调用） |
 | `ctx.provider.register(name, impl)` | `register(name, (params) => Provider实例) → 还原函数` | ★ 实现级插槽（2026-09）：注册服务商名的 Provider 实现（impl 返回含 `chat(session)` 等能力的对象）；同名覆盖返回还原函数（卸载自动回退 OpenAI 实现）；未命中回退内置协议路由 |
+| `ctx.providerFactory.register(name, factory)` | `→ 还原函数` | 注册 provider **装配工厂**（与 `ctx.provider.register` 不同：后者注册协议级 Provider 实现，前者提供预设/服务商表的装配决策） |
+| `ctx.aiPresets.get(name)` / `.list()` | `→ preset \| null` / `{name: preset}` | AI 预设**数据面**（Go 只提供表，整套展开决策在插件） |
+| `ctx.models.get(provider)` | `→ {baseURL, apiKey, protocol, contextMaxTokens, models} \| null` | 服务商表数据面（装配器做服务商级兜底用） |
+| `ctx.hooks.register(event, fn)` | `→ void` | 注册循环钩子：`PreToolUse` / `PostToolUse` / `UserPromptSubmit` / `Stop`；`fn({event, cwd, turn, toolName, toolArgs, toolResult, prompt, message}) → {block, feedback} \| null`（`block` 仅门事件 PreToolUse / UserPromptSubmit 生效，feedback 回灌 LLM）；注册即生效，卸载自动注销 |
+| `ctx.prompts.provide({name, text})` / `.remove({name})` | `→ void` | 提供 / 移除命名提示词片段（跨插件共享，归属 `js:<插件名>`） |
+| `ctx.llmtrace.register(fn)` / `.unregister(fn)` | `fn(trace) → void` | LLM 请求/响应完整追踪（llm-trace 缓存分析数据面）；卸载自动注销 |
+| `ctx.activation.declare({command})` | `→ bool` | 声明按需激活入口：用户执行该 slash 命令时激活本插件 |
+| `ctx.handoff.*` | 属性 + 函数 | 会话交接无状态能力（口径桥接 Go 单一真源，避免两侧漂移破坏缓存前缀）：`title` / `marker`(恒空串，向后兼容) / `enabled`、`thresholds(maxCtx?)`、`estimateTokens(...)`、`ruleSummary(...)`、`stripSystem(...)`、`isHandoffText(...)`、`fingerprint(...)`、`keepForRelevance(...)`、`parseRelevance(...)` |
 | `ctx.app.workspaceRoot` | 字符串 | 当前工作区根 |
 | `ctx.app.root` | 字符串 | 主工作区根（实时） |
 | `ctx.app.folders` / `projectName` / `installDir` / `configDir` / `recentProjects` / `workspaceFolders` | 只读属性 | 宿主环境信息（实时读取） |
@@ -183,11 +209,123 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 | `harness.registerTool(tool)` | 同 `ctx.tools.register` | 注册工具 |
 | `harness.handle(method, fn)` | 同 `ctx.registerClientMethod` | 注册可被调用的方法（Go 侧 Invoke） |
 
+### 4.7 slash 命令注册（ctx.commands，需 inject）
+
+`inject:['commands']` 后可用（未 inject 时为 `undefined`）：
+
+| 成员 | 签名 | 说明 |
+|---|---|---|
+| `ctx.commands.register({name, description, handler})` | `handler(args) → string` | 注册 slash 命令 `/<name>`；归属本插件，卸载自动注销；`name` 为空或重名报错 |
+| `ctx.commands.list()` | `→ [{name, description, owner}, ...]` | 当前命令清单 |
+| `ctx.commands.run(name, args)` | `→ string` | 以编程方式执行命令（等价用户敲 `/<name> 参数`） |
+
+★ handler 是**同步**函数（宿主经 VM 锁进入，不能在里面 await 异步链路后才返回）；
+返回值会被 `fmt.Sprintf("%v")` 字符串化——要返回结构化内容请自行 `JSON.stringify`；
+抛错 → 命令执行失败，错误文本回灌前端。
+
+### 4.8 自主模式：决策器 + 子 agent 回合（★ 2026-09-21 新增）
+
+「策略在插件、能力在宿主」的旗舰范例。宿主只提供两个原语，其余全部由插件决定：
+
+1. `ctx.subagent.run(spec)` —— 同步跑完一个**独立 agent 回合**（自己的系统提示 / 工具白名单 / 来源标注）；
+2. `ctx.loopFactory.registerAutopilot({id?, decide})` —— 工作 agent 自然结束时宿主回调，由插件决定「继续 / 收尾」。
+
+#### 4.8.1 决策器何时被调用、返回什么
+
+宿主在 SessionManager 续轮处调用（前置：自主模式开关打开 + 工作 agent 本轮自然结束 + 插件已注册决策器）：
+`continue` → 宿主把 `task` 作为新任务唤醒工作 agent；`done` / 未返回 / 抛错 → 整轮结束。
+
+**req**：`{convId, workspaceRoot, round, maxRounds, objective, workerReport, workerTurns, recentHistory}`
+
+- `objective` = 会话首条真实用户消息（供插件构造任务书）；
+- `workerReport` = 工作 agent 本轮汇报（自然结束时的最终正文）；
+- `workerTurns` = 工作 agent 已完成的任务轮数；`recentHistory` = 工作会话最近消息（时间正序）。
+
+**返回**：`{action: 'continue' | 'done', task?, assessment?}`
+
+- `task` 在 `continue` 时必填（下一步指令）；`assessment` 仅展示/日志，不影响宿主行为；
+- 宿主内部字段 `handled` / `error` 用于诊断，插件无需返回。
+
+#### 4.8.2 子 agent 回合 spec（ctx.subagent.run）
+
+| 字段 | 说明 |
+|---|---|
+| `name` | 来源标注：本回合全部事件带 `AgentName=name`（前端看板分区 / 溯源） |
+| `round` | 回合序号（内核只透传标注，语义由插件定义，如「第 N 次监督」） |
+| `system` | 系统提示（角色设定，策略由插件提供） |
+| `task` | 起始任务（**必填**） |
+| `tools` | 工具白名单（`null` / `[]` = 继承会话全部已启用工具；白名单外不可见/不可调用） |
+| `extraTools` | 白名单之外额外保留的工具（如插件自带工具） |
+| `stepBudget` / `toolCallBudget` | 段内步数 / 工具调用预算（0 = 内核默认） |
+| `maxContextTokens` | 上下文窗口（0 = 继承会话配置） |
+| `timeoutMs` | 本回合超时（0 = 不限；**始终受会话取消约束**，用户停止即中止） |
+| `resultTool` | 可选结构化提交工具 `{name, description, parameters}`：模型一旦调用即记录参数并结束本回合 |
+| `convId` | 目标会话（缺省 = 决策器绑定的当前会话） |
+
+**返回**：`{content, segments, submitted, submittedRaw, steps, toolCalls, promptTokens, outputTokens, durationMs, error, ended}`
+
+`ended` 取值：`completed`（自然结束）/ `submitted`（结构化提交）/ `budget`（预算耗尽）/ `error`；
+`segments` 与前端展示结构同构（thinking / content / tool_call），便于插件落盘溯源。
+
+**关键语义（写之前必须知道）**：
+
+- **同步阻塞**：宿主在插件回调栈上直接跑完整个子回合（含 LLM 调用与工具执行），期间子 agent 事件实时下发前端；
+- 子 agent 循环**强制走 Go 路径**（不能在 JS 回调栈上重入 agentloop 的 JS 循环实现）；
+- 先探测再派发：`ctx.subagent.available() → bool`（无会话运行环境时 `run` 抛错）；
+- 子 agent 的工具执行走宿主注册表，**审批 / 预算 / 事件复用宿主管线**，插件不必自建执行器。
+
+#### 4.8.3 最小骨架
+
+```js
+return {
+  name: 'autopilot',
+  inject: ['fs'],
+  apply(ctx) {
+    const log = ctx.logger('autopilot');
+
+    ctx.loopFactory.registerAutopilot({
+      id: 'autopilot',
+      decide: async (req) => {
+        // ① 可选：派生「监督者」回合自行核查（工具白名单收敛，同步返回）
+        let extra = '';
+        if (ctx.subagent.available()) {
+          const r = ctx.subagent.run({
+            name: 'supervisor', round: req.round,
+            system: '你是任务监督者：核查工作 agent 的产出是否满足目标，只回事实与缺口。',
+            task: `原始目标：${req.objective}\n\n工作汇报：${req.workerReport}`,
+            tools: ['read', 'grep', 'glob'],
+            stepBudget: 20, toolCallBudget: 20, timeoutMs: 600000,
+          });
+          extra = r.content || '';
+          ctx.emit('ui:autopilot:trace', { round: req.round, steps: r.steps, ended: r.ended });
+        }
+        // ② 决策：continue（给下一步 task）/ done（收尾）
+        if (req.round >= (req.maxRounds || 3)) return { action: 'done', assessment: extra };
+        return { action: 'continue', task: `继续推进：${req.objective}`, assessment: extra };
+      },
+    });
+  },
+};
+```
+
+#### 4.8.4 与前端 / HTTP 的约定（实测定型）
+
+- 子 agent 事件带 `AgentName`，前端按 `name` 分区渲染监督轨迹；
+- 进度推进用 `ctx.emit('ui:xxx', payload)`；要暴露读接口用 `ctx.webServer.register(...)`，
+  **handler 必须返回字符串 body**（返回裸对象 → 响应体为空，前端 `JSON.parse` 直接报错）；
+- 决策器在**影子实例**（并行会话 VM 副本）里不写全局槽位：`registerAutopilot` 返回 `{ok:true, shadow:true}`，
+  避免会话结束销毁 VM 后全局槽位指向已死 Runtime。
+
 ---
 
 ## 5. inject 声明式服务
 
-`inject` 数组中声明的服务会作为 `ctx.xxx` 属性注入（未声明访问为 undefined）。可用服务（9 个）：
+`inject` 数组中声明的服务会作为 `ctx.xxx` 属性注入（未声明访问为 `undefined`）。
+宿主内置可用服务 **25 个**：
+
+`fs` `web` `bash` `sse` `ws` `logger` `timer` `tools` `events` `store` `handoff` `app` `workspaceRoot`
+`kernel` `market` `process` `mcp` `skill` `toolset` `npm` `plugins` `agents` `llm` `http` `commands`
+（另有插件经 `ctx.provide` 注册的动态服务，见 §6；清单见 `PluginHost.availableServices`）
 
 | 服务 | 访问 | 签名 | 说明 |
 |---|---|---|---|
@@ -200,9 +338,37 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 | `timer` | `ctx.timer` | `timeout(fn, ms)→cancel` / `interval(fn, ms)→cancel` | 同 ctx.timeout/interval |
 | `kernel` | `ctx.kernel` | 见 4.3 | 内核路由表 |
 | `market` | `ctx.market` | 见 4.5 | 市场源 |
+| `mcp` | `ctx.mcp` | `list()` / `upsert(server)` / `remove(name)` | MCP 服务器管理（插件化配置面） |
+| `skill` | `ctx.skill` | `list()` / `write({name, content, description?})` / `remove(name)` | 技能读写（写工作区 `.pair/skills/`） |
+| `toolset` | `ctx.toolset` | `list()` / `save(toolset)` / `remove(name)` / `install(...)` | 工具集管理。⚠️ 会**覆盖**默认的 `ctx.toolset.registerTemplate` 形态（同键，见 4.5） |
+| `npm` | `ctx.npm` | `install(pkg)` / `uninstall(name)` / `installed()` / `checkUpdates()` / `update(name?)` | 插件运行时 npm 依赖管理 |
+| `plugins` | `ctx.plugins` | `reloadDisk()` + `console` / `env` / `platform` / `arch` / `version` / `cwd` / `exit` / `process` / `btoa` / `atob` | 插件运行时工具面（对齐 Node 常用能力） |
+| `agents` | `ctx.agents` | `ready(convId?)` / `followup(convId, text)` | 会话唤醒投递（跟随 agent 的 followup 面；旧的子 Agent 派生面已删除） |
+| `commands` | `ctx.commands` | 见 4.7 | slash 命令注册面 |
 
 > 还有 `app` / `workspaceRoot` / `store` 三个静态服务：`app` 已无条件注入（见 4.5），
 > `workspaceRoot` 可用 `ctx.get('workspaceRoot')` 取（宿主固有服务），`store` 为会话存储（ConversationStore）。
+
+### 5.1 相对路径的根从哪来（★ 2026-09-20 起统一）
+
+`ctx.fs` / `ctx.bash` / `ctx.binary` / `ctx.process` 等一切需要「工作区根」的能力，
+都按同一优先级解析（宿主 `jsPluginAdapter.ctxServiceRoot`，单一真相源）：
+
+| 档 | 来源 | 生效场景 |
+|---|---|---|
+| 1 | 当前**工具调用会话**根 | agent 执行本插件的工具时自动绑定（并发多会话隔离） |
+| 2 | UI invoke 绑定根 | 浏览器 `ui.invoke` 发起时刻的当前主工作区 |
+| 3 | 装载期会话根 | `cordis(op=run)` 装载本插件的会话工作区（apply 期间及其后无更精确绑定的回调） |
+| 4 | 插件上下文根 | 随宿主主工作区切换**实时更新**（`PluginHost.SetWorkspaceRoot`） |
+| 5 | 全局主工作区 | 最后兜底；全空 → 显式报错「工作区根为空」，**不会**静默落到别的工作区 |
+
+约定：
+
+- 写工程产物用**相对路径**，让它跟随「当前会话」；要「用户当前所见工作区」用 `ctx.app.workspaceRoot`；
+  要插件自身目录（缓存/bundle 资源）用插件目录语义，别拿工作区根凑。
+- 不要在 `apply`（装载）里写工程产物：装载期的根是第 3/4 档，不一定是用户正在操作的会话。
+- 历史坑（已修）：宿主根只在 `NewPluginHost` 时快照、`cordis(op=run)` 不绑定会话根、
+  `ctx.fs` 自己维护一份手写根解析副本 → 插件产物写进了「IDE 启动时那个工作区」。
 
 ---
 
@@ -474,10 +640,39 @@ field 支持：`name`（键）/ `label`（展示名）/ `type`（text/number/boo
     props: { field: 'type' },   // 面板数据契约（轻量 Slot）
   })
 
+  // 注册**中间区域视图**（在 IDE 主内容区 tab 栏开一个 tab，与 对话/编辑器/市场/工具集 同级）
+  ui.registerView({
+    id: 'my-view',
+    title: '我的视图',
+    icon: 'svg...',
+    order: 30,          // tab 顺序（小者靠前；缺省 100）
+    open: true,         // true = 默认打开为「后台 tab」：tab 出现但不抢占对话主视图
+    render(el, ui) { el.innerHTML = '<div>视图内容</div>' },  // 返回 cleanup 可清理
+  })
+
   // 调后端 API（受限）
   const data = await ui.http.get('/api/plugins')       // 或 ui.http.post(path, body)
 }
 ```
+
+> ⚠️ **渲染纪律（★ 2026-09-21 实测）**：渲染模型/用户产出的**文本**一律 `el.textContent = text`
+> （LLM 输出常含 `<` `>` `&`，用 `innerHTML` 会被当标签解析 → 排版错乱/内容消失）；
+> `innerHTML` 只用于插件自建、可信的结构。/ `render(el, ui)` 可返回 cleanup 函数
+> （`registerPanel` 打开面板即挂载、`registerView` 切 tab 不卸载，关闭 tab 或卸载插件才清理）。
+
+**`registerPanel` vs `registerView`（2026-09 新增）**：
+
+| | `registerPanel` | `registerView` |
+|---|---|---|
+| 出现位置 | 插件面板（壳级逃生口浮动窗口）内的「客户端面板」小 tab 区 | 主内容区（`.main-area`）tab 栏，与 对话/编辑器/市场/工具集 同级 |
+| 适用场景 | 管理/总览类面板（藏在插件面板里） | 需要**长期占用主工作区**的界面（编辑器式工作台） |
+| 可关闭 | 跟随插件面板 | 每个 tab 有 ×，关闭状态持久化（`localStorage: viewOpen:<插件>:<视图 id>`） |
+| 与对话 | — | 可**并排**：tab 栏「并排对话」按钮 → 主区分左右两栏（对话 + 当前视图，可换边）；再点回单栏 |
+| 挂载策略 | 打开插件面板即挂载 | **懒挂载 + 保持**：首次激活才挂载（render(el, ui)），之后切 tab 不卸载（保住 3D 视角/滚动等状态），关闭 tab 或卸载插件才 cleanup |
+
+> 视图与对话并排时的布局状态在 `ui-state.js` 的 `layout` 服务（`toggleSplit()` /
+> `setSplitChatSide('left'|'right')` / `openViewTab()` / `closeViewTab()`），
+> 不持久化（临时视图态，刷新回单栏）。
 
 **预定义 UI 槽位**（`ui.registerSlot({slotId, ...})` 注册占用；替换型 single 区域内下拉切换占用者，叠加型 list 勾选激活）：
 
@@ -487,6 +682,60 @@ field 支持：`name`（键）/ `label`（展示名）/ `type`（text/number/boo
 > 同一 slotId 可同时存在 single 与 list 两类占用，机制按 kind 分流。
 
 事件流：host→浏览器 经 `/api/plugins/client-events` 每 2s 轮询取增量；浏览器→host 经 `/api/plugins/event`。
+
+### 12.1 三种挂载点怎么选（★ 2026-09 实战补充）
+
+| | `ui.registerSlot({slotId})` | `ui.registerView({...})` | `ui.registerPanel({...})` |
+|---|---|---|---|
+| 出现位置 | 预定义槽位（如 `titlebar-right`） | 主内容区 tab 栏 | 插件面板内的「客户端面板」区 |
+| 形态 | **状态徽标 / 小组件**（list 叠加型：多占用者共存勾选） | **完整工作台**（长期占用主区，可并排对话） | 管理/总览小面板（藏在插件面板里） |
+| 数据密度 | 极低（一行文字 + 一个脉冲点） | 高（卡片列表 / 表格 / 详情） | 中 |
+| 实例 | autopilot `.ap-tbadge`（「自主模式 · N 轮」，运行中带 `running` 类 + 脉冲点） | autopilot `registerView('autopilot-board')` 监督回合看板 | 插件自身的设置/统计面板 |
+
+**选型经验**：状态类插件「徽标 + 独立视图」双挂载最实用 —— 徽标负责**常驻可发现性**
+（不抢主区、点击即切到视图），视图负责**深度信息**（可滚动、可刷新、可并排对话看）。
+徽标点击切换视图用 `layout.openViewTab(viewId)`（`ui-state.js` 的 layout 服务）。
+
+### 12.2 状态型 UI 插件的运行态契约（★ 2026-09-21 修复，重要）
+
+前端「某会话正在运行」的**唯一真相**是 `window.__state.agentRunningByConv[convId]`
+（以及 `loadingByConv`），它由后端 WebSocket 的 **status 帧**写入：
+
+```jsonc
+{ "type": "status", "runningConvs": ["conv_xxx"], ... }   // 后端 buildStatusPayload（internal/agent/event_ws.go）
+```
+
+**时序坑（本次踩到并已修）**：自主模式下 `done` 事件**早于会话真正结束** ——
+工作 agent 每轮自然结束都发一次 `done`，之后仍有监督者回合与收尾。WS 端点在收到
+`done`/`error` 后延迟 50ms 推一份 status（当时会话确实还在跑 → 含本会话，正确）；
+而会话**真正结束**时（Loop goroutine 的 defer 里 `Running=false`）原本不再产生任何事件，
+于是前端最后一次 status 仍把它标成运行中 → **「运行中」永久残留**（徽标一直脉冲、
+输入框禁用、会话列表状态错）。
+
+修复机制：`EventStatusRefresh`（`internal/agent/loop.go` 事件常量）
+
+1. `session_manager.go` 会话 defer 中，置 `Running=false` 之后、`close(Events)` 之前
+   **非阻塞**补发该事件（缓冲满丢弃无妨，下轮 done 仍会校正）；
+2. `event_ws.go` 收到它**只补推一条 status 帧**，事件本体不下发前端（避免未知消息）；
+3. `agent.go` 的全局监听显式跳过它（内部信号不进宿主 `OnEvent`）。
+
+**插件侧纪律**：不要把「运行中」当唯一真相渲染最终态；卡片/轮次等**事实数据**一律来自
+持久化接口（如 `GET /api/autopilot/rounds?convId=`），运行态只用来控制「进行中」的
+视觉提示。这样即使事件偶发丢失，刷新/切会话后界面仍自洽。
+
+### 12.3 UI 插件验证方法（CDP 无头 Chrome，2026-09 定型）
+
+1. **环境隔离**：一律用**非默认端口 + 独立二进制**（宿主 9090 不动），
+   如 `WEB_PORT=9097 ./companion_test.exe`；验证脚本放 `_temp/*.cjs`（配 `_temp/cdp-lib.cjs`）。
+2. **不动全局配置**：测试会话的模型只改**会话级 preset**
+   （`PUT /api/conversations/<id>` body `{preset:'基元flash'}`），不要写 `config/settings.json`。
+3. **驱动流程**：`Page.navigate` → 轮询等 `window.__PAIRCODE_CORE.layout` 就绪 →
+   `fetch('/api/chat/send', {convId, message, autonomous:true, workspaceRoot})` → 断言 DOM/state。
+4. **状态类断言必须高密度采样（2s）**：运行态是瞬态（本轮实测 `runFlag` true→false
+   只隔一个采样间隔）。5s 采样会直接漏掉整个运行窗口、得出错误结论 ——
+   verify5（5s）判「未观察到运行中」，verify6（2s，独立会话）才拿到
+   `2s:false → 4s:true + 徽标 .ap-tbadge.running → 8s:false → 10s:收尾文案+卡片` 的完整证据链。
+5. **留证据**：每轮落盘 `_temp/*-result.json`（采样序列 + 控制台错误）+ `Page.captureScreenshot` 截图。
 
 ---
 
@@ -641,6 +890,10 @@ return {
 - 长耗时任务用 `ctx.process.runBackground`（后台进程跨轮次存活）或 `ctx.binary.exec`（独立二进制）；
 - 新工具优先设计成「单工具 + op 分派」（§7.1）；混合读写语义用 `dynamicApproval` 控审批面；
 - 改工具名/合并工具后，务必同步工具集白名单与相关测试引用（见 §14）。
+- 装配型插件（`ctx.loopFactory.register`）只**覆盖自己关心的字段**，别整包返回 `opts` 的半成品——
+  装配器链是「按序叠加」（§4.5），返回 `null` 就是「本轮不改动」，比返回近似值安全；
+- 需要「插件自己当监督者」时，把核查逻辑放进 `ctx.subagent.run`（独立思考 + 收敛工具），
+  决策器 `decide` 只做轻量判断——同步阻塞语义下，`decide` 里做的每件事都在占用户等待时间（§4.8）。
 
 ### 常见坑
 
@@ -661,6 +914,12 @@ return {
 | 工具对勾勾了 Agent 却不用 | 工具集收敛 | 确认已加入工具集（勾选即加入，去掉即移除） |
 | 沙箱里 `require`/`setTimeout` 不可用 | 无 Node API | 一律走 ctx 服务（`ctx.fs`/`ctx.timeout`/`ctx.web`/...） |
 | `CordisApi` 插件里用 `ctx.set('svc', impl)` | cordis 3 语义 | `app.set('service', impl)` / `app.get('service')` |
+| 插件 HTTP 接口返回 200 但 body 为空 | handler 返回了裸对象/`res.json()` 而宿主只认字符串 body | 显式返回字符串：`return JSON.stringify(data)`（或 `{status, body, headers}`，body 也要字符串） |
+| UI 渲染把模型输出当 HTML 解析（排版错乱/内容消失） | client 半用了 `innerHTML` | 文本一律 `textContent`（LLM 输出常含 `<` `>` `&`）；只有自建结构才拼 HTML |
+| 自主模式流是「多插件并存」的假象 | 误以为 `register` 是单槽位覆盖，写了整包覆盖 | 2026-09-21 起为装配器**链**（§4.5）；同插件名重复注册才替换该项 |
+| `ctx.subagent.run` 报「无会话运行环境」 | 在装载期 / 无会话回调里派发 | 先 `ctx.subagent.available()` 判；不可用则降级为纯文本判断（§4.8.2） |
+| 声明 `inject:['toolset']` 后 `ctx.toolset.registerTemplate` undefined | 同键被工具集服务覆盖 | 二选一：要模板注册就别 inject toolset（§5） |
+| 决策器抛错后自主模式「静默停止」 | 宿主按「无监督」处理（日志可见） | 决策器内 try/catch + 日志；不要把宿主异常当控制流（§4.8.1） |
 
 ### 数据纪律
 

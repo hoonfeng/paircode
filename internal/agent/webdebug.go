@@ -433,8 +433,15 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 
 	// ── 截图 ──
 	if opts.screenshot {
-		ssDir := filepath.Join(root, "screenshots")
-		os.MkdirAll(ssDir, 0o755)
+		ssDir := screenshotOutputDir(root) // ★ 兜底 + 绝对化（见 screenshot_path.go）
+		if err := os.MkdirAll(ssDir, 0o755); err != nil {
+			// ★ 2026-09-17：原实现忽略该错误，导致「目录创建失败 → 之后截图路径写入失败」
+			//   只在结果里留下模糊的「截图失败」。此处显式记录，便于定位（不改控制流）。
+			res.consoleMsgs = append(res.consoleMsgs, consoleMessage{
+				Type: "error",
+				Text: fmt.Sprintf("截图目录创建失败（%s）: %v", ssDir, err),
+			})
+		}
 		ssName := fmt.Sprintf("webdebug_%d.png", time.Now().UnixMilli())
 		ssPath := filepath.Join(ssDir, ssName)
 		img, err := page.Screenshot(true, &proto.PageCaptureScreenshot{

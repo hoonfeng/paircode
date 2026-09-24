@@ -50,32 +50,79 @@
         <!-- ★ 工具集 tab（2026-09）：点击活动栏「工具集」打开；× 关闭后回对话主视图 -->
         <button v-if="state.toolsetsTabOpen" class="main-tab" :class="{ active: mainView === 'toolsets' }"
                 @click="layout.setMainView('toolsets')">工具集<span class="main-tab-close" title="关闭" @click.stop="closeToolsetsTab()">×</span></button>
+        <!-- ★ 插件中间区域视图 tab（2026-09；ui.registerView / clientViews）：
+             与内置视图同级 —— 可激活、可关闭、可与对话并排；打开状态持久化
+             （viewOpen:<插件>:<视图 id>），默认 open:true 的视图以「后台 tab」形式出现，
+             不抢占对话主视图。 -->
+        <button v-for="v in openViews" :key="v.key" class="main-tab"
+                :class="{ active: mainView === v.key }" :title="v.pluginName"
+                @click="layout.activateViewTab(v.pluginName, v.id)">{{ v.title }}<span
+                class="main-tab-close" title="关闭" @click.stop="layout.closeViewTab(v.pluginName, v.id)">×</span></button>
+        <!-- 右侧工具区：视图列表（开关各视图）+ 与对话并排切换 -->
+        <div class="main-tab-tools">
+          <button class="main-tab-tool" :class="{ active: viewMenuOpen }"
+                  title="视图列表（插件注册的中间区域视图）" @click.stop="viewMenuOpen = !viewMenuOpen">视图</button>
+          <button class="main-tab-tool" :class="{ active: splitActive }" :disabled="!canSplit"
+                  :title="canSplit ? (splitActive ? '取消并排（回到单栏）' : '与对话并排显示') : '对话本身已是当前视图（无需并排）'"
+                  @click.stop="layout.toggleSplit()">{{ splitActive ? '取消并排' : '并排对话' }}</button>
+          <button v-if="splitActive" class="main-tab-tool" title="切换对话所在侧"
+                  @click.stop="swapSplitSide()">换边</button>
+          <!-- 视图菜单浮层：勾选 = tab 打开（后台打开，不抢主视图） -->
+          <div v-if="viewMenuOpen" class="view-menu" @click.stop>
+            <div class="view-menu-head">中间区域视图（插件注册）</div>
+            <label v-for="v in views" :key="v.key" class="view-menu-item">
+              <input type="checkbox" :checked="v.open"
+                     @change="onToggleView(v, $event.target.checked)">
+              <span class="view-menu-title">{{ v.title }}</span>
+              <span class="view-menu-src">{{ v.pluginName }}</span>
+            </label>
+            <div v-if="views.length === 0" class="view-menu-empty">暂无插件注册视图</div>
+          </div>
+        </div>
+      </div>
+      <!-- 视图菜单外点关闭用的透明背板（不吃其他区域交互：仅 menu 打开时存在） -->
+      <div v-if="viewMenuOpen && !panelMode" class="view-menu-backdrop"
+           @click="viewMenuOpen = false"></div>
+
+      <!-- ★ 内容区：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图）─────────
+           split 时 = 一栏对话（可在左/右，换边按钮切换）+ 一栏当前激活视图；
+           各 pane 常驻挂载（v-show 切换，绝不 unmount）→ CM6/终端 WS 不重连。 -->
+      <div class="main-views"
+           :class="{ split: splitActive, 'split-chat-right': state.panels.splitChatSide === 'right' }">
+      <!-- conversation 宿主（单槽，常驻挂载；v-show 按 tab 切换；并排时常显侧栏） -->
+      <div class="view-pane view-pane-chat" v-show="mainView === 'conversation' || splitActive">
+        <div v-if="(state.rightPanelVisible || panelMode) && !slots.conversation.owner.value"
+             class="slot-empty conversation-container"
+             :class="{ 'panel-only': panelMode }"><span>对话面板未装配（ui-right-panel）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
+        <div v-else-if="(state.rightPanelVisible || panelMode)"
+             :ref="slots.conversation.hostRef" class="plugin-slot-host conversation-container"
+             :class="{ 'panel-only': panelMode }"></div>
       </div>
 
-      <!-- conversation 宿主（单槽，常驻挂载；v-show 按 tab 切换） -->
-      <div v-if="(state.rightPanelVisible || panelMode) && !slots.conversation.owner.value"
-           v-show="mainView === 'conversation'" class="slot-empty conversation-container"
-           :class="{ 'panel-only': panelMode }"><span>对话面板未装配（ui-right-panel）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
-      <div v-else-if="(state.rightPanelVisible || panelMode)" v-show="mainView === 'conversation'"
-           :ref="slots.conversation.hostRef" class="plugin-slot-host conversation-container"
-           :class="{ 'panel-only': panelMode }"></div>
-
       <!-- editor 宿主（单槽，常驻挂载；v-show 按 tab 切换，从不 unmount） -->
-      <div v-if="!panelMode && !slots.editor.owner.value"
-           v-show="mainView === 'editor'" class="slot-empty editor-container">
-        <span>编辑器未装配（ui-editor）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
-      <div v-else-if="!panelMode" v-show="mainView === 'editor'"
-           :ref="slots.editor.hostRef" class="plugin-slot-host editor-container"></div>
+      <div v-if="!panelMode" class="view-pane" v-show="mainView === 'editor'">
+        <div v-if="!slots.editor.owner.value" class="slot-empty editor-container">
+          <span>编辑器未装配（ui-editor）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
+        <div v-else :ref="slots.editor.hostRef" class="plugin-slot-host editor-container"></div>
+      </div>
 
       <!-- ★ market 宿主（市场面板 tab 内容）：marketplace bundle 动态挂载；
            与对话/编辑器同为主区视图（v-show 切换，不占用槽），bundle 未就绪自动重试 -->
-      <div v-if="!panelMode && state.marketTabOpen" v-show="mainView === 'market'"
-           ref="marketHost" class="plugin-slot-host market-container"></div>
+      <div v-if="!panelMode && state.marketTabOpen" class="view-pane" v-show="mainView === 'market'">
+        <div ref="marketHost" class="plugin-slot-host market-container"></div>
+      </div>
 
       <!-- ★ 工具集宿主（主区 tab）：ToolsetPanel 静态组件直接挂载（非 bundle）；
            v-if 控制 tab 打开时才挂载（首次打开加载数据），v-show 切换保持不销毁 -->
-      <div v-if="!panelMode && state.toolsetsTabOpen" v-show="mainView === 'toolsets'"
-           class="plugin-slot-host toolsets-container"><ToolsetPanel /></div>
+      <div v-if="!panelMode && state.toolsetsTabOpen" class="view-pane" v-show="mainView === 'toolsets'">
+        <div class="plugin-slot-host toolsets-container"><ToolsetPanel /></div>
+      </div>
+
+      <!-- ★ 插件中间区域视图容器（registerView）：激活过的视图懒挂载（bundle.render →
+           容器；挂上后保持，切 tab 不卸载 → 保住 3D 视角/滚动等状态），关闭 tab 才卸载 -->
+      <div v-for="v in openViews" :key="v.key" class="view-pane view-pane-plugin"
+           v-show="mainView === v.key" :ref="(el) => setViewHostEl(v.key, el)"></div>
+      </div>
     </div>
 
     <!-- statusbar 槽位（single）：底部状态栏 -->
@@ -115,7 +162,8 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue'
-import { useSingleSlot, boot, startPolling, stopPolling, loadAssemblyFile } from './plugin-runtime.js'
+import { useSingleSlot, boot, startPolling, stopPolling, loadAssemblyFile,
+         setViewMount, isViewOpen, getUIFor } from './plugin-runtime.js'
 import { state, sidebarWidth, layout } from './ui-state.js'
 import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab, closeToolsetsTab } from './app-actions.js'
 import PluginPanel from './components/PluginPanel.vue'
@@ -213,10 +261,94 @@ function unmountMarketPanel() {
   if (marketUnmount) { try { marketUnmount() } catch (e) {} marketUnmount = null }
 }
 
+// ─── ★ 插件中间区域视图（ui.registerView / clientViews，2026-09）──────────
+//   视图 tab 与内置 4 视图同级（对话/编辑器/市场/工具集）：
+//   · 列表来源 = plugin-runtime 的 clientViews（共享注册表，跨 bundle 副本一致）；
+//   · 打开状态 = isViewOpen()（localStorage viewOpen:* 优先，否则注册时的 open 默认）；
+//   · 渲染 = 视图 render(el, ui) → 容器；**懒挂载 + 保持**（激活过就挂上，切 tab 不
+//     卸载 —— 保住 3D 视角/滚动位置等），关闭 tab 或插件卸载才 cleanup；
+//   · 与对话并排 = layout.toggleSplit()（状态在 ui-state，本组件只渲染几何）。
+const views = ref([])          // [{ key, id, pluginName, title, icon, open, render }]
+const viewMenuOpen = ref(false)
+const viewHostEls = new Map()  // key → 容器 DOM
+const viewMounts = new Map()   // key → cleanup（render 返回值）
+let viewUnsub = null
+
+// refreshViews 视图表变化（插件装载/卸载、用户开关 tab）→ 重建列表 + 清理已关闭项。
+function refreshViews(list) {
+  const next = (list || []).map(v => ({
+    key: 'view:' + v.pluginName + ':' + v.id,
+    id: v.id,
+    pluginName: v.pluginName,
+    title: v.title,
+    icon: v.icon,
+    render: v.render,
+    open: isViewOpen(v),
+  }))
+  views.value = next
+  const live = new Set(next.filter(v => v.open).map(v => v.key))
+  // 已关闭的 tab / 已卸载插件的视图 → 卸载挂载（防残留 DOM 与轮询）
+  for (const [key, cleanup] of [...viewMounts]) {
+    if (live.has(key)) continue
+    try { cleanup() } catch (e) { console.warn('[shell] 视图卸载失败', key, e) }
+    viewMounts.delete(key)
+    viewHostEls.delete(key)
+  }
+  // 兜底：正激活的视图 tab 消失（插件被卸载）→ 回对话主视图
+  if (String(mainView.value).startsWith('view:') && !live.has(mainView.value)) {
+    state.panels.mainTab = 'conversation'
+  }
+}
+
+const openViews = computed(() => views.value.filter(v => v.open))
+// 并排开关可用性：对话本身是当前视图时无意义（会变成两栏对话）
+const canSplit = computed(() => mainView.value !== 'conversation' || state.panels.splitView)
+const splitActive = computed(() => layout.isSplitActive())
+
+function setViewHostEl(key, el) {
+  if (el) viewHostEls.set(key, el)
+  else viewHostEls.delete(key)
+}
+
+// mountViewIfNeeded 懒挂载（已挂载则幂等跳过；render 返回值作 cleanup）。
+function mountViewIfNeeded(v) {
+  if (!v || viewMounts.has(v.key)) return
+  const el = viewHostEls.get(v.key)
+  if (!el) return
+  if (typeof v.render !== 'function') {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">视图「' +
+      v.title + '」未提供 render（插件 client 半声明 registerView 时需给 render）</div>'
+    return
+  }
+  try {
+    const ret = v.render(el, getUIFor(v.pluginName))
+    viewMounts.set(v.key, typeof ret === 'function' ? ret : () => {})
+  } catch (e) {
+    console.warn('[shell] 视图挂载失败', v.key, e)
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">视图「' +
+      v.title + '」挂载失败: ' + ((e && e.message) || e) + '</div>'
+  }
+}
+
+// 视图菜单勾选：打开（后台 tab，不抢主视图）/ 关闭
+function onToggleView(v, checked) {
+  if (checked) layout.openViewTab(v.pluginName, v.id, { activate: false })
+  else layout.closeViewTab(v.pluginName, v.id)
+}
+// 并排：切换对话所在侧（左 ⇄ 右）
+function swapSplitSide() {
+  layout.setSplitChatSide(state.panels.splitChatSide === 'left' ? 'right' : 'left')
+}
+
 // 市场 tab 激活/离开时挂载/卸载面板（激活时 may 尚未 mount 完成，nextTick 兜底）
 watch(mainView, (v) => {
   if (v === 'market' && state.marketTabOpen) nextTick(mountMarketPanel)
   else unmountMarketPanel()
+  // ★ 插件视图：激活时懒挂载（挂上后保持 —— 切 tab 不卸载）
+  if (String(v).startsWith('view:')) {
+    const target = openViews.value.find(x => x.key === v)
+    if (target) nextTick(() => mountViewIfNeeded(target))
+  }
 })
 
 const gridStyle = computed(() => {
@@ -233,6 +365,8 @@ const gridStyle = computed(() => {
 
 onMounted(async () => {
   for (const s of Object.values(slots)) s.start()
+  // ★ 订阅视图注册表（registerView）：tab 栏 + 懒挂载随插件注册/卸载实时更新
+  viewUnsub = setViewMount(refreshViews)
   desktopPrefetch()
   initAppGlobals()
   loadWsList()
@@ -257,6 +391,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   for (const s of Object.values(slots)) s.stop()
+  if (viewUnsub) { viewUnsub(); viewUnsub = null }
+  for (const [, cleanup] of viewMounts) { try { cleanup() } catch (e) {} }
+  viewMounts.clear()
+  viewHostEls.clear()
   stopPolling()
   cleanupAppGlobals()
   unmountMarketPanel()
@@ -301,6 +439,7 @@ onUnmounted(() => {
 .main-tabs {
   display: flex; flex-shrink: 0; height: 30px;
   background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
+  position: relative;
 }
 .main-tab {
   /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */
@@ -311,6 +450,68 @@ onUnmounted(() => {
 }
 .main-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
 .main-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active); }
+/* ★ 内容区（2026-09）：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图） */
+.main-views {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden; position: relative;
+}
+/* 并排：横排两栏；split-chat-right 用 row-reverse 把对话栏换到右侧
+   （对话 pane 始终是 DOM 首个子元素：换边只改方向，不动挂载顺序） */
+.main-views.split { flex-direction: row; }
+.main-views.split.split-chat-right { flex-direction: row-reverse; }
+.view-pane {
+  flex: 1 1 auto; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden; position: relative;
+}
+/* 并排时对话栏固定比例（当前视图栏占剩余空间） */
+.main-views.split .view-pane-chat {
+  flex: 0 0 var(--split-chat-w, 42%);
+  border-right: 1px solid var(--border-color);
+}
+.main-views.split.split-chat-right .view-pane-chat {
+  border-right: none; border-left: 1px solid var(--border-color);
+}
+/* 插件中间区域视图容器（registerView）：bundle 挂载点，撑满所在栏 */
+.view-pane-plugin { background: var(--bg-primary); }
+/* tab 栏右侧工具区（视图列表 + 并排开关） */
+.main-tab-tools {
+  margin-left: auto; display: flex; align-items: stretch;
+  position: relative; flex-shrink: 0;
+}
+.main-tab-tool {
+  border: none; background: none; cursor: pointer;
+  color: var(--text-muted); font-size: 11px; font-weight: 600;
+  padding: 0 10px; border-left: 1px solid var(--border-color);
+  transition: color .15s, background .15s;
+}
+.main-tab-tool:hover { color: var(--text-primary); background: var(--bg-hover); }
+.main-tab-tool.active { color: var(--text-primary); background: var(--bg-active); }
+.main-tab-tool:disabled { opacity: .4; cursor: default; }
+.main-tab-tool:disabled:hover { color: var(--text-muted); background: none; }
+/* 视图列表浮层（勾选 = tab 打开；后台打开，不抢对话主视图） */
+.view-menu {
+  position: absolute; top: 30px; right: 0; width: 240px;
+  max-height: 320px; overflow: auto; padding: 4px 0; z-index: 120;
+  background: var(--bg-elevated, #262932);
+  border: 1px solid var(--border-color); border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
+}
+.view-menu-head {
+  padding: 4px 10px 6px; margin-bottom: 2px;
+  font-size: 11px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+.view-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; font-size: 12px; color: var(--text-primary);
+  cursor: pointer;
+}
+.view-menu-item:hover { background: var(--bg-hover); }
+.view-menu-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view-menu-src { font-size: 10px; color: var(--text-muted); }
+.view-menu-empty { padding: 8px 10px; font-size: 11px; color: var(--text-muted); }
+/* 菜单外点关闭背板（仅菜单打开时存在，点一下就关） */
+.view-menu-backdrop { position: fixed; inset: 0; z-index: 110; }
 /* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */
 .conversation-container {
   flex: 1; min-width: 0; min-height: 0;

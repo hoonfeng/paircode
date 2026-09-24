@@ -8,6 +8,8 @@
 //     ui.invoke(plugin, method, args?)  远程调用 host 半注册方法（D11 invoke RPC）
 //     ui.reportFailure(phase, message)  client 半失败上报（render/guard/boot）
 //     ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（渲染进插件面板 client 区）
+//     ui.registerView({id,title,icon,render,order,open}) 注册**中间区域视图**（主内容区
+//          tab 栏开 tab，与 对话/编辑器/市场/工具集 同级；open=true → 默认打开为后台 tab）
 //     ui.http.get(path)/post(path, body)       受限后端 API 调用
 //     ui.log(...)                 日志（控制台）
 //
@@ -41,6 +43,20 @@
 //     机制按 kind 分流（getSlotOwner 只管 single，getSlotUIList 只管 list）。
 // ═══════════════════════════════════════════════════════════════
 
+// ★ 中间区域视图（registerView）vs 插件面板（registerPanel）—— 2026-09 新增能力：
+//   registerPanel → 渲染进「插件面板」浮动窗口内的小 tab 区（属管理/总览场景，藏在
+//                   壳级逃生口里，用户要先打开插件面板才看得到）；
+//   registerView  → 直接在**主内容区**（.main-area）tab 栏开一个真正的 tab，与
+//                   「对话 / 编辑器 / 市场 / 工具集」同级：可激活、可关闭、可与对话
+//                   **并排**（壳层 split 布局：layout.toggleSplit()）。
+//   视图是「后台打开」语义：registerView({open:true}) 只把 tab 挂上，不抢走对话主视图
+//   （state.panels.mainTab 保持 'conversation'），用户点 tab 才激活。
+//   打开/关闭状态持久化 localStorage（viewOpen:<插件名>:<视图 id>）；未显式设置时取
+//   注册时的 open 默认值（对齐 overlay 槽位「未设置=默认」的既有语义）。
+//   ★ 与槽位系统的边界：槽位是「替换宿主既有区域」（titlebar/sidebar/editor…），
+//     视图是「在主内容区**增加**一个同级 tab」——不占用任何槽位，卸载插件即消失。
+// ═══════════════════════════════════════════════════════════════
+
 import api from './api.js'
 import { ref, nextTick } from 'vue'
 
@@ -51,8 +67,10 @@ import { ref, nextTick } from 'vue'
 //   否则外部插件（壳侧装载）与 bundle 内组件（UI bundle 侧）看到两张分裂的装配表，
 //   槽位占用/渲染互相不可见。对齐单例 SlotRegistry 语义。
 const __registry = (typeof window !== 'undefined')
-  ? (window.__SLOT_REGISTRY = window.__SLOT_REGISTRY || { instances: [], clientSlots: [], clientPanels: [] })
-  : { instances: [], clientSlots: [], clientPanels: [] }
+  ? (window.__SLOT_REGISTRY = window.__SLOT_REGISTRY || { instances: [], clientSlots: [], clientPanels: [], clientViews: [] })
+  : { instances: [], clientSlots: [], clientPanels: [], clientViews: [] }
+// ★ 兜底：页内已存在旧版 registry（热更新/旧副本已建）时补字段，否则 clientViews=undefined
+if (!__registry.clientViews) __registry.clientViews = []
 const instances = __registry.instances
 
 // ─── 事件轮询状态 ────────────────────────────────────────────
@@ -66,6 +84,42 @@ let pollInterval = 2000
 export const clientPanels = __registry.clientPanels
 // 面板容器元素注册（PluginPanel 挂载后调用）
 let panelMountFn = null
+
+// ─── 中间区域视图注册表（registerView：插件在 IDE 主内容区开 tab）─────
+// views: [{ id, title, icon, order, open, render, pluginName, defId }]
+// ★ 共享数组（同 __registry 语义）：壳（ShellApp）与 UI bundle 副本看到同一张表。
+export const clientViews = __registry.clientViews
+// 视图列表变化订阅（ShellApp 订阅 → 重渲染 tab 栏、增删视图容器）。
+// 返回取消订阅函数；订阅时立即收到当前表（对齐 setSlotMount 语义）。
+let viewMountFns = []
+export function setViewMount(fn) {
+  if (!fn) { viewMountFns = []; return () => {} }
+  viewMountFns.push(fn)
+  try { fn(clientViews) } catch (e) { console.warn('[view] 初始通知失败', e) }
+  return () => {
+    const i = viewMountFns.indexOf(fn)
+    if (i >= 0) viewMountFns.splice(i, 1)
+  }
+}
+export function emitViewChanged() {
+  for (const fn of viewMountFns) {
+    try { fn(clientViews) } catch (e) { console.warn('[view] 通知失败', e) }
+  }
+}
+// 视图打开状态：localStorage 显式设置优先，否则用注册时的 open 默认值。
+function viewOpenKey(pluginName, id) { return 'viewOpen:' + pluginName + ':' + id }
+export function isViewOpen(v) {
+  if (!v || !v.pluginName || !v.id) return false
+  try {
+    const raw = localStorage.getItem(viewOpenKey(v.pluginName, v.id))
+    if (raw !== null) return raw === '1'
+  } catch (e) { /* 忽略 */ }
+  return v.open === true
+}
+export function setViewOpen(pluginName, id, on) {
+  try { localStorage.setItem(viewOpenKey(pluginName, id), on ? '1' : '0') } catch (e) { /* 忽略 */ }
+  emitViewChanged()
+}
 
 // ─── UI 槽位注册表（Slot 系统：插件可替换的预定义界面区域）───
 // slots: [{ slotId, pluginName, title, render, defId }]
@@ -451,6 +505,41 @@ function makeUI(inst) {
         },
       }
     },
+    // 注册中间区域视图（主内容区 tab；与 registerPanel 相互独立——面板在插件面板内，
+    // 视图在 IDE 中间区域，两者可同时注册、共用同一个 bundle 的 mount）。
+    // spec: { id, title, icon?, order?, open?, render(el, ui) }
+    //   open=true → 注册后默认打开为后台 tab（不抢占对话主视图）
+    //   render 返回 cleanup；同一个 render 可能被调用两次（面板 + 视图各挂一次），
+    //   实现方需保证 mount 可重入（各自创建独立实例）。
+    registerView(spec) {
+      if (!spec || !spec.id || !spec.title) {
+        console.warn('[plugin] registerView 需要 {id, title, render?}')
+        return
+      }
+      const idx = clientViews.findIndex(v => v.id === spec.id && v.pluginName === inst.name)
+      const view = {
+        id: spec.id,
+        title: spec.title,
+        icon: spec.icon || 'sparkles',
+        // order 控制 tab 栏顺序（数值小者靠前；默认 100，排在内置视图之后）
+        order: Number.isFinite(Number(spec.order)) ? Number(spec.order) : 100,
+        open: spec.open === true,
+        render: typeof spec.render === 'function' ? spec.render : null,
+        pluginName: inst.name,
+        defId: inst.defId,
+      }
+      if (idx >= 0) clientViews[idx] = view
+      else clientViews.push(view)
+      clientViews.sort((a, b) => a.order - b.order || String(a.title).localeCompare(String(b.title)))
+      emitViewChanged()
+      return {
+        update() { emitViewChanged() },
+        remove() {
+          const i = clientViews.findIndex(v => v.id === view.id && v.pluginName === inst.name)
+          if (i >= 0) { clientViews.splice(i, 1); emitViewChanged() }
+        },
+      }
+    },
     // 注册 UI 槽位占用（Slot 系统：替换宿主预定义界面区域，如 'statusbar'/'chat'；
     // kind='list' 槽位为叠加型——多个占用者同时渲染，如 'overlay' 浮动层）。
     // 同插件重复注册同槽位 → 替换。single 槽位宿主按 getSlotOwner 决定激活哪个
@@ -565,8 +654,15 @@ export function unloadClientHalf(nameOrDefId) {
         clientSlots.splice(j, 1)
       }
     }
+    // 移除该插件注册的中间区域视图
+    for (let j = clientViews.length - 1; j >= 0; j--) {
+      if (clientViews[j].pluginName === name) {
+        clientViews.splice(j, 1)
+      }
+    }
     emitPanelChanged()
     emitSlotChanged()
+    emitViewChanged()
   }
   reportState()
 }
@@ -592,8 +688,18 @@ export async function syncClientHalves(plugins) {
     }
   }
   // 卸载已停止/删除的
+  // ★ 2026-09-17（创作域五域合并）：保留 **boot 图（dsh.ui 区域包）装载的实例** —— 这些包
+  //   不一定出现在 /api/plugins 清单里：Node 桥轨插件（声明了运行期 npm 依赖，host 半由
+  //   Node 桥装载、goja 轨跳过）即此情形，其 client 半只经 /api/ui-boot 的 entries 下发。
+  //   若此处只按 /api/plugins 对齐卸载，会连带清掉它注册的面板/视图（tool-voice 与 UI 同包后
+  //   「人声」面板一度消失的根因）——与 boot() 注释里「两类包并存装载」的语义不符。
+  const bootIds = (() => {
+    const core = (typeof window !== 'undefined') ? window.__PAIRCODE_CORE : null
+    const entries = (core && core.bootGraph && core.bootGraph.entries) || []
+    return new Set(entries.map(e => e && e.id).filter(Boolean))
+  })()
   for (let i = instances.length - 1; i >= 0; i--) {
-    if (!active.has(instances[i].name)) {
+    if (!active.has(instances[i].name) && !bootIds.has(instances[i].name)) {
       instances.splice(i, 1)
     }
   }
@@ -610,8 +716,15 @@ export async function syncClientHalves(plugins) {
       clientSlots.splice(j, 1)
     }
   }
+  // 清理孤儿视图注册
+  for (let j = clientViews.length - 1; j >= 0; j--) {
+    if (!liveNames.has(clientViews[j].pluginName)) {
+      clientViews.splice(j, 1)
+    }
+  }
   emitPanelChanged()
   emitSlotChanged()
+  emitViewChanged()
   reportState()
 }
 
@@ -706,6 +819,7 @@ export async function loadClientHalvesFromManifest(entries) {
   }
   emitPanelChanged()
   emitSlotChanged()
+  emitViewChanged()
   reportState()
 }
 
@@ -713,6 +827,14 @@ export async function loadClientHalvesFromManifest(entries) {
 
 // dispatchHostEvent 把一条 host 事件分发给所有 client 半的 on 监听器。
 function dispatchHostEvent(ev) {
+  // ★ 2026-09-21 主界面也要消费 host 事件（如 autopilot 的 ui:autopilot:round 监督看板）：
+  //   在 window 上统一广播一份（detail={name,payload}）。主界面不是插件实例、拿不到
+  //   client 半的 on 监听器；无监听者时零副作用。
+  try {
+    window.dispatchEvent(new CustomEvent('pair-plugin-event', { detail: { name: ev.name, payload: ev.payload } }))
+  } catch (e) {
+    // 忽略：非浏览器环境
+  }
   for (const inst of instances) {
     const fns = inst.onHandlers.get(ev.name)
     if (!fns) continue
@@ -759,11 +881,19 @@ export function buildSnapshot() {
   for (const p of plugins) {
     const mine = clientPanels.filter(cp => cp.pluginName === p.name).map(cp => cp.id)
     if (mine.length) p.panels = mine
+    const mineViews = clientViews.filter(cv => cv.pluginName === p.name).map(cv => cv.id)
+    if (mineViews.length) p.views = mineViews
     const mineSlots = clientSlots.filter(cs => cs.pluginName === p.name).map(cs => cs.slotId)
     if (mineSlots.length) p.slots = mineSlots
   }
   const slots = clientSlots.map(s => s.slotId)
-  return { plugins, ...(panels.length ? { panels } : {}), ...(slots.length ? { slots } : {}) }
+  const views = clientViews.map(v => v.pluginName + ':' + v.id)
+  return {
+    plugins,
+    ...(panels.length ? { panels } : {}),
+    ...(views.length ? { views } : {}),
+    ...(slots.length ? { slots } : {}),
+  }
 }
 
 // reportState 上报快照（节流：轮询周期内自动去重，无需独立节流）。
@@ -800,6 +930,7 @@ export default {
   boot, loadClientHalvesFromManifest,
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
+  clientViews, setViewMount, isViewOpen, setViewOpen, emitViewChanged,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
   emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, mountListSlot, loadAssemblyFile,
 }
@@ -811,6 +942,7 @@ if (typeof window !== 'undefined') {
     instances: () => instances.map(i => ({ name: i.name, status: i.status, error: i.error || '' })),
     clientSlots: () => clientSlots.map(s => ({ slotId: s.slotId, pluginName: s.pluginName, title: s.title, hasRender: typeof s.render === 'function' })),
     clientPanels: () => clientPanels.map(p => ({ id: p.id, pluginName: p.pluginName })),
+    clientViews: () => clientViews.map(v => ({ id: v.id, pluginName: v.pluginName, title: v.title, open: isViewOpen(v), hasRender: typeof v.render === 'function' })),
     getSlotOwner,
   }
 }

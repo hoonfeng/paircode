@@ -58,7 +58,11 @@ if (!PKG_PREFIX || /\s/.test(PKG_PREFIX) || !/[\/-]$/.test(PKG_PREFIX)) {
   console.error(`--pkg-prefix 非法（应形如 @paircode/ 或 paircode-plugin-，须以 / 或 - 结尾）: ${PKG_PREFIX || '(空)'}`)
   process.exit(1)
 }
-const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
+// ★ 发布包顶层白名单（2026-09-19 补 'lib'）：tool-voice 的 Node 半实现在 lib/ 下
+//   （index.js 里 require('./lib/{wav,dsp,fixture,deps,analyze,ops,project,verify}')），
+//   漏掉它会把 voice 发成「缺实现模块」的坏包（0.3.2 实测：tarball 里没有 lib/，装载即报错）。
+//   ⚠️ 同时必须同步白名单到 buildPackage 覆写的 pkg.files —— npm publish <dir> 仍按 files 字段过滤。
+const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'README.md']
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
 // ── 代理配置：Web 配置(.pair/publish/.proxy 文件) → PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY ──
 // ★ node fetch 不读 HTTP(S)_PROXY 环境变量，故线上查询改走 curl（天然支持 -x）
@@ -93,8 +97,13 @@ function listPlugins() {
   if (!fs.existsSync(pluginsDir)) return []
   const out = []
   for (const ent of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
-    if (!ent.isDirectory()) continue
     const dir = path.join(pluginsDir, ent.name)
+    // ★ Windows junction 兼容（2026-09-19）：开发态常把 .pair/plugins/<name> 以 junction 挂到
+    //   plugins-dist/<name>，而 Dirent.isDirectory() 对 junction 返回 false（既非目录也非 symlink）
+    //   ⇒ 必须用 statSync（跟随重解析点）复核，否则这类插件被整包跳过（六创作域就因此从列表里消失）。
+    let isDir = ent.isDirectory()
+    if (!isDir) { try { isDir = fs.statSync(dir).isDirectory() } catch { isDir = false } }
+    if (!isDir) continue
     const pkgPath = path.join(dir, 'package.json')
     if (!fs.existsSync(path.join(dir, 'index.js')) && !fs.existsSync(pkgPath)) continue
     let pkg = {}
@@ -364,7 +373,9 @@ function buildPackage(name) {
     if (!pkg.keywords.includes('paircode')) pkg.keywords.push('paircode')
     pkg.license = pkg.license || 'MIT'
     pkg.publishConfig = { access: 'public' }
-    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'package.json']
+    // 与 PUBLISH_FILES 同步（含 'lib'）：npm publish <dir> 会再按 files 字段过滤一遍，
+    // 只改拷贝白名单而漏掉这里，lib/ 照样进不了 tarball。
+    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json']
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
     return { ok: true, version: pkg.version }
   } catch (e) {

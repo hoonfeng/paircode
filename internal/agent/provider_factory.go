@@ -6,13 +6,28 @@
 //   获取最终 Provider 参数，不再直接读 core.Settings 的 AI 业务字段。
 //
 // ★ 2026-09-03 决策全量迁插件（本轮）：Go 只留「机制 + 数据面」——
-//   · 裸基线 resolveProviderBase：仅读 settings 顶层业务字段（存储镜像，零决策）；
+//   · 裸基线 resolveProviderBase：只注入装配上下文（零决策；★ 2026-09-20 起连接字段
+//     也不再读，见下）；
 //   · 装配上下文注入：Preset（当前生效配置名：会话级 > 全局激活）与 Conv*（会话选定值）
 //     透传给装配器（JS 经 ctx.aiPresets / ctx.models 查数据面表）；
 //   · 决策（配置整套展开、服务商数据兜底、Key 选择、统一模型同步、参数级覆盖、
 //     上下文窗口层级）全部在插件装配器（agentloop 的 provider 装配器）内实现；
 //   · 会话三元组查询（LookupConvModel）由 web 层注入钩子提供（数据面，agent 包不依赖 SessionManager）。
 //   无插件装载时装配器为原样工厂（goProviderFactory），返回裸基线（回退行为，非决策）。
+//
+// ★ 2026-09-20 生成参数零直读：温度 / 思考档位 / 最大输出 / 上下文窗口不再由核心读取
+//   （此前读 core.Temperature() 与 core.Settings.{MaxTokens,ThinkingMode,ContextMaxTokens}，
+//   与「配置项一律插件 ctx.registerSettings 注册」的设计纪律不符）。现取值来源全在插件侧：
+//   · 全局默认 → 插件注册配置域 pluginSettings.generation（agentloop registerSettings）；
+//   · 服务商级 / 模型级 → models.json（经 ctx.models）；
+//   · 配置级（AI 配置预设）→ ai-presets.json（经 ctx.aiPresets）。
+//   核心只消费装配结果（ProviderParams.ContextMaxTokens 等）。
+//
+// ★ 2026-09-20 连接字段零直读（同批清理）：服务商/地址/Key/模型此前从 settings 顶层
+//   兜底读取（resolveProviderBase 的 Provider/BaseURL/APIKey/MainModel + 装配器 ③ 段的
+//   s.provider/s.executeModel）。settings 顶层旧值已由 core 一次性迁入 ai-presets.json
+//   的一条 AI 配置并清空（core/settings_connection.go）——现基线只传「装配上下文」
+//   （Preset + 会话三元组），连接信息一律由装配器按激活配置经 ctx.aiPresets/ctx.models 展开。
 
 package agent
 
@@ -97,8 +112,12 @@ func logResolvedParams(tag, convID string, p ProviderParams) {
 	if convID != "" {
 		extra = fmt.Sprintf(" conv=%s (会话选定 provider=%s model=%s preset=%s)", convID, p.ConvProvider, p.ConvModel, p.ConvPreset)
 	}
-	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s%s",
-		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, extra)
+	// ★ 2026-09-19：一并打印生成参数（温度/最大输出/上下文窗口）——便于确认取值来源
+	//   （温度/最大输出/上下文窗口一律以 models.json 服务商配置为准，模型级 > 服务商级）。
+	// ★ 2026-09-20：补打 thinkingMode（取值链：模型级 models.json > ai-presets.json
+	//   > 插件注册配置域 generation 段），四项生成参数来源均可据此核对。
+	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s | temperature=%.2f thinkingMode=%s maxTokens=%d contextMaxTokens=%d%s",
+		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, p.Temperature, p.ThinkingMode, p.MaxTokens, p.ContextMaxTokens, extra)
 }
 
 // ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
@@ -122,34 +141,49 @@ func ResolveProviderParams() ProviderParams {
 	return p
 }
 
-// resolveProviderBase 解析装配器之前的裸基线（存储镜像，零决策）：
-// 只读 settings 顶层业务字段 + 装配上下文（Preset=全局激活配置名，Conv* 由 ForConv 注入）。
+// resolveProviderBase 解析装配器之前的裸基线（零决策）：
+// 只注入装配上下文（Preset=全局激活配置名；Conv* 由 ForConv 注入）。
 // 服务商默认数据（BaseURL/Key/协议/上下文）与配置展开由装配器经 ctx.models/ctx.aiPresets
 // 决策（★ 2026-09-03 决策迁插件——Go 不再预填任何 AI 业务派生值）。
+//
+// ★ 2026-09-20 连接字段零直读：此前基线还从 core.Settings 抓 Provider/BaseURL/APIKey/
+// Model（旧连接字段兜底），装配器再兜一层 s.provider/s.executeModel——同一份连接信息
+// 在 settings 顶层与 ai-presets.json 两处存储、易漂移。现 settings 顶层旧值已一次性迁入
+// AI 配置并清空（core/settings_connection.go），基线只留装配上下文；服务商/地址/Key/模型
+// 由装配器按激活配置展开（无激活配置 → 未配置，运行期由 ConfiguredProvider 报缺失）。
 func resolveProviderBase() ProviderParams {
-	cur := ProviderParams{
-		Provider:                 core.Settings.Provider,
-		BaseURL:                  core.Settings.BaseURL,
-		APIKey:                   core.Settings.APIKey,
-		Model:                    core.MainModel(),
-		Temperature:              core.Temperature(),
-		MaxTokens:                core.Settings.MaxTokens,
-		ThinkingMode:             core.Settings.ThinkingMode,
-		ContextMaxTokens:         core.Settings.ContextMaxTokens,
-		ProviderContextMaxTokens: core.GetProviderContextMaxToken(core.Settings.Provider), // 服务商默认上下文（数据面预查；装配器按最终服务商再决策）
-		ModelParams:              core.Settings.ModelParams,
-		Preset:                   core.Settings.Preset, // 全局激活配置名（装配上下文）
+	return ProviderParams{
+		// ★ 2026-09-20 生成参数不再由核心直读（见文件头）：基线一律留「未配置」，
+		//   由装配器按插件注册配置（generation 段）/ models.json / ai-presets.json 决策。
+		//   Temperature=-1 是「不下发温度」的机制语义（Provider 不传 temperature 字段）。
+		Temperature: -1,
+		// 装配上下文：全局激活配置名（装配器据此经 ctx.aiPresets 整套展开）。
+		// ★ 服务商级默认上下文窗口（ProviderContextMaxTokens）不再预查——装配器按
+		//   「最终服务商」经 ctx.models 取（基线预查会按旧服务商算，可能不是最终值）。
+		Preset: core.Settings.Preset,
 	}
-	// 统一模型同步（无分支的无害兜底：装配器最终按执行模型覆盖 plan/review）
-	cur.PlanModel = cur.Model
-	cur.ReviewModel = cur.Model
-	return cur
 }
 
 // ConfiguredProvider 是否已配好可用 Provider（业务层用，替代 core.Configured 的 AI 检查）。
 func ConfiguredProvider() bool {
 	p := ResolveProviderParams()
 	return p.APIKey != "" && p.BaseURL != "" && p.Model != ""
+}
+
+// ContextWindow 返回生效的上下文窗口（token）——一律以服务商配置（models.json）为准：
+// 装配器已按「模型级（models.json modelParams）> 服务商级（models.json）」算出 ContextMaxTokens；
+// 正常路径下装配器还会向下兜底「配置级（ai-presets.json）> 全局（插件注册 generation 段）」，
+// 故本函数只在插件未装载/全部未配置时回退机制兜底常量（运行保障，非配置面）。
+//
+// ★ 2026-09-19 缺陷修复：此前 Loop 装配 / 历史精简 / 会话交接 / 精简策略都直接读
+// core.Settings.ContextMaxTokens，models.json 的服务商级上下文窗口不生效（装配结果无人消费）。
+// ★ 2026-09-20：核心不再直读任何生成参数——移除对 core.Settings.ContextMaxTokens 的兜底
+// （旧字段已迁入插件注册域并清空），改回机制常量 core.DefaultContextWindow。
+func ContextWindow(p ProviderParams) int {
+	if p.ContextMaxTokens > 0 {
+		return p.ContextMaxTokens
+	}
+	return core.DefaultContextWindow
 }
 
 // ConfiguredProviderForConv 会话感知的 Provider 就绪检查（★ 2026-09-04 同步段校验修复）：

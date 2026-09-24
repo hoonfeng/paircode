@@ -19,6 +19,11 @@
     <!-- ★ statusbar-items 槽位（list 型）：内置状态栏内细粒度叠加条目（插件加小状态/快捷入口） -->
     <div ref="statusItemsEl" class="plugin-slot-host plugin-slot-status-items"></div>
     <div class="status-right">
+      <!-- ★ 在线更新：发现新版本 / 更新进行中时全局提示（点击打开软件更新弹窗） -->
+      <span v-if="updateAvailable" class="status-item update-item" :title="updateTitle" @click="openUpdateModal">
+        <SvgIcon name="download" :size="12" />
+        {{ updateBadgeText }}
+      </span>
       <span class="status-item" v-if="state.activeFile">
         <SvgIcon name="file-code" :size="12" />
         {{ displayPath }}
@@ -35,6 +40,10 @@ import { state } from '../ui-state.js'
 import SvgIcon from './SvgIcon.vue'
 import api from '../api.js'
 import { mountListSlot } from '../plugin-runtime.js'
+import {
+  updateAvailable, updateBadgeText, updateTitle,
+  openUpdateModal, startUpdateWatch, stopUpdateWatch,
+} from '../update-state.js'
 
 const gitBranch = ref('')
 const gitChanges = ref(0)
@@ -79,11 +88,14 @@ onMounted(async () => {
   // Load git info
   await loadGitInfo()
   gitTimer = setInterval(loadGitInfo, 15000)
+  // 在线更新：读 /api/update/status（后端自动检查的结果），有新版则显示徽标
+  startUpdateWatch()
 })
 
 onUnmounted(() => {
   if (gitTimer) clearInterval(gitTimer)
   if (statusItemsUnsub) { statusItemsUnsub(); statusItemsUnsub = null }
+  stopUpdateWatch()
 })
 </script>
 
@@ -119,4 +131,18 @@ onUnmounted(() => {
 .status-item:hover { opacity: 1; }
 .git-branch-item, .git-status-icons { cursor: pointer; }
 .git-branch-item:hover, .git-status-icons:hover { text-decoration: underline; }
+/* 在线更新徽标：底色用当前文字色的低透明度（随主题走，不引入新色值） */
+.update-item {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+.update-item:hover { background: color-mix(in srgb, currentColor 32%, transparent); }
+.update-item .svg-icon { animation: updatePulse 1.6s ease-in-out infinite; }
+@keyframes updatePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
 </style>

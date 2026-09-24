@@ -76,10 +76,10 @@
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
                       <ProviderManager v-else-if="f.type === 'provider-manager'" :model-param-fields="f.modelParamFields || []" :model-editor="f.modelEditor || {}"
                                        :protocol-label="f.protocolLabel || 'LLM 协议'" :protocol-options="f.protocolOptions || []" :protocol-hint="f.protocolHint || ''"
-                                       @saved="loadModels" />
+                                       @saved="onProvidersSaved" />
 
                       <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
-                      <PresetManager v-else-if="f.type === 'preset-manager'" :preset-fields="f.presetFields || []" @saved="onPresetSaved" />
+                      <PresetManager v-else-if="f.type === 'preset-manager'" :key="presetRev" :preset-fields="f.presetFields || []" @saved="onPresetSaved" />
                       
                       <!-- link（纯展示：href 经 linkHref 白名单校验；文本用 {{ }} 插值防注入） -->
                       <a v-else-if="f.type === 'link'" class="field-link" :href="linkHref(f)" target="_blank" rel="noopener noreferrer">{{ f.linkText || '打开' }}</a>
@@ -290,6 +290,15 @@ function loadSettings() {
 async function reloadProjectInst() { await loadProjectInstructions() }
 
 const resetForm = () => { loadSettings() }
+
+// ─── 服务商数据变更后（新增/编辑/改名/删除）：重载服务商数据 + 重建 AI 配置面板 ───
+// ★ 2026-09-20：服务商改名会同步改写 ai-presets.json 里的 provider 引用，预设面板必须重新
+//   拉取才会显示新名（:key 变化 → PresetManager 重建并重新 getAiPresets）。
+const presetRev = ref(0)
+async function onProvidersSaved() {
+  await loadModels()
+  presetRev.value++
+}
 
 // ─── AI 配置预设变更后：重新拉 settings（应用预设已整套写回）并重建表单 ───
 async function onPresetSaved() {

@@ -29,6 +29,19 @@
           <button class="btn-refresh" @click="loadInstalled"><SvgIcon name="refresh" :size="14" /> 刷新</button>
         </div>
 
+        <!-- 类型筛选 tag（★ 2026-09-19 新增：按类型点击切换 插件 / MCP / 技能） -->
+        <div v-if="tab === 'installed'" class="installed-filters">
+          <button v-for="f in installedFilterTags" :key="f.kind"
+                  class="if-tag"
+                  :class="{ active: installedFilter === f.kind, empty: f.count === 0 }"
+                  :title="f.title"
+                  @click="installedFilter = f.kind">
+            <SvgIcon :name="f.icon" :size="12" />
+            {{ f.label }}
+            <span class="if-count">{{ f.count }}</span>
+          </button>
+        </div>
+
         <!-- 添加 MCP 表单 -->
         <div v-if="showAddMCP" class="mcp-form">
           <div class="mcp-form-row"><label>名称</label><input v-model="mcpForm.name" placeholder="如 my-server" /></div>
@@ -92,7 +105,7 @@
             <span v-if="updSummary" class="installed-toolbar-tip" :class="{ 'has-upd': updates.some(u => u.updateable) }">{{ updSummary }}</span>
           </div>
           <!-- 插件分组（★ 2026-08-20 新增：磁盘插件清单） -->
-          <div v-if="installedPlugins.length > 0" class="installed-group">
+          <div v-if="showInstalledGroup('plugin')" class="installed-group">
             <div class="installed-group-title" @click="toggleGroup('plugin')" :title="collapsedGroups.has('plugin') ? '展开插件列表' : '收起插件列表'">
               <SvgIcon :name="collapsedGroups.has('plugin') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
               <span>插件</span>
@@ -110,9 +123,9 @@
                   插件 ·
                   <span :class="'status-' + (item.state === 'running' ? 'on' : 'off')">{{ item.state === 'running' ? '运行中' : '已停止' }}</span>
                   · {{ item.scope === 'global' ? '全局' : '工作区' }}
-                  <template v-if="npmOf(item)">
-                    · v{{ npmOf(item).current }}
-                    <span v-if="npmOf(item).updateable" class="badge-updateable" :title="'registry 最新 v' + npmOf(item).latest">有新版</span>
+                  <template v-if="pluginVersion(item)">
+                    · v{{ pluginVersion(item) }}
+                    <span v-if="npmOf(item) && npmOf(item).updateable" class="badge-updateable" :title="'registry 最新 v' + npmOf(item).latest">有新版 v{{ npmOf(item).latest }}</span>
                   </template>
                 </span>
               </div>
@@ -126,7 +139,7 @@
             </div>
           </div>
           <!-- MCP 分组 -->
-          <div v-if="installedMCPs.length > 0" class="installed-group">
+          <div v-if="showInstalledGroup('mcp')" class="installed-group">
             <div class="installed-group-title" @click="toggleGroup('mcp')" :title="collapsedGroups.has('mcp') ? '展开 MCP 列表' : '收起 MCP 列表'">
               <SvgIcon :name="collapsedGroups.has('mcp') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
               <span>MCP 服务器</span>
@@ -152,7 +165,7 @@
             </div>
           </div>
           <!-- 技能分组 -->
-          <div v-if="installedSkills.length > 0" class="installed-group">
+          <div v-if="showInstalledGroup('skill')" class="installed-group">
             <div class="installed-group-title" @click="toggleGroup('skill')" :title="collapsedGroups.has('skill') ? '展开技能列表' : '收起技能列表'">
               <SvgIcon :name="collapsedGroups.has('skill') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
               <span>技能</span>
@@ -184,6 +197,12 @@
             </div>
             </div>
           </div>
+          <!-- 筛选后该类为空时的提示（★ 2026-09-19 类型筛选） -->
+          <div v-if="tab === 'installed' && installedFilter !== 'all' && filteredInstalledCount === 0" class="market-empty">
+            <div class="me-icon"><SvgIcon :name="filterIcon(installedFilter)" :size="32" /></div>
+            <div>暂无{{ filterLabel(installedFilter) }}</div>
+            <div class="me-hint">点击上方 tag 切回「全部」或切换到其他类型</div>
+          </div>
           <div v-if="installedMCPs.length === 0 && installedSkills.length === 0 && installedPlugins.length === 0" class="market-empty">
             <div class="me-icon"><SvgIcon name="package" :size="32" /></div>
             <div>暂无已安装内容</div>
@@ -202,10 +221,19 @@
               <div class="mi-desc">{{ item.description }}</div>
               <div class="mi-meta">
                 <span class="mi-type" :class="'type-' + item.kind">{{ item.kind === 'mcp' ? 'MCP' : item.kind === 'plugin' ? '插件' : '技能' }}</span>
+                <span v-if="item.version" class="mi-version">v{{ item.version }}</span>
                 <span v-if="item.tags" class="mi-tags">
                   <span v-for="tag in item.tags" :key="tag" class="mi-tag">{{ tag }}</span>
                 </span>
                 <span v-if="item.installed" class="mi-installed"><SvgIcon name="check" :size="10" /> 已安装</span>
+              </div>
+              <!-- 更新提示（★ 2026-09-19：已安装条目对比本地版本与 registry latest） -->
+              <div v-if="item.installed && marketLocalVersion(item)" class="mi-updline">
+                <span v-if="marketUpdate(item)" class="mi-update">
+                  <SvgIcon name="refresh" :size="10" />
+                  有更新：v{{ marketLocalVersion(item) }} → v{{ marketLatest(item) }}
+                </span>
+                <span v-else class="mi-uptodate">已装 v{{ marketLocalVersion(item) }} · 已是最新</span>
               </div>
             </div>
             <div v-if="!item.installed" class="mi-install-area">
@@ -230,6 +258,10 @@
               </template>
             </div>
             <div v-else class="mi-install-area">
+              <button v-if="marketUpdate(item)" class="mi-install-btn" @click="updatePlugin(item)"
+                      :title="'更新到 v' + marketLatest(item)">
+                <SvgIcon name="refresh" :size="12" /> 更新到 v{{ marketLatest(item) }}
+              </button>
               <button class="mi-uninstall-btn" @click="uninstallItem(item)" title="卸载：从配置中移除">
                 <SvgIcon name="trash" :size="12" /> 卸载
               </button>
@@ -301,6 +333,34 @@ async function loadSources() {
 const installedMCPs = ref([])
 const installedSkills = ref([])
 const installedPlugins = ref([])
+// ★ 2026-09-19 新增：已安装页类型筛选（tag 点击切换 全部 / 插件 / MCP / 技能）
+const installedFilter = ref('all')
+const installedFilterTags = computed(() => {
+  const all = installedPlugins.value.length + installedMCPs.value.length + installedSkills.value.length
+  return [
+    { kind: 'all', label: '全部', icon: 'package', count: all, title: '显示全部已安装内容' },
+    { kind: 'plugin', label: '插件', icon: 'puzzle', count: installedPlugins.value.length, title: '只看插件（npm 来源 + 系统/内置插件）' },
+    { kind: 'mcp', label: 'MCP', icon: 'package', count: installedMCPs.value.length, title: '只看 MCP 服务器' },
+    { kind: 'skill', label: '技能', icon: 'code', count: installedSkills.value.length, title: '只看技能' },
+  ]
+})
+const filteredInstalledCount = computed(() => {
+  const k = installedFilter.value
+  if (k === 'plugin') return installedPlugins.value.length
+  if (k === 'mcp') return installedMCPs.value.length
+  if (k === 'skill') return installedSkills.value.length
+  return installedPlugins.value.length + installedMCPs.value.length + installedSkills.value.length
+})
+// showInstalledGroup 分组是否展示（受当前类型筛选约束）
+function showInstalledGroup(kind) {
+  if (installedFilter.value !== 'all' && installedFilter.value !== kind) return false
+  if (kind === 'plugin') return installedPlugins.value.length > 0
+  if (kind === 'mcp') return installedMCPs.value.length > 0
+  if (kind === 'skill') return installedSkills.value.length > 0
+  return false
+}
+function filterLabel(kind) { return { plugin: '插件', mcp: 'MCP 服务器', skill: '技能' }[kind] || '内容' }
+function filterIcon(kind) { return kind === 'plugin' ? 'puzzle' : (kind === 'skill' ? 'code' : 'package') }
 const showAddMCP = ref(false)
 const savingMCP = ref(false)
 const mcpError = ref('')
@@ -346,17 +406,50 @@ const npmMap = computed(() => {
 })
 function npmOf(item) { return npmMap.value[item.name] }
 
+// ── 版本展示 / 更新提示（★ 2026-09-19）──
+// 数据源：/marketplace/check-update（每个磁盘插件包一条：current=本地版本、
+// latest=registry 最新、updateable=是否有新版、pkg=npm 包名）。
+// ★ 后端已按官方约定推断（@paircode/<插件名>）覆盖手动放置的插件包，
+//   因此本地版本对全部插件可用、更新提示对 npm 来源插件可用。
+function pluginVersion(item) {
+  const u = npmOf(item)
+  return (u && u.current) || ''
+}
+function marketLocalVersion(item) {
+  const u = npmOf(item)
+  return (u && u.current) || ''
+}
+function marketLatest(item) {
+  const u = npmOf(item)
+  return (u && u.latest) || item.version || ''
+}
+function marketUpdate(item) {
+  const u = npmOf(item)
+  return !!(u && u.updateable)
+}
+
+// updLoadedAt 更新对照数据的加载时间（60s 内复用，避免市场搜索/切 tab 反复查 registry）
+let updLoadedAt = 0
+
+// ensureUpdates 静默确保更新对照已加载（市场列表与已安装页共用同一份数据）。
+async function ensureUpdates() {
+  if (updates.value.length && Date.now() - updLoadedAt < 60000) return
+  await checkUpdates(true)
+}
+
 async function checkUpdates(silent) {
   checkingUpd.value = true
   try {
     const r = await api.apiGet('/marketplace/check-update')
     // ★ ok() 直接序列化数组（body 即数组），非 {ok,data} 包装
     updates.value = Array.isArray(r) ? r : ((r && r.data) || [])
+    updLoadedAt = Date.now()
     const upd = updates.value.filter(u => u.updateable)
     const errs = updates.value.filter(u => u.error && !u.updateable)
+    const npmCount = updates.value.filter(u => u.pkg).length
     if (upd.length) updSummary.value = `${upd.length} 个插件可更新`
     else if (errs.length) updSummary.value = `${errs.length} 个插件检查失败（见网络/registry）`
-    else updSummary.value = updates.value.length ? '全部已是最新' : ''
+    else updSummary.value = npmCount ? `${npmCount} 个 npm 插件已是最新` : (updates.value.length ? '无 npm 来源插件' : '')
     if (!silent) window.$toast?.(updSummary.value || '无 npm 来源插件', 'success')
   } catch (e) {
     updSummary.value = '检查失败: ' + e.message
@@ -520,6 +613,8 @@ async function doSearch() {
       kind: kind,
     })
     items.value = results || []
+    // ★ 静默拉取版本对照（不阻塞搜索渲染）：市场条目据此显示「已装 vX · 有更新」
+    ensureUpdates()
   } catch (err) {
     error.value = '搜索失败: ' + err.message
     items.value = []
@@ -793,6 +888,44 @@ onMounted(() => {
   gap: 4px;
 }
 .btn-refresh:hover { color: var(--text-primary); }
+
+/* ── 已安装类型筛选 tag（★ 2026-09-19：插件 / MCP / 技能 点击切换）── */
+.installed-filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+.if-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.if-tag:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent); }
+.if-tag.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.if-tag.empty { opacity: 0.45; }
+.if-tag:disabled { cursor: default; }
+.if-count {
+  font-size: 10px;
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 999px;
+  padding: 0 5px;
+  min-width: 14px;
+  text-align: center;
+}
 
 /* ── MCP 表单 ── */
 .mcp-form {
@@ -1087,6 +1220,26 @@ onMounted(() => {
 .mi-tags { display: flex; gap: 3px; flex-wrap: nowrap; overflow: hidden; }
 .mi-tag { font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--bg-tertiary); color: var(--text-muted); flex-shrink: 0; }
 .mi-installed { font-size: 11px; color: #6a9955; display: flex; align-items: center; gap: 2px; }
+
+/* ── 市场条目的版本号与更新提示（★ 2026-09-19）── */
+.mi-version {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mi-updline { margin-top: 4px; font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.mi-update {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+}
+.mi-uptodate { color: var(--text-muted); }
 
 .mi-install-btn, .mi-uninstall-btn {
   flex-shrink: 0;

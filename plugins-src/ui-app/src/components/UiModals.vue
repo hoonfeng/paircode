@@ -4,6 +4,7 @@
   <SourceModal v-if="showSource" @close="showSource = false" />
   <HelpModal v-if="showHelp" @close="showHelp = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget" />
   <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
+  <UpdateModal v-if="showUpdate" @close="showUpdate = false" />
   <GlobalDialogs />
   <!-- ★ overlay 槽位（list 型）：插件注册的浮动层条目叠加渲染（badge/toast/status pill 等） -->
   <div ref="overlaySlotEl" class="plugin-overlay-host"></div>
@@ -16,7 +17,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
   showSettings, showSystem, showSource,
-  showHelp, showAbout, helpDocTarget,
+  showHelp, showAbout, helpDocTarget, showUpdate,
 } from '../ui-state.js'
 import { mountListSlot, isOverlayActive } from '../plugin-runtime.js'
 import SettingsModal from './SettingsModal.vue'
@@ -24,6 +25,7 @@ import SystemModal from './SystemModal.vue'
 import SourceModal from './SourceModal.vue'
 import HelpModal from './HelpModal.vue'
 import AboutModal from './AboutModal.vue'
+import UpdateModal from './UpdateModal.vue'
 import GlobalDialogs from './GlobalDialogs.vue'
 
 const overlaySlotEl = ref(null)

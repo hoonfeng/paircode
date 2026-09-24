@@ -130,18 +130,19 @@ function providerInfo(prov) {
 }
 
 // 打开添加表单（服务商默认当前生效的，带出 BaseURL/Key/模型）
-// ★ 优先带出激活预设（settings.preset → ai-presets 整套配置），
-//   其次 settings 当前生效值，最后 models.json 服务商默认。
+// ★ 优先带出激活配置（settings.preset → ai-presets 整套配置），
+//   其次 models.json 服务商默认（★ 2026-09-20：不再读 settings 顶层连接字段——
+//   provider/baseURL 已由 core 迁入 ai-presets.json 并清空）。
 function openAdd() {
   const s = (window && window.__PAIRCODE_CORE && window.__PAIRCODE_CORE.uiState && window.__PAIRCODE_CORE.uiState.state
     && window.__PAIRCODE_CORE.uiState.state.settings) || {}
   let base = {}
   if (s.preset && presets.value && presets.value[s.preset]) base = presets.value[s.preset]
-  const prov = (base.provider || s.provider || providers.value[0] || '')
+  const prov = (base.provider || providers.value[0] || '')
   const info = providerInfo(prov)
   form.value = blankForm({
     provider: prov,
-    baseURL: (base.baseURL || s.baseURL || info.baseURL || ''),
+    baseURL: (base.baseURL || info.baseURL || ''),
     apiKey: base.apiKey || '',
   })
   editingName.value = ''

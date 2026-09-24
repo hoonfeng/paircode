@@ -485,7 +485,7 @@ func registerCoreTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "write",
-		UsageGuide:       "写入文件，父目录自动创建。需审核批准。path 相对「主项目根」解析——多项目工作区写其他项目文件请传 project（项目目录名）或绝对路径。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read 读入再加上新内容后 write 覆盖。",
+		UsageGuide:       "写入文件，父目录自动创建。需审核批准。path 相对「主项目根」解析——多项目工作区写其他项目文件请传 project（项目目录名）或绝对路径。比 os.WriteFile 更安全（路径越界拦截+变更回调）。如需追加内容请先用 read 读入再加上新内容后 write 覆盖。",
 		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。path 相对主项目根（跨项目传 project 或绝对路径）。",
 		Parameters:       objSchema(props{"path": strProp("文件路径（相对主项目根，跨项目用 project 参数或绝对路径）"), "content": strProp("完整文件内容"), "project": projectSchemaProp()}, "path", "content"),
 		RequiresApproval: true,
@@ -494,7 +494,6 @@ func registerCoreTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
 			content := argStr(args, "content")
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return "", err
@@ -513,7 +512,7 @@ func registerCoreTools(r *Registry, root string) {
 		Name:       "apply_patch",
 		UsageGuide: "应用 codex 语法自由格式补丁修改文件（*** Begin Patch / Add File / Update File / Delete File / *** End Patch）。免 JSON 转义、免唯一性/行号依赖——Update 用上下文行定位；编辑文件的主工具（取代 edit/multi_edit）。",
 		Description: "应用补丁修改文件：一次调用可含多个文件、四类操作（新增/更新/删除/移动）。" +
-			"@@ 段内：空格前缀=上下文行、- 前缀=删除行、+ 前缀=新增行；写前自动快照+变更回调。",
+			"@@ 段内：空格前缀=上下文行、- 前缀=删除行、+ 前缀=新增行；写前变更回调。",
 		Parameters:       objSchema(props{"patch": strProp("补丁文本（*** Begin Patch … *** End Patch）")}, "patch"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {

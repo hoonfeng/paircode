@@ -167,19 +167,16 @@ var ws *webServer
 //	buildProviderFn:   创建 LLM Provider（主模型）
 //	buildSystemPromptFn:创建系统提示语
 //	buildCompressorFn:  创建上下文压缩器（nil=规则式压缩）
-//	buildPlanProviderFn:创建规划 Provider（自主模式，回退到 buildProviderFn）
 type (
 	buildProviderFn     func() agent.Provider
 	buildSystemPromptFn func() string
 	buildCompressorFn   func() agent.Compressor
-	buildPlanProviderFn func() agent.Provider
 )
 
 var (
 	webProvider     buildProviderFn
 	webSystemPrompt buildSystemPromptFn
 	webCompressor   buildCompressorFn
-	webPlanProvider buildPlanProviderFn
 )
 
 // findMessageStoreRoot 在所有工作区文件夹中查找第一个有对话数据目录的路径。
@@ -224,7 +221,8 @@ func startWebUI(port int) error {
 	ws.installSessionWake()
 	// ★ 2026-09 精简策略可见化：硬地板默认关闭（只用窗口比例阈值），
 	//   想恢复绝对量保护设 PAIR_COMPACT_HARD_FLOOR=<token>。
-	log.Printf("[compact] 精简策略：%s", agent.CompactPolicy(core.Settings.ContextMaxTokens))
+	// ★ 2026-09-19：上下文窗口以服务商配置（models.json）为准（经装配器；settings 顶层值仅兜底）
+	log.Printf("[compact] 精简策略：%s", agent.CompactPolicy(agent.ContextWindow(agent.ResolveProviderParams())))
 	// ★ 钩子系统（t1 L2 闭环）：装载配置钩子（.pair/settings.json + ~/.pair/settings.json），
 	//   与桌面端 Init 同一入口；无配置时全部 no-op。
 	agent.InitLoopHooks()
@@ -271,7 +269,6 @@ func startWebUI(port int) error {
 	}
 	if root := core.Root(); root != "" {
 		memory.SetRoot(root)
-		agent.InitTracker(root)
 	}
 	// 初始化 Skills 资源目录（供 LoadAllSkills 使用）
 	if root := core.Root(); root != "" {
@@ -318,6 +315,12 @@ func startWebUI(port int) error {
 	//   必须在磁盘插件装载（LoadAllToolsets → LoadGlobalPlugins 装 core-api）
 	//   之前调用——core-api apply 时经 ctx.kernel.install 挂载这些接口。
 	registerKernelAPIs(ws)
+
+	// ★ 在线更新引擎（2026-09-19）：装配配置（安装目录 / config 目录 / 更新源）
+	//   并启动后台自动检查（GitHub Releases 分发；实现见 internal/update，
+	//   接口见 cmd/companion/update_api.go，设置项由 .pair/plugins/app-update 注册）。
+	refreshUpdateEngine()
+	startUpdateAutoCheck()
 
 	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
 	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
@@ -371,6 +374,12 @@ func startWebUI(port int) error {
 				agent.SetCodeGraphDB(nil)
 				agent.SetCodeGraphRoot("")
 			}
+			// ★ 2026-09-20 插件宿主工作区根同步（修「插件不按工作区切路径 / 产物
+			//   写进别的工作区」）：宿主 root 与各插件上下文根原先只在 NewPluginHost
+			//   时快照，主工作区切换后不再更新 → 插件 ctx 服务（fs/bash/binary/…）
+			//   仍按启动工作区解析路径。root 为空（无主工作区）时同步为空串，
+			//   让插件内的路径解析显式报错，而不是静默沿用旧工作区。
+			ph.SetWorkspaceRoot(root)
 		}
 	}
 	mux := http.NewServeMux()
@@ -730,7 +739,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			core.Save()
 
-			// 5. 可选：删除工作区下的 .pair 目录（对话历史、快照等）
+			// 5. 可选：删除工作区下的 .pair 目录（对话历史等）
 			if req.DeleteFiles {
 				pairDir := filepath.Join(root, ".pair")
 				if stat, err := os.Stat(pairDir); err == nil && stat.IsDir() {
@@ -1378,6 +1387,11 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
 	// 委托共享实现：GET 读取 / POST/PUT 全量保存 → 落盘安装目录 config/models.json
 	handler.HandleModels(w, r)
+}
+
+// handleModelsRename 服务商改名（委托共享实现）：改 models.json 键 + 同步 AI 配置里的 provider 引用
+func (s *webServer) handleModelsRename(w http.ResponseWriter, r *http.Request) {
+	handler.HandleModelsRename(w, r)
 }
 
 // handleAiPresets AI 配置预设 API（委托共享实现）：GET 查询 / POST 保存-应用-删除 / PUT 全量保存
@@ -2314,15 +2328,19 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	//   替代全量历史注入（防上下文膨胀；复用/刷新见 handoff.go）；未达阈值/关闭时
 	//   保持原逻辑（按 token 压力精简，未达压力阈值即逐字节原样，缓存连续命中）。
 	handoffApplied := false
+	// ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：装配器按「模型级 > 服务商级」
+	//   取值，settings 顶层值仅在服务商/模型都未配置时兜底（此前这里直读 settings → 服务商配置不生效）。
+	convParams := agent.ResolveProviderParamsForConv(convID, root)
+	ctxWindow := agent.ContextWindow(convParams)
 	if store := agentMgr.StoreFor(root); store != nil {
 		// ★ 判官实例（B/C 语义复检）：独立轻量实例——non-thinking + 极小输出
 		//   （只输出一个词），与主对话通道隔离；构建为纯参数装配（无网络），每轮现建。
-		judge := agent.HandoffJudgeProvider(agent.ResolveProviderParamsForConv(convID, root))
+		judge := agent.HandoffJudgeProvider(convParams)
 		// ★ 2026-09-12 策略外置：整理由 agentloop 插件（registerHandoff.onUserTurn）实现，
 		//   宿主只提供调用位置（会话装配前——插件无从自主介入）与能力（provider/judge/
 		//   store/口径工具）；未注册或执行失败 → 回退 Go 默认实现（语义不变）。
 		view, ok, hnotice := agent.HandoffUserTurnView(context.Background(), prov, judge, store,
-			convID, root, history, message, core.Settings.ContextMaxTokens)
+			convID, root, history, message, ctxWindow)
 		if ok {
 			log.Printf("[handoff] conv=%s 已启用交接视图（历史 %d 条 → %d 条）", convID, len(history), len(view))
 			history = view
@@ -2334,7 +2352,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		}
 	}
 	if !handoffApplied {
-		history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
+		history = agent.CondenseHistoryByPressure(history, ctxWindow)
 	}
 
 	// ★ 2026-09-12：「最大迭代数」配置已移除（原此处读 core.Settings.MaxIterations，
@@ -2351,7 +2369,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		//   （见 .pair/plugins/agentloop/index.js 的 ctx.loopFactory.register）；
 		//   宿主不设默认值——0 = agent 侧默认（120 次 / 20 段），
 		//   负数预算 = 不限（归一化见 agent/tool_budget.go）。
-		MaxContextTokens:    core.Settings.ContextMaxTokens,
+		MaxContextTokens:    ctxWindow,
 		Compressor:          webCompressor(),
 		History:             history,         // 压缩版：供 LLM 上下文使用
 		HistoryOriginal:     originalHistory, // 原始版：供持久化使用，防止压缩版写回历史记录
@@ -2466,14 +2484,6 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// 记录当前消息索引，后续文件编辑快照关联到此消息（★ 按会话根路由 store）
-	if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
-		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
-			if tr := agent.GetTracker(); tr != nil {
-				tr.SetCurrentMsg(req.ConvID, count-1)
-			}
-		}
-	}
 	// ★ 2026-08-22 异步 Start：重活（opts 构建/插件合并/会话上下文注入/会话装配/历史加载）
 	//   可能在 10s~76s 波动（实测日志），原同步等待会让前端 30s 超时显示「请求超时」。
 	//   现改为 HTTP 立即返回「马上的消息」，Start 在后台 goroutine 执行；
@@ -2552,17 +2562,10 @@ func (s *webServer) launchConvRun(convID, wsRoot, task string, autonomous bool) 
 			}
 		}
 
-		if autonomous {
-			pm := strings.TrimSpace(cur.PlanModel)
-			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-				pp := cur
-				pp.Model = pm
-				pp.Multimodal = false
-				opts.PlanProvider = agent.CreateProvider(pp)
-			} else if prov := buildWebProviderForConv(convID, wsRoot); prov != nil {
-				opts.PlanProvider = prov
-			}
-		}
+		// ★ 2026-09-21 自主模式插件化：原 autonomous 分支创建的 PlanProvider（双层 Loop
+		//   的规划模型）已随该架构删除——自主模式的「监督者」由插件决策器 + ctx.subagent
+		//   能力派生，复用本会话 Provider（「跟随执行模型」）。监督轮数上限由插件经
+		//   ctx.loopFactory.register 覆盖 maxSuperviseRounds（缺省内核 20）。
 
 		// 使用分离的 context：setupCtx 用于 Start 方法本身的超时（避免在获取锁或建表时永久阻塞），
 		// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。
@@ -2819,45 +2822,6 @@ func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, map[string]any{"ok": true})
-}
-
-// handleChatRollback POST /api/chat/rollback 回滚到指定用户消息前的状态。
-// 恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
-// 请求体: { convId, msgIdx }
-// convId 为对话 ID，msgIdx 为用户消息索引（0 基）。
-func (s *webServer) handleChatRollback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ConvID string `json:"convId"`
-		MsgIdx int    `json:"msgIdx"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "工作区未设置")
-		return
-	}
-	var store agent.ConversationStore
-	if agentMgr != nil {
-		store = agentMgr.Store()
-	}
-	if err := agent.RollbackToMsg(root, req.ConvID, req.MsgIdx, store); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	// 停止正在运行的 agent 会话（如果有）
-	agentMgr.Stop(req.ConvID)
-	jsonResp(w, map[string]any{"ok": true, "msgIdx": req.MsgIdx})
 }
 
 // startEventPersistWorker 设置 OnDone 回调（compressor 由 webCompressor 回调提供）。

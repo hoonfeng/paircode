@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-harness — harness 核心协议工具（read/write/apply_patch/glob/grep/run_code + list/restore_snapshot）
+// tool-harness — harness 核心协议工具（read/write/apply_patch/glob/grep/run_code）
 // 迁移来源（2026-08-16）：内置 RegisterHarnessTools（internal/agent/
 // harness_tools.go）→ 磁盘外置插件。2026-08-16 第二轮：7 个工具的 execute
 // 由 ctx.hostTool（宿主 Go 执行器）改为 **JS 原生化**（调用实现在插件内，
@@ -108,7 +108,7 @@ function writeFile(ctx, args) {
 }
 
 // apply_patch：codex 语法自由格式补丁（2026-09 工具重构 Phase B——取代 edit/multi_edit）。
-// 宿主能力 ctx.fs.applyPatch（Go ApplyPatchText：解析 + 应用 + 写前快照 + 变更回调）：
+// 宿主能力 ctx.fs.applyPatch（Go ApplyPatchText：解析 + 应用 + 变更回调）：
 // 免 JSON 转义、免 old_string 唯一性焦虑、免行号依赖（上下文行定位）；支持
 // Add/Delete/Update/Move 四类操作及多文件单次调用。
 function applyPatch(ctx, args) {
@@ -254,50 +254,11 @@ const tools = [
     },
     impl: runCode, // 统一二进制承载（node 嵌套 goja 调度 + 外部进程执行）
   },
-  // ─── 会话快照（2026-09-12 自 tool-snapshot 并入）：写前快照的查询/恢复 ───
-  {
-    "name": "restore_snapshot",
-    "description": "从快照恢复指定文件。快照在 write/apply_patch 修改前自动创建。默认恢复到最旧快照（原始文件）。可用 list_snapshots 查看快照列表。指定 index 参数恢复特定版本（0=最旧原始文件，-1=最新，1~N=第 N 份从最旧算）。",
-    "parameters": {
-      "properties": {
-        "index": {
-          "description": "可选快照索引：0=最旧(原始/默认)，-1=最新，1~N=第 N 份",
-          "type": "string"
-        },
-        "path": {
-          "description": "要恢复的文件路径（相对主项目根，如 \"cmd/main.go\"；跨项目请传绝对路径）",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "type": "object"
-    },
-    "requiresApproval": true
-  },
-  {
-    "name": "list_snapshots",
-    "description": "列出指定文件的所有可用快照（按时间倒序，带索引号）。用 restore_snapshot 的 index 参数可恢复指定版本。",
-    "parameters": {
-      "properties": {
-        "path": {
-          "description": "文件路径（相对主项目根；跨项目请传绝对路径）",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
 ]
 
 return {
   name: 'tool-harness',
-  purpose: 'harness 核心协议工具（read/write/apply_patch/glob/grep/run_code + 快照 list/restore_snapshot）——文件与工作区工具；执行工具由 tool-exec 承载（2026-09 工具重构）；2026-09-12 并入 tool-snapshot',
+  purpose: 'harness 核心协议工具（read/write/apply_patch/glob/grep/run_code）——文件与工作区工具；执行工具由 tool-exec 承载（2026-09 工具重构）；★ 2026-09-21 文件快照能力整体移除（曾并入的快照查询/恢复工具已下线）',
   inject: ['fs'],
   apply(ctx) {
     for (const t of tools) {

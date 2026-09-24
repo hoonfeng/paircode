@@ -66,8 +66,9 @@ func TestToolBudgetConfig_FromPluginSettings(t *testing.T) {
 	}
 	coreSettingsEnsure()
 	loadRealAgentloop(t) // 装载真实插件（含 ctx.loopFactory.register 装配器）
-	if _, ok := LoopFactoryNow().(*jsLoopFactoryBridge); !ok {
-		t.Fatalf("装载 agentloop 后工厂 = %T，期望 *jsLoopFactoryBridge", LoopFactoryNow())
+	// ★ 2026-09-21 装配器链：注册进入装配器链（不再替换全局 LoopFactory 单槽位）。
+	if names := LoopAssemblerNames(); len(names) == 0 {
+		t.Fatalf("装载 agentloop 后装配器链为空，期望含 'agentloop'，实际=%v", names)
 	}
 
 	// ① 显式配置（JSON 反序列化后的数值类型 float64）→ 生效

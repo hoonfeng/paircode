@@ -47,6 +47,7 @@ return {
           description: p.description || '',
           tags: ['mcp'].concat(p.keywords || []),
           source: (p.links && p.links.npm) || '',
+          version: p.version || '', // ★ 2026-09-19：市场列表显示版本号
           command: 'npx', args: ['-y', p.name],
         })
       }

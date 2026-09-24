@@ -107,9 +107,9 @@ func genToolGroups() []genToolGroup {
 		//   如无必要不要重跑；如需同步 resource_* 描述，改 Go 后手工同步 JS。
 		{"tool-resource", "资源管理与资产/进化（resource_list/search/stats + memory_verify/project_info_verify + asset_delete/evolution_save_capsule/save_gene/status；tool-verify 2026-09-04、tool-asset 2026-09-12 并入）",
 			func(r *Registry, root string) { registerResourceTools(r, root); registerAssetTools(r, root) }, nil, ""},
-		// ★ 2026-09-12 codex 精简轮：tool-snapshot 已并入 tool-harness（手工插件，声明已搬迁——
-		//   见 .pair/plugins/tool-harness/index.js 的 restore_snapshot/list_snapshots 条目），
-		//   RegisterSnapshotTools 内核实现与宿主存档保留（hostTool 承载）。
+		// ★ 2026-09-21：文件快照能力整体移除——snapshot.go / rollback.go 删除，
+		//   restore_snapshot / list_snapshots 声明与「回退到消息」功能一并下线
+		//   （tool-snapshot 曾于 2026-09-12 并入 tool-harness，声明已同步清理）。
 	}
 }
 

@@ -28,6 +28,14 @@
         <span class="pm-field-label">上下文大小（Token）</span>
         <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
       </div>
+      <div class="pm-field">
+        <span class="pm-field-label">默认温度</span>
+        <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
+      </div>
+      <div class="pm-field">
+        <span class="pm-field-label">默认输出 Token（最大输出）</span>
+        <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
+      </div>
 <ModelEditor :models="editModels" :label="modelEditor.label || '可用模型（回车或逗号分隔添加；支持整段粘贴）'" :placeholder="modelEditor.placeholder || '输入模型名，回车添加…'" @change="onModelsChange" />
 <div class="pm-params">
             <div class="pm-params-title">模型参数（每模型独立配置；对话里也可临时切换思考档位）</div>
@@ -64,7 +72,8 @@
           <div class="pm-edit-title">编辑服务商：{{ p.name }}</div>
           <div class="pm-field">
             <span class="pm-field-label">服务商名称</span>
-            <input :value="p.name" disabled />
+            <input v-model="editForm.name" placeholder="如 deepseek" />
+            <span class="pm-hint">改名会一并同步引用该服务商的 AI 配置（连接信息不丢）；空=保持原名</span>
           </div>
           <div class="pm-field">
             <span class="pm-field-label">API URL（基础地址或完整端点）</span>
@@ -80,6 +89,14 @@
           <div class="pm-field">
             <span class="pm-field-label">上下文大小（Token）</span>
             <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
+          </div>
+          <div class="pm-field">
+            <span class="pm-field-label">默认温度</span>
+            <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
+          </div>
+          <div class="pm-field">
+            <span class="pm-field-label">默认输出 Token（最大输出）</span>
+            <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
           </div>
 <ModelEditor :models="editModels" :label="modelEditor.label || '可用模型（回车或逗号分隔添加；支持整段粘贴）'" :placeholder="modelEditor.placeholder || '输入模型名，回车添加…'" @change="onModelsChange" />
 <div class="pm-params">
@@ -140,7 +157,6 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { state } from '../ui-state.js'
 import api from '../api.js'
 import ModelEditor from './ModelEditor.vue'
 
@@ -161,9 +177,10 @@ const props = defineProps({
 
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
-const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0 })
+// ★ 2026-09-19 生成参数（温度/最大输出）改为服务商级字段，随 models.json 一起保存
+const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' })
 const editModels = ref([])
-const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → settings.json modelParams
+const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → models.json 该服务商的 modelParams
 const error = ref('')
 const saving = ref(false)
 
@@ -192,19 +209,27 @@ function defaultParamKeys() {
 }
 
 function readProviderParams(providerName) {
-  const mp = (state.settings && state.settings.modelParams) || {}
-  return JSON.parse(JSON.stringify(mp[providerName] || {}))
+  // ★ 2026-09-19：模型参数唯一来源 = models.json（服务商条目下的 modelParams）
+  const p = providers.value.find(x => x.name === providerName)
+  return JSON.parse(JSON.stringify((p && p.modelParams) || {}))
 }
 
 async function load() {
   try {
     const d = await api.getModels()
+    const mp = d.providerModelParams || {}
+    const temps = d.providerTemperatures || {}
+    const maxes = d.providerMaxTokens || {}
     providers.value = (d.providers || []).map(name => ({
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
       contextMaxTokens: (d.providerContexts || {})[name] || 0, // ★ 服务商级默认上下文窗口
       protocol: (d.providerProtocols || {})[name] || '',        // ★ 2026-09-02 LLM 协议（插件注册配置选项）
       models: (d.models || {})[name] || [],
+      // ★ 2026-09-19 生成参数唯一来源 = models.json（服务商级 + 模型级）
+      temperature: temps[name] || '',
+      maxTokens: maxes[name] || 0,
+      modelParams: mp[name] || {},
     }))
     error.value = ''
   } catch (e) {
@@ -215,14 +240,17 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, protocol: '' }
+  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' }
   editModels.value = []
   editParams.value = {}
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
-  editForm.value = { name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0, protocol: p.protocol || '' }
+  editForm.value = {
+    name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0,
+    temperature: p.temperature || '', maxTokens: p.maxTokens || 0, protocol: p.protocol || '',
+  }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
   // 为所有模型补默认参数键（模板 v-model 需要键存在；★ 2026-08-21 按 schema 生成）
@@ -246,40 +274,63 @@ function cancelEdit() { editingName.value = ''; error.value = '' }
 // 当前列表 → 全量快照 map（供 POST /api/models）
 function snapshot() {
   const map = {}
-  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, contextMaxTokens: p.contextMaxTokens || 0, protocol: p.protocol || '' }
+  // ★ 2026-09-19：快照必须带上服务商级参数与模型级参数——否则保存任一服务商会丢掉其余服务商的参数
+  for (const p of providers.value) {
+    map[p.name] = {
+      baseURL: p.baseURL,
+      models: p.models,
+      contextMaxTokens: p.contextMaxTokens || 0,
+      protocol: p.protocol || '',
+      temperature: p.temperature || '',
+      maxTokens: p.maxTokens || 0,
+      modelParams: p.modelParams || {},
+    }
+  }
   return map
 }
 
 async function saveEdit() {
-  const name = editForm.value.name.trim() || (editingName.value !== '__new__' ? editingName.value : '')
+  const oldName = editingName.value        // '' | '__new__' | 被编辑的服务商原名
+  const isRename = oldName !== '__new__' && oldName !== ''
+  const name = editForm.value.name.trim() || (isRename ? oldName : '')
   if (!name) { error.value = '服务商名称不能为空'; return }
-  const map = snapshot()
-  if (editingName.value === '__new__' && map[name]) { error.value = `服务商「${name}」已存在`; return }
-  map[name] = {
-    baseURL: editForm.value.baseURL.trim(),
-    models: editModels.value,
-    contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0), // ★ 服务商级默认上下文窗口
-    protocol: (editForm.value.protocol || '').trim(), // ★ 2026-09-02 LLM 协议（空=默认 openai-completions）
+  if (name !== oldName && providers.value.some(p => p.name === name)) {
+    error.value = `服务商「${name}」已存在`; return
   }
   saving.value = true
   try {
+    // ★ 2026-09-20 改名先走后端：由它迁移 models.json 的键并同步 AI 配置里的 provider 引用。
+    //   失败即中止（否则后面的全量保存会把旧键写回去，等于改名没发生）。
+    let renamed = null
+    if (isRename && name !== oldName) renamed = await api.renameProvider(oldName, name)
+    const map = snapshot()
+    if (isRename && name !== oldName) delete map[oldName] // 旧键已由后端改名，快照里必须清掉
+    map[name] = {
+      baseURL: editForm.value.baseURL.trim(),
+      models: editModels.value,
+      contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0),
+      protocol: (editForm.value.protocol || '').trim(),
+      temperature: String(editForm.value.temperature ?? '').trim(),
+      maxTokens: Math.max(0, Number(editForm.value.maxTokens) || 0),
+      modelParams: cleanModelParams(),
+    }
     await api.saveModels(map)
-    await saveModelParams(name) // ★ 模型参数同步 settings.modelParams
     editingName.value = ''
     await load()
     emit('saved') // AI tab 下拉同步刷新
+    if (renamed && renamed.renamed) {
+      const n = (renamed.updatedPresets || []).length
+      window.$toast(`已改名为「${name}」` + (n ? `，同步更新 ${n} 条 AI 配置` : ''), 'success')
+    }
   } catch (e) {
-    error.value = '保存失败: ' + (e.message || e)
+    error.value = (isRename && name !== oldName ? '改名失败: ' : '保存失败: ') + (e.message || e)
   } finally { saving.value = false }
 }
 
-// 将当前编辑的模型参数写回 settings.json 顶层 modelParams（仅保留非空项）
-// ★ 2026-08-21 按 schema 字段写回：checkbox 存 true；number 存 >0；select/text 存非空字符串。
-async function saveModelParams(providerName) {
-  // ★ 先拉后端最新 settings 作基底，避免过期缓存覆盖其他字段
-  let base = {};
-  try { const l = await api.apiGet('/settings'); base = (l && l.settings) || {} } catch {}
-  const mp = JSON.parse(JSON.stringify((base.modelParams) || {}))
+// 按 schema 清洗当前编辑的模型参数（仅保留非空项）→ 随服务商一起写入 models.json
+// ★ 2026-09-19：不再写 settings.json（生成参数唯一来源 = models.json，服务商配置为准）。
+// 字段语义：checkbox 存 true；number 存 >0；select/text 存非空字符串。
+function cleanModelParams() {
   const clean = {}
   for (const [m, cfg] of Object.entries(editParams.value)) {
     const c = cfg || {}
@@ -296,29 +347,31 @@ async function saveModelParams(providerName) {
     }
     if (Object.keys(out).length) clean[m] = out
   }
-  if (Object.keys(clean).length) mp[providerName] = clean
-  else delete mp[providerName]
-  const top = { ...base, modelParams: mp }
-  await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
-  state.settings = top
+  return clean
 }
 
 async function removeProvider(p) {
-  if (!window.confirm(`删除服务商「${p.name}」？\n（AI tab 将不再可选该服务商）`)) return
+  // ★ 2026-09-20：删除前列出仍引用该服务商的 AI 配置——配置自带完整连接快照，删掉服务商后
+  //   这些配置仍能聊天，但它们在对话面板的模型分组会消失（分组取自 models.json 的服务商模型
+  //   列表），用户会以为配置坏了。此处提前告知并给出去向建议。
+  let affected = []
+  try {
+    const d = await api.getAiPresets()
+    const presets = (d && d.presets) || {}
+    affected = Object.keys(presets).filter(n => (presets[n] || {}).provider === p.name).sort()
+  } catch {}
+  let msg = `删除服务商「${p.name}」？\n（AI tab 将不再可选该服务商）`
+  if (affected.length) {
+    msg += `\n\n以下 ${affected.length} 条 AI 配置仍引用它：\n· ${affected.join('\n· ')}`
+      + '\n\n删除后它们仍可继续聊天（配置是完整快照），但在对话面板里会失去模型分组；'
+      + '建议先在「AI 配置」里把它们改选到其他服务商。'
+  }
+  if (!window.confirm(msg)) return
   const map = snapshot()
   delete map[p.name]
   try {
+    // ★ 2026-09-19：模型参数存于 models.json 的服务商条目内，随服务商一并删除
     await api.saveModels(map)
-    // 同步清理该服务商的模型参数（先拉后端最新 settings 作基底，避免缓存覆盖）
-    let base = {};
-    try { const l = await api.apiGet('/settings'); base = (l && l.settings) || {} } catch {}
-    const mp = JSON.parse(JSON.stringify((base.modelParams) || {}))
-    if (mp[p.name]) {
-      delete mp[p.name]
-      const top = { ...base, modelParams: mp }
-      await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
-      state.settings = top
-    }
     await load()
     emit('saved')
   } catch (e) {
@@ -327,10 +380,14 @@ async function removeProvider(p) {
 }
 
 function paramsSummary(providerName) {
-  const mp = (state.settings && state.settings.modelParams) || {}
-  const by = mp[providerName] || {}
-  const n = Object.keys(by).length
-  return n ? '模型参数已配置 ' + n + ' 个' : ''
+  const p = providers.value.find(x => x.name === providerName)
+  if (!p) return ''
+  const n = Object.keys(p.modelParams || {}).length
+  const svc = []
+  if (p.temperature) svc.push('温度 ' + p.temperature)
+  if (p.maxTokens > 0) svc.push('输出上限 ' + p.maxTokens)
+  if (n) svc.push('模型参数 ' + n + ' 个')
+  return svc.join(' · ')
 }
 </script>
 
@@ -410,6 +467,7 @@ function paramsSummary(providerName) {
   border-radius: 4px; padding: 1px 7px; display: inline-block; margin-bottom: 4px;
 }
 .pm-protocol-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; }
+.pm-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; line-height: 1.5; }
 .pm-ctx { font-size: 11px; color: var(--text-secondary, #999); }
 .pm-models { display: flex; flex-wrap: wrap; gap: 5px; }
 .pm-tag {

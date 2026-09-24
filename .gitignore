@@ -35,10 +35,14 @@ config/models.json
 config/models/
 
 # Generated runtime configs
+config/.params-migrated
+config/.generation-migrated
 
 # Temporary files
 tmp/
 _temp/
+# 覆盖备份（design_codegen / 写盘工具的 .bak 回滚副本，属临时产物）
+*.bak
 
 # Frontend dependencies (not committed)
 node_modules/
@@ -133,3 +137,19 @@ desktop_test*
 ws_trace.jsonl
 nm*.txt
 _probe_*
+
+# tool-model 导出产物（测试/演示脚本以项目根为 cwd 跑时会泄漏到根目录；只限根层，不误伤子目录）
+/model.stl
+/model.ascii.stl
+/model.obj
+/model.gltf
+/model.glb
+/model.json
+/model.verify.json
+/model.preview.html
+
+# 设计工具本地产出（design_* 的工程文件与默认落盘目录，属本地工作产物而非发布资产）
+/design/
+/design-export/
+/design.project.json
+/design.verify.json

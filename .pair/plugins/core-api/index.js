@@ -23,6 +23,13 @@ const ROUTES = [
   { key: 'health' },
   { key: 'system.info' },
   { key: 'system.exec' },
+  // 在线更新（GitHub Releases 分发）
+  { key: 'update.check' },
+  { key: 'update.status' },
+  { key: 'update.download' },
+  { key: 'update.apply' },
+  { key: 'update.cancel' },
+  { key: 'update.config' },
   // 文件系统
   { key: 'fs.image' },
   // 工作区 / 设置
@@ -47,6 +54,7 @@ const ROUTES = [
   { key: 'tasks' },
   // 模型 / 指令 / AI 配置预设
   { key: 'models' },
+  { key: 'models.rename' }, // ★ 2026-09-20 服务商改名（同步 models.json 键与 AI 配置里的 provider 引用）
   { key: 'ai-presets' },
   { key: 'instructions' },
   // 工具配置

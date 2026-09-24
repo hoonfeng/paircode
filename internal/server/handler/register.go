@@ -56,7 +56,6 @@ func RegisterAll(r *Router) {
 	r.Handle("POST", "/api/chat/answer", HandleChatAnswer)
 	r.Handle("POST", "/api/chat/approve", HandleChatApprove)
 	r.Handle("POST", "/api/chat/feedback", HandleChatFeedback)
-	r.Handle("POST", "/api/chat/rollback", HandleChatRollback)
 
 	// 对话列表 / 消息
 	r.Handle("GET", "/api/conversations", HandleConversations)
@@ -72,6 +71,7 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/models", HandleModels)
 	r.Handle("POST", "/api/models", HandleModels)
 	r.Handle("PUT", "/api/models", HandleModels)
+	r.Handle("POST", "/api/models/rename", HandleModelsRename) // ★ 2026-09-20 服务商改名（同步 AI 配置引用）
 	r.Handle("GET", "/api/ai-presets", HandleAiPresets)
 	r.Handle("POST", "/api/ai-presets", HandleAiPresets)
 	r.Handle("PUT", "/api/ai-presets", HandleAiPresets)

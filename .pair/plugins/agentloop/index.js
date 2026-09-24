@@ -429,18 +429,66 @@ return {
       })
 
     // ═══════════════════════════════════════════════════════════
+    // ★ 生成参数全局默认 = 插件注册配置域（★ 2026-09-20）
+    //   纪律：配置项一律由插件 ctx.registerSettings 注册，值存 settings.json 的
+    //   pluginSettings.<key>；核心（Go）不持有也不直读生成参数——此前 AppSettings 顶层的
+    //   temperature/thinkingMode/maxTokens/contextMaxTokens/modelParams 已由 core 一次性
+    //   迁入本域（全局默认）与 models.json（模型级）并清空（见 core/settings_generation.go）。
+    //   ★ 无 binding：值存 pluginSettings.generation（核心字段不再承载生成参数）。
+    //   取值层级（装配器 ⑤⑥⑦⑧ 段）：models.json 模型级 > models.json 服务商级
+    //   > ai-presets.json 配置级 > 本段全局默认。
+    // ═══════════════════════════════════════════════════════════
+    const GEN_KEY = 'generation'
+    // GEN_DEFAULTS 与本插件 registerSettings 的 field.default 同源（单一来源）：
+    // 装配器兜底时用同一份默认值，避免「schema 默认值」与「运行时兜底」两处漂移。
+    const GEN_DEFAULTS = { temperature: '0.3', thinkingMode: 'high', maxTokens: 131072, contextMaxTokens: 64000 }
+    ctx.registerSettings({
+      key: GEN_KEY,
+      title: '生成参数',
+      fields: [
+        { name: 'temperature', label: '温度', type: 'select', default: GEN_DEFAULTS.temperature,
+          options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'],
+          hint: '全局默认温度（随机性），空=不下发。服务商/模型级参数与 AI 配置优先于本项。' },
+        { name: 'thinkingMode', label: '思考档位', type: 'select', default: GEN_DEFAULTS.thinkingMode,
+          options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+          hint: '全局默认思考档位（OpenAI 定义），空=不下发。模型级参数与 AI 配置优先于本项。' },
+        { name: 'maxTokens', label: '最大输出 Token', type: 'number', min: 0, step: 1024,
+          default: GEN_DEFAULTS.maxTokens,
+          hint: '全局默认最大输出 Token（0=不下发）。模型级参数与 AI 配置优先于本项。' },
+        { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', min: 0, step: 4096,
+          default: GEN_DEFAULTS.contextMaxTokens,
+          hint: '全局默认上下文窗口（token），影响历史精简与交接阈值。模型级/服务商级参数与 AI 配置优先于本项。' },
+      ],
+    })
+
+    // ═══════════════════════════════════════════════════════════
     // ★ 配置消费插件化（2026-08-19）+ 决策全量迁插件（2026-09-03）：
     //   LLM Provider 参数装配器——AI 连接参数的唯一决策者。
     //   Go 内核（buildWebProvider/Review/Plan/工具集分析）不再做任何配置决策：
-    //   只传裸基线（settings 顶层存储字段）+ 装配上下文（preset/conv*）经
+    //   只传裸基线（连接字段：服务商/地址/Key/模型）+ 装配上下文（preset/conv*）经
     //   agent.ResolveProviderParams() → 本装配器获取最终参数。
     //   本装配器决策链：① 配置整套展开（会话配置 > 全局激活，经 ctx.aiPresets）
     //   → ② 会话级覆盖（conv*）→ ③ 服务商数据兜底（经 ctx.models）→ ④ Key 选择
-    //   → ⑤ 模型级参数 → ⑥ 上下文窗口层级 → ⑦ 全局温度/思考/输出兜底
-    //   → ⑧ 统一模型同步（plan/review 跟随执行模型）。
+    //   → ⑤ 模型级参数（models.json）→ ⑥ 上下文窗口层级 → ⑦ 全局兜底
+    //   → ⑧ 服务商配置为准（★ 2026-09-19：models.json 的温度/最大输出/上下文窗口
+    //        覆盖上述 settings 取值——生成参数的唯一来源是「服务商」）
+    //   → ⑨ 统一模型同步（plan/review 跟随执行模型）。
+    //   ★ 2026-09-20：⑤⑥⑦ 的取值源已从核心字段（ctx.app.settings 顶层）改为
+    //     插件注册配置域（ctx.getSettings('generation')）+ models.json；
+    //     本插件不再读任何生成参数核心字段。
+    //   ★ 2026-09-20 连接字段同样不再读核心字段：③ 段的 s.provider/s.executeModel/s.model
+    //     兜底已移除——settings 顶层旧连接字段已由 core 迁入 ai-presets.json 的一条配置并
+    //     清空（core/settings_connection.go）。连接信息唯一来源：① 激活配置整套展开
+    //     （ctx.aiPresets）+ ② 会话三元组 + ④ 服务商数据（ctx.models）。
     // ═══════════════════════════════════════════════════════════
     ctx.providerFactory.register((current) => {
-      const s = (ctx.app && ctx.app.settings) || {};
+      // ★ 2026-09-20 生成参数全局默认的取值源 = 插件注册配置域 pluginSettings.generation
+      //   （核心 Go 已不直读生成参数）。默认值用 GEN_DEFAULTS（与 schema default 同源）。
+      const gset = ctx.getSettings(GEN_KEY) || {};
+      const genVal = (k) => {
+        const v = gset[k];
+        return (v === undefined || v === null || v === '') ? GEN_DEFAULTS[k] : v;
+      };
       const over = {};
       // ── ① 配置整套展开（会话配置 > 全局激活；配置不存在/无效 → 跳过）──
       const presetName = current.convPreset || current.preset || '';
@@ -470,8 +518,10 @@ return {
       if (current.convProvider) over.provider = current.convProvider;
       if (current.convModel) over.model = current.convModel;
       // ── ③ 最终 服务商/模型（后续决策的依据）──
-      const provider = over.provider || current.provider || s.provider || '';
-      const model = over.model || current.model || s.executeModel || s.model || '';
+      //   ★ 2026-09-20：不再兜底核心 settings 顶层字段（已迁入 AI 配置并清空）——
+      //   over.*=配置展开/会话选定，current.*=Go 注入的会话上下文（conv*）。
+      const provider = over.provider || current.provider || '';
+      const model = over.model || current.model || '';
       // ── ④ 服务商数据兜底（经 ctx.models 查 models.json：BaseURL/协议/Key/上下文）──
       const me = (provider && ctx.models.get(provider)) || {};
       const presetProvider = presValid ? (pres.provider || '') : '';
@@ -492,17 +542,10 @@ return {
         }
         if (!over.apiKey && me.apiKey) over.apiKey = me.apiKey;
       }
-      // ── ⑤ 模型级参数（settings.modelParams[服务商][模型]；GBK 损坏 key 按模型名兜底）──
-      let mp = (s.modelParams && s.modelParams[provider] && s.modelParams[provider][model]) ||
-               (current.modelParams && current.modelParams[provider] && current.modelParams[provider][model]) || null;
-      // ★ 2026-08-21 兼容：provider key 编码损坏/改名（如 settings.json 被 GBK 保存污染）
-      //   → 精确匹配失败后按「模型名唯一匹配」兜底（modelParams[任意provider][model]）。
-      if (!mp && s.modelParams) {
-        for (const pk of Object.keys(s.modelParams)) {
-          const pm = s.modelParams[pk];
-          if (pm && typeof pm === 'object' && pm[model]) { mp = pm[model]; break }
-        }
-      }
+      // ── ⑤ 模型级参数（models.json 服务商 modelParams[模型]；★ 2026-09-20 唯一来源）──
+      //   此前读 settings.modelParams（核心字段）——旧数据已由 core 一次性迁入 models.json
+      //   （core.MigrateParamSettingsToModels），本插件不再触碰核心生成参数字段。
+      const mp = (me.modelParams && me.modelParams[model]) || null;
       if (mp) {
         if (mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '') {
           const t = parseFloat(mp.temperature);
@@ -513,24 +556,57 @@ return {
         // ★ 2026-08-21 多模态：模型级参数标记该模型支持图片输入 → Provider 以多模态格式发送
         if (mp.multimodal === true) over.multimodal = true;
       }
-      // ── ⑥ 上下文窗口层级：模型级 > 服务商级（最终服务商）> 配置级 > 全局 ──
+      // ── ⑥ 上下文窗口层级：模型级 > 服务商级（最终服务商）> 配置级 > 全局（插件注册配置域）──
       let cctx = (mp && mp.contextMaxTokens) ? Number(mp.contextMaxTokens) : 0;
       if (!(cctx > 0) && me.contextMaxTokens) cctx = Number(me.contextMaxTokens);
       if (!(cctx > 0) && pres && Number(pres.contextMaxTokens) > 0) cctx = Number(pres.contextMaxTokens);
-      if (!(cctx > 0) && s.contextMaxTokens) cctx = Number(s.contextMaxTokens);
+      if (!(cctx > 0)) {
+        const gctx = Number(genVal('contextMaxTokens'));
+        if (gctx > 0) cctx = gctx;
+      }
       if (cctx > 0) over.contextMaxTokens = cctx;
-      // ── ⑦ 全局温度/思考/输出兜底（模型级与配置级未配置时；兼容旧配置）──
+      // ── ⑦ 全局兜底（插件注册配置域 generation 段；模型级/配置级未配置时生效）──
       if (!(mp && mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '')) {
-        if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
-          const t = parseFloat(s.temperature);
+        const gtv = genVal('temperature');
+        if (gtv !== undefined && gtv !== null && gtv !== '') {
+          const t = parseFloat(gtv);
           if (!isNaN(t) && t >= 0) over.temperature = t;
         }
       }
-      if (!(mp && mp.thinkingMode) && s.thinkingMode) over.thinkingMode = s.thinkingMode;
-      if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0) && s.maxTokens && Number(s.maxTokens) > 0) {
-        over.maxTokens = Number(s.maxTokens);
+      if (!(mp && mp.thinkingMode)) {
+        const gtm = String(genVal('thinkingMode') || '');
+        if (gtm) over.thinkingMode = gtm;
       }
-      // ── ⑧ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
+      if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0)) {
+        const gmt = Number(genVal('maxTokens'));
+        if (gmt > 0) over.maxTokens = gmt;
+      }
+      // ── ⑧ 服务商配置为准（★ 2026-09-19 修复）：温度/最大输出/上下文窗口的唯一来源 = models.json ──
+      //   层级：模型级（me.modelParams[模型]）> 服务商级（me.temperature/maxTokens/contextMaxTokens）。
+      //   上方 ⑤⑥⑦ 的 settings 取值仅在两处都未配置时兜底——不再覆盖服务商值。
+      const mpm = mp; // ★ 2026-09-20 与 ⑤ 同源（models.json 服务商 modelParams[模型]）
+      // 取「已配置」的值：undefined/null/空串/数字 0 一律视为未配置（0=不设），
+      // 逐级回退：models.json 模型级 → models.json 服务商级。
+      const svcPick = (k) => {
+        for (const v of (mpm ? [mpm[k], me[k]] : [me[k]])) {
+          if (v === undefined || v === null || v === '') continue;
+          if (typeof v === 'number' && v <= 0) continue;
+          if (typeof v === 'string' && v.trim() === '') continue;
+          return v;
+        }
+        return '';
+      };
+      const svcTemp = svcPick('temperature');
+      if (svcTemp !== '') {
+        const t = parseFloat(svcTemp);
+        if (!isNaN(t) && t >= 0) over.temperature = t;
+      }
+      const svcMax = Number(svcPick('maxTokens'));
+      if (svcMax > 0) over.maxTokens = svcMax;
+      const svcCtx = Number(svcPick('contextMaxTokens'));
+      if (svcCtx > 0) over.contextMaxTokens = svcCtx;
+      if (mpm && mpm.multimodal === true) over.multimodal = true;
+      // ── ⑨ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
       if (model) { over.planModel = model; over.reviewModel = model; }
       return over;
     });
@@ -557,7 +633,6 @@ return {
       if (cfg.maxToolBudgetSegments != null && Number(cfg.maxToolBudgetSegments) > 0) {
         over.maxToolBudgetSegments = Number(cfg.maxToolBudgetSegments);
       }
-      if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) over.maxContextTokens = Number(cfg.maxContextTokens);
       // ★ 2026-08-19 修复：仅强制开启（true 才覆盖）——false 不再覆盖全局，
       //   消除「保存设置面板即强制关闭全局自主模式」的默认值缺陷。
       if (cfg.autonomous === true) over.autonomous = true;
@@ -570,10 +645,23 @@ return {
       if (typeof cfg.reviewWhitelist === 'string' && cfg.reviewWhitelist) {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
-// ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
-      const aiTop = (ctx.app && ctx.app.settings) || {};
-      const ctxMax = Number(aiTop.contextMaxTokens);
-      if (ctxMax > 0) over.maxContextTokens = ctxMax;
+      // ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：宿主已按装配结果
+      //   （服务商级 > 配置级 > 全局默认）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
+      //   才用插件设置 / 插件注册配置域兜底——不再无条件覆盖服务商值。
+      // ★ 2026-09-20：全局兜底改读插件注册配置域 generation 段——settings 顶层
+      //   contextMaxTokens 旧字段已迁入该域并清空（core/settings_generation.go），
+      //   核心字段零读取。
+      if (!(Number(opts.maxContextTokens) > 0)) {
+        if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) {
+          over.maxContextTokens = Number(cfg.maxContextTokens);
+        } else {
+          const gsetCtx = ctx.getSettings(GEN_KEY) || {};
+          const gv = (gsetCtx.contextMaxTokens === undefined || gsetCtx.contextMaxTokens === null || gsetCtx.contextMaxTokens === '')
+            ? GEN_DEFAULTS.contextMaxTokens : gsetCtx.contextMaxTokens;
+          const ctxMax = Number(gv);
+          if (ctxMax > 0) over.maxContextTokens = ctxMax;
+        }
+      }
       return over;
     });
 
@@ -955,22 +1043,12 @@ return {
               for (const m of fms) ephemeral.push(m);
               loop.events.emit({ type: 'notice', content: `收到 ${fms.length} 条跟进消息，继续处理` });
               contentOnlyIters = 0;
-            } else if (autonomous) {
-              // ② 自主模式：下一阶段任务
-              const next = loop.ctrl.nextTask();
-              if (next) {
-                ephemeral.push({ role: 'user', content: next });
-                loop.events.emit({ type: 'notice', content: '进入下一阶段：' + loop.ctrl.truncStr(next, 80) });
-                loop.ctrl.logEntry('system', 'next_phase', '进入下一阶段：' + loop.ctrl.truncStr(next, 80));
-                contentOnlyIters = 0;
-              } else {
-                // 无后续任务 → 正常完成
-                const reason = loop.ctrl.stickyReason('completed');
-                loop.events.emit({ type: 'done', content: assistant.content.trim(), doneReason: 'task_complete', turnReason: reason });
-                return { msgs };
-              }
             } else {
-              // 非自主 → 正常完成
+              // ② 正常完成：整轮结束。
+              // ★ 2026-09-21 旧自主模式删除：原「自主模式下一阶段任务」（loop.ctrl.nextTask
+              //   从任务清单队列拉下一条）已移除——自主模式的「监督 → 续跑」现由宿主的
+              //   会话续轮处驱动（插件 ctx.loopFactory.registerAutopilot 注册决策器，
+              //   判定继续则把指令作为新任务唤醒工作 agent；见 autopilot.go / subagent.go）。
               const reason = loop.ctrl.stickyReason('completed');
               loop.events.emit({ type: 'done', content: assistant.content.trim(), doneReason: 'task_complete', turnReason: reason });
               return { msgs };

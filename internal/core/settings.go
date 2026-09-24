@@ -14,7 +14,14 @@ import (
 // ★ 2026-08-21 AI 业务字段（provider/baseURL/apiKey/模型）加 omitempty：
 //
 //	settings 不再存 key/模型（唯一来源 ai-presets.json），Save 时不把空字段写回文件。
+//
+// ★ 2026-09-20 连接字段彻底退出核心（见 settings_connection.go）：
+//
+//	provider/baseURL/apiKey/model/executeModel/planModel/reviewModel 仅在启动时被迁移
+//	读取一次（→ AI 配置），随后清空；运行期无任何消费者（resolveProviderBase 也不再读）。
+//	连接信息唯一来源 = ai-presets.json 的当前激活配置（装配器按 settings.Preset 展开）。
 type AppSettings struct {
+	// ── 以下 AI 连接字段：仅迁移读取（见 MigrateLegacyConnectionToPreset），运行期零消费者 ──
 	Provider         string `json:"provider,omitempty"`
 	Preset           string `json:"preset"` // ★ 2026-08-20 当前 AI 配置预设名（对话面板选预设时记录，UI 高亮用）
 	BaseURL          string `json:"baseURL,omitempty"`
@@ -23,10 +30,13 @@ type AppSettings struct {
 	PlanModel        string `json:"planModel,omitempty"`
 	ExecuteModel     string `json:"executeModel,omitempty"`
 	ReviewModel      string `json:"reviewModel,omitempty"`
-	Temperature      string `json:"temperature"`
-	ThinkingMode     string `json:"thinkingMode"`
-	MaxTokens        int    `json:"maxTokens"`
-	ContextMaxTokens int    `json:"contextMaxTokens"`
+	// ★ 2026-09-20 生成参数旧字段（仅迁移读取；运行期零消费者）：
+	//   启动时一次性迁入插件注册域 pluginSettings.generation（settings_generation.go）
+	//   并清空，omitempty 保证此后不再写回 settings.json。取值一律走插件注册配置。
+	Temperature      string `json:"temperature,omitempty"`
+	ThinkingMode     string `json:"thinkingMode,omitempty"`
+	MaxTokens        int    `json:"maxTokens,omitempty"`
+	ContextMaxTokens int    `json:"contextMaxTokens,omitempty"`
 	// 工作区
 	LastProject          string              `json:"lastProject"`
 	WorkspaceFolders     []string            `json:"workspaceFolders"`
@@ -47,7 +57,9 @@ type AppSettings struct {
 	// MCP / Skills
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
 	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
-	// 模型级参数（★ 2026-08-20）：每个模型独立配置生成参数，key=服务商 → 模型 → 参数
+	// 模型级参数（★ 2026-08-20；★ 2026-09-20 起仅迁移读取）：每模型独立生成参数，
+	// key=服务商 → 模型 → 参数。启动时一次性迁入 models.json 的服务商 modelParams
+	// （见 MigrateParamSettingsToModels），此后模型级参数唯一来源是 models.json。
 	ModelParams map[string]map[string]ModelParamEntry `json:"modelParams,omitempty"`
 	// 插件配置（插件通过 ctx.registerSettings 注册命名空间，值存这里）
 	PluginSettings map[string]map[string]any `json:"pluginSettings,omitempty"`
@@ -114,10 +126,14 @@ func Default() AppSettings {
 	return AppSettings{
 		// ★ 2026-08-21 AI 业务字段不再设默认（配置来源收敛到 ai-presets.json：
 		//   装配按 settings.preset 展开；无预设时 models.json 服务商 key/baseURL 兜底。
-		//   全局参数（温度/思考/输出/上下文）保留默认作为装配兜底。
+		// ★ 2026-09-20 生成参数（温度/思考/输出/上下文窗口）默认值也移出核心：
+		//   改由插件 agentloop 经 ctx.registerSettings 注册（generation 段，
+		//   见 settings_generation.go）——核心不再持有生成参数默认值。
+		// ★ 2026-09-20 连接字段（provider/baseURL/apiKey/model）同样无默认值：
+		//   唯一来源是 AI 配置（ai-presets.json）；旧顶层值启动时一次性迁入配置并清空
+		//   （见 settings_connection.go）——核心零直读连接字段。
 		Provider: "", BaseURL: "", APIKey: "",
 		PlanModel: "", ExecuteModel: "", ReviewModel: "",
-		Temperature: "0.3", ThinkingMode: "high", MaxTokens: 131072, ContextMaxTokens: 64000,
 		AutoIterate: true, ReviewMode: "auto",
 		Theme: "dark", FontSize: 14, TabSize: 2,
 	}
@@ -170,6 +186,20 @@ func Load() bool {
 	EnsureModelList()
 	// 确保 AI 配置预设已加载（ai-presets.json 不存在则建空映射）
 	EnsureAiPresets()
+	// ★ 2026-09-19：把 settings 里的生成参数（温度/最大输出/上下文窗口）一次性迁进
+	//   models.json（此后服务商配置为唯一来源）；幂等，迁过即跳过。
+	MigrateParamSettingsToModels()
+	// ★ 2026-09-20：再把 settings 顶层的全局生成参数迁进插件注册域
+	//   （pluginSettings.generation，由 agentloop 注册）并清空旧字段——此后 Go 内核
+	//   零直读，全局默认取值一律走插件注册配置。
+	//   ★ 顺序：必须在 MigrateParamSettingsToModels 之后（模型级参数先搬进 models.json）。
+	MigrateGenerationSettingsFromLegacy()
+	// ★ 2026-09-20：把 settings 顶层的旧连接字段（provider/baseURL/apiKey/模型）迁进
+	//   ai-presets.json 的一条 AI 配置（并把 preset 指向它）后清空——此后核心零直读连接
+	//   字段，连接信息唯一来源 = AI 配置（插件经 ctx.aiPresets 读写）。
+	//   ★ 顺序：必须在 MigrateParamSettingsToModels 之后（该迁移仍需 Settings.Provider
+	//     定位「当前服务商」以写入服务商级参数）。
+	MigrateLegacyConnectionToPreset()
 	return loaded
 }
 
@@ -212,31 +242,6 @@ func SyncWorkspaceFolderList(wsRoot string, folders []string) {
 			Settings.RecentProjects = Settings.RecentProjects[:20]
 		}
 	}
-}
-
-// MainModel 主循环用的模型：执行模型优先，回退旧 Model 字段。
-func MainModel() string {
-	if Settings.ExecuteModel != "" {
-		return Settings.ExecuteModel
-	}
-	return Settings.Model
-}
-
-// Configured 是否已配好可用 Provider。
-func Configured() bool {
-	return Settings.APIKey != "" && Settings.BaseURL != "" && MainModel() != ""
-}
-
-// Temperature 解析温度：留空/非法→-1。
-func Temperature() float64 {
-	s := strings.TrimSpace(Settings.Temperature)
-	if s == "" {
-		return -1
-	}
-	if v, err := strconv.ParseFloat(s, 64); err == nil {
-		return v
-	}
-	return -1
 }
 
 // FirstFontFamily 从 CSS 字体栈取首个具体族名。

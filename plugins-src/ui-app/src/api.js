@@ -548,14 +548,6 @@ async function sendFeedback(convId, content) {
 
 }
 
-// 回滚到指定用户消息前的状态：恢复文件快照 + 删除后续对话历史
-
-async function chatRollback(convId, msgIdx) {
-
-  return apiPost('/chat/rollback', { convId, msgIdx })
-
-}
-
 // 请求当前运行中的对话在下一轮迭代压缩上下文
 
 async function chatCompact(convId) {
@@ -631,6 +623,15 @@ async function getModels() {
 async function saveModels(providers) {
 
   return apiPost('/models', { providers })
+
+}
+
+// renameProvider 服务商改名（后端把 models.json 的键与 ai-presets.json 里 AI 配置的
+// provider 引用一并同步；返回 {renamed, old, new, updatedPresets}）。
+// ★ 2026-09-20：改名必须走后端——只改 models.json 会让引用旧名的 AI 配置丢地址/Key/协议。
+async function renameProvider(oldName, newName) {
+
+  return apiPost('/models/rename', { old: oldName, new: newName })
 
 }
 
@@ -717,7 +718,7 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, renameProvider, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
 
 // ─── UI 插件 boot 图（外部兼容 /api/ui-boot 单图）──────────────
 // getUIBoot 取外部 boot 图（WebBootGraph 等价，{rev, entries:[{id,url,rev,inject,immediately,external}]}）。

@@ -25,7 +25,7 @@ import (
 
 // AgentConfig 宿主注入的全部配置（依赖倒置：Agent 不感知宿主具体实现）。
 type AgentConfig struct {
-	// 工作区根路径（必填）。用于对话存储、快照、Skill 加载等。
+	// 工作区根路径（必填）。用于对话存储、Skill 加载等。
 	WorkspaceRoot string
 	// LLM Provider（必填）。Agent 通过它调用模型。
 	Provider Provider
@@ -33,8 +33,9 @@ type AgentConfig struct {
 	SystemPrompt string
 	// 上下文压缩器（可选）。空则规则式摘要。
 	Compressor Compressor
-	// 规划 Provider（可选）。非空时启用自主模式双层 Loop。
-	PlanProvider Provider
+	// ★ 2026-09-21 自主模式插件化：原 PlanProvider（规划 Provider，双层 Loop
+	//   「设计者→执行者」）已随该架构删除——自主模式的「监督者」由插件决策器 +
+	//   ctx.subagent 能力派生（复用本会话 Provider，见 autopilot.go / subagent.go）。
 	// 审核 Provider（可选）。非空+ReviewMode="auto" 时启用 AI 审核。
 	ReviewProvider Provider
 
@@ -49,7 +50,8 @@ type AgentConfig struct {
 	// 上下文 token 上限（>0 启用压缩）
 	MaxContextTokens int
 
-	// 自主模式标志（双层 Loop：设计者→执行者）
+	// 自主模式标志：开启后工作 agent 每次自然结束都会唤醒插件决策器（「人」角色
+	// 审核/评判/决定下一步），需要装载自主模式插件（.pair/plugins/autopilot）才生效。
 	Autonomous bool
 	// 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
 	ReviewMode string
@@ -95,8 +97,7 @@ func NewAgentBase(cfg AgentConfig) *AgentBase {
 //  2. 初始化存储（SQLite/JSONL）
 //  3. 创建工具注册表并注册默认工具
 //  4. 初始化会话管理器
-//  5. 初始化快照跟踪器
-//  6. 初始化执行计划管理器
+//  5. 初始化执行计划管理器
 //
 // 可多次安全调用（第二次起为 no-op）。
 func (a *AgentBase) Init() error {
@@ -117,7 +118,7 @@ func (a *AgentBase) Init() error {
 	if err := os.MkdirAll(pairDir, 0755); err != nil {
 		return fmt.Errorf("AgentBase: 创建 .pair 目录失败: %w", err)
 	}
-	for _, sub := range []string{"conversations", "snapshots", "skills", "memory", "project-info", "tools"} {
+	for _, sub := range []string{"conversations", "skills", "memory", "project-info", "tools"} {
 		if err := os.MkdirAll(filepath.Join(pairDir, sub), 0755); err != nil {
 			return fmt.Errorf("AgentBase: 创建 %s 目录失败: %w", sub, err)
 		}
@@ -160,30 +161,32 @@ func (a *AgentBase) Init() error {
 	go func() {
 		ch := sm.SubscribeAll()
 		for ge := range ch {
+			// ★ 内部状态信号不下发宿主（见 loop.go EventStatusRefresh）：它只服务于
+			//   WS 端点的 status 补推，携带内容为空，转发出去会让上层收到无意义事件。
+			if ge.Event.Type == EventStatusRefresh {
+				continue
+			}
 			if a.Config.OnEvent != nil {
 				a.Config.OnEvent(ge.Event)
 			}
 		}
 	}()
 
-	// 5. 初始化快照跟踪器
-	InitTracker(root)
-
-	// 6. 初始化执行计划管理器（任务追踪用）
+	// 5. 初始化执行计划管理器（任务追踪用）
 	InitExecutionManager(root)
 	InitPlanManager(root)
 
-	// 7. 设置 Skills 加载路径
+	// 6. 设置 Skills 加载路径
 	// ★ 2026-09-12 注：SkillGlobalDir 不在此设置——AgentBase 依赖倒置不引
 	//   core 包；skillTargetDir 空值时运行时兜底（core.InstallDir()）。
 	SkillProjectDir = filepath.Join(root, ".pair", "skills")
 	SkillSystemDir = filepath.Join(root, "config", "skills")
 
-	// 8. 设置 CodeGraph DB
+	// 7. 设置 CodeGraph DB
 	SetCodeGraphDB(sm.RawDB())
 	SetCodeGraphRoot(root) // 共享 DB 归属主项目（多项目时其他项目用独立 JSONStore）
 
-	// 9. 初始化执行状态管理器
+	// 8. 初始化执行状态管理器
 	InitExecStateManager(root)
 
 	a.Registry = registry

@@ -18,13 +18,30 @@ const jsNativeWorkspace = `F:\syproject\gou-ide`
 
 // loadDiskPluginForTest 读取 .pair/plugins/<name>/index.js 并装载到新 host。
 // 返回 host + registry（注册工具可直接 Execute）。
+// diskPluginDir 定位磁盘插件包目录（★ 2026-09-17 双源）：IDE 基线插件在
+// .pair/plugins/，独立发布插件（市场分发、不进 IDE 发布包）真源在 plugins-dist/。
+// 优先基线（同名并存时以基线为准，与 publish-official-plugins.listPlugins 同口径），
+// 其次 plugins-dist；两者都无 index.js 时返回基线路径（保留原有报错形态）。
+func diskPluginDir(root, name string) string {
+	baseline := filepath.Join(root, ".pair", "plugins", name)
+	if _, err := os.Stat(filepath.Join(baseline, "index.js")); err == nil {
+		return baseline
+	}
+	dist := filepath.Join(root, "plugins-dist", name)
+	if _, err := os.Stat(filepath.Join(dist, "index.js")); err == nil {
+		return dist
+	}
+	return baseline
+}
+
 func loadDiskPluginForTest(t *testing.T, name string) (*PluginHost, *Registry) {
 	t.Helper()
-	code, err := os.ReadFile(filepath.Join(jsNativeWorkspace, ".pair", "plugins", name, "index.js"))
+	dir := diskPluginDir(jsNativeWorkspace, name)
+	code, err := os.ReadFile(filepath.Join(dir, "index.js"))
 	if err != nil {
 		t.Fatalf("读取 %s/index.js: %v", name, err)
 	}
-	return loadJSCodeForTest(t, string(code), filepath.Join(jsNativeWorkspace, ".pair", "plugins", name))
+	return loadJSCodeForTest(t, string(code), dir)
 }
 
 func loadJSCodeForTest(t *testing.T, code string, dirs ...string) (*PluginHost, *Registry) {

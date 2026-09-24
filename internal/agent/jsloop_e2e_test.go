@@ -171,8 +171,9 @@ func gojaOk() bool {
 }
 
 // coreSettingsEnsure 确保 core.Settings 已初始化（registerSettings 依赖）。
+// ★ 2026-09-20：判据改用 Theme（连接字段已退出核心——Settings.Provider 恒空，不能作判据）。
 func coreSettingsEnsure() {
-	if core.Settings.Provider == "" {
+	if core.Settings.Theme == "" {
 		core.Settings = core.Default()
 	}
 }
