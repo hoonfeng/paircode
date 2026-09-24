@@ -98,7 +98,8 @@
     </section>
 
     <!-- ③ 上下文构成（六分项：系统提示 / 技能 / MCP / 历史 / 工具 / 其他）
-         分段条与明细行**同序同色**；每段带 title（悬停显示名称与数值，便于按色定位）。
+         分段条与明细行**同序同色** —— 明细项前缀 8px 图例色点，颜色逐项取自
+         分段条同一份 SEG_COLORS（不是另配一套色），悬停 title 显示名称与原始 tokens。
          明细折成两行 —— 264px 卡宽容不下 6 项单行（原设计 4 项时的单行写法已不适用）。 -->
     <section class="sr-card">
       <div class="sr-head"><span class="sr-title">上下文构成</span></div>
@@ -107,13 +108,18 @@
               :style="{ width: s.pct + '%', background: s.color }"
               :title="s.label + ' ' + fmt(s.tokens)"></span>
       </div>
-      <!-- 六项明细 = 固定 3 列 × 2 行网格（顺序与分段条一致）。
+      <!-- 六项明细 = 2 列 × 3 行网格（顺序与分段条一致）。
            ★ 不用「单行 · 拼接文本」：宽度实测 220px，6 项拼接必然自动折行，
              折行点落在项中间（实测「MCP 278」被单独挤到一行）→ 改成网格后每项
-             独占一格、nowrap，排版稳定不受数值长度影响（超长才省略号）。 -->
+             独占一格、nowrap，排版稳定不受数值长度影响（超长才省略号）。
+           ★ 列数由 3 改 2（2026-09-25）＝为容下图例色点的实测结果：3 列时列宽仅
+             69.6px，而最长项「系统提示 4.6K」已占满 70px（scrollWidth=clientWidth，
+             零余量），再塞 8px 色点 + 5px 间距必然把文字挤成省略号。2 列后列宽
+             ≈107px，色点开销 13px 后文本仍有 ≈93px，实测最长项不再截断。 -->
       <div class="sr-legend">
         <span v-for="k in SEG_ORDER" :key="k" class="sr-legend-item"
-              :title="SEG_LABELS[k] + ' ' + parts[k] + ' tokens'">{{ SEG_LABELS[k] }} {{ fmt(parts[k]) }}</span>
+              :title="SEG_LABELS[k] + ' ' + parts[k] + ' tokens'"><i class="sr-legend-dot"
+              :style="{ background: SEG_COLORS[k] }"></i><span class="sr-legend-txt">{{ SEG_LABELS[k] }} {{ fmt(parts[k]) }}</span></span>
       </div>
       <div v-if="ctxMax > 0" class="sr-note">剩余 {{ fmt(remainTokens) }}（{{ remainPct }}%）</div>
     </section>
@@ -381,14 +387,20 @@ function fmtSpeed(tps) {
 .sr-v-dim { color: var(--text-muted); }
 .sr-empty { font-size: 11px; color: var(--text-muted); padding: 4px 0; }
 .sr-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
-/* 上下文构成·六项明细网格：3 列 × 2 行，每项独占一格（nowrap，不跨行拆断）。
-   minmax(0,1fr) 允许列内收缩，配合 ellipsis 保证超长数值不撑破卡片。 */
+/* 上下文构成·六项明细网格：2 列 × 3 行，每项独占一格（nowrap，不跨行拆断）。
+   minmax(0,1fr) 允许列内收缩，配合 ellipsis 保证超长数值不撑破卡片。
+   列数 3→2 的原因见模板注释（3 列零余量，放不下图例色点）。 */
 .sr-legend {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px 6px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
   font-size: 11px; color: var(--text-muted); line-height: 1.5;
 }
-.sr-legend-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 明细项 = 图例色点 + 文本（flex 行）；文本承担 ellipsis，色点永不压缩、永不被裁。 */
+.sr-legend-item { display: flex; align-items: center; gap: 5px; min-width: 0; }
+/* 图例色点：8px 方块（对齐分段条 h=8 / r=4 的视觉分量，小尺寸用 r=2），
+   颜色由模板 inline 注入 SEG_COLORS[k] —— 与分段条同源，杜绝两套配色漂移。 */
+.sr-legend-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 2px; }
+.sr-legend-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 设计稿 th154/th153：h=8、圆角 4 的进度条（底 = surface-2 → --bg-hover；填充 = accent） */
 .sr-bar { height: 8px; border-radius: 4px; background: var(--bg-hover); overflow: hidden; }
 .sr-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .25s; }
