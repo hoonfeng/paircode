@@ -471,7 +471,7 @@ GET /api/system/info
   "goos": "windows",
   "workspace": "F:/projects/my-app",
   "folders": ["F:/projects/my-app"],
-  "version": "v1.6.8"
+  "version": "v1.6.9"
 }
 ```
 
@@ -859,7 +859,9 @@ PUT /api/instructions?scope={作用域}
 
 ## 九、任务与规划
 
-> **注意：** 任务由 Agent 通过 `update_tasks` / `update_plan` 工具自主管理。以下 API 仅提供前端只读查询接口。
+> **注意：** 任务由 Agent 通过 `update_tasks` 工具自主管理（任务 DAG 由该工具参数中的依赖声明表达）。以下 API 仅提供前端只读查询接口。
+>
+> 规划文档 API `/api/taskplan` 已于 2026-08-31 随 plan 体系一并移除，本文档不再列出。
 
 ### 9.1 获取任务列表
 
@@ -885,54 +887,6 @@ GET /api/tasks?convId={对话ID}
 ```
 
 > 任务数据持久化在工作区 `.pair/tasks/*.json`，由 Agent 的 `update_tasks` 工具写入。
-
-### 9.2 读取任务规划文档
-
-```
-GET /api/taskplan?name={规划名}
-```
-
-列出或读取 Markdown 格式的规划文档。
-
-**参数：** `name` — 可选，指定规划文档名（不含 `.md` 后缀）；省略则返回所有规划文档列表。
-
-**GET 响应（列出全部）：**
-```json
-[
-  {"name": "refactor-auth", "file": "F:/projects/.pair/tasks/refactor-auth.md"}
-]
-```
-
-**GET 响应（读单个）：**
-```json
-{
-  "name": "refactor-auth",
-  "content": "## 重构计划\n1. 提取认证中间件\n2. 添加 JWT 支持"
-}
-```
-
-### 9.3 追加/完成规划文档
-
-```
-POST /api/taskplan
-```
-
-**请求体：**
-```json
-{
-  "name": "refactor-auth",
-  "content": "- 完成 JWT 集成",
-  "action": "append"
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| name | string | 否 | 规划名称（省略则自动生成 `plan_日期时间`） |
-| content | string | 是 | 要追加的内容（Markdown） |
-| action | string | 否 | `"append"`（追加）或 `"complete"`（追加"[已完成] 时间戳"），默认 `"append"` |
-
-**响应：** `{"ok": true}`
 
 ---
 
@@ -1065,8 +1019,6 @@ POST /api/git/commit
 ```
 GET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}
 ```
-
-> **别名：** `/api/git-log`（绕过部分浏览器广告拦截器对 `/api/git/log` 的误杀）。
 
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
@@ -1560,6 +1512,11 @@ GET   /api/plugins/detail     # 插件详情
 POST  /api/plugins/define     # 定义 JS/TS 插件
 POST  /api/plugins/action     # 插件动作（run/stop/inspect 等）
 POST  /api/plugins/event      # 插件事件
+GET/POST /api/plugins/builtin     # 内置工具包开关
+POST  /api/plugins/tool           # 工具级开关（单个工具启停）
+POST  /api/plugins/prefer         # 同名工具并存时切换生效实现（repo/bridge）
+POST  /api/plugins/invoke         # client 半远程调用 host 半
+POST  /api/plugins/client-failure # client 加载失败上报
 GET   /api/plugins/client-state   # host/client 双半客户端状态
 POST  /api/plugins/client-events  # 客户端事件
 ```
@@ -1569,6 +1526,8 @@ POST  /api/plugins/client-events  # 客户端事件
 ```
 GET   /api/toolsets           # 列出工具集
 POST  /api/toolsets/build     # 动态构建工具集（按项目+需求组合插件）
+GET   /api/toolsets/active    # 会话实际生效的工具集（?convId=）
+POST  /api/toolsets/edit      # 工具集编辑（add_plugin/rm_plugin/rm_tool/enable_tool）
 GET   /api/toolsets/export    # 导出工具集 JSON
 POST  /api/toolsets/import    # 导入工具集（project/user 范围）
 POST  /api/toolsets/remove    # 移除工具集
@@ -1578,9 +1537,10 @@ POST  /api/toolsets/remove    # 移除工具集
 
 ```
 GET   /api/tools              # 工具清单（含启用/审核状态）
-POST  /api/tools/save         # 保存工具配置
 POST  /api/tools/review       # 审核配置
 ```
+
+> 工具与插件的启用状态由 `/api/plugins/tool`（单工具）与 `/api/plugins/builtin`（内置工具包）写入；旧的 `/api/tools/save` 已移除，故不再列出。
 
 ---
 
@@ -1776,7 +1736,6 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | POST | `/api/git/reset` | 取消暂存 |
 | POST | `/api/git/commit` | 提交 |
 | GET | `/api/git/log` | 提交历史 |
-| GET | `/api/git-log` | 提交历史（别名） |
 | POST | `/api/git/branch` | 分支管理 |
 | POST | `/api/git/checkout` | 切换分支/恢复文件 |
 | POST | `/api/git/stash` | 贮藏 |
@@ -1797,6 +1756,12 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | GET | `/api/mcp/list` | MCP 列表 |
 | POST | `/api/mcp/save` | MCP 保存/管理 |
 | GET | `/api/tokens/stats` | Token 统计 |
+| GET/POST/PUT | `/api/ai-presets` | AI 配置预设（保存 / 应用 / 删除 / 全量） |
+| POST | `/api/models/rename` | 服务商改名（同步 AI 配置里的引用） |
+| GET | `/api/commands` | 斜杠（slash）命令清单 |
+| POST | `/api/commands/run` | 执行斜杠命令 |
+| GET/PUT | `/api/ui-assembly` | UI 装配状态磁盘持久化 |
+| GET | `/api/ui-boot` | UI 启动装配数据 |
 | GET | `/api/debug/logs` | 调试日志列表 |
 | GET | `/api/debug/logs/{id}` | 调试日志详情 |
 | GET | `/api/memory/search` | 搜索记忆 |
@@ -1807,7 +1772,6 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | POST | `/api/marketplace/refresh` | 刷新市场缓存 |
 | GET/PUT | `/api/instructions` | 指令管理 |
 | GET | `/api/tasks` | 任务列表（只读查询） |
-| GET/POST | `/api/taskplan` | 规划文档管理 |
 
 ### 插件 & 工具集
 | 方法 | 端点 | 用途 |
@@ -1816,17 +1780,36 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | GET | `/api/plugins/detail` | 插件详情 |
 | POST | `/api/plugins/define` | 定义 JS/TS 插件 |
 | POST | `/api/plugins/action` | 插件动作（run/stop/inspect） |
+| GET/POST | `/api/plugins/builtin` | 内置工具包开关 |
+| POST | `/api/plugins/tool` | 工具级开关（单个工具启停） |
+| POST | `/api/plugins/prefer` | 同名工具选择生效实现（repo/bridge） |
+| POST | `/api/plugins/invoke` | client 半远程调用 host 半 |
+| POST | `/api/plugins/client-failure` | client 加载失败上报 |
 | POST | `/api/plugins/event` | 插件事件 |
 | GET | `/api/plugins/client-state` | host/client 客户端状态 |
 | POST | `/api/plugins/client-events` | 客户端事件 |
 | GET | `/api/toolsets` | 工具集列表 |
 | POST | `/api/toolsets/build` | 动态构建工具集 |
+| GET | `/api/toolsets/active` | 会话实际生效的工具集（`?convId=`） |
+| POST | `/api/toolsets/edit` | 工具集编辑（插件 / 工具增删） |
 | GET | `/api/toolsets/export` | 导出工具集 JSON |
 | POST | `/api/toolsets/import` | 导入工具集 |
 | POST | `/api/toolsets/remove` | 移除工具集 |
 | GET | `/api/tools` | 工具清单 |
-| POST | `/api/tools/save` | 保存工具配置 |
 | POST | `/api/tools/review` | 审核配置 |
+
+---
+
+### 软件更新
+
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | `/api/update/check` | 检查更新（拉取发布清单并比较版本） |
+| GET | `/api/update/status` | 更新状态快照（含下载进度） |
+| GET | `/api/update/config` | 更新生效配置（源 / 镜像 / 安装目录） |
+| POST | `/api/update/download` | 下载更新包（断点续传 + sha256 校验） |
+| POST | `/api/update/apply` | 应用更新（替换安装目录文件，可 dryRun） |
+| POST | `/api/update/cancel` | 取消进行中的检查 / 下载 |
 
 ---
 

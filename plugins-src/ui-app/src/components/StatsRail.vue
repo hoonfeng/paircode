@@ -97,13 +97,24 @@
       </div>
     </section>
 
-    <!-- ③ 上下文构成 -->
+    <!-- ③ 上下文构成（六分项：系统提示 / 技能 / MCP / 历史 / 工具 / 其他）
+         分段条与明细行**同序同色**；每段带 title（悬停显示名称与数值，便于按色定位）。
+         明细折成两行 —— 264px 卡宽容不下 6 项单行（原设计 4 项时的单行写法已不适用）。 -->
     <section class="sr-card">
       <div class="sr-head"><span class="sr-title">上下文构成</span></div>
       <div class="sr-segbar">
-        <span v-for="(s, i) in segs" :key="i" class="sr-seg" :style="{ width: s.pct + '%', background: s.color }"></span>
+        <span v-for="(s, i) in segs" :key="i" class="sr-seg"
+              :style="{ width: s.pct + '%', background: s.color }"
+              :title="s.label + ' ' + fmt(s.tokens)"></span>
       </div>
-      <div class="sr-note">{{ composeText }}</div>
+      <!-- 六项明细 = 固定 3 列 × 2 行网格（顺序与分段条一致）。
+           ★ 不用「单行 · 拼接文本」：宽度实测 220px，6 项拼接必然自动折行，
+             折行点落在项中间（实测「MCP 278」被单独挤到一行）→ 改成网格后每项
+             独占一格、nowrap，排版稳定不受数值长度影响（超长才省略号）。 -->
+      <div class="sr-legend">
+        <span v-for="k in SEG_ORDER" :key="k" class="sr-legend-item"
+              :title="SEG_LABELS[k] + ' ' + parts[k] + ' tokens'">{{ SEG_LABELS[k] }} {{ fmt(parts[k]) }}</span>
+      </div>
       <div v-if="ctxMax > 0" class="sr-note">剩余 {{ fmt(remainTokens) }}（{{ remainPct }}%）</div>
     </section>
 
@@ -182,38 +193,62 @@ const ctxMax = computed(() => ctx.value.contextMaxTokens || 0)
 //   但模型输出不占上下文窗口 —— 那是前端拼接出来的口径，已删。
 const ctxUsed = computed(() => ctx.value.promptTokens || 0)
 
-// ── 上下文构成（设计稿 th171「提示词 12K · 历史 6K · 工具 3K · 其他 9K」）──
-// ★ 段口径 = 后端 PromptBreakdown 各分项（types.go：估算 prompt 内各类构成，
-//   经 NormalizeBreakdown 归一化到 prompt_tokens）—— 即
+// ── 上下文构成（后端 PromptBreakdown 六分项：系统提示 / 技能 / MCP / 历史 / 工具 / 其他）──
+// ★ 段口径 = 后端 PromptBreakdown 各分项（types.go PromptBreakdown，compress.go
+//   buildPromptBreakdown 逐项计算后归一化到 prompt_tokens）—— 即
 //   system+skills+mcp+tool+history+other ≈ promptTokens。
-//   故 ① 不得再叠加 promptTokens（旧实现 `promptTokens + system + skills + mcp`
-//   把总数重复计入，分段条与"提示词"数值双双虚高）；② 输出 token 也不属上下文构成
-//   （旧实现 `other + completionTokens`）。两处臆测口径均已修正。
+//   ★ 2026-09-25 用户指令：**技能与 MCP 必须独立成项**。旧实现把
+//   system+skills+mcp 折叠成一个「提示词」段 —— 技能与 MCP 的占用在界面上完全
+//   不可见（三者在同一段内无法分辨）。实测该折叠确有信息损失：本机工作区累计
+//   skillsTokens=7,091,325、mcpTokens=3,817,512，均显著非零 → 拆为三个独立段
+//   （系统提示 / 技能 / MCP）分别展示与配色。后端两字段的算法本就独立：
+//   skills = system prompt 内「# 可用技能」段（skill_loader.go 写入该标记）；
+//   mcp = 工具定义中 `mcp_` 前缀者（mcp__<server>__<tool>）。
+//   另两条既有口径不变：① 不得再叠加 promptTokens（旧实现
+//   `promptTokens + system + skills + mcp` 把总数重复计入，数值虚高）；
+//   ② 输出 token 不属上下文构成（旧实现 `other + completionTokens`）。
+// 数据链路：后端 GET /api/conversations/{id}/token-stats（web_server.go 下发
+//   systemTokens/skillsTokens/mcpTokens/…）→ agent-events.js 写入
+//   state.convCtxStatsByConv → 本卡只做展示，不估算、不兜底。
 const parts = computed(() => {
   const c = ctx.value
   return {
-    prompt: (c.systemTokens || 0) + (c.skillsTokens || 0) + (c.mcpTokens || 0),
+    system: c.systemTokens || 0,
+    skills: c.skillsTokens || 0,
+    mcp: c.mcpTokens || 0,
     history: c.historyTokens || 0,
     tool: c.toolTokens || 0,
     other: c.otherTokens || 0,
   }
 })
+// 段序 = 后端语义顺序（系统提示 → 技能 → MCP → 历史 → 工具 → 其他）。
+// 颜色全部取设计令牌（index.html 语义槽 + 分类色），不写硬编码 hex 兜底
+// （旧实现用 var(--success, #4FD8A4) / var(--warning, #F0C158) —— 这两个变量
+//   在 index.html 中并未定义，实际一直取兜底 hex，亮色主题下不会随主题变化）。
+const SEG_ORDER = ['system', 'skills', 'mcp', 'history', 'tool', 'other']
+const SEG_LABELS = { system: '系统提示', skills: '技能', mcp: 'MCP', history: '历史', tool: '工具', other: '其他' }
+const SEG_COLORS = {
+  system: 'var(--color-accent)',       // 主色（延续原「提示词」段主色）
+  skills: 'var(--color-cat-purple)',   // 技能（新增独立段）
+  mcp: 'var(--color-cat-teal)',        // MCP（新增独立段）
+  history: 'var(--color-success)',
+  tool: 'var(--color-warning)',
+  other: 'var(--bg-active)',
+}
 const segs = computed(() => {
   const p = parts.value
-  const tot = p.prompt + p.history + p.tool + p.other
-  if (tot <= 0) return [{ pct: 100, color: 'var(--border-color)' }]
-  // 设计稿 th166-th169 四段配色的语义顺序：accent / success / warning / surface-3
-  return [
-    { pct: p.prompt / tot * 100, color: 'var(--accent)' },
-    { pct: p.history / tot * 100, color: 'var(--success, #4FD8A4)' },
-    { pct: p.tool / tot * 100, color: 'var(--warning, #F0C158)' },
-    { pct: p.other / tot * 100, color: 'var(--bg-active)' },
-  ]
+  const tot = SEG_ORDER.reduce((s, k) => s + p[k], 0)
+  if (tot <= 0) return [{ pct: 100, color: 'var(--border-color)', label: '无数据', tokens: 0 }]
+  return SEG_ORDER.map((k) => ({
+    pct: p[k] / tot * 100,
+    color: SEG_COLORS[k],
+    label: SEG_LABELS[k],
+    tokens: p[k],
+  }))
 })
-const composeText = computed(() => {
-  const p = parts.value
-  return `提示词 ${fmt(p.prompt)} · 历史 ${fmt(p.history)} · 工具 ${fmt(p.tool)} · 其他 ${fmt(p.other)}`
-})
+// 明细图例：模板遍历 SEG_ORDER 渲染「名称 值」网格（顺序与分段条一致，便于按序对照）。
+// 恒显示 6 项（无占用时显示 0）—— 不做"有值才显示"的动态隐藏：否则卡片行数随数据
+// 跳动，且用户无法判断某类是真的 0 还是未被统计。
 const remainTokens = computed(() => Math.max(0, ctxMax.value - ctxUsed.value))
 const remainPct = computed(() => ctxMax.value > 0 ? Math.round(remainTokens.value / ctxMax.value * 100) : 0)
 
@@ -346,6 +381,14 @@ function fmtSpeed(tps) {
 .sr-v-dim { color: var(--text-muted); }
 .sr-empty { font-size: 11px; color: var(--text-muted); padding: 4px 0; }
 .sr-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+/* 上下文构成·六项明细网格：3 列 × 2 行，每项独占一格（nowrap，不跨行拆断）。
+   minmax(0,1fr) 允许列内收缩，配合 ellipsis 保证超长数值不撑破卡片。 */
+.sr-legend {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 6px;
+  font-size: 11px; color: var(--text-muted); line-height: 1.5;
+}
+.sr-legend-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 设计稿 th154/th153：h=8、圆角 4 的进度条（底 = surface-2 → --bg-hover；填充 = accent） */
 .sr-bar { height: 8px; border-radius: 4px; background: var(--bg-hover); overflow: hidden; }
 .sr-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .25s; }
