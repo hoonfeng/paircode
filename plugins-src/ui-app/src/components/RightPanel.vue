@@ -1839,7 +1839,8 @@ const submitAskAnswer = async (seg) => {
   if (seg.answers && seg.answers.length) {
     seg._answered = true
     try {
-      await api.apiPost('/chat/answer', { convId, callId: seg.callId, answers: seg.answers })
+      const resp = await api.apiPost('/chat/answer', { convId, callId: seg.callId, answers: seg.answers })
+      notifyLateAnswer(resp, convId)
     } catch (e) {
       console.error('[RP] 回答提交失败（多问题）:', e)
       seg._answered = false
@@ -1850,12 +1851,22 @@ const submitAskAnswer = async (seg) => {
   const answer = (seg.answer || '').trim()
   if (!answer) return; seg._answered = true
   try {
-    await api.apiPost('/chat/answer', { convId, answer })
+    const resp = await api.apiPost('/chat/answer', { convId, callId: seg.callId, answer })
+    notifyLateAnswer(resp, convId)
   } catch (e) {
     console.error('[RP] 回答提交失败（单问题）:', e)
     seg._answered = false
     recoverDeadAskSession(convId, e, seg)
   }
+}
+
+// ★ 2026-09-25 提问已超时/停止后提交的回答：后端不再静默丢弃，而是落盘为一条
+//   会话消息（响应带 recorded='message'）。此处提示用户并尝试刷新历史；
+//   运行中会话的 reload 会被 reloadConvMessages 跳过（刷新页面即可见）。
+const notifyLateAnswer = (resp, convId) => {
+  if (!resp || resp.recorded !== 'message') return
+  window.$toast && window.$toast('该提问已结束（超时/停止），你的回答已记录为会话消息（刷新页面可见）', 'info')
+  Promise.resolve(reloadConvMessages(convId)).catch(() => {})
 }
 
 const resolveApproval = async (approved) => {

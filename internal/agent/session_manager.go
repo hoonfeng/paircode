@@ -16,6 +16,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -166,6 +167,12 @@ type Session struct {
 
 	// stopped 标记用户主动停止（区别于自然结束，避免多发错误事件）
 	stopped bool
+
+	// ★ 2026-09-25 askPending：当前是否有 ask_user 真正阻塞等待用户回答
+	//   （= askCh 上有消费者）。置位处：会话级 ask_user Handler 与 WaitAnswers。
+	//   用途：SendAnswers 判定「无消费者」——旧行为下 askCh（1 格缓冲）投递
+	//   成功但无人消费，回答被静默丢弃：前端显示「已回答」，历史却查无此答。
+	askPending atomic.Bool
 }
 
 // SessionManager 并行会话架构核心：管理多个并行 Session。
@@ -469,6 +476,12 @@ func TrimInterruptedHistory(history []Message) []Message {
 
 // ErrSessionNotRunning 会话未在运行（向已结束的会话发交互信号）。
 var ErrSessionNotRunning = errors.New("会话未在运行")
+
+// ErrAskNotPending 回答提交时该会话已无 ask_user 在等待（提问超时/被停止）。
+// ★ 2026-09-25：此时回答已落盘为会话消息（用户历史可见、下一轮模型可见），
+// web 层据此回「已记录为消息」而不是报错——旧行为是投递进缓冲通道后
+// 无人消费，回答静默丢失（用户看到「已回答」但历史无记录）。
+var ErrAskNotPending = errors.New("提问已结束（超时/停止）：回答已记录为会话消息")
 
 // composePersistMessages 组合持久化消息：已落盘基准 + 锚点之后的新增。
 //
@@ -836,6 +849,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				},
 				RequiresApproval: false,
 				Handler: func(hctx context.Context, args map[string]any) (string, error) {
+					// ★ 2026-09-25：标记「正在等待用户回答」——SendAnswers 据此判定
+					//   有无消费者（无消费者时把回答落盘为会话消息而非静默丢弃）。
+					sess.askPending.Store(true)
+					defer sess.askPending.Store(false)
 					// ★ Round3 ⑤：questions 数组优先，缺省回落单问题路径
 					if qs := askQuestionsFromArgs(args); len(qs) > 0 {
 						select {
@@ -1496,6 +1513,16 @@ func (m *SessionManager) SendAnswer(convID string, answer string) error {
 
 // SendAnswers 向指定会话发送 ask_user 的回答数组（Round3 ⑤ 多问题）。
 // 会话不存在或未运行返回错误。
+//
+// ★ 2026-09-25 新增语义：若该会话当前没有 ask_user 在等待回答（提问已超时/被
+// 停止），回答不再投递进 askCh（1 格缓冲，投递「成功」但无人消费 → 回答永不
+// 落盘：前端显示「已回答」、历史查无此答），而是落盘为一条会话 user 消息并返回
+// ErrAskNotPending；web 层据此回 {"ok":true,"recorded":"message"}。落盘幂等：
+// 与「会话最后一条 user 消息」同文本时直接跳过（前端重试/重复提交不产生重复消息）。
+//
+// 锁范围：m.mu 仅保护 sessions map 查表；askPending 为 atomic.Bool 自同步；
+// storeFor 内部用 wsMu、MessageStore 自身按 convID 加锁——本函数不嵌套持锁，
+// 落盘全程在 m.mu 之外执行。
 func (m *SessionManager) SendAnswers(convID string, answers []AskAnswer) error {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
@@ -1506,12 +1533,74 @@ func (m *SessionManager) SendAnswers(convID string, answers []AskAnswer) error {
 	if !sess.Running {
 		return ErrSessionNotRunning
 	}
+	// 无消费者兜底（见函数注释）：atomic 读，无需 m.mu。
+	if !sess.askPending.Load() {
+		if err := m.persistLateAskAnswer(sess, answers); err != nil {
+			return fmt.Errorf("提问已结束（超时/停止），且回答写入会话消息失败：%w", err)
+		}
+		return ErrAskNotPending
+	}
 	select {
 	case sess.askCh <- answers:
 		return nil
 	default:
 		return errors.New("回答通道已满（可能已有待处理回答）")
 	}
+}
+
+// IsAwaitingAnswer 该会话当前是否有 ask_user 在等待回答（无会话/未运行返回 false）。
+func (m *SessionManager) IsAwaitingAnswer(convID string) bool {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	return ok && sess.askPending.Load()
+}
+
+// persistLateAskAnswer 把「提问已结束」后才提交的回答落盘为会话 user 消息。
+// 走会话自己的工作区 store（不写全局 m.store——会话运行中用户切换工作区时避免写错库）；
+// 幂等：内容与最近一条 user 消息相同时跳过（重复提交不生重复消息）。
+func (m *SessionManager) persistLateAskAnswer(sess *Session, answers []AskAnswer) error {
+	store := m.storeFor(sess.WorkspaceRoot)
+	if store == nil {
+		return errors.New("消息存储未就绪（会话工作区根为空）")
+	}
+	text := formatLateAskAnswer(answers)
+	if strings.TrimSpace(text) == "" {
+		return errors.New("回答内容为空")
+	}
+	if last, _, err := store.LoadLatest(sess.ConvID, 1); err == nil && len(last) > 0 {
+		prev := last[len(last)-1].Message
+		if prev.Role == RoleUser && strings.TrimSpace(prev.Content) == strings.TrimSpace(text) {
+			return nil // 幂等：同一回答已落盘
+		}
+	}
+	if err := store.AppendUserMessage(sess.ConvID, text); err != nil {
+		return err
+	}
+	log.Printf("[session] ask_user 迟到回答已落盘为会话消息 conv=%s（提问已超时/停止）", sess.ConvID)
+	return nil
+}
+
+// formatLateAskAnswer 组装迟到回答的消息文本：单问题（ID 空）直接用答案原文；
+// 多问题逐条列出（带问题 ID，便于模型/用户对应）。
+func formatLateAskAnswer(answers []AskAnswer) string {
+	if len(answers) == 1 && strings.TrimSpace(answers[0].ID) == "" {
+		return strings.TrimSpace(answers[0].Answer)
+	}
+	var b strings.Builder
+	b.WriteString("（提问已超时结束，这是我对该提问的补充回答）")
+	for i, a := range answers {
+		ans := strings.TrimSpace(a.Answer)
+		if ans == "" {
+			continue
+		}
+		if strings.TrimSpace(a.ID) != "" {
+			b.WriteString(fmt.Sprintf("\n%d. [%s] %s", i+1, a.ID, ans))
+		} else {
+			b.WriteString(fmt.Sprintf("\n%d. %s", i+1, ans))
+		}
+	}
+	return b.String()
 }
 
 // WaitAnswer 按 convID 等待用户回答（ask_user 会话桥路由入口，单问题路径）。
@@ -1539,6 +1628,10 @@ func (m *SessionManager) WaitAnswers(ctx context.Context, convID string) ([]AskA
 	if !sess.Running {
 		return nil, ErrSessionNotRunning
 	}
+	// ★ 2026-09-25：标记等待中——SendAnswers 据此判定有无消费者（无消费者时
+	//   把回答落盘为会话消息，避免「已回答」却历史查无此答）。
+	sess.askPending.Store(true)
+	defer sess.askPending.Store(false)
 	select {
 	case answers := <-sess.askCh:
 		return answers, nil

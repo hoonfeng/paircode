@@ -2654,22 +2654,40 @@ func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "convId 必填")
 		return
 	}
+	// ★ 2026-09-25：agent.ErrAskNotPending = 提问已超时/停止（无 ask_user 在等待），
+	//   回答已由 SessionManager 落盘为一条会话 user 消息——按成功回应并带 recorded
+	//   标记，前端据此提示「已记录为消息」并刷新历史（旧行为：投递进缓冲通道无人
+	//   消费，回答静默丢失）。
+	recorded := ""
 	if len(req.Answers) > 0 {
 		answers := make([]agent.AskAnswer, 0, len(req.Answers))
 		for _, a := range req.Answers {
 			answers = append(answers, agent.AskAnswer{ID: a.ID, Answer: a.Answer})
 		}
-		if err := agentMgr.SendAnswers(req.ConvID, answers); err != nil {
+		err := agentMgr.SendAnswers(req.ConvID, answers)
+		switch {
+		case errors.Is(err, agent.ErrAskNotPending):
+			recorded = "message"
+		case err != nil:
 			jsonErr(w, err.Error())
 			return
 		}
 	} else {
-		if err := agentMgr.SendAnswer(req.ConvID, req.Answer); err != nil {
+		err := agentMgr.SendAnswer(req.ConvID, req.Answer)
+		switch {
+		case errors.Is(err, agent.ErrAskNotPending):
+			recorded = "message"
+		case err != nil:
 			jsonErr(w, err.Error())
 			return
 		}
 	}
-	jsonResp(w, map[string]any{"ok": true})
+	resp := map[string]any{"ok": true}
+	if recorded != "" {
+		resp["recorded"] = recorded
+		resp["note"] = "该提问已结束（超时/停止），回答已记录为会话消息"
+	}
+	jsonResp(w, resp)
 }
 
 // handleCommands GET /api/commands：slash 命令清单（前端 "/" 菜单提示）。
