@@ -125,3 +125,94 @@ func TestSendAnswersErrorsUnchanged(t *testing.T) {
 		t.Fatal("未知会话 IsAwaitingAnswer 应为 false")
 	}
 }
+
+// ★ 2026-09-25 真机复验发现的二次缺陷：迟到回答落盘后，会话的「全量覆盖写」
+// （OnBatchPersist → PersistNewMessages，内容 = 基准 + 本轮新增）不含它 → 抹掉，
+// 用户看到「已记录为会话消息」但刷新历史仍不见。本测试模拟该覆盖写全流程。
+func TestLateAnswerSurvivesBatchOverwrite(t *testing.T) {
+	m, store, sess := newLateTestManager(t, "c_over")
+	// 已落盘基准（上一段完整时间线）
+	base := []Message{
+		{Role: RoleUser, Content: "原始任务"},
+		{Role: RoleAssistant, Content: "开始处理"},
+		{Role: RoleUser, Content: "第二轮任务"},
+	}
+	if err := store.PersistNewMessages("c_over", base); err != nil {
+		t.Fatalf("基准落盘失败: %v", err)
+	}
+	// 提问已结束（无等待者）→ 回答直接落盘并登记
+	if err := m.SendAnswers("c_over", []AskAnswer{{Answer: "迟到的选择"}}); !errors.Is(err, ErrAskNotPending) {
+		t.Fatalf("应返回 ErrAskNotPending，实际: %v", err)
+	}
+	if got := sess.lateAnswersSnapshot(); len(got) != 1 || got[0].Content != "迟到的选择" {
+		t.Fatalf("迟到回答未登记: %+v", got)
+	}
+
+	// 模拟 OnBatchPersist：基准 + 本轮新增（不含迟到回答）→ 并入 → 全量覆盖写
+	msgs := append(append([]Message(nil), base...),
+		Message{Role: RoleAssistant, Content: "第二轮回复"})
+	combined := composePersistMessages(base, msgs)
+	combined = mergeLateAnswers(combined, len(base), sess.lateAnswersSnapshot())
+	if err := store.PersistNewMessages("c_over", combined); err != nil {
+		t.Fatalf("覆盖写失败: %v", err)
+	}
+
+	saved, err := store.LoadAll("c_over")
+	if err != nil {
+		t.Fatalf("LoadAll 失败: %v", err)
+	}
+	n := 0
+	idxLate, idxTail := -1, -1
+	for i, msg := range saved {
+		switch msg.Content {
+		case "迟到的选择":
+			n++
+			idxLate = i
+		case "第二轮回复":
+			idxTail = i
+		}
+	}
+	if n != 1 {
+		t.Fatalf("覆盖写后迟到回答应恰好保留 1 条，实际 %d 条（内容：%+v）", n, saved)
+	}
+	if idxTail >= 0 && idxLate > idxTail {
+		t.Fatalf("迟到回答应插在基准之后、本轮新增之前（late=%d tail=%d）", idxLate, idxTail)
+	}
+
+	// 再跑一次覆盖写：基准已含该消息（模拟 refreshPersistBase 从磁盘读回）→ 不重复插入
+	base2, _ := store.LoadAll("c_over")
+	combined2 := mergeLateAnswers(composePersistMessages(base2, msgs), len(base2), sess.lateAnswersSnapshot())
+	if err := store.PersistNewMessages("c_over", combined2); err != nil {
+		t.Fatalf("第二次覆盖写失败: %v", err)
+	}
+	saved2, _ := store.LoadAll("c_over")
+	dup := 0
+	for _, msg := range saved2 {
+		if msg.Content == "迟到的选择" {
+			dup++
+		}
+	}
+	if dup != 1 {
+		t.Fatalf("二次覆盖写后应仍为 1 条（幂等），实际 %d 条", dup)
+	}
+}
+
+// mergeLateAnswers 单元语义：空列表原样返回；已存在同文本不插入；插入位置越界按末尾。
+func TestMergeLateAnswersEdgeCases(t *testing.T) {
+	base := []Message{{Role: RoleUser, Content: "任务"}}
+	if got := mergeLateAnswers(base, 1, nil); len(got) != 1 {
+		t.Fatalf("空迟到列表应原样返回，实际 %+v", got)
+	}
+	late := []Message{{Role: RoleUser, Content: "答案"}}
+	if got := mergeLateAnswers(base, 1, late); len(got) != 2 || got[1].Content != "答案" {
+		t.Fatalf("应插入 1 条，实际 %+v", got)
+	}
+	dup := append(append([]Message(nil), base...), Message{Role: RoleUser, Content: "答案"})
+	if got := mergeLateAnswers(dup, 1, late); len(got) != 2 {
+		t.Fatalf("已存在同文本不应重复插入，实际 %+v", got)
+	}
+	out := mergeLateAnswers(base, 99, late)
+	if len(out) != 2 || out[1].Content != "答案" {
+		t.Fatalf("越界 insertAt 应按末尾插入，实际 %+v", out)
+	}
+}

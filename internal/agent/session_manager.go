@@ -173,6 +173,15 @@ type Session struct {
 	//   用途：SendAnswers 判定「无消费者」——旧行为下 askCh（1 格缓冲）投递
 	//   成功但无人消费，回答被静默丢弃：前端显示「已回答」，历史却查无此答。
 	askPending atomic.Bool
+
+	// ★ 2026-09-25 lateAnswers：已直接落盘的「迟到回答」（提问超时/停止后才提交）登记。
+	//   为何要登记：会话持久化走 OnBatchPersist → store.PersistNewMessages 全量覆盖写，
+	//   写入内容 = persistBase(已落盘基准) + 本轮新增(msgs 锚点后的 tail)——两者都不含
+	//   直接 append 到磁盘的迟到回答 → 下一次覆盖写（每轮迭代 + 会话结束兜底各一次）
+	//   把它抹掉：用户看到「已记录为会话消息」，刷新历史却仍然查无此答。
+	//   故登记于此，由 mergeLateAnswers 并入每次覆盖写的内容（见其注释）。
+	lateMu      sync.Mutex
+	lateAnswers []Message
 }
 
 // SessionManager 并行会话架构核心：管理多个并行 Session。
@@ -512,6 +521,51 @@ func composePersistMessages(base []Message, msgs []Message) []Message {
 	return combined
 }
 
+// maxLateAnswers 会话内登记保留的迟到回答上限（超限丢最旧；被丢的通常已随
+// refreshPersistBase 并入基准，不影响最终持久化结果）。
+const maxLateAnswers = 64
+
+// mergeLateAnswers 把登记的迟到回答并入「全量覆盖写」的内容（插在基准之后、
+// 本轮新增之前——迟到回答发生在提问结束之后、当前轮开始之前，位置相符）。
+//
+// 为什么需要：PersistNewMessages 每次全量覆盖写，内容 = 基准 + 本轮新增，
+// 直接 append 到磁盘的迟到回答两者都不含 → 覆盖写会把它抹掉（用户「已记录」
+// 却刷新历史仍不见）。并入后 base/tail 两侧都保留它。
+//
+// 幂等：combined 中已有同文本 user 消息时跳过（基准经 refreshPersistBase 推进后
+// 已从磁盘读回该消息 → 不重复插入）。insertAt 越界时按末尾处理。
+func mergeLateAnswers(combined []Message, insertAt int, late []Message) []Message {
+	if len(late) == 0 {
+		return combined
+	}
+	if insertAt < 0 || insertAt > len(combined) {
+		insertAt = len(combined)
+	}
+	seen := make(map[string]bool, len(combined)+len(late))
+	for _, m := range combined {
+		if m.Role == RoleUser {
+			seen[strings.TrimSpace(m.Content)] = true
+		}
+	}
+	add := make([]Message, 0, len(late))
+	for _, m := range late {
+		key := strings.TrimSpace(m.Content)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		add = append(add, m)
+	}
+	if len(add) == 0 {
+		return combined
+	}
+	out := make([]Message, 0, len(combined)+len(add))
+	out = append(out, combined[:insertAt]...)
+	out = append(out, add...)
+	out = append(out, combined[insertAt:]...)
+	return out
+}
+
 // Start 为 convID 创建并启动一个新会话。
 //
 // 流程：
@@ -788,6 +842,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			base := persistBase
 			persistBaseMu.Unlock()
 			combined := composePersistMessages(base, msgs)
+			// ★ 2026-09-25：并入登记的迟到回答（提问超时/停止后提交、已直接落盘的
+			//   会话 user 消息）——combined 只含「基准 + 本轮新增」，不含直接 append
+			//   的消息，不并入则本次全量覆盖写会把它抹掉（用户「已记录」却刷新不见）。
+			combined = mergeLateAnswers(combined, len(base), sess.lateAnswersSnapshot())
 			err := store.PersistNewMessages(convID, combined)
 			if err != nil {
 				fmt.Printf("[persist] OnBatchPersist 失败 conv=%s err=%v\n", convID, err)
@@ -1556,6 +1614,36 @@ func (m *SessionManager) IsAwaitingAnswer(convID string) bool {
 	return ok && sess.askPending.Load()
 }
 
+// addLateAnswer 登记一条迟到回答（供全量覆盖写并入，见 Session.lateAnswers 注释）。
+// 与登记尾部同文本时跳过（重复提交不重复登记）。
+func (s *Session) addLateAnswer(content string) {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return
+	}
+	s.lateMu.Lock()
+	defer s.lateMu.Unlock()
+	if n := len(s.lateAnswers); n > 0 && strings.TrimSpace(s.lateAnswers[n-1].Content) == text {
+		return
+	}
+	if len(s.lateAnswers) >= maxLateAnswers {
+		s.lateAnswers = append([]Message(nil), s.lateAnswers[1:]...) // 丢最旧，防无限增长
+	}
+	s.lateAnswers = append(s.lateAnswers, Message{Role: RoleUser, Content: text})
+}
+
+// lateAnswersSnapshot 返回迟到回答快照（拷贝，调用方无需持锁）。
+func (s *Session) lateAnswersSnapshot() []Message {
+	s.lateMu.Lock()
+	defer s.lateMu.Unlock()
+	if len(s.lateAnswers) == 0 {
+		return nil
+	}
+	out := make([]Message, len(s.lateAnswers))
+	copy(out, s.lateAnswers)
+	return out
+}
+
 // persistLateAskAnswer 把「提问已结束」后才提交的回答落盘为会话 user 消息。
 // 走会话自己的工作区 store（不写全局 m.store——会话运行中用户切换工作区时避免写错库）；
 // 幂等：内容与最近一条 user 消息相同时跳过（重复提交不生重复消息）。
@@ -1571,12 +1659,16 @@ func (m *SessionManager) persistLateAskAnswer(sess *Session, answers []AskAnswer
 	if last, _, err := store.LoadLatest(sess.ConvID, 1); err == nil && len(last) > 0 {
 		prev := last[len(last)-1].Message
 		if prev.Role == RoleUser && strings.TrimSpace(prev.Content) == strings.TrimSpace(text) {
+			// 已落盘也登记：全量覆盖写时同样要保证它在最终内容里（见 Session.lateAnswers）。
+			sess.addLateAnswer(text)
 			return nil // 幂等：同一回答已落盘
 		}
 	}
 	if err := store.AppendUserMessage(sess.ConvID, text); err != nil {
 		return err
 	}
+	// ★ 登记，供 OnBatchPersist 的全量覆盖写并入——否则下一次覆盖写把它抹掉。
+	sess.addLateAnswer(text)
 	log.Printf("[session] ask_user 迟到回答已落盘为会话消息 conv=%s（提问已超时/停止）", sess.ConvID)
 	return nil
 }
