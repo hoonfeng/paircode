@@ -129,7 +129,8 @@
                         </div>
                         <div v-else-if="seg.type === 'ask_user'" class="tl-item">
                           <span class="tl-dot tl-dot-ask"></span>
-                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :questions="seg.questions" :call-id="seg.callId" :answered="seg._answered" :stale="seg._stale" @answer="onAskAnswer(seg, $event)" /></div>
+                          <!-- ★ 2026-09-25：answer/answers 一并传入——历史回看时回显当时的选择项/自定义输入（此前不传，卡片只显示原始问题） -->
+                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :questions="seg.questions" :call-id="seg.callId" :answer="seg.answer" :answers="seg.answers" :answered="seg._answered" :stale="seg._stale" @answer="onAskAnswer(seg, $event)" /></div>
                         </div>
                         <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
                           <span class="tl-dot tl-dot-content"></span>

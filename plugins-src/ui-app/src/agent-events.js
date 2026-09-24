@@ -159,6 +159,20 @@ export function createAssistantPlaceholder(convId, key) {
 //   保真「正文→工具→正文」的真实交错顺序。旧快照（仅 reasoning/tools/content
 //   三个分离累积字段，无法还原交错）降级兼容：content 聚在工具调用后面，
 //   表现为「上方总工具调用、下方总正文输出」，已由本修复根除。
+// parseAskResult 解析 ask_user 的工具结果（与后端 message_store.go 的
+// parseAskResultV2 同规则）：多问题为 {"answers":[{id,answer}]} JSON，单问题为整段文本。
+// 快照重放此前把整个 JSON 当 answer → 卡片回显出一串 JSON 原文。
+function parseAskResult(content) {
+  const s = String(content || '').trim()
+  if (s.startsWith('{')) {
+    try {
+      const o = JSON.parse(s)
+      if (o && Array.isArray(o.answers) && o.answers.length > 0) return { answer: '', answers: o.answers }
+    } catch {}
+  }
+  return { answer: s, answers: [] }
+}
+
 function applyLiveSnapshot(convId, msg, rt, snap) {
   // ★ 2026-08-22 保留用户交互状态：快照重建 segments 前按类别收集旧的展开状态
   //   （thinking 展开 = _collapsed===false；tool_call 展开 = _expanded===true），
@@ -205,10 +219,13 @@ function applyLiveSnapshot(convId, msg, rt, snap) {
             if (Array.isArray(args.options)) options = args.options
             if (Array.isArray(args.questions)) questions = args.questions
           } catch {}
+          // ★ 2026-09-25：answers 一并还原（多问题 JSON 解析），供卡片回显当时的选择
+          const parsed = parseAskResult(ev.content)
           const seg = {
             type: 'ask_user', question, askType, options, questions,
             callId: ev.callId || '',
-            answer: ev.content || '', _answered: !!ev.content,
+            answer: parsed.answer, answers: parsed.answers,
+            _answered: !!(parsed.answer || parsed.answers.length),
           }
           if (questions.length > 0) seg.question = ''
           segments.push(seg)
@@ -482,6 +499,21 @@ export function processAgentEvent(convId, data) {
       // ★ 用户已手动展开的 tool_call 不被结果折叠：流式期间用户展开查看细节时，
       //   结果到达不强制收起——否则表现为「展开后又被自动折叠」
       if (target._expanded !== true) target._expanded = false
+    }
+
+    // ★ 2026-09-25：ask_user 结果回填问答卡片——多窗口/刷新重连时另一端的回答
+    //   也要能看到（实时点击路径由 onAskAnswer 直接写入 seg.answer/answers）。
+    if (toolName === 'ask_user') {
+      const parsed = parseAskResult(data.content)
+      for (let i = msg.segments.length - 1; i >= 0; i--) {
+        const seg = msg.segments[i]
+        if (seg.type !== 'ask_user') continue
+        if (callId && seg.callId && seg.callId !== callId) continue
+        seg.answer = parsed.answer
+        seg.answers = parsed.answers
+        seg._answered = !!(parsed.answer || parsed.answers.length)
+        break
+      }
     }
   } else if (data.type === 'approval') {
     // 解析 args JSON，结构化展示

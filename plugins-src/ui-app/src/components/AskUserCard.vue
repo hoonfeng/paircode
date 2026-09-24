@@ -23,6 +23,12 @@
           <input v-model="multiTexts[q.id]" class="ask-user-input" type="text"
                  placeholder="输入回答..." @keydown.enter="submitMultiForm" :disabled="answered || stale" />
         </div>
+        <!-- ★ 2026-09-25 历史回显：该问题当时的回答（选择项/自定义文本） -->
+        <div v-if="answeredTextFor(q)" class="ask-answered-line"
+             :class="{ 'ask-answered-failed': isFailedAnswer(answeredTextFor(q)) }">
+          <span class="ask-answered-label">{{ isFailedAnswer(answeredTextFor(q)) ? '未收到回答' : '你的回答' }}</span>
+          <span class="ask-answered-text">{{ answeredTextFor(q) }}</span>
+        </div>
       </div>
       <div class="ask-multi-actions">
         <button class="ask-user-btn" @click="submitMultiForm" :disabled="answered || stale || !multiFormValid">
@@ -34,6 +40,13 @@
     <!-- 单问题模式（原路径不变） -->
     <div v-else>
     <div class="ask-user-question">{{ question }}</div>
+
+    <!-- ★ 2026-09-25 历史回显：显示当时的选择项 / 自定义输入 / 文本回答 -->
+    <div v-if="answered && answeredShow" class="ask-answered-line"
+         :class="{ 'ask-answered-failed': isFailedAnswer(answeredShow) }">
+      <span class="ask-answered-label">{{ isFailedAnswer(answeredShow) ? '未收到回答' : '你的回答' }}</span>
+      <span class="ask-answered-text">{{ answeredShow }}</span>
+    </div>
 
     <!-- 单选 (radio)：options 为空时降级为文本输入（见下方兜底） -->
     <div v-if="askType === 'single' && hasOptions" class="ask-user-options">
@@ -104,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   question: { type: String, default: '' },
@@ -116,6 +129,12 @@ const props = defineProps({
   stale: { type: Boolean, default: false },
   // ★ Round3 ⑤ 多问题：questions 数组 [{id, question, options?, multiSelect?}]
   questions: { type: Array, default: () => [] },
+  // ★ 2026-09-25 历史回显：已答内容（后端 segments 提供，见 message_store.go
+  //   SegmentsFromMessage 的 ask_user 分支——从 tool 结果解析 Answer/Answers）。
+  //   answer=单问题答案文本；answers=[{id, answer}]=多问题答案数组。
+  //   此前两者只用于 answered 判定、未参与渲染 → 回看历史看不到当时选了什么。
+  answer: { type: String, default: '' },
+  answers: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['answer'])
 
@@ -207,6 +226,67 @@ function submitText() {
   emit('answer', { callId: props.callId, answer: textInput.value.trim() })
   textInput.value = ''
 }
+
+// ── ★ 2026-09-25 历史回显：已答内容回填（选项高亮 + 自定义文本/纯文本） ──
+// 缺陷：回答提交后仅后端落盘（tool 结果 → segments.answer/answers），前端卡片
+// 从未消费这两者 → 回看历史时看不到当时选了哪一项、自定义输入了什么。
+
+// splitAnswer 拆分答案文本（多选/多问题提交时以 ', ' 连接，见 submitMulti/submitMultiForm）。
+const splitAnswer = (s) => String(s || '').split(',').map(x => x.trim()).filter(Boolean)
+
+// isFailedAnswer 工具失败/超时文本（后端把工具 error 文本当结果解析成 answer，如
+// "Error: JS 工具 ask_user 执行失败: ... 等待用户回答超时（5 分钟）"）——那不是用户
+// 答案：展示为「未收到回答」，且不参与选项高亮/输入框回填。
+const isFailedAnswer = (s) => /^Error:|^error:|等待用户回答超时/.test(String(s || '').trim())
+
+// answeredTextFor 多问题模式：取该问题当时的答案文本（按 question id 关联）。
+function answeredTextFor(q) {
+  const hit = (props.answers || []).find(a => a && a.id === (q && q.id))
+  return hit ? String(hit.answer || '').trim() : ''
+}
+
+// answeredShow 单问题模式的答案文本。
+const answeredShow = computed(() => String(props.answer || '').trim())
+
+// restoreFromAnswer 把已答内容回填到本地交互状态，使历史态外观与实时态一致：
+//   有选项 → 高亮当时所选（多选回填多项）；无选项/选项外文本 → 回填输入框。
+function restoreFromAnswer() {
+  const qs = props.questions || []
+  if (qs.length > 0) {
+    const sel = { ...multiSelections.value }
+    const txt = { ...multiTexts.value }
+    for (const q of qs) {
+      const ans = answeredTextFor(q)
+      if (!ans || isFailedAnswer(ans)) continue
+      if (q.options && q.options.length) {
+        const matched = splitAnswer(ans).filter(p => q.options.includes(p))
+        sel[q.id] = matched
+        if (matched.length === 0) txt[q.id] = ans // 选项外文本（模型自定义/历史手输）
+      } else if (!txt[q.id]) {
+        txt[q.id] = ans
+      }
+    }
+    multiSelections.value = sel
+    multiTexts.value = txt
+    return
+  }
+  const ans = answeredShow.value
+  if (!ans || isFailedAnswer(ans)) return
+  const opts = Array.isArray(props.options) ? props.options : []
+  const matched = opts.length > 0 ? splitAnswer(ans).filter(p => opts.includes(p)) : []
+  if (matched.length > 0) {
+    selectedOpt.value = matched[0]
+    selectedMulti.value = matched
+  } else if (opts.length > 0) {
+    customInput.value = ans // single-with-input：自定义文本回填
+  } else {
+    textInput.value = ans // text：纯文本回答回填
+  }
+}
+
+// 历史渲染（segments 带 answer/answers）与实时回答（onAskAnswer 写入 seg）都会触发；
+// immediate 保证首帧回显，deep 保证 answers 数组内容变化也能同步。
+watch(() => [props.answer, props.answers], restoreFromAnswer, { immediate: true, deep: true })
 </script>
 
 <style scoped>
@@ -302,4 +382,21 @@ function submitText() {
 
 /* ── 多选按钮区 ── */
 .ask-multi-actions { margin-top: 4px; }
+
+/* ── ★ 2026-09-25 历史回显：已答内容行（当时的选择 / 自定义输入） ── */
+.ask-answered-line {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-top: 6px; padding: 6px 8px;
+  background: var(--bg-hover);
+  border-left: 2px solid var(--accent);
+  border-radius: 3px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.ask-answered-label { flex-shrink: 0; color: var(--text-muted); font-size: 11px; }
+.ask-answered-text { color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+.ask-answered-failed { border-left-color: var(--text-muted); }
+.ask-answered-failed .ask-answered-text { color: var(--text-muted); font-style: italic; }
+
+/* 已答态（历史回看）输入框回填内容可读性：disabled 默认偏灰 */
+.ask-user-input:disabled { opacity: 1; color: var(--text-primary); }
 </style>
