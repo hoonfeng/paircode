@@ -30,6 +30,7 @@
 //   node scripts/plugin-publisher.mjs --root <dir>   指定 PairCode 项目目录（默认当前目录）
 //
 // 环境变量：PAIRCODE_NPM_REGISTRY 可覆盖 registry（如本地 verdaccio 测试）
+// 包名前缀：--pkg-prefix paircode-plugin- 切裸名官方形态（默认 @paircode/；无 scope 账号用）
 // ═══════════════════════════════════════════════════════════════
 import fs from 'node:fs'
 import path from 'node:path'
@@ -49,6 +50,14 @@ const publishDir = path.join(root, '.pair', 'publish')
 const npmrcPath = path.join(publishDir, '.npmrc')
 const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmjs.org'
 const SCOPED = '@paircode'
+// ── 包名前缀（2026-09-24）：--pkg-prefix 可切裸名官方形态（paircode-plugin-*，
+//    市场 searchNpmPlugins 第二约定，无 scope 账号用）；默认 @paircode/。
+const prefixIdx = args.indexOf('--pkg-prefix')
+const PKG_PREFIX = prefixIdx >= 0 ? String(args[prefixIdx + 1] || '').trim() : (SCOPED + '/')
+if (!PKG_PREFIX || /\s/.test(PKG_PREFIX) || !/[\/-]$/.test(PKG_PREFIX)) {
+  console.error(`--pkg-prefix 非法（应形如 @paircode/ 或 paircode-plugin-，须以 / 或 - 结尾）: ${PKG_PREFIX || '(空)'}`)
+  process.exit(1)
+}
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
 // ── 代理配置：Web 配置(.pair/publish/.proxy 文件) → PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY ──
@@ -107,7 +116,7 @@ function listPlugins() {
 //   scoped 包」dist-tags 返回 401（非 404），误判为检测失败；packument 正确
 //   返回 404=未发布 / 200=已发布。
 async function remoteCheck(name) {
-  const pkgName = SCOPED + '/' + name
+  const pkgName = PKG_PREFIX + name
   const url = `${REG}/${encodeURIComponent(pkgName)}`
   try {
     // curl 查询（packument）：404=未发布 / 200=已发布；支持代理 -x
@@ -155,7 +164,7 @@ async function scanAll() {
   for (let i = 0; i < plugins.length; i++) {
     const p = plugins[i]
     const rc = checks[i]
-    const pkgName = SCOPED + '/' + p.name
+    const pkgName = PKG_PREFIX + p.name
     let h = { src: '', artifact: '' }
     try { h = dirHashSplit(path.join(pluginsDir, p.name)) } catch {}
     const rec = migrateRec(hashes[pkgName])
@@ -198,7 +207,7 @@ async function scanAll() {
     for (const r of autoRefresh) hh[r.pkgName] = { version: r.version, src: r.src, artifact: r.artifact }
     saveHashes(hh)
   }
-  return { plugins: out, registry: REG, pkgPrefix: SCOPED + '/', root }
+  return { plugins: out, registry: REG, pkgPrefix: PKG_PREFIX, root }
 }
 
 // ── token 管理 ──
@@ -348,7 +357,7 @@ function buildPackage(name) {
     const pkgPath = path.join(dst, 'package.json')
     let pkg = {}
     try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) } catch { return { ok: false, error: '缺少合法 package.json' } }
-    pkg.name = SCOPED + '/' + name
+    pkg.name = PKG_PREFIX + name
     pkg.description = pkg.purpose || pkg.description || `PairCode 官方插件 ${name}`
     delete pkg.purpose
     pkg.keywords = pkg.keywords || []
@@ -378,7 +387,7 @@ async function publishOne(name, { onLog = log } = {}) {
 
   // ── 内容指纹：版本相同 + 指纹不同 → 自动 bump patch；无记录 → 建基线跳过 ──
   const hashes = readHashes()
-  const pkgName = SCOPED + '/' + name
+  const pkgName = PKG_PREFIX + name
   let h = { src: '', artifact: '' }
   try { h = dirHashSplit(srcDir) } catch {}
   const rec = migrateRec(hashes[pkgName])
@@ -423,7 +432,7 @@ async function publishOne(name, { onLog = log } = {}) {
     }
   }
 
-  onLog(`  ⚙ 打包 ${SCOPED}/${name}@${local} ...`)
+  onLog(`  ⚙ 打包 ${PKG_PREFIX}${name}@${local} ...`)
   const b = buildPackage(name)
   if (!b.ok) return { name, ok: false, error: b.error }
 
@@ -431,13 +440,13 @@ async function publishOne(name, { onLog = log } = {}) {
   const pkgDir = path.join(publishDir, name)
   // 发布：绝对路径的包目录 + userconfig + 代理（相对路径+反斜杠会导致 npm 找不到配置卡认证）
   const cmd = `npm publish "${pkgDir}" --registry=${REG} --userconfig=${npmrcPath} --access public${getProxyArgs()}`
-  onLog(`  ⬆ 发布 ${SCOPED}/${name}@${b.version} ...`)
+  onLog(`  ⬆ 发布 ${PKG_PREFIX}${name}@${b.version} ...`)
   try {
     const out = execSync(cmd, { cwd: pkgDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
     // 发布成功 → 更新内容指纹记录（新版本 + 构建后最新 src/artifact）
     hashes[pkgName] = { version: b.version, src: h.src, artifact: h.artifact }
     saveHashes(hashes)
-    onLog(`  ✅ ${SCOPED}/${name}@${b.version} 发布成功`)
+    onLog(`  ✅ ${PKG_PREFIX}${name}@${b.version} 发布成功`)
     return { name, ok: true, action: st.code === 'unpublished' ? 'published' : 'updated', version: b.version, remote: rc.version, out: out.slice(0, 300) }
   } catch (e) {
     const msg = cleanNpmError(e.stderr || e.message || e)
@@ -570,7 +579,7 @@ border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body><div class="wrap">
 <h1><span class="dot"></span>PairCode 插件上传发布工具</h1>
-<div class="sub">独立构建工具 · 扫描 .pair/plugins/ → 自动检测版本 → 一键发布到 npm（@paircode/*）</div>
+<div class="sub">独立构建工具 · 扫描 .pair/plugins/ → 自动检测版本 → 一键发布到 npm（@paircode/* 或 paircode-plugin-*）</div>
 
 <div class="card">
   <h2>NPM Token</h2>
@@ -766,7 +775,7 @@ async function main() {
     const target = args[pIdx + 1] && !args[pIdx + 1].startsWith('--') ? args[pIdx + 1].trim() : ''
     if (target) {
       const r = await publishOne(target, { onLog: log })
-      log(r.ok ? `✅ ${SCOPED}/${target}@${r.version} ${r.action === 'published' ? '首次发布' : '更新'}成功` : (r.skipped ? `⏭ 跳过：${r.reason}` : `❌ ${target} 发布失败: ${r.error}`))
+      log(r.ok ? `✅ ${PKG_PREFIX}${target}@${r.version} ${r.action === 'published' ? '首次发布' : '更新'}成功` : (r.skipped ? `⏭ 跳过：${r.reason}` : `❌ ${target} 发布失败: ${r.error}`))
       return
     }
     const scan = await scanAll()

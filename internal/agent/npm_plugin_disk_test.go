@@ -7,14 +7,17 @@ import (
 )
 
 // TestNPMPluginDiskName 验证 npm 包名 → 磁盘插件包目录名的转换：
-//   - 裸名：paircode-plugin-x → 原样
+//   - 裸名官方形态：paircode-plugin-x → x（前缀剥离，与 @paircode/x 语义等价）
+//   - 普通裸名：plain-name → 原样
 //   - scope 包：@scope/pkg → pkg（去掉 @ 与 /，目录名友好）
 func TestNPMPluginDiskName(t *testing.T) {
 	cases := map[string]string{
-		"paircode-plugin-x": "paircode-plugin-x",
-		"@paircode/git":     "git",
-		"@someorg/tool":     "tool",
-		"plain-name":        "plain-name",
+		"paircode-plugin-x":             "x",
+		"paircode-plugin-wechat-bridge": "wechat-bridge",
+		"@paircode/git":                 "git",
+		"@someorg/tool":                 "tool",
+		"plain-name":                    "plain-name",
+		"other-plugin-name":             "other-plugin-name",
 	}
 	for in, want := range cases {
 		if got := npmPluginDiskName(in); got != want {

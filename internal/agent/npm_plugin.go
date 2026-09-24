@@ -656,7 +656,9 @@ func npmPluginDiskName(pkg string) string {
 	if i := strings.Index(name, "/"); i > 0 {
 		return name[i+1:]
 	}
-	return name
+	// 裸名官方形态（市场 searchNpmPlugins 第二约定）：paircode-plugin-<name> 与
+	// @paircode/<name> 语义等价 → 剥前缀，磁盘名对齐短名（同插件替换/升级不重名）。
+	return strings.TrimPrefix(name, "paircode-plugin-")
 }
 
 // ─── npm 插件更新机制（2026-08-20：基于 npm registry 版本对比）────────

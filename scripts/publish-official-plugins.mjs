@@ -12,6 +12,7 @@
 //   node scripts/publish-official-plugins.mjs --only marketplace,tool-web   # 只发指定插件
 //   node scripts/publish-official-plugins.mjs --check       # 只检查现有 npm 包版本（不打包）
 //
+//   node ... --pkg-prefix paircode-plugin-   # 裸名前缀发布（无 scope 账号用；默认 @paircode/，须以 / 或 - 结尾）
 // ★ 2FA：账号开启 2FA 时真实发布需一次性 OTP：
 //   node ... --publish --otp 123456
 // 或改用 bypass-2FA 的 granular token（写入 .npmrc 后无需 --otp）。
@@ -47,6 +48,16 @@ const otpIdx = args.indexOf('--otp')
 const OTP = otpIdx >= 0 ? args[otpIdx + 1] : ''
 const onlyIdx = args.indexOf('--only')
 const ONLY = onlyIdx >= 0 ? args[onlyIdx + 1].split(',').map((s) => s.trim()).filter(Boolean) : null
+
+// ── 包名前缀（2026-09-24）：默认 @paircode/（scope 包，唯一权威）；
+//    --pkg-prefix paircode-plugin- 切裸名官方形态（市场 searchNpmPlugins 第二约定：
+//    paircode-plugin-* 裸名包，须带 paircode 关键词，无需 scope 账号即可发布）。
+const prefixIdx = args.indexOf('--pkg-prefix')
+const PKG_PREFIX = prefixIdx >= 0 ? String(args[prefixIdx + 1] || '').trim() : '@paircode/'
+if (!PKG_PREFIX || /\s/.test(PKG_PREFIX) || !/[\/-]$/.test(PKG_PREFIX)) {
+  console.error(`--pkg-prefix 非法（应形如 @paircode/ 或 paircode-plugin-，须以 / 或 - 结尾）: ${PKG_PREFIX || '(空)'}`)
+  process.exit(1)
+}
 
 // 拷贝文件/目录（白名单：只拷发布所需，排除 node_modules/.git 等）
 // ★ 2026-08-20 修复：topLevel 只在顶层做 PUBLISH_FILES 过滤；
@@ -169,7 +180,7 @@ function npmExists(pkgName) {
 
 function main() {
   const plugins = listPlugins().filter((p) => !ONLY || ONLY.includes(p.name))
-  console.log(`══ PairCode 官方插件发布 ══ registry=${REGISTRY} mode=${DO_PUBLISH ? 'PUBLISH' : 'pack-验证'}`)
+  console.log(`══ PairCode 官方插件发布 ══ registry=${REGISTRY} mode=${DO_PUBLISH ? 'PUBLISH' : 'pack-验证'} prefix=${PKG_PREFIX}`)
   if (ONLY) console.log(`精选: ${ONLY.join(', ')}`)
   console.log(`待处理插件 ${plugins.length} 个：`)
   for (const p of plugins) console.log(`  - ${p.name}`)
@@ -177,9 +188,9 @@ function main() {
   if (DO_CHECK) {
     console.log('\n── 现有 npm 版本检查 ──')
     for (const p of plugins) {
-      const full = `@paircode/${p.name}`
+      const full = `${PKG_PREFIX}${p.name}`
       const ver = npmExists(full)
-      console.log(`  ${ver ? `@paircode/${p.name}@${ver}（已存在）` : `${full}（未发布）`}`)
+      console.log(`  ${ver ? `${PKG_PREFIX}${p.name}@${ver}（已存在）` : `${full}（未发布）`}`)
     }
     return
   }
@@ -207,7 +218,7 @@ function main() {
       console.log(`（冷却 15s 防 npm 限流）`)
       sleepSync(15000)
     }
-    const pkgName = `@paircode/${p.name}`
+    const pkgName = `${PKG_PREFIX}${p.name}`
     const dst = path.join(publishDir, p.name)
     // ★ 指纹感知跳过（2026-08-21）：版本 + 内容指纹（src 源码 / artifact 构建产物分层）
     //   - 线上无 → 发布；线上版本不同 → 发布；
