@@ -15,18 +15,16 @@
         <div v-if="currentTaskTitle" class="task-banner-row">
           <div class="task-banner-card" :title="currentTaskTitle">{{ currentTaskTitle }}</div>
         </div>
-        <!-- 阶段指示器（自主模式多阶段切换）+ 运行统计（耗时/步数/token 速度）——
-             ★ 常态显示：不执行时定格展示该对话「上次运行」的结果（刷新/重启后仍在） -->
-        <div v-if="currentPhase || agentRunningConv || runStatsVisible" class="phase-bar">
-          <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
-          <span class="phase-text" :title="runBarTitle">{{ phaseText }}</span>
-          <!-- ★ 2026-09-25 监督要求：删除与右栏 StatsRail「运行统计」(th148) 重复的
-               六个数字（步数 / 工具调用与耗时 / 墙钟耗时 / 输出速度 / 输出 token）。
-               运行统计的唯一归宿是右栏；此处只保留「正在做什么」= 阶段图标 +
-               阶段文案 + 进度条（th130 子树中无对应节点，故不引入新结构）。 -->
-          <!-- 进度条仅在运行中显示（空闲定格态不保留满条，避免误读为进行中） -->
-          <span v-if="agentRunningConv || currentPhase" class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
-        </div>
+        <!-- ★ 2026-09-26 用户指令 + 实测判据：原消息区顶部 phase-bar（「上次运行 / 执行中…」
+             ＋ 估算进度条）已**整条删除**。四条判据：
+             ① 与右栏 StatsRail「运行统计」卡同源重复——同一份 state.runStatsByConv，
+                右栏已给出「运行中/已完成 · 耗时 · 输出速度」+ 步数/工具调用/LLM 调用明细；
+             ② 它的「阶段」分支（currentPhase ← state.phaseByConv）无生产方：Go 侧
+                EventPhase 常量仅定义未发送、JS/插件侧无任何 phase 事件发送点 → 恒为空；
+             ③ 进度条按「已耗时 ÷ 60min、封顶 95%」估算，非真实进度，易被误读为卡住/将完成；
+             ④ 设计稿 shell-midnight th130 子树本无该节点。
+             运行态可见性不受影响：消息流「思考中...」banner + 输入区停止按钮 +
+             工具行 spinner + 右栏运行统计。 -->
         <div class="chat-messages" ref="msgRef" @scroll="onScroll">
           <!-- 顶部加载更多提示 -->
           <div v-if="hasMoreTop" class="scroll-more-hint" ref="topSentinel">
@@ -105,10 +103,13 @@
                             <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="toggleThinking(seg, combo.assistant._idx, si)" title="折叠思考">▲ 收起</div>
                           </div>
                         </div>
-                        <!-- ★ 2026-09-25 对齐设计稿 th83/th90（row 816×32, bg=surface-2,
-                             r8, border, pad=xs）：时间线圆点 → **行式** ——
-                             accent icon14 + 名称(xs, w240, 单行省略) + 运行中 spinner +
-                             状态胶囊 88×24(r=full) + 右侧 chevron(muted14)。
+                        <!-- ★ 2026-09-26 用户反馈修正：原实现把状态做成**贴最右的胶囊(tag)**
+                             （.tr-pill 用 margin-left:auto 推出 + 名称固定 240 宽 → 中间大片
+                             留白、整体像右侧标签），不符合预期。现改为**消息流内左对齐成组**：
+                             accent icon14 + 工具名(xs, 自适应 max220, 单行省略)
+                             + 运行中 spinner + 结果摘要(xs, 紧随其后、单行省略，用文字色区分
+                             成功/错误/运行中，**无背景无圆角**) + chevron 紧随其后。
+                             行本体沿用 th83/th90 行式（h32, bg=surface-2, r8, border）。
                              ★ 能力保留：整行可点，展开区（参数/结果/命令/输出）照旧，未删任何分支。 -->
                         <div v-else-if="seg.type === 'tool_call'" class="tool-row-wrap">
                           <div class="tool-row" :class="{ 'is-open': seg._expanded }"
@@ -116,8 +117,8 @@
                             <SvgIcon :name="toolMeta(seg).icon" :size="14" class="tr-icon" />
                             <span class="tr-name" :title="toolMeta(seg).title">{{ toolMeta(seg).title }}</span>
                             <span v-if="!seg.result" class="tr-spinner" title="运行中"></span>
-                            <span class="tr-pill"
-                                  :class="isToolErr(seg) ? 'tr-pill-err' : (seg.result ? 'tr-pill-ok' : 'tr-pill-run')"
+                            <span class="tr-status"
+                                  :class="isToolErr(seg) ? 'tr-status-err' : (seg.result ? 'tr-status-ok' : 'tr-status-run')"
                                   :title="seg.result ? toolResultSummary(seg) : '运行中'">{{ seg.result ? toolResultSummary(seg) : '运行中' }}</span>
                             <svg class="tr-chevron" viewBox="0 0 8 8" width="10" height="10" fill="currentColor" aria-hidden="true">
                               <path :d="seg._expanded ? 'M1.2 2.6 L4 6.8 L6.8 2.6 Z' : 'M2.6 1.2 L6.8 4 L2.6 6.8 Z'"/>
@@ -350,7 +351,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { state, layout, setFocusMode, rightPanelWidth, savePersistentState, showSettings } from '../ui-state.js'
+// ★ 2026-09-26：移除未使用的 rightPanelWidth 导入（构建期告警 "imported but never used"，
+//   文件内零引用；右栏宽度由 layout.rightPanelWidth 直接读，不经此具名导入）。
+import { state, layout, savePersistentState, showSettings } from '../ui-state.js'
 import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
@@ -369,12 +372,6 @@ const showDebugLog = ref(false)
 
 const props = defineProps({ panelMode: { type: Boolean, default: false } })
 const panelMode = computed(() => !!props.panelMode)
-const toggleRight = () => { state.rightPanelVisible = false }
-// 专注对话切换：专注 = 纯对话视图（隐藏编辑器 + 收起左栏文件浏览器与会话列表）。
-// ★ 统一走 ui-state.setFocusMode（唯一入口）：进入收起、退出还原用户原值。
-const toggleFocus = () => {
-  setFocusMode(!state.focusMode)
-}
 
 // ─── 会话列表面板（Token 统计栏）显隐（2026-09-12 新增）───
 //   头部按钮与 Ctrl+Shift+L 都走这里；状态读写见 ui-state.js（持久化 + layout.toggleConvList）。
@@ -699,10 +696,6 @@ const convToolsetIsDefault = ref(true) // true = 会话未显式选择（生效�
 const convToolsetConverged = ref(false) // true = 按集合收敛工具面（false = 集合缺失，全量保留）
 const convToolsetDefaultName = ref('')  // 默认集合名（presetNameDefault，如「基础」）
 const pendingConvToolset = ref('')     // 新对话尚未创建时的暂存选择（建会话后写入）
-function toolsetLabel(t) {
-  const scope = t.scope === 'builtin' ? '内置' : '全局'
-  return t.name + '（' + scope + '·' + (t.pluginCount || 0) + ' 插件）'
-}
 // ★ 2026-09-25 会话列表底部「场景」胶囊接线：把本处解析出的权威值镜像到共享
 //   state.convToolsetInfo，供 ConvSidebar（设计稿 th60「场景名 · N 插件」）显示。
 //   ★ 本函数是 state.convToolsetInfo 的唯一写方（避免双源不一致）。
@@ -843,22 +836,11 @@ function updateInputPadding() {
 }
 // ★ 2026-09-25 对齐设计稿 th129 行2：输入区默认高 150 → 40（拖拽能力保留）
 const inputHeight = ref(40)
-const convListWidth = ref(250)
-// ★ wb-ui(goja) workaround：state.conversations 数组整体赋值（loadConvList
-//   里 state.conversations = list）触发不了 prop 响应式更新——直接传
-//   state.conversations 时 ConvSidebar 拿到的是旧引用/空数组。改用
-//   computed 包装：渲染时实时求值 state.conversations（与 FileExplorer 的
-//   currentFolders 同一模式），首次渲染即读到预取/加载的数据。
-const convList = computed(() => state.conversations)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
 const reviewBtnTitle = computed(() => {
   const m = reviewMode.value
   return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
-})
-const reviewBtnLabel = computed(() => {
-  const m = reviewMode.value
-  return m === 'auto' ? '审核' : m === 'manual' ? '审批' : '放行'
 })
 const reviewIconName = computed(() => {
   const m = reviewMode.value
@@ -1175,98 +1157,24 @@ function buildAttachRefText(att) {
   return '\n\n📎 附件: `' + (att.path || att.filename) + '`（请用 read 读取）'
 }
 
-// nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
-const currentNudge = computed(() => state.nudgeByConv[state.currentConvId] || '')
+// nudge 自动清除定时器（state.nudgeByConv 的写入点见本文件右侧消息处理分支）。
+// ★ 2026-09-25 扫描：本组件 nudge 展示 UI 已不存在（原 currentNudge 计算属性经证实
+//   为死绑定，已摘除），state.nudgeByConv 当前无前端消费者——保留写入链路待产品决策。
 let nudgeTimer = null
-function showNudge(text) {
-  // nudge 写入全局 state，由 currentNudge computed 响应
-  state.nudgeByConv[state.currentConvId] = text
-  if (nudgeTimer) clearTimeout(nudgeTimer)
-  nudgeTimer = setTimeout(() => { state.nudgeByConv[state.currentConvId] = '' }, 4000)
-}
-
-let pendingAskCallId = ''
 // ★ 2026-08-31：plan 体系已移除——currentPlan/planExpanded 下线，任务追踪只用 currentTasks。
 const currentTasks = ref([])
 const tasksExpanded = ref(false)
-const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
-// ★ 当前对话是否运行中（原模板引用的 agentRunning 未定义 → phase-bar 仅靠 currentPhase
-//   显示，运行中无 phase 事件时统计条整条不出现；现显式声明）
-const agentRunningConv = computed(() => !!state.agentRunningByConv[state.currentConvId])
 
-// ── ★ 运行统计（耗时 · 步数 · 工具调用 · token 速度）──
-// 数据源：**后端**运行统计（state.runStatsByConv；由 agent-events 的 fetchRunStats
-//   经 GET /api/conversations/{id}/run-stats 拉取）。后端 agent 循环埋点累加
-//   （Go 循环与 JS 循环共用入口）并持久化到 .pair/run-stats.json —— 前端不累加、
-//   不本地持久化（前端累加受丢事件/刷新影响，不可信）。
-//   ★ token 速度由后端派生：输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
-//     不含工具执行 / 审批等待 / prefill 排队；旧实现用整段运行墙钟当分母 → 严重低估。
-// 展示位置：消息区顶部 phase-bar（运行中实时刷新，结束后定格为本轮结果）。
-const currentRunStat = computed(() => state.runStatsByConv[state.currentConvId] || null)
-const runTick = ref(0)   // 计时 tick（运行中每秒 +1 驱动刷新）
-let runTickTimer = null
-
-// formatDuration 耗时人性化（12s / 1m 23s / 1h 05m）
-function formatDuration(ms) {
-  const sec = Math.floor(ms / 1000)
-  if (sec < 60) return sec + 's'
-  const min = Math.floor(sec / 60)
-  if (min < 60) return min + 'm ' + String(sec % 60).padStart(2, '0') + 's'
-  return Math.floor(min / 60) + 'h ' + String(min % 60).padStart(2, '0') + 'm'
-}
-
-// formatTokens 紧凑 token 数（2.4k / 12k / 1.2M）
-function formatTokens(n) {
-  const v = Number(n) || 0
-  if (v < 1000) return String(v)
-  if (v < 1000000) return (v / 1000).toFixed(v < 10000 ? 1 : 0) + 'k'
-  return (v / 1000000).toFixed(1) + 'M'
-}
-
-// runElapsedMs 本次运行耗时：运行中随 tick 每秒增长（后端 startAt 为同机时间），
-// 结束后定格为后端派生值 durationMs。
-const runElapsedMs = computed(() => {
-  const rs = currentRunStat.value
-  void runTick.value   // 依赖 tick → 运行中每秒重算
-  if (!rs || !rs.startAt) return 0
-  if (rs.endAt || !rs.running) {
-    return rs.durationMs || (rs.endAt > rs.startAt ? rs.endAt - rs.startAt : 0)
-  }
-  return Math.max(0, Date.now() - rs.startAt)
-})
-const runElapsedText = computed(() => (runElapsedMs.value >= 1000 ? formatDuration(runElapsedMs.value) : ''))
-const runSteps = computed(() => { const rs = currentRunStat.value; return rs && rs.steps > 0 ? rs.steps : 0 })
-const runToolCalls = computed(() => (currentRunStat.value ? currentRunStat.value.toolCalls : 0))
-// runToolMsText 工具执行累计耗时（仅 ≥1s 显示，避免碎片数字干扰）
-const runToolMsText = computed(() => {
-  const ms = currentRunStat.value ? currentRunStat.value.toolMs : 0
-  return ms >= 1000 ? formatDuration(ms) : ''
-})
-const runOutputTokens = computed(() => (currentRunStat.value ? currentRunStat.value.completionTokens : 0))
-// runTokenSpeed 输出速度：直接用后端派生值（输出 token ÷ LLM 生成耗时），
-// 前端不做除法——避免再次把工具/审批等待算进生成时间。
-const runTokenSpeed = computed(() => {
-  const rs = currentRunStat.value
-  if (!rs || !(rs.tokensPerSecond > 0)) return ''
-  const tps = rs.tokensPerSecond
-  return (tps >= 100 ? Math.round(tps) : tps.toFixed(1)) + ' t/s'
-})
-// runStatsVisible 统计条显示条件：本次运行有任一数据（结束定格后仍显示，切会话即切换）
-const runStatsVisible = computed(() => {
-  const rs = currentRunStat.value
-  return !!(rs && rs.startAt && (rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0))
-})
-// hasRunStats 折叠按钮显示条件（P4-2）：六个数字里至少一个非空才给按钮（否则无内容可折叠）。
-//   ★ 与 runStatsVisible 的区别：后者是「整条是否显示」的宽条件，前者只关心「有没有数字」。
-//   例：只有墙钟耗时/输出速度而无 steps/toolCalls/completionTokens 时，整条显示但按钮仍要出现。
-const hasRunStats = computed(() => runSteps.value > 0 || runToolCalls.value > 0
-  || !!runElapsedText.value || !!runTokenSpeed.value || runOutputTokens.value > 0)
-// toggleRunStats 折叠/展开运行统计（P4-2）：状态在 ui-state（持久化），此处即时落盘
-//   —— 与 toggleConvList 同规则（宿主无全局 state watch，不落盘则刷新即丢）。
-const toggleRunStats = () => {
-  state.runStatsCollapsed = !state.runStatsCollapsed
-  savePersistentState()
-}
+// ── 运行统计（★ 2026-09-26 收敛为「只拉取、不展示」）──
+// 数据源：**后端**运行统计（state.runStatsByConv ← agent-events 的 fetchRunStats
+//   经 GET /api/conversations/{id}/run-stats 拉取；后端 agent 循环埋点累加，
+//   落盘 .pair/run-stats.json —— 前端不累加、不本地持久化）。
+//   后端派生口径：token 速度 = 输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
+//   不含工具执行 / 审批等待 / prefill 排队。
+// ★ 展示位置唯一：右栏 StatsRail「运行统计」卡 —— 本组件不再重复展示任何状态/数字
+//   （原消息区顶部 phase-bar 及只服务它的 computed / 函数 / CSS 已删除）。
+// ★ 本组件仍负责在**会话切换 / 续跑**时调用 fetchRunStats 触发拉取
+//   （见 loadConvMessages / reloadConvMessages）—— 该调用不可删：右栏卡依赖它写入的状态。
 
 // ★ 2026-09-25（设计稿屏 1 ③）：「下一步可以试试」引导卡。
 //   出现条件 = 有对话内容 + 不在生成中 + 未被关闭。
@@ -1294,11 +1202,6 @@ const nextStepsVisible = computed(() =>
   !nextStepsDismissed.value
   && !state.chatLoading
   && Array.isArray(state.messages) && state.messages.length > 0)
-function dismissNextSteps() {
-  nextStepsDismissed.value = true
-  // 与 P4-3 的「不再显示」同策略：独立 key，不混入布局偏好（避免清布局时意外复活）
-  try { localStorage.setItem('paircode-next-steps-dismissed', '1') } catch (e) { }
-}
 function useNextStep(text) {
   try {
     const all = Array.prototype.slice.call(document.querySelectorAll('textarea'))
@@ -1311,40 +1214,9 @@ function useNextStep(text) {
 }
 try { nextStepsDismissed.value = localStorage.getItem('paircode-next-steps-dismissed') === '1' } catch (e) { }
 
-// ★ 常态显示（2026-09-12）：统计条不再只在执行期间可见——打开/切换会话时
-//   fetchRunStats 从后端拉取该会话「最近一次运行」的定格值（后端持久化于
-//   .pair/run-stats.json），因此刷新页面 / 重启 IDE 后同样展示耗时/步数/token 速度。
-// phaseText 统计条文案：运行中跟随阶段（自主模式）或「执行中…」；空闲为「上次运行」。
-const phaseText = computed(() => {
-  if (currentPhase.value) return currentPhase.value
-  if (agentRunningConv.value) return '执行中…'
-  return '上次运行'
-})
-// runBarTitle 统计条悬浮说明（区分实时运行 / 已保留的上次结果）。
-const runBarTitle = computed(() => (agentRunningConv.value || currentPhase.value)
-  ? '本次运行（后端统计）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度（运行中每 2s 刷新）'
-  : '上次运行（后端统计，已落盘）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度；速度 = 输出 token ÷ LLM 生成耗时')
-
-// 计时 tick：仅运行中启动（结束后停止 → 定格值不再变化）
-watch(() => state.agentRunningByConv[state.currentConvId], (running) => {
-  if (running) {
-    if (!runTickTimer) runTickTimer = setInterval(() => { runTick.value++ }, 1000)
-  } else if (runTickTimer) {
-    clearInterval(runTickTimer)
-    runTickTimer = null
-    runTick.value++   // 立即重算一次，显示定格后的最终耗时
-  }
-}, { immediate: true })
-
-// ★ 进度条：运行中按总耗时估算（长时任务最多 60 分钟，顶值 95%）；结束定格 100%
-const phaseProgress = computed(() => {
-  const rs = currentRunStat.value
-  if (!state.agentRunningByConv[state.currentConvId]) return (rs && rs.endAt) ? 100 : 0
-  if (!rs || !rs.startAt) return 0
-  const maxSec = 60 * 60 // 60 分钟
-  return Math.min(Math.round((runElapsedMs.value / 1000 / maxSec) * 100), 95)
-})
-let phaseTimer = null
+// ★ 2026-09-26 删除：phase-bar 的文案 / 计时 / 估算进度条（phaseText、runBarTitle、
+//   runTick 计时器、phaseProgress）与 phaseTimer —— 只服务已删除的顶部统计条。
+//   右栏 StatsRail 自带同口径的耗时/速度计算（本组件不参与）。
 
 // ── 滚动控制 ──
 const scrollTopRef = ref(0)
@@ -1575,15 +1447,6 @@ const fillViewport = async () => {
   if (!window.__scrollLockTimer) forceScrollToBottom()
 }
 
-// ── 段模式（兼容旧版）──
-function segMode(seg) {
-  if (seg._mode) return seg._mode
-  if (seg.type === 'thinking') return seg._collapsed !== false ? 'collapsed' : 'expanded'
-  if (seg.type === 'tool_call') return seg._expanded ? 'expanded' : 'collapsed'
-  if (seg.type === 'ask_user') return 'expanded'
-  return seg._collapsed === false ? 'expanded' : 'collapsed'
-}
-
 // ── 工具智能分类（简化版）──
 function safeParse(json) {
   if (!json) return {}
@@ -1709,8 +1572,6 @@ function formatTerminalCommand(seg) {
 }
 
 // ── 工作区 Token 统计（使用全局 state，与 agent-events.js 共享）──
-const wsTokenStats = computed(() => state.wsTokenStatsByWs[state.workspaceRoot] || { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 })
-const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
 
 const loadWsTokenStats = async () => {
   try {
@@ -2223,35 +2084,6 @@ const newConversation = async () => {
   nextTick(() => inputRef.value?.focus())
 }
 
-const deleteConv = async (id) => {
-  // 若该对话有运行中的 agent，停止它
-  if (state.agentRunningByConv[id]) {
-    try { await api.chatStop(id) } catch {}
-    resetConvRuntime(id)
-  }
-  try {
-    await api.apiDelete('/conversations/' + id)
-    state.conversations = state.conversations.filter(c => c.id !== id)
-    // 删除后立即同步到 localStorage，防止页面刷新后旧数据复现
-    window.dispatchEvent(new Event('save-conversations'))
-    delete state.messagesByConv[id]
-    delete state.loadingByConv[id]
-    delete state.agentRunningByConv[id]
-    delete state.approvalByConv[id]
-    delete state.phaseByConv[id]
-    delete state.nudgeByConv[id]
-    delete state.convCtxStatsByConv[id]
-    delete state.msgTotalByConv[id]
-    delete state.msgLoadedByConv[id]
-    if (state.currentConvId === id) {
-      state.currentConvId = ''
-      state.messages = []
-      state.chatLoading = false
-      state.agentRunning = false
-    }
-  } catch {}
-}
-
 // ── 对话切换：纯历史消息加载，不管理运行时/不创建占位/不挂起 WS
 //   WS 事件通过 processAgentEvent 直接写入 messagesByConv[convId]，
 //   不受 switchConv 影响（多对话并行场景下各 conv 独立更新）。
@@ -2543,25 +2375,11 @@ const autoNameConv = async (convId, content) => {
   } catch {}
 }
 
-function phaseIcon(phase) {
-  if (phase.includes('规划')) return 'list'
-  if (phase.includes('探索')) return 'search'
-  if (phase.includes('执行')) return 'terminal'
-  if (phase.includes('验证')) return 'check'
-  if (phase.includes('评测')) return 'layers'
-  if (phase.includes('完成')) return 'check'
-  if (phase.includes('继续')) return 'send'
-  return 'cycle'
-}
+// ★ 2026-09-26 删除 phaseIcon()：只服务 phase-bar 的阶段图标；phase 事件已无生产方
+//   （state.phaseByConv 恒空），函数恒不命中。
 
-function handleTaskTool(data) {
-  const toolName = data.tool || data.name || ''
-  const taskTools = ['task_create', 'task_update', 'task_list', 'task_delete', 'task_summary']
-  if (!taskTools.includes(toolName)) return false
-  try {
-    return true
-  } catch { return false }
-}
+// ★ 2026-09-25 删除 handleTaskTool()：全域零引用的死函数（模板/脚本段/跨文件均无调用，
+//   函数体只是「命中任务工具名则 return true」且调用方从未使用返回值）。
 
 
 // ── 输入框拖拽调整 ──
@@ -2890,15 +2708,6 @@ onMounted(() => {
       currentTasks.value = [...tasks]
       tasksExpanded.value = true
     },
-    onPhaseChange: (convId) => {
-      // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
-      if (phaseTimer) clearTimeout(phaseTimer)
-      phaseTimer = setTimeout(() => { state.phaseByConv[convId] = '' }, 6000)
-    },
-    onPhaseEnd: (convId) => {
-      if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-      state.phaseByConv[convId] = ''
-    },
     onNudge: (convId) => {
       // nudge 自动从 state.nudgeByConv 读取，此处启动定时器清除
       if (nudgeTimer) clearTimeout(nudgeTimer)
@@ -2928,8 +2737,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-  if (runTickTimer) { clearInterval(runTickTimer); runTickTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   window.removeEventListener('pair-plugin-event', onPluginEvent)
   stopContentResizeObserver()
@@ -3106,21 +2913,6 @@ onUnmounted(() => {
 .msg-loading-dots .dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes dotPulse { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1.2); } }
 .msg-loading-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: var(--text-muted); font-size: 12px; }
-.phase-bar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: var(--color-cat-amber-bg); border-bottom: 1px solid var(--color-cat-amber-bg); font-size: 12px; color: var(--color-cat-amber); flex-shrink: 0; flex-wrap: wrap; }
-.phase-icon { flex-shrink: 0; }
-.phase-text { font-weight: 600; }
-.phase-stats { display: flex; gap: 12px; margin-left: auto; }
-.phs-item { display: flex; align-items: center; gap: 3px; color: var(--color-cat-amber); font-size: 10px; }
-/* phs-sub 统计条内的次要数值（如工具累计耗时），弱化一级避免与主数值抢注意力 */
-.phs-sub { color: var(--color-cat-amber); }
-.phase-bar-track { width: 100%; height: 2px; background: var(--color-cat-amber-bg); border-radius: 1px; margin-top: 2px; }
-.phase-bar-fill { height: 100%; background: var(--color-cat-amber); border-radius: 1px; transition: width 1s ease; }
-/* ★ P4-2 运行统计折叠按钮：折叠时统计已隐藏 → 按钮自身右对齐（margin-left:auto）；
-   展开时统计占据 margin-left:auto，按钮改为紧贴其后（故用相邻兄弟选择器覆盖）。 */
-.phase-stats-toggle { display: flex; align-items: center; gap: 2px; margin-left: auto; padding: 0 5px; height: 16px; border: none; background: transparent; color: var(--color-cat-amber); font-size: 10px; cursor: pointer; border-radius: 3px; opacity: 0.75; flex-shrink: 0; }
-.phase-stats + .phase-stats-toggle { margin-left: 4px; }
-.phase-stats-toggle:hover { opacity: 1; background: color-mix(in srgb, var(--color-cat-amber) 14%, transparent); }
-.pst-text { line-height: 1; }
 .folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
 .folded-chevron { flex-shrink: 0; color: var(--text-muted); display: block; }
@@ -3154,19 +2946,21 @@ onUnmounted(() => {
 .tl-think-fold { position: sticky; bottom: 0; display: inline-block; font-size: 11px; color: var(--accent); cursor: pointer; padding: 3px 10px; margin-top: 4px; user-select: none; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; transition: background 0.15s; }
 .tl-think-fold:hover { background: var(--bg-hover); color: var(--accent-light); }
 .tl-thinking-collapsed { color: var(--text-muted); font-style: italic; font-size: 12px; cursor: pointer; padding: 2px 0; }
-/* ★ 2026-09-25 对齐设计稿 th83/th90：工具行式
-   （row 816×32, bg=surface-2, r8, border, pad=xs；胶囊 88×24 r=full）。
+/* ★ 2026-09-26 用户反馈修正：工具行不再用「贴最右的状态胶囊(tag)」——
+   名称自适应宽度（原固定 240px 造成中间留白）、结果摘要**左对齐紧随其后**
+   （文字色区分成功/错误/运行中，无背景无圆角；原 margin-left:auto 把胶囊推到行尾），
+   chevron 紧随内容之后。行本体仍是 th83/th90 的行式（h32, bg=surface-2, r8, border）。
    旧的 .tl-tc-header 规则保留（思考段等仍在复用），不受影响。 */
 .tool-row-wrap { display: flex; flex-direction: column; gap: 4px; margin: 2px 0; }
 .tool-row {
-  display: flex; align-items: center; height: 32px; padding: 0 4px; gap: 8px;
+  display: flex; align-items: center; height: 32px; padding: 0 6px; gap: 8px;
   background: var(--bg-secondary); border: 1px solid var(--border-color);
   border-radius: 8px; cursor: pointer; transition: border-color .15s;
 }
 .tool-row:hover, .tool-row.is-open { border-color: var(--accent); }
 .tr-icon { flex: 0 0 auto; color: var(--accent); }
 .tr-name {
-  flex: 0 0 auto; width: 240px; font-size: var(--fs-xs); color: var(--text-primary);
+  flex: 0 1 auto; max-width: 220px; font-size: var(--fs-xs); color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tr-spinner {
@@ -3174,14 +2968,15 @@ onUnmounted(() => {
   border-top-color: transparent; border-radius: 50%; animation: tr-spin .8s linear infinite;
 }
 @keyframes tr-spin { to { transform: rotate(360deg); } }
-.tr-pill {
-  margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  min-width: 88px; max-width: 168px; height: 24px; padding: 0 8px; border-radius: 999px;
-  font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+/* 结果摘要：左对齐、紧随工具名成组（不再吃满剩余宽度把 chevron 顶到最右）。
+   max-width 62% 保证与名称共处一行且可省略；无背景/无圆角 → 不是 tag。 */
+.tr-status {
+  flex: 0 1 auto; min-width: 0; max-width: 62%; font-size: var(--fs-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
 }
-.tr-pill-ok { color: var(--success, #4FD8A4); background: var(--color-success-bg, rgba(79,216,164,.16)); }
-.tr-pill-err { color: var(--danger, #FF8085); background: var(--color-danger-bg, rgba(255,128,133,.16)); }
-.tr-pill-run { color: var(--text-muted); background: var(--bg-hover); }
+.tr-status-ok { color: var(--success, #4FD8A4); }
+.tr-status-err { color: var(--danger, #FF8085); }
+.tr-status-run { color: var(--text-muted); }
 /* ★ 2026-09-25 对齐设计稿 th70/th69：助手消息头行（h24）与模型胶囊（124×24, r=full） */
 .msg-head { display: flex; align-items: center; gap: 8px; height: 24px; margin-bottom: 4px; }
 .mh-icon { flex: 0 0 auto; color: var(--accent); }

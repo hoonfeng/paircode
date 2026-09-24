@@ -193,6 +193,9 @@ func EnsureAiPresets() {
 //   清空（settings_connection.go），核心不再持有连接配置——快照来源即 settings.Preset
 //   指向的那条配置（唯一来源），而非核心字段。
 // ★ 2026-09-20 生成参数从插件注册域取（pluginSettings.generation，agentloop 注册）。
+// ★ 2026-09-25 生成参数改为从**激活配置**取：设置面板「生成参数」段已整体移除
+//   （生成参数唯一来源 = 服务商配置 models.json），核心不再持有任何可读的全局生成参数默认。
+//   快照语义因此齐整：连接信息与生成参数**同一来源**（settings.Preset 指向的那条配置）。
 func AiPresetFromSettings() AiPreset {
 	cur := GetPreset(Settings.Preset)
 	return AiPreset{
@@ -203,10 +206,10 @@ func AiPresetFromSettings() AiPreset {
 		PlanModel:        cur.ExecuteModel,
 		ReviewModel:      cur.ExecuteModel,
 		Protocol:         cur.Protocol,
-		Temperature:      GenerationTemperature(),
-		ThinkingMode:     GenerationThinkingMode(),
-		MaxTokens:        GenerationMaxTokens(),
-		ContextMaxTokens: GenerationContextMaxTokens(),
+		Temperature:      cur.Temperature,
+		ThinkingMode:     cur.ThinkingMode,
+		MaxTokens:        cur.MaxTokens,
+		ContextMaxTokens: cur.ContextMaxTokens,
 	}
 }
 

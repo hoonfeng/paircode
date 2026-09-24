@@ -1,3 +1,6 @@
+// ⚠️ 已失效（2026-09-26）：本脚本中 **phase-bar 相关断言**已失效 —— 消息区顶部
+//    `.phase-bar` 已整条删除 → 对应 check 必然 FAIL；门控兜底本身（WS 事件 flush）
+//    未变，其余断言仍有效。
 // cdp-verify-ws-gate-fallback.js — 验证「WS 事件门控兜底」（修复执行中前端不再输出 agent 内容）
 //
 // 背景：agent-events.js 的刷新门控（historyLoadedConvs）原先无兜底——历史加载失败/超时

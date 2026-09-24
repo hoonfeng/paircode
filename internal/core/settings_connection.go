@@ -10,7 +10,10 @@ import (
 // ★ 设计纪律（同 settings_generation.go）：配置项的唯一来源是插件数据面——
 //   - AI 连接配置（服务商/地址/Key/模型/参数）：ai-presets.json
 //     （插件经 ctx.aiPresets 读写；前端「AI 配置」面板维护，应用后只写 settings.preset）；
-//   - 服务商数据（地址/协议/模型列表/服务商级参数）：models.json（插件经 ctx.models 读写）。
+//   - 服务商数据（地址/协议/模型列表/服务商级参数 + **生成参数**）：models.json（插件经 ctx.models 读写）。
+//     ★ 2026-09-25 生成参数（温度/思考档位/最大输出/上下文窗口）唯一来源 = 服务商级字段 + 模型级
+//     modelParams（模型级 > 服务商级）；设置面板「生成参数」注册段已移除，ai-presets.json 里
+//     保留的生成参数快照只作「配置整套展开」用途，不再是可配的全局默认。
 //
 // 而 AppSettings 顶层的 provider/baseURL/apiKey/model/executeModel/planModel/reviewModel
 // 是 2026-08-21 之前的旧存储形态，长期只作兼容兜底——装配器要多兜一层

@@ -4,6 +4,138 @@
 
 ---
 
+## 1.6.8 — 2026-09-25
+
+> 本版是 **v1.6.7 发布之后的修复与清理批次**（含后端「生成参数单源化」）：泛化死代码扫描
+> （`chat-utils.js` 整文件删除、14 处死绑定、6 个零调用 API）、编辑器右键选中链路修复与
+> 监听器累积、任务进度实时同步、聊天工具行排版、「上次运行 / 执行中…」冗余状态条删除。
+> 全部条目均由**真实 UI 实测**驱动，并新增右键链路回归守卫脚本。
+
+### 变更 / 改进
+
+- **生成参数单源化：设置面板「生成参数」页移除** —— 生成参数（温度 / 思考档位 / 最大输出 /
+  上下文窗口）此前有两处入口：设置面板的「生成参数」页（全局默认，存 `pluginSettings.generation`）
+  与「服务商」页（服务商级 + 模型级）。前者处于装配链**最低优先级**（服务商级一配即被覆盖），
+  在设置面板改了温度/输出/窗口却「改了不生效」；同时服务商级当时**没有思考档位字段**，
+  反倒让它成了思考档位的唯一全局入口。现收敛为**唯一来源 = 服务商配置**：
+  · 「服务商」页服务商级新增**默认思考档位**（`models.json` 服务商条目 `thinkingMode`）；
+    装配器「服务商配置为准」段一并纳入思考档位（模型级 `modelParams[模型].thinkingMode`
+    > 服务商级 `thinkingMode`）——此前服务商面板里设的思考档位不生效；
+  · 「生成参数」设置页删除；旧值（`pluginSettings.generation` + settings 顶层旧字段）由
+    `core.MigrateGenerationToProvider()` 一次性迁入**激活配置对应服务商**的服务商级字段
+    （只补空、不覆盖服务商面板里已设的值；激活配置无可用服务商时保留旧值待下次启动重试）；
+  · 装配器兜底改为 `GEN_DEFAULTS` **机制常量**（不是配置面、无 UI 入口，仅在服务商级/模型级/
+    AI 配置都未配置时使用）；「保存 AI 配置」快照的生成参数改从**激活配置**取（此前取全局段），
+    源头移除后仍保持「整套配置快照」语义。
+
+### 修复
+
+- **聊天里的工具调用行跑到最右侧、状态做成胶囊 tag** —— 用户反馈工具行「整体像右侧标签」：
+  `.tr-pill` 用 `margin-left:auto` 把状态推出行尾、工具名固定 `width:240px`，中间留大片空白。
+  现改为**消息流内左对齐成组**：工具名自适应（`max-width:220px`）+ 运行中 spinner +
+  结果摘要紧随其后（`.tr-status`，**无背景无圆角**、`max-width:62%` 可省略，仅以文字色区分
+  成功/错误/运行中）+ chevron 紧随内容；行本体沿用设计稿 th83/th90 的行式（h32 / bg=surface-2 /
+  r8 / border），整行可点与展开区（参数 / 结果 / 命令 / 输出）全部保留。
+- **右栏「任务进度」不实时同步** —— 此前只在挂载 / 切会话时 `GET /api/tasks`，agent 运行中调用
+  `update_tasks` 改了清单 UI 不刷新。现由 `agent-events.js` 在**任务类工具执行完成
+  （tool_result）**与**回合结束（done）**时广播 `paircode:tasks-changed`，`StatsRail` 据此重拉
+  当前会话任务（150ms 防抖；事件带 convId 时只刷当前会话）。★ 不在 `tool_call` 触发 —— 那是
+  「即将执行」，任务尚未落盘会读到旧清单；done 再广播一次作兜底（工具异常未发 tool_result 时
+  仍能对齐）。全程零轮询。
+- **聊天面板顶部的「上次运行 / 执行中…」状态条已删除** —— 用户反馈「运行统计本身已有状态，
+  这条是否已不需要」。核实后确认**冗余并整条删除**（`.phase-bar`，消息区最顶部）：
+  ① 它与右栏 StatsRail「运行统计」卡**同源**（同一份 `state.runStatsByConv` ←
+  `GET /api/conversations/{id}/run-stats`），而右栏摘要已给「运行中 / 已完成 · 耗时 · 输出速度」
+  + 步数 / 工具调用 / LLM 调用明细；② 它的「阶段」分支无生产方 —— Go 侧 `EventPhase` 常量
+  **只有定义、零发送点**，JS / 插件侧也无任何 `phase` 事件发送点 → `state.phaseByConv` 恒空；
+  ③ 进度条按「已耗时 ÷ 60min、封顶 95%」**估算**，非真实进度，易被误读为「快完成 / 卡住」；
+  ④ 设计稿 `shell-midnight` th130 子树本无该节点。删除后运行态可见性**不受影响**：消息流
+  「思考中...」banner + 输入区停止按钮（发送 ↔ 停止切换）+ 工具行 spinner + 右栏运行统计。
+- **清理只服务该状态条的死代码** —— `RightPanel.vue` 移除 `phaseText` / `runBarTitle` /
+  `phaseProgress` / `phaseIcon()` / `currentPhase` / `agentRunningConv` / `runStatsVisible` /
+  `hasRunStats` / `toggleRunStats` / `runTick` 计时器与 `phaseTimer`、`onPhaseChange` /
+  `onPhaseEnd` 钩子，以及 CSS `.phase-bar*` / `.phase-stats*` / `.phs-*` / `.pst-text`（模板侧
+  已无引用）；另移除构建期告警的未使用导入 `rightPanelWidth`。★ 保留 `fetchRunStats` 调用
+  （会话切换 / 续跑时拉取）—— 右栏运行统计卡依赖它写入状态，删 UI 不等于删数据链路。
+  同步订正两处指回已删 UI 的注释（`ui-state.js` 的 `runStatsCollapsed` 标注「已无 UI 消费者，
+  字段仅为兼容旧持久化偏好」；`StatsRail.vue` 运行统计卡头注改为「数据源唯一，本卡」），并给
+  三个仍断言 `.phase-bar` 的旧 CDP 脚本（`cdp-verify-conv-tasks` / `cdp-verify-runstats-backend`
+  / `cdp-verify-ws-gate-fallback`）加失效标注 —— 避免后人把它们当回归基线而误判失败。
+
+- **编辑器右键菜单丢选中片段（功能降级）+ 监听器累积** —— `CodeEditor.vue` 声明的事件名是
+  `contextmenu-selection` 而实际发的是 `emit('contextmenu')`，父组件 `EditorArea.vue` 的
+  `@contextmenu` 因此被 Vue 当作**原生 DOM 事件**透传到根元素：handler 收到裸 `MouseEvent`
+  （无 `hasSelection` / `text` / `lineStart` / `lineEnd`）→ 有选中文本时菜单**恒走「无选中」
+  分支**，「AI: 添加到对话」按**整文件**加入（实测载荷 `{type:'file'}`，期望
+  `{type:'selection'}` + 行号 + 内容）；同时 `createEditor()` 内 `addEventListener('contextmenu')`
+  用匿名函数且从不移除，而该方法会因切换文件 / 改字号被反复调用（wrapper 元素不重建）——
+  实测改 4 次字号后监听器 **1 → 5** 累积，一次右键被处理多次且 `ContextMenu.show` 的
+  `resolvePromise` 被覆盖（先到的 Promise 永久 pending）。现统一为 **emit 通道**（声明名与
+  发送名一致 → 不再 fallthrough）+ 句柄引用化**幂等注册**（另在 `onBeforeUnmount` 清理）。
+  实测：监听器恒为 1、菜单走「有选中」分支、载荷 `type=selection` 且带行号与内容。
+- **清理泛化扫描确认的死代码** —— `chat-utils.js` **整文件删除**（159 行；头注声称「供
+  RightPanel.vue 使用」但全仓零引用，两个导出 `useMessageCombos` / `isSystemMsg` 亦零引用）；
+  `RightPanel.vue` 摘除 **15 个死绑定**（`toggleRight` / `toggleFocus` / `toolsetLabel` /
+  `convListWidth` / `convList` / `reviewBtnLabel` / `showNudge` / `pendingAskCallId` /
+  `dismissNextSteps` / `segMode` / `wsTokenStats` / `convCtxStats` / `deleteConv` /
+  `handleTaskTool` / `currentNudge`——模板段命中数逐项为 0、无 `defineExpose` 暴露、跨文件零引用）
+  并移除随之无用的 `setFocusMode` 导入；`api.js` 删除 6 个零调用方法（`isWebSocketOpen` /
+  `answerChat` / `approveChat` / `chatCompact` / `getMessagesCount` / `getUIBoot`，同步从
+  `export default` 表移除——其中 `approveChat` 封装缺 `reply` 字段，真实调用点一直直发
+  `/chat/approve` 且带 `reply`）；`model-parsers.js` 删 `partsBbox` / `partsTriCount`，
+  `ui-state.js` 删 `showQuickSwitcher`。
+- **事件分发链补兜底（不再静默丢弃）** —— `agent-events.js` 的 `processAgentEvent` 分发链原本
+  没有 `else` 分支：有生产方但前端未接的事件无声消失（典型是 Go 侧 `OnToolUpdate` →
+  `EventToolUpdate` 携带的工具执行中间结果）。现加兜底分支累计类型计数 + 首次 `console.debug`
+  提示，并导出 `getUnconsumedEventTypes()` 供排查。★ 该通道「接通（需设计流式工具输出展示位）
+  还是下线 Go 侧 emit」属产品决策，代码中已就地标注。
+
+### 文档
+
+- 另给 3 个断言已失效选择器的旧 CDP 脚本（`cdp-verify-toolset-tab` / `-toolset-panel` /
+  `-chat-input`：`.tset-item` / `.toolset-card` / `.ts-header` / `.ts-divider` / `.tp-grabber` /
+  `sp-trigger` / `sp-pop` 均已随 UI 改版消失）加 ⚠️ 失效标注，避免后人误当回归基线。
+
+### 验证
+
+- **编辑器右键链路回归守卫**（`scripts/cdp-verify-ctxmenu-chain.cjs`，独立实例 9099 +
+  headless Chrome）：修复前 3 项 FAIL（监听器 1→5 累积 / 菜单呈无选中版 / 载荷 `type=file`），
+  修复后 **6/6 PASS**，控制台 0 error、0 warning。
+- **生成参数单源化实测**（独立实例 `WEB_PORT=9098` + 临时 install-dir，9090 未动）：以真实旧配置
+  启动（`pluginSettings.generation` = temperature 0.3 / thinkingMode high / maxTokens 131072 /
+  contextMaxTokens 1000000；激活配置 `ds-vision` → 服务商 deepseek）——启动日志
+  「已把生成参数旧值迁入服务商 "deepseek" 的服务商级配置」，`models.json` 的 deepseek 条目获得
+  四项值、`settings.json` 的 `generation` 注册段与顶层旧字段清空。数据面：`GET /api/settings`
+  的 `schemas` **不含** `generation`；`GET /api/models` 的 `providerThinkingModes.deepseek = "high"`。
+  装配链（假 Key 触发，看 `[provider] global 装配结果`）：模型级 `thinkingMode=max` 覆盖服务商级
+  `high`；清掉模型级后回落为**服务商级 `high`**（本次新增能力）。CDP 交互实测 **14/14 PASS**：
+  设置分类列表无「生成参数」、服务商编辑表单含「默认思考档位」且当前值 = 迁入的 `high`、
+  页面 0 异常。
+- **工具调用行展示 + 任务进度实时同步实测**（独立实例 `WEB_PORT=9098` + 临时 install-dir，
+  9090 未动；CDP 9223）：几何探针 `.tr-pill` **不存在**，工具行 rect left=328 / width=793，
+  工具名 24px（357→381），结果摘要紧随名称**左对齐同行**；截图视觉确认左对齐成组、无右侧胶囊、
+  成功 / 错误 / 运行中三色可辨。右栏实时性走**真实 UI 发送路径**（`.chat-input`
+  contenteditable 填文本 + `.send-btn` 点击，非 API 直发 —— 直发会绕过前端运行态就观察不到
+  「运行中」窗口）驱动真实 agent 调用 `update_tasks`：任务卡于 **+1585ms** 出现，而 agent
+  **+5114ms** 才结束（此刻 `chatLoading` / 运行态均为 true）→ 证明是**运行中实时同步**而非
+  结束后补刷；最终徽标 3/3、控制台 0 错误，**10/10 PASS**（另有静态链路含「无事件不刷新 /
+  有事件即刷新」对照 **12/12**）。因实例内既有 key 均为无效假 key（401），真实链路改用本地
+  mock LLM（内置延迟）驱动两轮 `tool_calls`；脚本自动清理临时会话与任务文件。
+- 任务相关回归：`go test ./internal/agent/ -run 'TestUpdateTasksBindsConvID*|TestUpdateTasksNoConv*|
+  TestUpdateTasksRuntimeRoot|TestUseTaskManagerPerRoot|TestCheckFinalReadiness_NoTodos'`
+  **6/6 PASS**。产物一致性：`ui-right-panel.js` / `.css` 与壳 `index-G_Ay0AZC.js` + `index.html`
+  的**真源 vs `bin/.pair` 镜像 md5 全等**，旧产物 `index-C6dXkUaW.js` 已无残留。
+- **「上次运行 / 执行中…」状态条删除实测**（独立实例 `WEB_PORT=9099` + 临时 install-dir，
+  9090 未动；CDP 9223）：真实 UI 发送路径（`.chat-input` contenteditable + `.send-btn`）驱动
+  真实 agent —— 运行中 `.phase-bar` **不存在**，同时 `.msg-loading-banner`「思考中...」与
+  `.stop-btn` 均在位；回合结束后该会话已有运行统计（`steps=2 / toolCalls=1 / durationMs=4846`，
+  即旧实现在此**必然**显示「上次运行」），而 `.phase-bar` 仍**不存在**、右栏摘要为
+  「已完成 · 4s · 5.3 t/s」；`.chat-area` 首个可见子元素 = 任务横幅、与 `.chat-messages`
+  间隙 **0px**（无残留空条），控制台 0 错误 —— **13/13 PASS**（空闲 / 运行 / 结束三态 + 几何
+  探针）。截图视觉复核：消息区顶部无橙色条、「思考中...」与红色停止按钮正常、布局无错位。
+
+---
+
 ## 1.6.7 — 2026-09-25
 
 > 本版以**长会话加载性能**为主线（四轮专项，全部由真实会话实测数据驱动）：会话切换时

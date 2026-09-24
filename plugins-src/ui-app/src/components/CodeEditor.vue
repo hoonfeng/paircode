@@ -35,11 +35,23 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'save', 'cursorPos', 'contextmenu-selection'])
+// ★ 事件名必须与父组件监听名一致（EditorArea.vue 用 @contextmenu）。
+// 若声明成别的名字（历史遗留 'contextmenu-selection'），Vue 会把父组件的
+// @contextmenu 当作**原生 DOM 事件**透传到根元素（fallthrough），handler 收到
+// 裸 MouseEvent（无 hasSelection/text/lineStart/lineEnd）→ 右键菜单恒走
+// 「无选中」分支、「AI: 添加到对话」退化为整文件。声明为 'contextmenu' 后该
+// 监听被识别为组件自定义事件，只走 emit 通道（带完整载荷）。
+const emit = defineEmits(['update:modelValue', 'save', 'cursorPos', 'contextmenu'])
 
 const wrapperRef = ref(null)
 const searchPanelRef = ref(null)
 let view = null
+// ★ 保存 contextmenu 监听器引用：createEditor 会因切换文件（path watch）、
+//   改字号（fontSize watch）被重复调用，而 wrapper DOM 元素是同一个
+//   （Vue 不重建）→ 匿名监听器会逐次累积（实测改 4 次字号后 1→5 个），
+//   一次右键被处理 N 次，且 ContextMenu.show 的 resolvePromise 被覆盖
+//   （先到的 Promise 永久 pending）。注册前必须先移除旧引用。
+let contextMenuHandler = null
 
 function getLang(path) {
   if (!path) return null
@@ -218,8 +230,13 @@ function createEditor() {
   // ★ 调试探针：暴露 CM6 view（probe 验证编辑链路 state 同步；真实运行无害）
   if (typeof window !== 'undefined') window.__editorView = view
 
-  // 监听编辑器区域的右键事件 — 无论有无选中都发射
-  wrapperRef.value.addEventListener('contextmenu', (e) => {
+  // 监听编辑器区域的右键事件 — 无论有无选中都发射（emit 通道，载荷含选区信息）
+  // ★ 幂等注册：先移除上一次的监听器，避免 createEditor 重入导致累积
+  if (contextMenuHandler) {
+    wrapperRef.value.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
+  contextMenuHandler = (e) => {
     if (!view) return
     const sel = view.state.selection.main
     const selectedText = view.state.sliceDoc(sel.from, sel.to)
@@ -240,7 +257,8 @@ function createEditor() {
       y: e.clientY,
       path: props.path,
     })
-  })
+  }
+  wrapperRef.value.addEventListener('contextmenu', contextMenuHandler)
 }
 
 onMounted(() => {
@@ -312,6 +330,11 @@ watch(() => state.settings?.fontSize, (val) => {
 })
 
 onBeforeUnmount(() => {
+  // ★ 卸载时清理 DOM 监听器（组件销毁后 wrapper 元素可能仍被引用）
+  if (wrapperRef.value && contextMenuHandler) {
+    wrapperRef.value.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
   if (view) {
     view.destroy()
     view = null

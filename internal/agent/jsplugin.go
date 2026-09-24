@@ -1303,8 +1303,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	ctxObj.Set("aiPresets", aiPresetsObj)
 
 	// ── ctx.models：服务商表数据面（★ 2026-09-03 决策迁插件）──
-	// models.get(provider) → {baseURL,apiKey,protocol,contextMaxTokens,models}；不存在 → null
-	// 装配器经此做服务商级兜底（BaseURL/Key/协议/上下文窗口）。
+	// models.get(provider) → {baseURL,apiKey,protocol,contextMaxTokens,temperature,maxTokens,
+	//   thinkingMode,modelParams,models}；不存在 → null
+	// 装配器经此做服务商级兜底（BaseURL/Key/协议/生成参数），★ 2026-09-25 起生成参数
+	// （温度/思考档位/最大输出/上下文窗口）唯一来源就是这里（服务商级）+ modelParams（模型级）。
 	modelsObj := vm.NewObject()
 	modelsObj.Set("get", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()
@@ -1313,7 +1315,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		}
 		e := core.GetProviderEntry(name)
 		if e.BaseURL == "" && len(e.Models) == 0 && e.APIKey == "" && e.Protocol == "" &&
-			e.ContextMaxTokens == 0 && e.Temperature == "" && e.MaxTokens == 0 && len(e.ModelParams) == 0 {
+			e.ContextMaxTokens == 0 && e.Temperature == "" && e.MaxTokens == 0 &&
+			e.ThinkingMode == "" && len(e.ModelParams) == 0 {
 			return goja.Null()
 		}
 		// ★ 2026-09-19 模型级参数显式转小写键（goja 直转 Go struct 会用 Go 字段名，JS 读不到）；
@@ -1347,6 +1350,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			"contextMaxTokens": e.ContextMaxTokens,
 			"temperature":      e.Temperature, // ★ 服务商级默认温度（models.json = 生成参数唯一来源）
 			"maxTokens":        e.MaxTokens,   // ★ 服务商级默认最大输出 token
+			"thinkingMode":     e.ThinkingMode, // ★ 2026-09-25 服务商级默认思考档位
 			"modelParams":      mp,            // ★ 模型级参数（模型名 → 参数；覆盖服务商级）
 			"models":           e.Models,
 		})

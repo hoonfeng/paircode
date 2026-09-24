@@ -1,3 +1,7 @@
+// ⚠️ 部分已失效（2026-09-25 扫描确认）：`.sp-trigger`（触发器按钮）与 `.sp-pop`
+//   （popover 层）均不存在 —— SheetPicker 现为原生 `<select>` 风格：`.sp-wrap`（容器）/
+//   `.sp-select`（选择器本体）/ `.sp-chevron`（箭头），不再有 popover 与触发按钮
+//   → 对应 check 必然 FAIL（triggerCount=0 / popCount=0）。重写断言前请勿把失败当回归信号。
 // 聊天输入选择器验证（原生 <select> 科技风版：无 popover、optgroup 分组、appearance:none）
 // 用法：node scripts/cdp-verify-chat-input.js <port>
 const http = require('http'); const net = require('net'); const crypto = require('crypto')

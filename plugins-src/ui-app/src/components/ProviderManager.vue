@@ -32,6 +32,14 @@
         <span class="pm-field-label">默认温度</span>
         <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
       </div>
+      <!-- ★ 2026-09-25 服务商级生成参数：生成参数唯一来源 = 本页（模型级可逐模型覆盖），
+           设置面板的「生成参数」页已移除（选项来自插件 schema modelParamFields）。 -->
+      <div class="pm-field">
+        <span class="pm-field-label">默认思考档位</span>
+        <select v-model="editForm.thinkingMode" title="思考档位（OpenAI reasoning.effort 口径）：空=不下发；模型级可覆盖">
+          <option v-for="o in thinkOptions" :key="'t'+o" :value="o">{{ o || '默认（不设）' }}</option>
+        </select>
+      </div>
       <div class="pm-field">
         <span class="pm-field-label">默认输出 Token（最大输出）</span>
         <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
@@ -95,6 +103,12 @@
             <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
           </div>
           <div class="pm-field">
+            <span class="pm-field-label">默认思考档位</span>
+            <select v-model="editForm.thinkingMode" title="思考档位（OpenAI reasoning.effort 口径）：空=不下发；模型级可覆盖">
+              <option v-for="o in thinkOptions" :key="'t'+o" :value="o">{{ o || '默认（不设）' }}</option>
+            </select>
+          </div>
+          <div class="pm-field">
             <span class="pm-field-label">默认输出 Token（最大输出）</span>
             <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
           </div>
@@ -156,7 +170,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import api from '../api.js'
 import ModelEditor from './ModelEditor.vue'
 
@@ -178,24 +192,21 @@ const props = defineProps({
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
 // ★ 2026-09-19 生成参数（温度/最大输出）改为服务商级字段，随 models.json 一起保存
-const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' })
+// ★ 2026-09-25 生成参数唯一来源 = 本页（服务商级 + 模型级）：设置面板的「生成参数」页已移除，
+//   服务商级补齐「默认思考档位」（此前只有模型级可配思考档位）。
+const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0, temperature: '', thinkingMode: '', maxTokens: 0, protocol: '' })
 const editModels = ref([])
 const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → models.json 该服务商的 modelParams
 const error = ref('')
 const saving = ref(false)
 
-// 思考档位（OpenAI ReasoningEffort）+ 温度档位（兼容旧硬编码，schema 未声明时兜底）
-const THINK_TIERS = [
-  { v: '', label: '默认' },
-  { v: 'none', label: 'none（关闭）' },
-  { v: 'minimal', label: 'minimal（极简）' },
-  { v: 'low', label: 'low（低）' },
-  { v: 'medium', label: 'medium（中）' },
-  { v: 'high', label: 'high（高）' },
-  { v: 'xhigh', label: 'xhigh（超高）' },
-  { v: 'max', label: 'max（最大化）' },
-]
-const TEMPS = ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0']
+// ★ 2026-09-25 服务商级「默认思考档位」选项来源 = 插件 schema（modelParamFields 里 thinkingMode
+//   的 options，单一真源，插件改档位清单前端自动跟随）；schema 未声明时用本地兜底清单。
+const THINK_FALLBACK = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const thinkOptions = computed(() => {
+  const f = props.modelParamFields.find(x => x.name === 'thinkingMode')
+  return (f && Array.isArray(f.options) && f.options.length) ? f.options : THINK_FALLBACK
+})
 
 // ★ 2026-08-21 按 schema 生成某模型的默认参数键（模板 v-model 需要键存在）
 function defaultParamKeys() {
@@ -220,6 +231,7 @@ async function load() {
     const mp = d.providerModelParams || {}
     const temps = d.providerTemperatures || {}
     const maxes = d.providerMaxTokens || {}
+    const thinks = d.providerThinkingModes || {}
     providers.value = (d.providers || []).map(name => ({
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
@@ -228,6 +240,7 @@ async function load() {
       models: (d.models || {})[name] || [],
       // ★ 2026-09-19 生成参数唯一来源 = models.json（服务商级 + 模型级）
       temperature: temps[name] || '',
+      thinkingMode: thinks[name] || '',                         // ★ 2026-09-25 服务商级默认思考档位
       maxTokens: maxes[name] || 0,
       modelParams: mp[name] || {},
     }))
@@ -240,7 +253,7 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' }
+  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, temperature: '', thinkingMode: '', maxTokens: 0, protocol: '' }
   editModels.value = []
   editParams.value = {}
   error.value = ''
@@ -249,7 +262,8 @@ function startEdit(p) {
   editingName.value = p.name
   editForm.value = {
     name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0,
-    temperature: p.temperature || '', maxTokens: p.maxTokens || 0, protocol: p.protocol || '',
+    temperature: p.temperature || '', thinkingMode: p.thinkingMode || '',
+    maxTokens: p.maxTokens || 0, protocol: p.protocol || '',
   }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
@@ -282,6 +296,7 @@ function snapshot() {
       contextMaxTokens: p.contextMaxTokens || 0,
       protocol: p.protocol || '',
       temperature: p.temperature || '',
+      thinkingMode: p.thinkingMode || '',
       maxTokens: p.maxTokens || 0,
       modelParams: p.modelParams || {},
     }
@@ -311,6 +326,7 @@ async function saveEdit() {
       contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0),
       protocol: (editForm.value.protocol || '').trim(),
       temperature: String(editForm.value.temperature ?? '').trim(),
+      thinkingMode: String(editForm.value.thinkingMode ?? '').trim(),
       maxTokens: Math.max(0, Number(editForm.value.maxTokens) || 0),
       modelParams: cleanModelParams(),
     }
@@ -385,6 +401,7 @@ function paramsSummary(providerName) {
   const n = Object.keys(p.modelParams || {}).length
   const svc = []
   if (p.temperature) svc.push('温度 ' + p.temperature)
+  if (p.thinkingMode) svc.push('思考 ' + p.thinkingMode)
   if (p.maxTokens > 0) svc.push('输出上限 ' + p.maxTokens)
   if (n) svc.push('模型参数 ' + n + ' 个')
   return svc.join(' · ')

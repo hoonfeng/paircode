@@ -858,7 +858,7 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			// ★ 2026-09-22 修复：pluginSettings 已在上方按「段」合并（插件命名空间值），
 			//   此处若再走反射整体替换，会把请求体里**未出现**的插件段整体清掉——
 			//   实测：只提交 {pluginSettings:{autopilot:{...}}} → settings.json 里
-			//   agentloop / generation 两段消失（用户配置静默丢失）。
+			//   其余插件段（如 agentloop）消失（用户配置静默丢失）。
 			//   语义以「按段合并」为准（与 internal/server/handler/workspace.go 一致）。
 			if jsonKey == "pluginSettings" {
 				continue

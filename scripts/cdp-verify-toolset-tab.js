@@ -1,3 +1,8 @@
+// ⚠️ 部分已失效（2026-09-25 扫描确认）：本脚本的**工具集面板选择器断言**已失效 ——
+//   `.tset-item` / `.toolset-card` / `.ts-header` / `.ts-divider` 在现版 ToolsetPanel.vue
+//   中均不存在（面板已统一为 `tp-*` 命名：`.tp-panel` / `.tp-header` / `.tp-body` /
+//   `.tp-actions` / `.tp-icon-btn` …）→ 对应 check 恒返回 0/FAIL。
+//   重写断言前，请勿把本脚本的失败当作回归信号。
 // 主 tab 工具集面板验证脚本（CDP 无依赖客户端）
 // 用法：node scripts/cdp-verify-toolset-tab.js <port>
 // 依赖：headless chrome --remote-debugging-port=<port> 已启动

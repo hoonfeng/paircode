@@ -5,73 +5,40 @@ import (
 	"strings"
 )
 
-// settings_generation.go — 生成参数的「插件注册配置」域（★ 2026-09-20）。
+// settings_generation.go — 生成参数「旧来源 → 服务商配置」的一次性迁移（★ 2026-09-25）。
 //
-// ★ 设计纪律（docs/pluginization-gap-analysis.md、changelog「配置项注册纪律」）：
+// 唯一来源纪律：生成参数（温度 / 思考档位 / 最大输出 / 上下文窗口）的唯一来源 = **服务商配置**
+// （config/models.json：模型级 ProviderEntry.ModelParams[模型] > 服务商级 ProviderEntry 字段）。
 //
-//	「配置项一律由插件经 ctx.registerSettings 注册，值存 settings.json 的
-//	 pluginSettings.<注册 key>；不再新增全局设置顶层字段，避免设置面膨胀」。
+// 历史沿革（本文件为何只剩迁移与兜底常量）：
+//   - 起初四个参数存 AppSettings 顶层 + settings.modelParams，且 Go 内核有运行期直读
+//     （resolveProviderBase / ContextWindow）；
+//   - 2026-09-19 收敛到 models.json（服务商级 / 模型级）——见 MigrateParamSettingsToModels；
+//   - 2026-09-20 又加了「全局默认」层：插件 agentloop 注册 generation 段（值存
+//     pluginSettings.generation），内核零直读、取值全在装配器；
+//   - 2026-09-25 该「全局默认」层**整体移除**：它与服务商配置字段完全重复，却处于装配链最低
+//     优先级（服务商级一配即被覆盖）——用户在设置面板改温度/输出/窗口「改了不生效」；
+//     同时服务商级缺「思考档位」字段，反而迫使全局段成为思考档位的唯一全局入口。
+//     现补服务商级思考档位（ProviderEntry.ThinkingMode）后删除该注册段：生成参数只剩
+//     「服务商配置」一个来源（模型级 > 服务商级），设置面不再有重复入口。
 //
-// 生成参数（温度 / 思考档位 / 最大输出 / 上下文窗口）此前存在 AppSettings 顶层
-// （temperature/thinkingMode/maxTokens/contextMaxTokens + modelParams），且 Go 内核对它们
-// 有运行期直读（resolveProviderBase / ContextWindow）——与上述纪律不符。现收敛为：
-//
-//   - 全局默认：插件 agentloop 注册的 GenerationSettingsKey 段（值存 pluginSettings.generation）；
-//   - 服务商级 / 模型级：models.json（插件数据面，经 ctx.models 读写）；
-//   - 配置级（AI 配置预设）：ai-presets.json（插件数据面，经 ctx.aiPresets 读写）。
-//
-// Go 内核**不再直读任何生成参数**：取值全部由装配器（agentloop 的 provider 装配器）
-// 经 ctx.getSettings(GenerationSettingsKey) / ctx.models / ctx.aiPresets 决策，
-// 内核只消费装配结果（agent.ResolveProviderParams → ProviderParams）。
-//
-// 本文件只保留两件事：① 插件未装载/未配置时的**机制兜底常量**（不是配置面）；
-// ② settings.json 旧顶层字段 → 插件注册域的一次性迁移（迁移后旧字段清空、不再写回）。
+// 本文件职责：① 机制兜底常量（未配置时的运行保障，不是配置面）；
+//            ② 旧来源（settings 顶层旧字段 + pluginSettings.generation）→ 服务商级字段的迁移。
 
-// GenerationSettingsKey 生成参数配置段的注册 key——由插件 agentloop
-// ctx.registerSettings({key: 'generation', title: '生成参数', fields: [...]}) 注册。
-// ★ 插件侧改注册 key 时需同步本常量（core 与插件共享同一命名空间名）。
-const GenerationSettingsKey = "generation"
+// LegacyGenerationSettingsKey 设置面板「生成参数」段曾用的注册 key（★ 2026-09-25 该注册段已移除）。
+// 仅用于读取历史值并迁入服务商配置；core 与插件均不再注册此段。
+const LegacyGenerationSettingsKey = "generation"
 
 // DefaultContextWindow 上下文窗口的机制兜底值（token）。
 //
 // ★ 这是「运行保障」而非配置面：正常路径下窗口由装配器按
 // 模型级（models.json modelParams）> 服务商级（models.json）> 配置级（ai-presets.json）
-// > 全局（插件注册 generation 段）算出正数；仅当插件未装载/全部未配置时，
-// 本常量保证 Loop 精简与压缩有可用窗口（否则窗口 0 会导致不压缩/无限上下文）。
-// 配置默认值请改插件 registerSettings 的 default（agentloop 的 GEN_DEFAULTS）。
+// 算出正数；仅当插件未装载/全部未配置时，本常量保证 Loop 精简与压缩有可用窗口
+// （否则窗口 0 会导致不压缩/无限上下文）。
+// 要改默认值：服务商面板的「上下文大小」字段，或插件 agentloop 的 GEN_DEFAULTS（机制兜底）。
 const DefaultContextWindow = 64000
 
-// GenerationDefaultValue 读插件注册的生成参数值（未注册/未设置 → 返回 nil）。
-// 仅用于「保存 AI 配置」等需要抓当前全局默认快照的场景（server/handler）。
-func GenerationDefaultValue(name string) any {
-	v := Settings.PluginSettingValue(GenerationSettingsKey)[name]
-	return v
-}
-
-// GenerationTemperature 读插件注册域的温度（字符串，"0"~"2.0"；空=未配置）。
-func GenerationTemperature() string {
-	s, _ := GenerationDefaultValue("temperature").(string)
-	return strings.TrimSpace(s)
-}
-
-// GenerationThinkingMode 读插件注册域的思考档位（空=未配置）。
-func GenerationThinkingMode() string {
-	s, _ := GenerationDefaultValue("thinkingMode").(string)
-	return strings.TrimSpace(s)
-}
-
-// GenerationMaxTokens 读插件注册域的最大输出 token（0=未配置）。
-// 兼容 JSON 反序列化后的 float64 与已存的字符串形态。
-func GenerationMaxTokens() int {
-	return anyToInt(GenerationDefaultValue("maxTokens"))
-}
-
-// GenerationContextMaxTokens 读插件注册域的上下文窗口（0=未配置）。
-func GenerationContextMaxTokens() int {
-	return anyToInt(GenerationDefaultValue("contextMaxTokens"))
-}
-
-// anyToInt 宽松取整（number / 数字字符串 / 空 → 0）。
+// anyToInt 宽松取整（number / 数字字符串 / 空 → 0）；迁移读取旧值时用。
 func anyToInt(v any) int {
 	switch n := v.(type) {
 	case float64:
@@ -113,53 +80,100 @@ func ParseTempInt(s string) int {
 	return n
 }
 
-// MigrateGenerationSettingsFromLegacy 把 settings.json 顶层的生成参数旧字段
-// （temperature/thinkingMode/maxTokens/contextMaxTokens/modelParams）一次性迁入
-// 插件注册域，并清空旧字段（此后 Go 内核零直读；Save 时 omitempty 不再写回）。
+// MigrateGenerationToProvider 把生成参数的旧来源一次性迁进服务商配置，并清空旧来源。
 //
-// 幂等：写入只在目标键未配置时发生（不覆盖插件注册域已有值）；旧字段清空后重跑直接返回。
+// 旧来源（同源、先后出现过，值可能都存在）：
+//   - settings.json 顶层 temperature/thinkingMode/maxTokens/contextMaxTokens（★ 2026-09-20 前的旧字段）；
+//   - pluginSettings.generation（设置面板「生成参数」段的注册值，★ 2026-09-25 该段已移除）；
+//   - settings.modelParams（模型级旧字段；正常已由 MigrateParamSettingsToModels 搬走，
+//     这里只做「确保清空」——它已无任何运行期消费者）。
+//
+// 目标：激活配置（settings.preset）所指向服务商的**服务商级**字段
+// （models.json：Temperature/ThinkingMode/MaxTokens/ContextMaxTokens），**只补空、不覆盖已有值**
+// ——服务商配置已是唯一来源，用户后来在服务商面板里设的值优先于这些历史默认。
+//
+// 幂等：旧来源清空后重跑直接返回。无法定位目标服务商（无激活配置 / 服务商不在 models.json /
+// 落盘失败）时**保留旧值**并打日志（下次启动重试），避免「值被清掉又没落到任何地方」。
 // ★ 调用时机：core.Load 内、MigrateParamSettingsToModels 之后（模型级参数先搬进 models.json）。
-func MigrateGenerationSettingsFromLegacy() {
-	if Settings.Temperature == "" && Settings.ThinkingMode == "" &&
-		Settings.MaxTokens == 0 && Settings.ContextMaxTokens == 0 && len(Settings.ModelParams) == 0 {
-		return // 无遗留值（已迁移或本就未配置）
-	}
-	if Settings.PluginSettings == nil {
-		Settings.PluginSettings = map[string]map[string]any{}
-	}
-	gen := Settings.PluginSettings[GenerationSettingsKey]
-	if gen == nil {
-		gen = map[string]any{}
-	}
-	// 只在目标键未配置时写入：插件注册域（用户在新「生成参数」面板设置的值）优先
-	put := func(k string, v any) {
-		if _, exists := gen[k]; exists {
-			return
-		}
-		gen[k] = v
-	}
+func MigrateGenerationToProvider() {
+	legacy := map[string]any{}
 	if s := strings.TrimSpace(Settings.Temperature); s != "" {
-		put("temperature", s)
+		legacy["temperature"] = s
 	}
 	if s := strings.TrimSpace(Settings.ThinkingMode); s != "" {
-		put("thinkingMode", s)
+		legacy["thinkingMode"] = s
 	}
 	if Settings.MaxTokens > 0 {
-		put("maxTokens", Settings.MaxTokens)
+		legacy["maxTokens"] = Settings.MaxTokens
 	}
 	if Settings.ContextMaxTokens > 0 {
-		put("contextMaxTokens", Settings.ContextMaxTokens)
+		legacy["contextMaxTokens"] = Settings.ContextMaxTokens
 	}
-	Settings.PluginSettings[GenerationSettingsKey] = gen
+	// 注册段旧值补齐（顶层旧字段更早、值等价——已有则不再取注册段，避免覆盖语义模糊）
+	if gen := Settings.PluginSettingValue(LegacyGenerationSettingsKey); len(gen) > 0 {
+		for _, k := range []string{"temperature", "thinkingMode", "maxTokens", "contextMaxTokens"} {
+			if _, exists := legacy[k]; exists {
+				continue
+			}
+			if v, ok := gen[k]; ok {
+				legacy[k] = v
+			}
+		}
+	}
+	hasModelParams := len(Settings.ModelParams) > 0
+	if len(legacy) == 0 && !hasModelParams {
+		return // 无遗留值（已迁移或本就未配置）
+	}
 
-	// 清空旧字段：模型级参数已由 MigrateParamSettingsToModels 搬进 models.json
-	// （见 models.go），全局默认已进插件注册域 → 旧字段不再有任何运行期消费者。
+	provider := strings.TrimSpace(GetPreset(Settings.Preset).Provider)
+	entry, ok := ModelList[provider]
+	if provider == "" || !ok {
+		log.Printf("[config] 生成参数旧值暂未能迁入服务商配置（激活配置 %q 无可用服务商）——保留待下次启动重试",
+			Settings.Preset)
+		return
+	}
+	changed := false
+	if entry.Temperature == "" {
+		if v, isStr := legacy["temperature"].(string); isStr && strings.TrimSpace(v) != "" {
+			entry.Temperature = strings.TrimSpace(v)
+			changed = true
+		}
+	}
+	if entry.ThinkingMode == "" {
+		if v, isStr := legacy["thinkingMode"].(string); isStr && strings.TrimSpace(v) != "" {
+			entry.ThinkingMode = strings.TrimSpace(v)
+			changed = true
+		}
+	}
+	if entry.MaxTokens == 0 {
+		if n := anyToInt(legacy["maxTokens"]); n > 0 {
+			entry.MaxTokens = n
+			changed = true
+		}
+	}
+	if entry.ContextMaxTokens == 0 {
+		if n := anyToInt(legacy["contextMaxTokens"]); n > 0 {
+			entry.ContextMaxTokens = n
+			changed = true
+		}
+	}
+	if changed {
+		ModelList[provider] = entry
+		if err := SaveModelList(); err != nil {
+			log.Printf("[config] 生成参数迁入服务商 %q 失败（保留旧值待重试）: %v", provider, err)
+			return
+		}
+		log.Printf("[config] 已把生成参数旧值迁入服务商 %q 的服务商级配置（此后生成参数唯一来源 = 服务商配置）", provider)
+	}
+
+	// 清空旧来源：生成参数唯一来源 = 服务商配置，旧字段不再有任何运行期消费者。
 	Settings.Temperature = ""
 	Settings.ThinkingMode = ""
 	Settings.MaxTokens = 0
 	Settings.ContextMaxTokens = 0
 	Settings.ModelParams = nil
+	if Settings.PluginSettings != nil {
+		delete(Settings.PluginSettings, LegacyGenerationSettingsKey)
+	}
 	Save()
-	log.Printf("[config] 已把 settings.json 的生成参数迁入插件注册域 pluginSettings.%s（此后全局默认由插件注册配置为准）",
-		GenerationSettingsKey)
 }

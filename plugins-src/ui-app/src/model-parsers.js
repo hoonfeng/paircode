@@ -304,25 +304,3 @@ export function parseArtifact(artifact) {
   throw new Error('该文件类型不做几何预览：' + (kind || '未知'))
 }
 
-// 包围盒（面板显示尺寸用）
-export function partsBbox(parts) {
-  let mn = [Infinity, Infinity, Infinity]
-  let mx = [-Infinity, -Infinity, -Infinity]
-  for (const p of parts) {
-    for (let i = 0; i < p.pos.length; i += 3) {
-      for (let c = 0; c < 3; c++) {
-        const v = p.pos[i + c]
-        if (v < mn[c]) mn[c] = v
-        if (v > mx[c]) mx[c] = v
-      }
-    }
-  }
-  if (!isFinite(mn[0])) return null
-  return { min: mn, max: mx, size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] }
-}
-
-export function partsTriCount(parts) {
-  let n = 0
-  for (const p of parts) n += p.idx.length / 3
-  return n
-}

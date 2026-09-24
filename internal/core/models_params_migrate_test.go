@@ -7,14 +7,16 @@ import (
 	"testing"
 )
 
-// TestProviderEntryParamFieldsJSON 服务商生成参数字段（温度/最大输出/模型级参数）JSON 往返。
-// ★ 2026-09-19：这三个参数的唯一来源是 models.json（服务商条目），必须能正确序列化/反序列化。
+// TestProviderEntryParamFieldsJSON 服务商生成参数字段（温度/思考档位/最大输出/模型级参数）JSON 往返。
+// ★ 2026-09-19：这四个参数的唯一来源是 models.json（服务商条目），必须能正确序列化/反序列化。
+// ★ 2026-09-25：服务商级补 thinkingMode（设置面板「生成参数」段移除后，它是思考档位的服务商级默认可配点）。
 func TestProviderEntryParamFieldsJSON(t *testing.T) {
 	in := ProviderEntry{
-		BaseURL:     "https://api.example.com/v1",
-		Models:      []string{"m1", "m2"},
-		Temperature: "0.7",
-		MaxTokens:   32000,
+		BaseURL:      "https://api.example.com/v1",
+		Models:       []string{"m1", "m2"},
+		Temperature:  "0.7",
+		ThinkingMode: "high",
+		MaxTokens:    32000,
 		ModelParams: map[string]ModelParamEntry{
 			"m1": {Temperature: "1.0", MaxTokens: 13000, ContextMaxTokens: 128000, Multimodal: true},
 		},
@@ -27,8 +29,8 @@ func TestProviderEntryParamFieldsJSON(t *testing.T) {
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out.Temperature != "0.7" || out.MaxTokens != 32000 {
-		t.Errorf("服务商级参数往返失败: temp=%q max=%d", out.Temperature, out.MaxTokens)
+	if out.Temperature != "0.7" || out.ThinkingMode != "high" || out.MaxTokens != 32000 {
+		t.Errorf("服务商级参数往返失败: temp=%q think=%q max=%d", out.Temperature, out.ThinkingMode, out.MaxTokens)
 	}
 	mp := out.ModelParams["m1"]
 	if mp.Temperature != "1.0" || mp.MaxTokens != 13000 || mp.ContextMaxTokens != 128000 || !mp.Multimodal {
@@ -36,7 +38,7 @@ func TestProviderEntryParamFieldsJSON(t *testing.T) {
 	}
 	// 未配置时不落盘（omitempty，保持 models.json 干净）
 	empty, _ := json.Marshal(ProviderEntry{BaseURL: "x"})
-	for _, k := range []string{"temperature", "maxTokens", "modelParams"} {
+	for _, k := range []string{"temperature", "thinkingMode", "maxTokens", "modelParams"} {
 		if strings.Contains(string(empty), k) {
 			t.Errorf("空字段 %q 不应写入 models.json: %s", k, string(empty))
 		}

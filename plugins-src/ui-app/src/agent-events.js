@@ -19,6 +19,13 @@ const runtimes = {}
 let msgKeyCounter = 0
 function makeMsgKey() { return 'msg_' + Date.now() + '_' + (msgKeyCounter++) }
 
+// ─── 未消费事件统计（★ 2026-09-25 兜底：分发链末尾 else 记录）──
+// processAgentEvent 的事件分发链原本没有兜底分支：有生产方但前端未接的事件
+// （如 Go 侧 agent 循环 emit 的 tool_update，载荷是工具执行中间结果）会被静默丢弃。
+// 这里累计类型计数 + 首次告警一次，让「通道漏接」可见而非无声消失。
+const unconsumedEventTypes = {}
+const unconsumedEventWarned = new Set()
+
 // normalizeAskType 归一化 ask_user 的 askType 变体（与后端 parseAskArgs 对齐）：
 // single_with_input / single-input / choice-with-input 等 → single-with-input；unknown → text。
 export function normalizeAskType(raw) {
@@ -35,6 +42,20 @@ function pushSegment(segs, type, initial) {
   const seg = { type, content: '', ...initial }
   segs.push(seg)
   return seg
+}
+
+// ─── 任务清单变更广播（★ 2026-09-26 任务进度实时同步）───────────────
+// 背景：右栏 StatsRail「任务进度」卡原本只在挂载/切会话时 GET /api/tasks，
+//   agent 运行中调用 update_tasks（/todo_write）更新任务清单后 UI 不刷新
+//   （用户报告「任务进度不是实时同步」）。task_create/task_update 为历史工具名，一并覆盖。
+// 方案：任务类工具**执行完成**（tool_result 事件）与回合结束（done）时广播 DOM 事件，
+//   任务消费方（StatsRail）据此重拉该会话任务清单 —— 事件驱动，无需轮询。
+//   ★ 不在 tool_call 事件触发：那是「即将执行某工具」，任务尚未落盘（会读到旧清单）。
+const TASK_TOOLS = ['update_tasks', 'todo_write', 'task_create', 'task_update']
+function notifyTasksChanged(convId) {
+  try {
+    window.dispatchEvent(new CustomEvent('paircode:tasks-changed', { detail: { convId } }))
+  } catch (e) { /* 非浏览器环境忽略 */ }
 }
 
 // ─── 全局 UI 回调集合（由 RightPanel onMounted 注册）──
@@ -462,6 +483,9 @@ export function processAgentEvent(convId, data) {
       window.dispatchEvent(new CustomEvent('refresh-tree'))
     }
 
+    // ── 任务类工具执行完成 → 广播任务清单变更（右栏「任务进度」实时刷新）──
+    if (TASK_TOOLS.includes(toolName)) notifyTasksChanged(convId)
+
     // task_create 结果：提取任务 ID 更新计划（无对应 segment）
     if (toolName === 'task_create' && globalCtx.onTaskSetId) {
       const idMatch = (data.content || '').match(/ID:\s*`([^`]+)`/)
@@ -587,6 +611,19 @@ export function processAgentEvent(convId, data) {
     msg.segments.push({ type: 'content', content: '> ⚠️ 检测到重复操作，已提示 Agent 换思路' })
   } else if (data.type === 'evaluation') {
     msg.segments.push({ type: 'content', content: '> 📊 任务评测：\n' + (data.content || '') })
+  } else {
+    // ★ 2026-09-25 兜底：显式记录未被消费的事件类型，不静默丢弃。
+    //   已知「有生产方但前端无消费」：tool_update（Go 侧 loop.go/jsloop_run.go 的
+    //   OnToolUpdate → EventToolUpdate，载荷 = 该工具执行的中间结果 PartialResult；
+    //   当前 UI 无「流式工具输出」展示位）。
+    //   ★ 接通该通道属产品决策：接通需设计展示位；不接通则应下线 Go 侧 emit。
+    if (data && data.type) {
+      unconsumedEventTypes[data.type] = (unconsumedEventTypes[data.type] || 0) + 1
+      if (!unconsumedEventWarned.has(data.type)) {
+        unconsumedEventWarned.add(data.type)
+        console.debug('[agent-events] 未消费的事件类型: ' + data.type + '（仅首次提示；计数见 getUnconsumedEventTypes）')
+      }
+    }
   }
 
   // ★ 同步 state.messages（当前对话时），确保 Vue 响应式更新
@@ -598,6 +635,10 @@ export function processAgentEvent(convId, data) {
 
   if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
 }
+
+// ★ 2026-09-25 诊断用：返回「未被前端消费的事件类型 → 次数」快照。
+//   用途：验证脚本 / 排查时确认某事件通道是否真有生产方在发（如 tool_update）。
+export function getUnconsumedEventTypes() { return { ...unconsumedEventTypes } }
 
 export function processAgentDone(convId, data) {
 
@@ -663,6 +704,9 @@ export function processAgentDone(convId, data) {
       }
     }
   }
+  // ★ 任务清单最终一致：回合结束再广播一次（兜底：工具异常未发 tool_result、
+  //   或事件在运行末尾被丢弃时，右栏「任务进度」仍会拉到最新清单）
+  notifyTasksChanged(convId)
   // ★ 运行统计：done → 计时定格（UI 显示本次运行的总耗时与 token 速度）
   endRun(convId)
   state.loadingByConv[convId] = false

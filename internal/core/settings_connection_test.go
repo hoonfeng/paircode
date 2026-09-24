@@ -136,24 +136,27 @@ func TestMigrateLegacyConnectionNoop(t *testing.T) {
 }
 
 // TestAiPresetFromSettingsUsesActivePreset 保存配置时的快照来源 = 激活配置
-// （连接信息）+ 插件注册域（生成参数）——核心字段零参与。
+// （连接信息 + 生成参数）——核心字段零参与。
+// ★ 2026-09-25 生成参数同样取激活配置：设置面板「生成参数」段（pluginSettings.generation）
+// 已移除，生成参数唯一来源 = 服务商配置，核心不再持有可读的全局默认。
 func TestAiPresetFromSettingsUsesActivePreset(t *testing.T) {
 	oldPresets, oldSettings := PresetList, Settings
 	defer func() { PresetList, Settings = oldPresets, oldSettings }()
 
 	SetAiPresets(AiPresets{
 		"激活": {Provider: "p1", BaseURL: "https://p1/v1", APIKey: "K1", ExecuteModel: "m1",
-			Protocol: "anthropic-messages"},
+			Protocol: "anthropic-messages",
+			Temperature: "0.7", ThinkingMode: "low", MaxTokens: 4096},
 	})
 	Settings = Default()
 	Settings.Preset = "激活"
-	Settings.PluginSettings = map[string]map[string]any{
-		GenerationSettingsKey: {"temperature": "0.7", "thinkingMode": "low", "maxTokens": float64(4096)},
-	}
-	// 顶层旧字段即使被写回也不参与快照
+	// 顶层旧字段即使被写回也不参与快照（连接信息与生成参数都只认激活配置）
 	Settings.Provider = "p-legacy"
 	Settings.APIKey = "LEGACY"
 	Settings.ExecuteModel = "m-legacy"
+	Settings.Temperature = "1.9"
+	Settings.ThinkingMode = "max"
+	Settings.MaxTokens = 999999
 
 	p := AiPresetFromSettings()
 	if p.Provider != "p1" || p.APIKey != "K1" || p.ExecuteModel != "m1" || p.Protocol != "anthropic-messages" {
@@ -163,7 +166,7 @@ func TestAiPresetFromSettingsUsesActivePreset(t *testing.T) {
 		t.Errorf("统一模型：plan/review 应跟随执行模型，得到 plan=%q review=%q", p.PlanModel, p.ReviewModel)
 	}
 	if p.Temperature != "0.7" || p.ThinkingMode != "low" || p.MaxTokens != 4096 {
-		t.Errorf("快照的生成参数应取插件注册域，得到 %+v", p)
+		t.Errorf("快照的生成参数应取激活配置（不得取顶部旧字段），得到 %+v", p)
 	}
 }
 

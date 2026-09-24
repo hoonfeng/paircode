@@ -15,13 +15,15 @@
 //   · 会话三元组查询（LookupConvModel）由 web 层注入钩子提供（数据面，agent 包不依赖 SessionManager）。
 //   无插件装载时装配器为原样工厂（goProviderFactory），返回裸基线（回退行为，非决策）。
 //
-// ★ 2026-09-20 生成参数零直读：温度 / 思考档位 / 最大输出 / 上下文窗口不再由核心读取
-//   （此前读 core.Temperature() 与 core.Settings.{MaxTokens,ThinkingMode,ContextMaxTokens}，
-//   与「配置项一律插件 ctx.registerSettings 注册」的设计纪律不符）。现取值来源全在插件侧：
-//   · 全局默认 → 插件注册配置域 pluginSettings.generation（agentloop registerSettings）；
-//   · 服务商级 / 模型级 → models.json（经 ctx.models）；
-//   · 配置级（AI 配置预设）→ ai-presets.json（经 ctx.aiPresets）。
-//   核心只消费装配结果（ProviderParams.ContextMaxTokens 等）。
+// ★ 2026-09-20 生成参数零直读；★ 2026-09-25 唯一来源收敛为「服务商配置」：
+//   温度 / 思考档位 / 最大输出 / 上下文窗口不再由核心读取（此前读 core.Temperature() 与
+//   core.Settings.{MaxTokens,ThinkingMode,ContextMaxTokens}，与「配置项一律插件 ctx.registerSettings
+//   注册」的设计纪律不符）。现取值来源全在插件侧：
+//   · 服务商级 / 模型级 → models.json（经 ctx.models）——**生成参数唯一来源**（模型级 > 服务商级）；
+//   · 配置级（AI 配置预设）→ ai-presets.json（经 ctx.aiPresets）：连接信息；生成参数快照亦取激活配置；
+//   · 机制兜底 → 插件内常量 GEN_DEFAULTS（非配置面，纯运行保障）。
+//   设置面板「生成参数」注册段（settings.json → pluginSettings.generation）已于 2026-09-25 整体移除
+//   （它与服务商配置字段重复且位于装配链最低优先级）。核心只消费装配结果（ProviderParams.ContextMaxTokens 等）。
 //
 // ★ 2026-09-20 连接字段零直读（同批清理）：服务商/地址/Key/模型此前从 settings 顶层
 //   兜底读取（resolveProviderBase 的 Provider/BaseURL/APIKey/MainModel + 装配器 ③ 段的
@@ -113,9 +115,9 @@ func logResolvedParams(tag, convID string, p ProviderParams) {
 		extra = fmt.Sprintf(" conv=%s (会话选定 provider=%s model=%s preset=%s)", convID, p.ConvProvider, p.ConvModel, p.ConvPreset)
 	}
 	// ★ 2026-09-19：一并打印生成参数（温度/最大输出/上下文窗口）——便于确认取值来源
-	//   （温度/最大输出/上下文窗口一律以 models.json 服务商配置为准，模型级 > 服务商级）。
-	// ★ 2026-09-20：补打 thinkingMode（取值链：模型级 models.json > ai-presets.json
-	//   > 插件注册配置域 generation 段），四项生成参数来源均可据此核对。
+	//   （一律以 models.json 服务商配置为准，模型级 > 服务商级）。
+	// ★ 2026-09-20 补打 thinkingMode；★ 2026-09-25 生成参数唯一来源 = 服务商配置
+	//   （设置面板「生成参数」段已移除），本行输出即可判定四项生成参数的实际来源。
 	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s | temperature=%.2f thinkingMode=%s maxTokens=%d contextMaxTokens=%d%s",
 		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, p.Temperature, p.ThinkingMode, p.MaxTokens, p.ContextMaxTokens, extra)
 }
@@ -153,8 +155,9 @@ func ResolveProviderParams() ProviderParams {
 // 由装配器按激活配置展开（无激活配置 → 未配置，运行期由 ConfiguredProvider 报缺失）。
 func resolveProviderBase() ProviderParams {
 	return ProviderParams{
-		// ★ 2026-09-20 生成参数不再由核心直读（见文件头）：基线一律留「未配置」，
-		//   由装配器按插件注册配置（generation 段）/ models.json / ai-presets.json 决策。
+		// ★ 生成参数不再由核心直读（见文件头）：基线一律留「未配置」，
+		//   由装配器按服务商配置（models.json，模型级 > 服务商级）决策；
+		//   无任何配置面时由插件机制常量 GEN_DEFAULTS 兜底（非配置面）。
 		//   Temperature=-1 是「不下发温度」的机制语义（Provider 不传 temperature 字段）。
 		Temperature: -1,
 		// 装配上下文：全局激活配置名（装配器据此经 ctx.aiPresets 整套展开）。
@@ -172,13 +175,13 @@ func ConfiguredProvider() bool {
 
 // ContextWindow 返回生效的上下文窗口（token）——一律以服务商配置（models.json）为准：
 // 装配器已按「模型级（models.json modelParams）> 服务商级（models.json）」算出 ContextMaxTokens；
-// 正常路径下装配器还会向下兜底「配置级（ai-presets.json）> 全局（插件注册 generation 段）」，
-// 故本函数只在插件未装载/全部未配置时回退机制兜底常量（运行保障，非配置面）。
+// ★ 2026-09-25：生成参数唯一来源 = 服务商配置；原「全局（插件注册 generation 段）」层已随
+// 设置面板该页移除。故本函数只在插件未装载/全部未配置时回退机制兜底常量（运行保障，非配置面）。
 //
 // ★ 2026-09-19 缺陷修复：此前 Loop 装配 / 历史精简 / 会话交接 / 精简策略都直接读
 // core.Settings.ContextMaxTokens，models.json 的服务商级上下文窗口不生效（装配结果无人消费）。
 // ★ 2026-09-20：核心不再直读任何生成参数——移除对 core.Settings.ContextMaxTokens 的兜底
-// （旧字段已迁入插件注册域并清空），改回机制常量 core.DefaultContextWindow。
+// （旧字段已迁入服务商配置并清空），改回机制常量 core.DefaultContextWindow。
 func ContextWindow(p ProviderParams) int {
 	if p.ContextMaxTokens > 0 {
 		return p.ContextMaxTokens

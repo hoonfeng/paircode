@@ -110,6 +110,10 @@ export const state = reactive({
   //   耗时/墙钟耗时/输出速度/输出 token 六个数字整体收起，只留阶段图标+阶段文案+
   //   进度条（「正在做什么」始终可见，「做过多少」按需展开）。
   //   属纯展示偏好（非 focusMode 那类临时视图态）→ 持久化，与 convListVisible 同规则。
+  //   ★ 2026-09-26 起**无 UI 消费者**：原消费方是消息区顶部 .phase-bar 的六个数字折叠按钮，
+  //   而该条已整条删除（判据见 RightPanel.vue 模板注释）。本字段保留仅为兼容已持久化的旧
+  //   偏好（仍在 savePersistentState / loadPersistentState 白名单内），不再有组件读写；
+  //   若确认无需迁移，可连同持久化白名单一并摘除。
   runStatsCollapsed: false,
   bottomPanelVisible: true,
   bottomPanelTab: 'terminal',
@@ -209,7 +213,6 @@ export const showSource = ref(false)
 export const showAbout = ref(false)
 // 软件更新弹窗（状态栏「新版本可用」徽标 / 菜单打开 → UpdateModal 消费）
 export const showUpdate = ref(false)
-export const showQuickSwitcher = ref(false)
 export const helpDocTarget = ref('features')
 export const showHelp = ref(false)
 // showHelp 可被设为字符串（文档id）或 true（默认 features）

@@ -14,7 +14,8 @@
          ★ 数据源 = **后端运行统计** GET /api/conversations/{id}/run-stats
            （state.runStatsByConv ← agent-events.fetchRunStats ← 后端 agent 循环埋点累加，
             落盘 .pair/run-stats.json；输出速度 t/s 亦由后端按生成阶段耗时派生）。
-         ★ 与消息区顶部 phase-bar 的 currentRunStat 是同一份数据 —— 本卡只做展示格式化，
+         ★ 数据源唯一：原消息区顶部 phase-bar（同一份 runStatsByConv 的重复展示）已于
+           2026-09-26 整条删除 → **本卡是运行统计的唯一展示处**。本卡只做展示格式化，
            不累加、不派生、不兜底。（旧实现取的是 /token-stats 的上下文 token 统计，
            并把 settings.contextMaxTokens 当上限、`|| 1000000` 兜底 —— 口径错位 + 臆测，已删。） -->
     <section class="sr-card">
@@ -255,7 +256,23 @@ async function loadTasks() {
   }
 }
 
-onMounted(loadTasks)
+// ★ 2026-09-26 任务进度**实时**同步：原实现只在挂载/切会话时拉取 → agent 运行中
+//   调用 update_tasks 更新任务清单后本卡不刷新（用户报告「任务进度不是实时同步」）。
+//   现由 agent-events.js 在「任务类工具执行完成（tool_result）」与「回合结束（done）」时
+//   广播 paircode:tasks-changed → 本卡立即重拉该会话任务清单。
+//   防抖 150ms：同一回合内连续多次 write 只发一次请求；事件带 convId 时只刷新当前会话。
+let tasksDirtyTimer = null
+function onTasksDirty(e) {
+  const convId = e && e.detail ? e.detail.convId : ''
+  if (convId && convId !== state.currentConvId) return
+  if (tasksDirtyTimer) clearTimeout(tasksDirtyTimer)
+  tasksDirtyTimer = setTimeout(() => { tasksDirtyTimer = null; loadTasks() }, 150)
+}
+onMounted(() => { loadTasks(); window.addEventListener('paircode:tasks-changed', onTasksDirty) })
+onUnmounted(() => {
+  window.removeEventListener('paircode:tasks-changed', onTasksDirty)
+  if (tasksDirtyTimer) { clearTimeout(tasksDirtyTimer); tasksDirtyTimer = null }
+})
 watch(() => state.currentConvId, loadTasks)
 
 // ── 数字简写（与设计稿 44.4K / 1.0M 同格式）──
