@@ -240,7 +240,8 @@ export function handleKeydown(e) {
     // ★ 非专注态切换左栏 = 用户偏好，落盘（专注态内为临时调整，不污染偏好）
     if (state.focusMode === false) savePersistentState()
   }
-  if (e.ctrlKey && e.key === '`') { e.preventDefault(); state.bottomPanelVisible = !state.bottomPanelVisible }
+  // ★ 底部面板切换走 layout 服务（专注态内手动切换会同步「退出专注」还原目标）
+  if (e.ctrlKey && e.key === '`') { e.preventDefault(); layout.toggleBottomPanel() }
   // ★ 显式唤出侧栏 = 退出专注（先还原、再显式显示：语句顺序保证用户意图不被还原覆盖）
   if (e.ctrlKey && e.shiftKey && e.key === 'E') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'explorer'; state.sidebarVisible = true }
   if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true }

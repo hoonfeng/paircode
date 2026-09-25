@@ -90,7 +90,9 @@
     <!-- ═══ 右栏（grid col 4）：设计稿 th178 ═══
          运行统计(188) / 任务进度(152) / 上下文构成(116，水平分段条) / 底提示(72)。
          设计稿为常驻信息栏（宽 288），随主题令牌自动换肤。 -->
-    <div v-if="!panelMode && state.statsRailVisible !== false" class="right-rail-host">
+    <!-- ★ 右栏收纳（2026-09-25）：折叠=网格列宽 0（gridStyle railW），不 v-if —— 与
+         sidebar/编辑器同一折叠哲学：保持挂载，专注模式进出右栏不重挂、卡片状态不丢。 -->
+    <div v-if="!panelMode" class="right-rail-host">
       <StatsRail />
     </div>
 

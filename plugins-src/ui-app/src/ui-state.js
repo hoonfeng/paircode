@@ -104,7 +104,8 @@ export const state = reactive({
   //   默认显示；用户选择持久化；进入专注模式自动收起、退出还原（setFocusMode）。
   convListVisible: true,
   // ★ 右栏（2026-09-25 对齐设计稿 th178）：运行统计 / 任务进度 / 上下文构成 / 底提示，
-  //   宽 288px，占网格第 4 列。默认显示。
+  //   宽 288px，占网格第 4 列。默认显示；
+  //   进入专注模式自动收起、退出还原（setFocusMode）；不持久化（临时视图态）。
   statsRailVisible: true,
   // ★ 右栏运行统计条折叠（P4-2，2026-09-25）——.phase-bar 里的步数/工具次数与
   //   耗时/墙钟耗时/输出速度/输出 token 六个数字整体收起，只留阶段图标+阶段文案+
@@ -286,6 +287,13 @@ export const layout = {
     state.convListVisible = !state.convListVisible
     if (state.focusMode) convListBeforeFocus = state.convListVisible
   },
+  // ★ 底部面板（终端）显隐开关：与 toggleSidebar/toggleConvList 同语义——专注态内
+  //   手动切换会同步「退出专注」的还原目标（用户最近选择优先）。全 UI 切换底栏
+  //   统一走本函数（快捷键 Ctrl+`、顶栏菜单项等），保证专注进出与用户意图一致。
+  toggleBottomPanel() {
+    state.bottomPanelVisible = !state.bottomPanelVisible
+    if (state.focusMode) bottomPanelBeforeFocus = state.bottomPanelVisible
+  },
   openEditor(filePath) {
     if (typeof filePath === 'string' && filePath) {
       state.activeFile = filePath
@@ -375,33 +383,45 @@ export const layout = {
   },
 }
 
-// ─── ★ 专注模式（focusMode）唯一权威入口：隐藏编辑器 + 临时收起左右侧栏 ───
-//   语义：专注 = 纯对话视图。进入时隐藏编辑器，并收起左栏（文件浏览器/搜索/Git）
-//   与右栏会话列表面板；退出时还原用户进入前的显隐选择（尊重既有偏好，避免
-//   「用户本就隐藏 → 退出专注被强制显示」）。
+// ─── ★ 专注模式（focusMode）唯一权威入口：隐藏编辑器 + 临时收起四周面板 ───
+//   语义：专注 = 纯对话视图。进入时隐藏编辑器，并收起左栏（文件浏览器/搜索/Git）、
+//   会话列表面板、右栏统计栏（statsRail）与底部面板（终端）；退出时还原用户进入前的
+//   显隐选择（尊重既有偏好，避免「用户本就隐藏 → 退出专注被强制显示」）。
 //   ★ 为什么不用组件内 watch focusMode：watch 默认 flush:'pre'，回调在
 //     「同一同步块内后续语句」之后执行 —— 菜单「视图 → 资源管理器」是
 //     `setFocusMode(false)` 紧跟 `state.sidebarVisible = true`，若靠 watch 还原
 //     会把用户显式要求的「显示侧栏」覆盖掉。集中到本函数内显式处理，调用方的
 //     语句顺序天然生效（先还原、后显式覆盖）。
-//   ★ 两栏原值只存内存：与 focusMode 同为临时视图态，不持久化 —— 刷新后回到
+//   ★ 各面板原值只存内存：与 focusMode 同为临时视图态，不持久化 —— 刷新后回到
 //     用户真实偏好，不会把「专注时收起」误存成偏好。
+//   ★ 2026-09-25 补全（升级回归修复）：右栏 StatsRail 是 v1.6.7 新增的常驻栏
+//     （288px），此前未纳入专注收起 —— 升级后按 Ctrl+K 右栏仍在，即「新增组件
+//     未隐藏」缺陷；底部面板的「进入收」原先写死在 MenuBar 的 focus-mode 分支
+//     （菜单改造后不可达），一并收归本函数，快捷键/菜单两入口行为就此一致。
 let sidebarBeforeFocus = state.sidebarVisible
 let convListBeforeFocus = state.convListVisible
+let statsRailBeforeFocus = state.statsRailVisible
+let bottomPanelBeforeFocus = state.bottomPanelVisible
 
 export function setFocusMode(on) {
   const next = !!on
   if (next === !!state.focusMode) return
   if (next) {
-    // 进入专注：记住既有选择，再临时收起两栏
+    // 进入专注：记住既有选择，再临时收起各面板
     sidebarBeforeFocus = state.sidebarVisible
     convListBeforeFocus = state.convListVisible
+    statsRailBeforeFocus = state.statsRailVisible
+    bottomPanelBeforeFocus = state.bottomPanelVisible
     state.sidebarVisible = false
     state.convListVisible = false
+    state.statsRailVisible = false
+    state.bottomPanelVisible = false
   } else {
     // 退出专注：还原进入前的显隐选择
     state.sidebarVisible = sidebarBeforeFocus
     state.convListVisible = convListBeforeFocus
+    state.statsRailVisible = statsRailBeforeFocus
+    state.bottomPanelVisible = bottomPanelBeforeFocus
   }
   state.focusMode = next
 }

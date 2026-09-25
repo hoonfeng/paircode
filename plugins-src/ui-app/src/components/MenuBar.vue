@@ -116,16 +116,11 @@ const execItem = async (item) => {
   if (a === 'view-search') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
   if (a === 'view-git') { setFocusMode(false); state.activeActivity = 'source'; state.sidebarVisible = true; return }
   if (a === 'toggle-sidebar') { layout.toggleSidebar(); return }
-  if (a === 'toggle-terminal') { state.bottomPanelVisible = !state.bottomPanelVisible; state.bottomPanelTab = 'terminal'; return }
+  if (a === 'toggle-terminal') { layout.toggleBottomPanel(); state.bottomPanelTab = 'terminal'; return }
   if (a === 'toggle-right') { state.rightPanelVisible = !state.rightPanelVisible; return }
   if (a === 'focus-mode') {
-    const entering = !state.focusMode
-    // ★ 专注模式唯一入口：隐藏编辑器 + 收起左栏与会话列表（见 ui-state.js setFocusMode）
-    setFocusMode(entering)
-    if (entering) {
-      // 专注态连底部面板一并收起（纯对话视图）
-      state.bottomPanelVisible = false
-    }
+    // ★ 专注模式唯一入口：隐藏编辑器 + 收起左栏/会话列表/右栏统计/底栏（见 ui-state.js setFocusMode）
+    setFocusMode(!state.focusMode)
     return
   }
 
