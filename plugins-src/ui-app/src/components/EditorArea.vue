@@ -273,7 +273,10 @@ async function onEditorContextMenu(ev) {
             lineStart: ev.lineStart, lineEnd: ev.lineEnd, content: ev.text,
           }
         }))
-        state.rightPanelVisible = true
+        // ★ 对话面板显隐统一走 layout 服务（本文件 87 行 import { layout }）；
+        //   判空 + fallback = 防新旧版本错配（同 app-actions 模式）。
+        if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+        else state.rightPanelVisible = true
         break
       case 'undo': undoAction(); break
       case 'redo': redoAction(); break
@@ -344,7 +347,8 @@ function addFileToChat(file) {
   window.dispatchEvent(new CustomEvent('add-to-chat', {
     detail: { type: 'file', path: file, filename: fileName }
   }))
-  state.rightPanelVisible = true
+  if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+  else state.rightPanelVisible = true
 }
 
 function copyCurrentLine() {

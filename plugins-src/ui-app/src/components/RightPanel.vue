@@ -185,7 +185,7 @@
               </button>
             </div>
             <!-- ★ 2026-09-25 对齐设计稿 th105（底部提示行 xs muted） -->
-            <div class="ns-foot">不确定怎么开始？输入 Ctrl+K 打开命令面板，或让 Agent 先读项目再给方案。</div>
+            <div class="ns-foot">不确定怎么开始？直接输入你的需求（Ctrl+K 可进入专注模式），或让 Agent 先读项目再给方案。</div>
           </div>
           <div v-if="(!state.messages || state.messages.length === 0) && !state.chatLoading" class="chat-empty">
             <!-- ★ P4-3（2026-09-25）首启引导卡：空对话 + 三步未走完时替代朴素空态，
@@ -385,7 +385,8 @@ const toggleConvList = () => {
   layout.toggleConvList()
   // ★ 立即落盘：宿主无全局 state watch（savePersistentState 原本只在 switchWorkspace 调用），
   //   不主动保存则刷新后无法记住本次选择。
-  savePersistentState()
+  // ★ 专注态内为临时视图态，不落盘（与 Ctrl+B / Ctrl+Shift+L 同规则，防把专注收起误存为偏好）。
+  if (state.focusMode === false) savePersistentState()
 }
 const inputText = ref('')
 

@@ -215,8 +215,23 @@ function deploy(manifestFile) {
     if (mf.count === 0) { finish({ ok: true, stage: 'noop', note: '无差异，无需部署' }); return; }
     if (skipDeploy) { finish({ ok: true, stage: 'skip-deploy', note: '构建与清单完成（未部署）' }); return; }
     deploy(mf.file);
+    // ─── [7/7] 部署后：专注模式收纳探针（告警不阻断——收纳问题不致命，不拖垮升级流程）───
+    stage = 'focus-probe';
+    try {
+      log('=== [7/7] 专注收纳探针（部署后自动检查，告警不阻断） ===');
+      const { runFocusProbe } = await import('./focus-probe.mjs');
+      const webPort = Number(new URL(DEFAULTS.baseUrl).port || 9090);
+      const probe = await runFocusProbe({ webPort, log });
+      state.focusProbe = { ok: probe.ok, note: probe.note, uncollected: probe.uncollected };
+      log('专注收纳探针: ' + probe.note);
+    } catch (e) {
+      // 探针任何异常都不改变更新结果（含环境缺失：无 Edge/端口占用等）
+      state.focusProbe = { ok: false, note: '探针异常（不阻断）: ' + (e && e.message || e) };
+      log('专注收纳探针异常（不阻断部署）: ' + (e && e.message || e));
+    }
     finish({ ok: true, stage: 'done', note: state.from + ' -> ' + state.tag + '，部署 ' + mf.count +
-      ' 项' + (state.exeBuilt ? '（含新 exe）' : '（仅前端）') });
+      ' 项' + (state.exeBuilt ? '（含新 exe）' : '（仅前端）') +
+      (state.focusProbe ? '；专注探针 ' + state.focusProbe.note : '') });
   } catch (e) {
     finish({ ok: false, stage: e.stage || stage, note: e.message, code: e.exitCode || 1 });
   }

@@ -245,10 +245,27 @@ export function handleKeydown(e) {
   // ★ 显式唤出侧栏 = 退出专注（先还原、再显式显示：语句顺序保证用户意图不被还原覆盖）
   if (e.ctrlKey && e.shiftKey && e.key === 'E') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'explorer'; state.sidebarVisible = true }
   if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true }
-  if (e.ctrlKey && e.shiftKey && e.key === 'T') { e.preventDefault(); state.rightPanelVisible = true }
-  if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); state.rightPanelVisible = !state.rightPanelVisible }
+  if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+    e.preventDefault()
+    // ★ 对话面板显隐统一走 layout 服务（本文件 20 行 import { layout } from './ui-state.js'；
+    //   专注态内切换会同步「退出专注」还原目标）。就绪性判空 + 行为等价 fallback = 防
+    //   新旧版本错配窗口（旧 ui-state 无该方法时回退直写，行为与改前一致）。
+    if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+    else state.rightPanelVisible = true
+  }
+  if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+    e.preventDefault()
+    if (typeof layout.toggleRightPanel === 'function') layout.toggleRightPanel()
+    else state.rightPanelVisible = !state.rightPanelVisible
+  }
   // ★ 会话列表面板（Token 统计栏）显隐：与 rp-header 按钮同源（state.convListVisible 持久化）
-  if (e.ctrlKey && e.shiftKey && e.key === 'L') { e.preventDefault(); state.convListVisible = !state.convListVisible; savePersistentState() }
+  if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+    e.preventDefault()
+    if (typeof layout.toggleConvList === 'function') layout.toggleConvList()
+    else state.convListVisible = !state.convListVisible
+    // 专注态内为临时视图态，不落盘（与 Ctrl+B 同规则，防把专注收起误存为偏好）
+    if (state.focusMode === false) savePersistentState()
+  }
   // ★ 专注模式（唯一入口 setFocusMode）：进入收起左栏/会话列表，退出还原用户原值
   if (e.ctrlKey && e.key === 'k') { e.preventDefault(); setFocusMode(!state.focusMode) }
 }

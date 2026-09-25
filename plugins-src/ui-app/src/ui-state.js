@@ -99,6 +99,8 @@ export const state = reactive({
   //   文件浏览器改为活动栏第二个图标进入（原默认 explorer）。
   activeActivity: 'chat',
   sidebarVisible: true,
+  // ★ 对话面板（对话容器渲染/保活开关）：显隐切换统一走 layout.showRightPanel/toggleRightPanel；
+  //   进入专注模式自动显示、退出还原（setFocusMode 登记表）；用户选择持久化。
   rightPanelVisible: true,
   // ★ 会话列表面板（.conv-sidebar，250px，含 Token 统计/上下文占用）整体显隐。
   //   默认显示；用户选择持久化；进入专注模式自动收起、退出还原（setFocusMode）。
@@ -179,7 +181,7 @@ export const state = reactive({
   tasks: [],
   notificationCount: 0,
   theme: 'midnight',
-  focusMode: false, // ★ 默认非专注：编辑器+对话区并排（右侧宽度可拖拽调整）；Ctrl+K 切换专注（隐藏编辑器）
+  focusMode: false, // ★ 默认非专注；Ctrl+K 切换专注「纯对话」视图（收起四周面板+切回对话；见 setFocusMode 登记表）
   // ── ★ chat 优先薄壳布局：编辑器按需打开的装配状态（默认编辑器隐藏）──
   //   权威面只在 ctx.uiLayout / __PAIRCODE_CORE.layout（见下方 layout 服务），
   //   区域包通过服务读写，不直接改本字段（避免状态机分散 & 编辑器直接改私有开关）。
@@ -279,31 +281,44 @@ export const layout = {
   //   还原目标，避免退出专注时被旧值覆盖用户本次选择（与 toggleConvList 同规则）。
   toggleSidebar() {
     state.sidebarVisible = !state.sidebarVisible
-    if (state.focusMode) sidebarBeforeFocus = state.sidebarVisible
+    syncFocusTarget('sidebarVisible')
   },
   // ★ 会话列表面板（Token 统计栏）显隐开关：与 toggleSidebar 同语义，只切可见性
   //   （v-show 保持挂载、不 unmount，避免会话列表重挂丢状态）；壳与区域包经本服务读写。
   toggleConvList() {
     state.convListVisible = !state.convListVisible
-    if (state.focusMode) convListBeforeFocus = state.convListVisible
+    syncFocusTarget('convListVisible')
   },
   // ★ 底部面板（终端）显隐开关：与 toggleSidebar/toggleConvList 同语义——专注态内
   //   手动切换会同步「退出专注」的还原目标（用户最近选择优先）。全 UI 切换底栏
   //   统一走本函数（快捷键 Ctrl+`、顶栏菜单项等），保证专注进出与用户意图一致。
   toggleBottomPanel() {
     state.bottomPanelVisible = !state.bottomPanelVisible
-    if (state.focusMode) bottomPanelBeforeFocus = state.bottomPanelVisible
+    syncFocusTarget('bottomPanelVisible')
+  },
+  // ★ 对话面板（rightPanelVisible：对话容器渲染/保活开关）统一入口（2026-09-25）：
+  //   全 UI 显隐切换收敛到本服务（Ctrl+Shift+T/C、顶栏菜单、各「添加到对话」入口），
+  //   专注态内切换会同步「退出专注」还原目标（与 toggleSidebar 同规则）。
+  toggleRightPanel() {
+    state.rightPanelVisible = !state.rightPanelVisible
+    syncFocusTarget('rightPanelVisible')
+  },
+  // 显式唤出对话面板（置 true）：专注态内同步还原目标（用户最近选择优先）。
+  showRightPanel() {
+    state.rightPanelVisible = true
+    syncFocusTarget('rightPanelVisible')
   },
   openEditor(filePath) {
+    // ★ 先退出专注（含还原主区视图），再显式设置目标——语句顺序保证「用户要编辑器」
+    //   不被退出还原覆盖（focusMode 是「纯对话」态：点文件树打开编辑时必须退出，
+    //   否则编辑器被专注态「mainTab=conversation」折叠不可见）。
+    if (state.focusMode) setFocusMode(false)
     if (typeof filePath === 'string' && filePath) {
       state.activeFile = filePath
       if (!state.openFiles.includes(filePath)) state.openFiles.push(filePath)
       // ★ 打开文件即切到编辑器主 tab（主区 tab 互斥）
       state.panels.mainTab = 'editor'
     }
-    // ★ 打开编辑器即退出专注（focusMode 是「纯对话」态：隐藏侧栏+编辑器；
-    //   点文件树打开编辑时必须退出，否则编辑器仍被 focusMode 折叠不可见）。
-    if (state.focusMode) setFocusMode(false)
     // ★ 从关闭态打开：记录上次打开宽（折叠还原用），再置可见。
     if (!state.panels.editorOpen && state.panels.editorWidth > 0) {
       state.panels.editorLastWidth = state.panels.editorWidth
@@ -333,6 +348,9 @@ export const layout = {
   // ★ 主视图 tab 切换（对话 ⇄ 编辑器 ⇄ 市场）：mainTab 是单一事实源。
   //   各视图常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
   setMainView(view) {
+    // ★ 专注态内切到非对话视图 = 结束专注（先退出还原现场、再显式设置目标——
+    //   「先还原、后覆盖」语句顺序保证用户本次选择生效；切回对话则保持专注）。
+    if (state.focusMode && view !== 'conversation') setFocusMode(false)
     state.panels.mainTab = view
     state.panels.editorOpen = (view === 'editor')
   },
@@ -348,6 +366,8 @@ export const layout = {
   },
   // 激活视图 tab（切主视图；并排开启时同时保持对话可见）。
   activateViewTab(pluginName, id) {
+    // ★ 插件视图必非对话视图：专注态内激活 = 结束专注（同 setMainView，先还原后覆盖）。
+    if (state.focusMode) setFocusMode(false)
     state.panels.mainTab = this.viewTabKey(pluginName, id)
     state.panels.editorOpen = false
   },
@@ -383,45 +403,61 @@ export const layout = {
   },
 }
 
-// ─── ★ 专注模式（focusMode）唯一权威入口：隐藏编辑器 + 临时收起四周面板 ───
-//   语义：专注 = 纯对话视图。进入时隐藏编辑器，并收起左栏（文件浏览器/搜索/Git）、
-//   会话列表面板、右栏统计栏（statsRail）与底部面板（终端）；退出时还原用户进入前的
-//   显隐选择（尊重既有偏好，避免「用户本就隐藏 → 退出专注被强制显示」）。
+// ─── ★ 专注模式（focusMode）唯一权威入口：纯对话视图（登记表驱动）───
+//   语义：专注 = 纯对话视图。进入时收起四周面板（左栏/会话列表/右栏统计/底部面板）、
+//   确保对话面板显示、把主区视图切回对话（编辑器保持挂载，文件/滚动不丢）；
+//   退出时还原用户进入前的完整现场（尊重既有偏好，避免「用户本就隐藏 → 退出专注被强制显示」）。
 //   ★ 为什么不用组件内 watch focusMode：watch 默认 flush:'pre'，回调在
 //     「同一同步块内后续语句」之后执行 —— 菜单「视图 → 资源管理器」是
 //     `setFocusMode(false)` 紧跟 `state.sidebarVisible = true`，若靠 watch 还原
 //     会把用户显式要求的「显示侧栏」覆盖掉。集中到本函数内显式处理，调用方的
 //     语句顺序天然生效（先还原、后显式覆盖）。
-//   ★ 各面板原值只存内存：与 focusMode 同为临时视图态，不持久化 —— 刷新后回到
-//     用户真实偏好，不会把「专注时收起」误存成偏好。
-//   ★ 2026-09-25 补全（升级回归修复）：右栏 StatsRail 是 v1.6.7 新增的常驻栏
-//     （288px），此前未纳入专注收起 —— 升级后按 Ctrl+K 右栏仍在，即「新增组件
-//     未隐藏」缺陷；底部面板的「进入收」原先写死在 MenuBar 的 focus-mode 分支
-//     （菜单改造后不可达），一并收归本函数，快捷键/菜单两入口行为就此一致。
-let sidebarBeforeFocus = state.sidebarVisible
-let convListBeforeFocus = state.convListVisible
-let statsRailBeforeFocus = state.statsRailVisible
-let bottomPanelBeforeFocus = state.bottomPanelVisible
+//   ★ 现场快照只存内存（focusSaved）：与 focusMode 同为临时视图态，不持久化 ——
+//     刷新后回到用户真实偏好，不会把「专注时收起」误存成偏好。
+//   ★ 2026-09-25 补全史：右栏 StatsRail（v1.6.7 新增常驻栏）曾未纳入收纳（4fa3e367
+//     修复）；本轮再纳入 rightPanelVisible（对话面板）与 panels.mainTab（主区视图），
+//     并改为下方登记表驱动（新增面板 = 表加一行）。
+//   ★★★ 登记规则（新增常驻面板/区域必须执行）★★★
+//     1. 在本表登记一行（fold = 专注态取值）；
+//     2. 若占用网格列，同步 ShellApp.vue 的 gridStyle 列宽公式；
+//     3. 跑收纳探针：node scripts/source-update/focus-probe.mjs（更新流程部署后自动跑，
+//        发现「未收纳的新区域」会告警 —— 这就是「以后新增组件被自动发现」的保障）。
+const FOCUS_PANELS = [
+  { key: 'sidebarVisible',     label: '左栏（文件/搜索/Git）', get: () => state.sidebarVisible,     set: v => { state.sidebarVisible = v },     fold: false },
+  { key: 'convListVisible',    label: '会话列表面板',          get: () => state.convListVisible,    set: v => { state.convListVisible = v },    fold: false },
+  { key: 'statsRailVisible',   label: '右栏统计栏',            get: () => state.statsRailVisible,   set: v => { state.statsRailVisible = v },   fold: false },
+  { key: 'bottomPanelVisible', label: '底部面板（终端）',      get: () => state.bottomPanelVisible, set: v => { state.bottomPanelVisible = v }, fold: false },
+  { key: 'rightPanelVisible',  label: '对话面板',              get: () => state.rightPanelVisible,  set: v => { state.rightPanelVisible = v },  fold: true },
+  { key: 'panels.mainTab',     label: '主区视图 tab',          get: () => state.panels.mainTab,     set: v => { state.panels.mainTab = v; state.panels.editorOpen = (v === 'editor') }, fold: 'conversation' },
+]
+let focusSaved = null // 进入专注时的现场快照（Map<key, 原值>；仅内存，不持久化）
+
+// 专注态内同步「退出还原目标」（用户最近选择优先）：供 layout.toggle* 与壳兜底调用。
+//   等价于原 `if (state.focusMode) XBeforeFocus = state.X` 守卫（原逐项逻辑收拢为表项）。
+//   ★ 导出（2026-09-25）：供 ShellApp 壳兜底（refreshViews 视图卸载 → syncFocusTarget）直接
+//     import 调用；先例同 setFocusMode（专注机制工具函数「导出 + 组件直接 import」模式）。
+//     常规路径仍由 layout.toggle* 在模块内经本函数同步，无第二实现。
+export function syncFocusTarget(key) {
+  if (!state.focusMode || !focusSaved) return
+  const p = FOCUS_PANELS.find(x => x.key === key)
+  if (p) focusSaved.set(key, p.get())
+}
 
 export function setFocusMode(on) {
   const next = !!on
   if (next === !!state.focusMode) return
   if (next) {
-    // 进入专注：记住既有选择，再临时收起各面板
-    sidebarBeforeFocus = state.sidebarVisible
-    convListBeforeFocus = state.convListVisible
-    statsRailBeforeFocus = state.statsRailVisible
-    bottomPanelBeforeFocus = state.bottomPanelVisible
-    state.sidebarVisible = false
-    state.convListVisible = false
-    state.statsRailVisible = false
-    state.bottomPanelVisible = false
+    // 进入专注：记住既有现场（全部可收纳项），再逐项切到「纯对话」形态
+    focusSaved = new Map(FOCUS_PANELS.map(p => [p.key, p.get()]))
+    for (const p of FOCUS_PANELS) p.set(p.fold)
   } else {
-    // 退出专注：还原进入前的显隐选择
-    state.sidebarVisible = sidebarBeforeFocus
-    state.convListVisible = convListBeforeFocus
-    state.statsRailVisible = statsRailBeforeFocus
-    state.bottomPanelVisible = bottomPanelBeforeFocus
+    // 退出专注：还原进入前的现场（含专注态内用户最近选择 —— 见 syncFocusTarget）
+    if (focusSaved) {
+      for (const p of FOCUS_PANELS) {
+        if (focusSaved.has(p.key)) p.set(focusSaved.get(p.key))
+      }
+    }
+    focusSaved = null
   }
   state.focusMode = next
 }

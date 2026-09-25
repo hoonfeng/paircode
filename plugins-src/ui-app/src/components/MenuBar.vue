@@ -117,7 +117,13 @@ const execItem = async (item) => {
   if (a === 'view-git') { setFocusMode(false); state.activeActivity = 'source'; state.sidebarVisible = true; return }
   if (a === 'toggle-sidebar') { layout.toggleSidebar(); return }
   if (a === 'toggle-terminal') { layout.toggleBottomPanel(); state.bottomPanelTab = 'terminal'; return }
-  if (a === 'toggle-right') { state.rightPanelVisible = !state.rightPanelVisible; return }
+  if (a === 'toggle-right') {
+    // ★ 对话面板显隐统一走 layout 服务（本文件 35 行 import { layout }；专注态内切换会
+    //   同步「退出专注」还原目标）。判空 + fallback = 防新旧版本错配（同 app-actions 模式）。
+    if (typeof layout.toggleRightPanel === 'function') layout.toggleRightPanel()
+    else state.rightPanelVisible = !state.rightPanelVisible
+    return
+  }
   if (a === 'focus-mode') {
     // ★ 专注模式唯一入口：隐藏编辑器 + 收起左栏/会话列表/右栏统计/底栏（见 ui-state.js setFocusMode）
     setFocusMode(!state.focusMode)
@@ -225,7 +231,11 @@ const execItem = async (item) => {
   }
 
   // ── 搜索 ──
-  if (a === 'find-chat') { state.rightPanelVisible = true; return }
+  if (a === 'find-chat') {
+    if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+    else state.rightPanelVisible = true
+    return
+  }
   if (a === 'global-search') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
   if (a === 'find-file') { setFocusMode(false); state.activeActivity = 'search'; state.sidebarVisible = true; return }
 

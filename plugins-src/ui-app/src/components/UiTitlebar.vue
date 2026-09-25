@@ -153,7 +153,7 @@ async function newConversation() {
 function openSettings() { showSettings.value = true }
 function showHelp() {
   window.$alert &&
-    window.$alert('命令面板 Ctrl+K · 专注模式 Ctrl+Shift+L · 设置 Ctrl+, · 会话列表 Ctrl+Shift+C', '快捷键')
+    window.$alert('专注模式 Ctrl+K · 会话列表 Ctrl+Shift+L · 对话面板 Ctrl+Shift+C · 设置 Ctrl+,', '快捷键')
 }
 
 // ★ 2026-09-25（用户纠正）：接回 titlebar-right 槽位宿主。

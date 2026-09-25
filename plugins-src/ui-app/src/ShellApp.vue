@@ -135,7 +135,7 @@
 import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue'
 import { useSingleSlot, boot, startPolling, stopPolling, loadAssemblyFile,
          setViewMount, isViewOpen, getUIFor } from './plugin-runtime.js'
-import { state, sidebarWidth, layout } from './ui-state.js'
+import { state, sidebarWidth, layout, syncFocusTarget } from './ui-state.js'
 import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab, closeToolsetsTab } from './app-actions.js'
 import PluginPanel from './components/PluginPanel.vue'
 import ToolsetPanel from './components/ToolsetPanel.vue'
@@ -180,14 +180,14 @@ const hostMainChildren = {
   //     对应壳级子槽，并在本表联动。）
 }
 
-// ─── ★ 薄壳几何：activitybar | sidebar | main（主视图 tab 区，无独立 editor 列）───
-// grid 列：activitybar(48) | sidebar | main(minmax(0, 1fr)) —— 三列，见下方 gridStyle
+// ─── ★ 薄壳几何：activitybar | sidebar | main（主视图 tab 区）| rail（右栏）───
+// grid 列：activitybar(48) | sidebar | main(minmax(0, 1fr)) | rail(288) —— 四列，见下方 gridStyle
 // · sidebar 列宽：折叠（state.sidebarVisible=false）→ 0px；否则 sidebarWidth（默认 280）
-//   ★ 专注模式不进列宽公式：Ctrl+K 由 ui-state.setFocusMode 直接收起 sidebarVisible /
-//     convListVisible（退出还原用户原值），故此处只认可见性标志。
-//   ★ 编辑器折叠=列宽收缩（CSS），宿主 DOM 不卸载（CM6/终端 WS 保持挂载）。
-// ★ 主视图 tab（对话 ⇄ 编辑器 ⇄ 市场）：state.panels.mainTab 是单一事实源。
-//   三者常驻挂载（模板 v-show 切换），互不影响。
+//   ★ 专注模式不进列宽公式：Ctrl+K 由 ui-state.setFocusMode 按 FOCUS_PANELS 登记表
+//     直接收起 sidebarVisible / statsRailVisible 等（退出还原用户原值），故此处只认可见性标志。
+//   ★ 编辑器不再独立列：在 main 区内与对话 tab 切换（v-show，宿主 DOM 不卸载）。
+// ★ 主视图 tab（对话 ⇄ 编辑器 ⇄ 市场 ⇄ 工具集 ⇄ 插件视图）：state.panels.mainTab 是单一事实源。
+//   各视图常驻挂载（模板 v-show 切换），互不影响。
 const mainView = computed(() => state.panels.mainTab)
 
 // ── ★ 市场面板（主区 tab）动态挂载：marketplace 插件 bundle → window.MarketplacePanel ──
@@ -272,6 +272,9 @@ function refreshViews(list) {
   // 兜底：正激活的视图 tab 消失（插件被卸载）→ 回对话主视图
   if (String(mainView.value).startsWith('view:') && !live.has(mainView.value)) {
     state.panels.mainTab = 'conversation'
+    // ★ 专注态内同步「退出专注」还原目标：避免退出时还原到已卸载视图（空白）。
+    //   syncFocusTarget 由 ui-state.js 导出（非专注态为无操作）。
+    syncFocusTarget('panels.mainTab')
   }
 }
 
@@ -331,6 +334,12 @@ watch(mainView, (v) => {
 
 const gridStyle = computed(() => {
   if (panelMode) return { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }
+  // ★★★ 网格登记规则（新增网格列/常驻区域必须执行，2026-09-25 起）★★★
+  //   1. 在 ui-state.js 的 FOCUS_PANELS 登记一行（fold = 专注态取值）——
+  //      专注模式（Ctrl+K）的收起/还原由该表驱动，不登记 = 专注不收；
+  //   2. 在本 computed 中登记列宽公式（可见性开关 → '0px'）；
+  //   3. 跑收纳探针：node scripts/source-update/focus-probe.mjs（更新流程部署后自动跑，告警不阻断）。
+  //   背景：右栏 StatsRail（v1.6.7 引入）曾未登记专注收纳（4fa3e367 修复）。
   // · sidebar 列宽：折叠（sidebarVisible=false）→ 0；否则 sidebarWidth（280）
   // · main 列（col 3）：对话/编辑器 tab 区，占主导（无独立 editor 列）。
   //   ★ 编辑器不再是独立 details 列，而是 main 区内与对话 tab 切换（见 main-area）。

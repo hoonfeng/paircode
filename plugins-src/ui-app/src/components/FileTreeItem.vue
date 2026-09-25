@@ -333,7 +333,10 @@ function sendAICmd(cmd) {
   window.dispatchEvent(new CustomEvent('add-to-chat', {
     detail: { content: cmd, type: 'command' }
   }))
-  state.rightPanelVisible = true
+  // ★ 对话面板显隐统一走 layout 服务（本文件 40 行 import { layout }）；
+  //   判空 + fallback = 防新旧版本错配（同 app-actions 模式）。
+  if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+  else state.rightPanelVisible = true
 }
 
 // ── 新建文件 ──
@@ -493,7 +496,8 @@ async function addToChat(path, name, isDir) {
       detail: { type: 'file', path, filename: name }
     }))
   }
-  state.rightPanelVisible = true
+  if (typeof layout.showRightPanel === 'function') layout.showRightPanel()
+  else state.rightPanelVisible = true
 }
 
 // ── 刷新子节点 ──
