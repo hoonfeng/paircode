@@ -92,6 +92,11 @@ var toolPluginModes = map[string]string{
 	//   glTF 2.0 导出（z-up→y-up 转换）、WebGL 预览（预览 HTML 内联渲染器）与 9 项判据
 	//   均为自研，零 npm 依赖，不经 ctx.hostTool / ctx.binary。
 	"tool-model": "native",
+	// ★ 2026-09-26 本机通用插件打包器（tool-packager）：mixed = 打包主流程经
+	//   ctx.binary.exec 调用插件自带 exe（bin/tool-packager.exe，stdin/stdout 一行 JSON），
+	//   其余（说明生成/回验/zip 组装）走 ctx.fs 原生——exe 为本插件自带、非内嵌内核，
+	//   工具名在 toolHarnessAliases 声明跳过内嵌断言。
+	"tool-packager": "mixed",
 }
 
 // toolHarnessAliases 混合型插件的 JS 原生实现工具（不在内嵌内核，断言跳过）：
@@ -104,6 +109,7 @@ var toolPluginModes = map[string]string{
 var toolHarnessAliases = map[string]bool{
 	"read": true, "write": true, "apply_patch": true, "glob": true, "grep": true,
 	"web_fetch": true, "web_search": true,
+	"pack_plugin": true, // tool-packager：打包 exe 为插件自带（非内嵌内核），断言跳过
 	// ★ 2026-09-12 并入声明：tool-vision→tool-web（read_image JS 原生）；
 	// screenshot 三合一（调度直通内核原名 screenshot_desktop/window/area）
 	// ★ 2026-09-21：文件快照能力移除，list/restore_snapshot 别名声明同步删除。
