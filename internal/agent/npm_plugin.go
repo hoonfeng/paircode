@@ -27,22 +27,73 @@ import (
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
-// npmOfficialRegistry npm 官方源（仅用于「tarball 域名对齐」判断，不作默认源）。
+// ★ 2026-09-26 插件源配置化：内核不再写死插件分发源（原 npmMirrorRegistry 常量已删除）。
+//   源地址由配置层提供——marketplace 磁盘插件经 ctx.registerSettings 注册「插件市场」段
+//   （useMirror / registry / mirror），用户在设置面板切换源仓库与镜像源；内核只消费配置，
+//   任何默认地址都不出现在 Go 代码里。
+
+// npmOfficialRegistry npm 官方源——仅用于「tarball 域名对齐」判断（非默认源；
+// 默认源完全来自配置层，见 npmRegistryBase）。
 const npmOfficialRegistry = "https://registry.npmjs.org"
 
-// npmMirrorRegistry 默认 registry = npmmirror 镜像。
-// ★ 2026-09-25：此前默认官方源，国内直连极慢（实测 5.78MB 包 ≈3KB/s，
-// 90s 只下 274KB，市场「安装」在前端 30s 超时内必然失败）；镜像同包 1.6s 下完。
-const npmMirrorRegistry = "https://registry.npmmirror.com"
+// marketSettingsKey 插件源配置段命名空间（marketplace 插件注册该段；
+// 内核不定义默认地址——默认值随插件 schema 一起下发）。
+const marketSettingsKey = "marketplace"
 
-// npmRegistryBase npm registry 地址（测试可替换为 httptest server；
-// 运行时可用环境变量 PAIRCODE_NPM_REGISTRY 覆盖——本地市场/私有 registry）。
-var npmRegistryBase = func() string {
-	if v := os.Getenv("PAIRCODE_NPM_REGISTRY"); v != "" {
+// npmRegistryBaseOverride 显式注入的 registry（测试 httptest server / 私有源；
+// 非空时优先于配置与环境变量）。
+var npmRegistryBaseOverride string
+
+// npmRegistryBase 返回当前插件分发源地址（每次调用重新计算 → 保存设置后立即生效）。
+//
+// 优先级：显式注入 > 环境变量 PAIRCODE_NPM_REGISTRY > 插件市场配置段
+// （useMirror ? mirror : registry，所选为空则回退另一项）> ""（调用方提示去设置里配）。
+func npmRegistryBase() string {
+	if v := strings.TrimSpace(npmRegistryBaseOverride); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return npmMirrorRegistry
-}()
+	if v := strings.TrimSpace(os.Getenv("PAIRCODE_NPM_REGISTRY")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	cfg := core.PluginSettingDefaults(marketSettingsKey) // 默认值来自插件注册的 schema
+	for k, v := range core.Settings.PluginSettingValue(marketSettingsKey) {
+		cfg[k] = v // 用户配置覆盖默认
+	}
+	mirror := npmSettingURL(cfg, "mirror")
+	official := npmSettingURL(cfg, "registry")
+	if npmSettingBool(cfg, "useMirror", true) {
+		if mirror != "" {
+			return mirror
+		}
+		return official
+	}
+	if official != "" {
+		return official
+	}
+	return mirror
+}
+
+// npmSettingURL 读配置段里的 URL 字段（去空白、去尾斜杠）。
+func npmSettingURL(cfg map[string]any, key string) string {
+	v, _ := cfg[key].(string)
+	return strings.TrimRight(strings.TrimSpace(v), "/")
+}
+
+// npmSettingBool 读配置段里的布尔字段（兼容字符串形式 true/1/on/yes）。
+func npmSettingBool(cfg map[string]any, key string, def bool) bool {
+	v, ok := cfg[key]
+	if !ok || v == nil {
+		return def
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		return s == "true" || s == "1" || s == "on" || s == "yes"
+	}
+	return def
+}
 
 // npmFetchTimeout npm 拉取超时（下载 tarball 可能较慢：冷门包经镜像回源仍然慢，
 // 大包如 @paircode/tool-model 体积数 MB）。★ 2026-09-25：120s → 300s，
@@ -66,11 +117,12 @@ var npmHTTPClient = &http.Client{
 // 直接下载会静默退回慢源 —— 统一把 registry.npmjs.org 前缀改写成当前 base。
 // （当前 base 就是官方源、或本就是当前 base 的地址 → 原样返回。）
 func npmMirrorTarball(tarball string) string {
-	if tarball == "" || npmRegistryBase == npmOfficialRegistry {
+	base := npmRegistryBase()
+	if tarball == "" || base == "" || base == npmOfficialRegistry {
 		return tarball
 	}
 	if strings.HasPrefix(tarball, npmOfficialRegistry+"/") {
-		return npmRegistryBase + strings.TrimPrefix(tarball, npmOfficialRegistry)
+		return base + strings.TrimPrefix(tarball, npmOfficialRegistry)
 	}
 	return tarball
 }
@@ -119,7 +171,11 @@ func fetchNPMInfo(pkg string) (*npmPackageInfo, error) {
 // 只有"确定不存在"才判为非 npm 来源，并可安全负缓存。
 // ★ 2026-09-19 新增（市场更新提示：手动放置/复制的官方插件包没有安装元数据）。
 func fetchNPMInfoChecked(pkg string) (*npmPackageInfo, bool, error) {
-	url := npmRegistryBase + "/" + strings.ReplaceAll(pkg, "/", "%2F") + "/latest"
+	base := npmRegistryBase()
+	if base == "" {
+		return nil, false, fmt.Errorf("插件源未配置：请在「设置 → 插件市场」填写源仓库或镜像源")
+	}
+	url := base + "/" + strings.ReplaceAll(pkg, "/", "%2F") + "/latest"
 	resp, err := npmHTTPGet(url)
 	if err != nil {
 		return nil, false, fmt.Errorf("查询 npm %s 失败: %v", pkg, err)

@@ -420,8 +420,6 @@ export const layout = {
 //   ★★★ 登记规则（新增常驻面板/区域必须执行）★★★
 //     1. 在本表登记一行（fold = 专注态取值）；
 //     2. 若占用网格列，同步 ShellApp.vue 的 gridStyle 列宽公式；
-//     3. 跑收纳探针：node scripts/source-update/focus-probe.mjs（更新流程部署后自动跑，
-//        发现「未收纳的新区域」会告警 —— 这就是「以后新增组件被自动发现」的保障）。
 const FOCUS_PANELS = [
   { key: 'sidebarVisible',     label: '左栏（文件/搜索/Git）', get: () => state.sidebarVisible,     set: v => { state.sidebarVisible = v },     fold: false },
   { key: 'convListVisible',    label: '会话列表面板',          get: () => state.convListVisible,    set: v => { state.convListVisible = v },    fold: false },

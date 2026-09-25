@@ -1,9 +1,0 @@
-{
-  "name": "source-update",
-  "purpose": "源码仓库更新检查与一键更新（上游 tag 比对 -> 弹窗提示 -> 全自动合并/构建/成对部署）",
-  "version": "0.1.0",
-  "scope": "global",
-  "type": "plugin",
-  "main": "index.js",
-  "client": "client.js"
-}

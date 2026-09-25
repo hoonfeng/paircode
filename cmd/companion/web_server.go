@@ -824,12 +824,33 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		//   · settings 对象：AppSettings 顶层字段（配置插件 binding 字段收集），
 		//     展开进 rawMap 参与下方反射增量 merge（类型精度保留）
 		//   · pluginSettings 对象：插件命名空间值（ctx.setSettings 写入），整体合并
+		//   ★ 2026-09-25 修复：settings 段内可能**也带** pluginSettings（前端设置面板的
+		//     base 快照 = GET /api/settings 的完整 settings，内含 pluginSettings 旧值）。
+		//     此前展开 settings 时无条件写入 rawMap["pluginSettings"]，把请求体**顶层**的
+		//     pluginSettings（本次真正的新值）覆盖成旧快照 → 插件设置永远保存不上（用户在
+		//     设置面板打开某插件开关点保存，settings.json 里始终不出现该插件段）。
+		//     实测：{settings:{pluginSettings:{probeA}},pluginSettings:{probeB}} 落盘只剩 probeA。
+		//     现改为：settings 内的 pluginSettings 只作**低优先级段合并源**暂存，顶层
+		//     pluginSettings 随后合并（新值胜出）；两边都未出现的段不受影响（不清段）。
+		var settingsPS map[string]map[string]any
 		if sRaw, ok := rawMap["settings"]; ok {
 			var sMap map[string]json.RawMessage
 			if err := json.Unmarshal(sRaw, &sMap); err == nil {
 				for k, v := range sMap {
+					if k == "pluginSettings" {
+						_ = json.Unmarshal(v, &settingsPS)
+						continue
+					}
 					rawMap[k] = v
 				}
+			}
+		}
+		if len(settingsPS) > 0 {
+			if core.Settings.PluginSettings == nil {
+				core.Settings.PluginSettings = map[string]map[string]any{}
+			}
+			for k, v := range settingsPS {
+				core.Settings.PluginSettings[k] = v
 			}
 		}
 		if psRaw, ok := rawMap["pluginSettings"]; ok {

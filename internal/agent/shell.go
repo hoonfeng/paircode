@@ -523,7 +523,7 @@ func killProcessTree(pid int) {
 
 // KillAllBackgroundProcesses 终止全部后台进程（宿主退出清理；cmd/companion/main.go
 // 退出钩子调用）。覆盖所有经 runBackground / exec_command 启动的进程——agent 的
-// dev server、插件后台进程（如微信桥 wxbridge.exe）等，堵住「子进程孤儿化残留」缺口。
+// dev server、插件后台进程等，堵住「子进程孤儿化残留」缺口。
 // 幂等：无进程时无副作用；已结束的进程跳过（不做 PID 复用误杀）。
 func KillAllBackgroundProcesses() {
 	globalBG.mu.Lock()

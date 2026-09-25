@@ -1,9 +1,0 @@
-{
-  "name": "wechat-bridge",
-  "purpose": "微信 ClawBot 桥：手机微信 ⇄ PairCode 双向（多账号/媒体/主动发送）",
-  "scope": "global",
-  "type": "plugin",
-  "version": "1.0.0",
-  "main": "index.js",
-  "client": "client.js"
-}

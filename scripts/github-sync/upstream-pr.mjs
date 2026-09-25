@@ -19,8 +19,6 @@
 //   - --dry-run 模式不执行任何写操作：commit / push / POST 创建全部跳过；
 //     仅保留只读操作（本地 git status/log/rev-parse 与 GitHub GET 查询）
 //   - 全部文件为 UTF-8；token 只从本地文件或环境变量读取，任何情况下不打印 token 值
-//   - 本机定制排除：.pair/plugins/source-update 与 scripts/source-update（源码更新机制）
-//     属本机专属，提交前自动从暂存区撤出，不随 PR 外发（见 PR_EXCLUDES）
 //   - 错误处理：git 失败、网络失败、缺 token、origin 配置错误均给出明确提示并以非零码退出
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,8 +35,9 @@ const FORK_REPO = 'xh290/paircode';   // 源仓库（fork）全名
 const BRANCH = 'master';
 
 // 本机定制（不上行）：提交前从暂存区撤出，避免随 PR 外发。
-// 说明见技能 paircode-source-update：该更新机制与插件仅适用于本机环境。
-const PR_EXCLUDES = ['.pair/plugins/source-update', 'scripts/source-update'];
+// ★ 2026-09-26：原 source-update 源码更新机制（插件 + scripts/source-update/）已随仓库移除，
+//   当前无本机定制排除项；保留该机制供后续本机专属改动使用。
+const PR_EXCLUDES = [];
 
 // ── 参数解析（argv 数组，无 shell 参与）──
 const argv = process.argv.slice(2);

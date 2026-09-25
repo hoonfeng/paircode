@@ -48,9 +48,9 @@ export default function (ctx) {
 	defer srv.Close()
 	gotTarballPath = srv.URL + "/demo-npm-plugin/-/demo-npm-plugin-1.2.3.tgz"
 
-	oldBase := npmRegistryBase
-	npmRegistryBase = srv.URL
-	defer func() { npmRegistryBase = oldBase }()
+	oldBase := npmRegistryBaseOverride
+	npmRegistryBaseOverride = srv.URL
+	defer func() { npmRegistryBaseOverride = oldBase }()
 
 	// 全链路：info → tarball → main
 	info, err := fetchNPMInfo("demo-npm-plugin")

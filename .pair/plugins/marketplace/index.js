@@ -23,19 +23,58 @@ return {
   apply(ctx) {
     const log = (msg) => { if (ctx.logger) ctx.logger('marketplace').log(msg) }
 
-    // ── 搜索实现（ctx.web.fetch，同步返回 {ok, status, text}）──
-    // registry 可覆盖（本地市场/私有 registry 测试）：PAIRCODE_NPM_REGISTRY=http://127.0.0.1:4873
-    // ★ 2026-09-25：默认源改 npmmirror 镜像（与内核 npm_plugin.go 的 npmMirrorRegistry 对齐）。
-    //   官方源在国内直连极慢（搜索请求经常 >30s 无响应 → 市场面板空列表/超时）。
-    const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmmirror.com'
-    const NPM_SEARCH = REG + '/-/v1/search?text='
+    // ── 插件源（★ 2026-09-26 配置化：源仓库与镜像源都在「设置 → 插件市场」切换）──
+    // 内核（Go npm_plugin.go）已不再写死任何源地址，只消费同一配置段；
+    // 优先级两边一致：环境变量 PAIRCODE_NPM_REGISTRY（测试/私有源）> 配置
+    // （useMirror ? mirror : registry，所选项为空则回退另一项）。
+    // 默认值由本插件注册的 schema 下发（见文件末尾 registerSettings）。
+    const SRC_DEFAULTS = {
+      useMirror: true,
+      registry: 'https://registry.npmjs.org',
+      mirror: 'https://registry.npmmirror.com',
+    }
+    const trimSlash = (s) => String(s || '').trim().replace(/\/+$/, '')
+    const srcCfg = () => {
+      let raw = {}
+      try { raw = (ctx.getSettings && ctx.getSettings('marketplace')) || {} } catch (e) { raw = {} }
+      return Object.assign({}, SRC_DEFAULTS, raw)
+    }
+    // registryBase 当前插件源地址（每次调用重新计算 → 改设置立即生效，无需重启）
+    const registryBase = () => {
+      const env = trimSlash(process.env.PAIRCODE_NPM_REGISTRY)
+      if (env) return env
+      const c = srcCfg()
+      const mirror = trimSlash(c.mirror)
+      const official = trimSlash(c.registry)
+      const useMirror = c.useMirror === true || c.useMirror === 'true' || c.useMirror === 1 || c.useMirror === '1'
+      return useMirror ? (mirror || official) : (official || mirror)
+    }
+    const npmSearchURL = () => registryBase() + '/-/v1/search?text='
     const MAX = 20
     const shortName = (n) => { const p = String(n).split('/'); return p.length > 1 ? p[1] : p[0] }
 
+    // 源请求失败记录（★ 源可配置后「地址配错」属常见场景）：ctx.web.fetch 抛错而非返回
+    // 失败对象，统一经 safeFetch 包装成 null，避免异常直抛接口（原表现为接口 500 + 堆栈外泄），
+    // 并记录原因供 search 接口/工具给出可诊断提示。
+    let srcFailures = []
+    const safeFetch = (url) => {
+      try {
+        const r = ctx.web.fetch(url)
+        if (!r || !r.ok) {
+          srcFailures.push('HTTP ' + ((r && r.status) || '无响应') + ' ← ' + url)
+          return null
+        }
+        return r
+      } catch (e) {
+        srcFailures.push(String((e && e.message) || e).split('\n')[0] + ' ← ' + url)
+        return null
+      }
+    }
+
     // npm registry 搜索 MCP 服务器（npx 启动）
     function searchNpmMCP(query) {
-      const r = ctx.web.fetch(NPM_SEARCH + encodeURIComponent(query) + '&size=' + MAX)
-      if (!r || !r.ok) return []
+      const r = safeFetch(npmSearchURL() + encodeURIComponent(query) + '&size=' + MAX)
+      if (!r) return []
       let data = {}
       try { data = JSON.parse(r.text || '{}') } catch (e) { return [] }
       const out = []
@@ -58,8 +97,8 @@ return {
 
     // GitHub 仓库搜索 → skill 条目（按 stars 排序）
     function searchGitHubSkills(query) {
-      const r = ctx.web.fetch('https://api.github.com/search/repositories?q=' + encodeURIComponent(query) + '&sort=stars&per_page=' + MAX)
-      if (!r || !r.ok) return []
+      const r = safeFetch('https://api.github.com/search/repositories?q=' + encodeURIComponent(query) + '&sort=stars&per_page=' + MAX)
+      if (!r) return []
       let data = {}
       try { data = JSON.parse(r.text || '{}') } catch (e) { return [] }
       const out = []
@@ -84,8 +123,8 @@ return {
     function searchNpmPlugins(query) {
       const q0 = String(query || '').trim()
       const fetchNpm = (text, size = MAX) => {
-        const r = ctx.web.fetch(NPM_SEARCH + encodeURIComponent(text) + '&size=' + size)
-        if (!r || !r.ok) return []
+        const r = safeFetch(npmSearchURL() + encodeURIComponent(text) + '&size=' + size)
+        if (!r) return []
         try { return JSON.parse(r.text || '{}').objects || [] } catch (e) { return [] }
       }
       const norm = (s) => String(s || '').toLowerCase()
@@ -140,6 +179,7 @@ return {
     function searchAll(query, kind) {
       const q = String(query || '').trim()
       if (!q) return []
+      srcFailures = []
       const isAll = !kind || kind === 'all'
       const tasks = []
       if (isAll || kind === 'mcp') tasks.push(['mcp', searchNpmMCP])
@@ -291,6 +331,10 @@ return {
       const query = qp(req, 'q') || qp(req, 'query')
       const kind = qp(req, 'kind') || '' // 空=全部市场
       const results = searchAll(query, kind)
+      // 源不可达/被拒 → 明确提示（不再表现为「空列表」让人误以为没有该插件）
+      if (results.length === 0 && srcFailures.length > 0) {
+        return err('市场源请求失败：' + srcFailures[0] + '（可在「设置 → 插件市场」切换源仓库/镜像源）')
+      }
       return ok(results.map(e => ({ ...e, installed: isInstalled(e) })))
     })
 
@@ -360,6 +404,35 @@ return {
     ctx.market.register({ kind: 'plugin', source: 'npm-paircode', name: '插件', desc: 'npm PairCode 插件（自己的生态，借 npm 分发）：goja 沙箱或 Node 运行时桥安装' })
     ctx.market.register({ kind: 'skill', source: 'github', name: '技能', desc: 'GitHub 仓库搜索 → 技能条目（安装到工作区 .pair/skills）' })
 
+    // ── 插件源配置段（★ 2026-09-26）：设置面板自动渲染，值落 settings.json 的
+    //    pluginSettings['marketplace']；内核 npm_plugin.go 读同一段决定装包源。
+    //    默认值随 schema 下发 → 内核零硬编码源地址。
+    if (ctx.registerSettings) {
+      try {
+        ctx.registerSettings({
+          key: 'marketplace',
+          title: '插件市场',
+          fields: [
+            {
+              name: 'useMirror', label: '使用镜像源', type: 'checkbox',
+              default: SRC_DEFAULTS.useMirror,
+              hint: '国内网络建议开启（镜像加速）；关闭则直连源仓库（官方 npm registry）',
+            },
+            {
+              name: 'registry', label: '源仓库', type: 'text',
+              default: SRC_DEFAULTS.registry, placeholder: SRC_DEFAULTS.registry,
+              hint: '插件分发源仓库（官方 npm registry）；关闭镜像源时使用',
+            },
+            {
+              name: 'mirror', label: '镜像源', type: 'text',
+              default: SRC_DEFAULTS.mirror, placeholder: SRC_DEFAULTS.mirror,
+              hint: '镜像加速地址（开启「使用镜像源」时生效）',
+            },
+          ],
+        })
+      } catch (e) { log('插件源配置段注册失败: ' + e) }
+    }
+
     // ── agent 工具（LLM 可用，替代 Go 内置 marketplace_search/install）──
     const mObjSchema = (props, required) => ({ type: 'object', properties: props, required: Array.isArray(required) ? required : [required] })
     const mStrProp = (desc) => ({ type: 'string', description: desc })
@@ -375,6 +448,7 @@ return {
         const results = searchAll(query, kind)
         if (results.length === 0) {
           if (!query) return '市场无预设数据——请提供搜索关键词（如「github」）实时检索 npm/GitHub。'
+          if (srcFailures.length > 0) return '市场源请求失败：' + srcFailures[0] + '（可在「设置 → 插件市场」切换源仓库/镜像源）'
           return '未找到匹配的市场条目（远程实时搜索）。用 marketplace_install <id> 安装。'
         }
         let b = ''

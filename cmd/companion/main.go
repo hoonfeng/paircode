@@ -79,9 +79,8 @@ func main() {
 	// ★ 2026-09-15：退出信号钩子——Ctrl+C / SIGTERM 时清理 MCP 连接池中的子进程，
 	//   避免 MCP 服务器进程孤儿化残留。
 	// ★ 2026-09-16：追加 KillAllBackgroundProcesses——终止全部后台进程
-	//   （run_background/exec_command 启动的 dev server、插件后台进程如
-	//   微信桥 wxbridge.exe），堵住「子进程孤儿残留」同类缺口；与插件的
-	//   stdin-EOF 自守护（如微信桥）形成双保险。
+	//   （run_background/exec_command 启动的 dev server、插件后台进程等），
+	//   堵住「子进程孤儿残留」同类缺口；与插件的 stdin-EOF 自守护形成双保险。
 	//   注意：Windows 强杀（任务管理器终止进程）不触发任何清理（OS 限制），
 	//   由空闲回收兜底（PAIR_MCP_IDLE_TTL_SEC，默认 10 分钟）。
 	sigCh := make(chan os.Signal, 1)
