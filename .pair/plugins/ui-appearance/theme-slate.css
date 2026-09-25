@@ -1,0 +1,67 @@
+/*! ui-appearance · theme-slate —— Slate 石板（亮）
+ *
+ * 由 plugins-src/ui-app/index.html 迁移而来（P2：主题 CSS 插件化）。
+ * 令牌真相源：design/ui-theme.tokens.json
+ * 注入方式：client.js 按当前主题插入 <link href="/plugins-assets/ui-appearance/theme-slate.css">
+ *
+ * ★ 选择器不含 :root —— 基准令牌兜底由壳 index.html 的 :root 块承担（插件未装配时不裸奔）。
+ * ★ 别名选择器（）保留，兼容旧主题 id。
+ */
+.theme-slate {
+      color-scheme: light;
+      --color-canvas: #e4e7ec;
+      --color-bg: #EEF1F6;
+      --color-surface: #FFFFFF;
+      --color-surface-2: #E9EEF5;
+      --color-surface-3: #e2e7ee;
+      --color-border: #D2DAE6;
+      --color-border-subtle: #dfe4ed;
+      --color-border-strong: #bcc4d0;
+      --color-input-border: #989FA9;
+      --color-fg: #182231;
+      --color-muted: #566378;
+      --color-subtle: #5b687c;
+      --color-accent: #3B45C9;
+      --color-accent-fg: #FFFFFF;
+      --color-accent-soft: rgba(59,69,201,0.12);
+      --color-accent-bg: rgba(59,69,201,0.08);
+      --color-accent-ring: rgba(59,69,201,0.25);
+      --color-success: #0F7A4A;
+      --color-warning: #8A5A00;
+      --color-danger: #C42B2B;
+      --color-info: #3B45C9;
+      --color-success-bg: rgba(15,122,74,0.10);
+      --color-warning-bg: rgba(138,90,0,0.10);
+      --color-danger-bg: rgba(196,43,43,0.10);
+      --color-info-bg: rgba(59,69,201,0.10);
+      --color-glass: #f2f5f9;
+      --color-glass-alpha: rgba(242,245,249,0.72);
+      --color-scrim: rgba(12,16,24,0.32);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.07);
+      --shadow-md: 0 4px 14px rgba(0,0,0,0.10);
+      --shadow-lg: 0 10px 34px rgba(0,0,0,0.14);
+      --shadow-xl: 0 20px 60px rgba(0,0,0,0.18);
+      --color-cat-blue: #1B5FD9;
+      --color-cat-blue-bg: rgba(27,95,217,0.12);
+      --color-cat-teal: #0A6E7A;
+      --color-cat-teal-bg: rgba(10,110,122,0.12);
+      --color-cat-amber: #8A5A00;
+      --color-cat-amber-bg: rgba(138,90,0,0.12);
+      --color-cat-purple: #6B3FA0;
+      --color-cat-purple-bg: rgba(107,63,160,0.12);
+      --color-cat-green: #186418;
+      --color-cat-green-bg: rgba(24,100,24,0.12);
+      /* ── 语法高亮 · 亮档（CodeEditor / Markdown / mermaid 共用）── */
+      --syn-keyword: #CF222E;   /* 关键字 / 修饰符 / 操作符 */
+      --syn-type: #953800;      /* 类型 / 类名 / 命名空间 */
+      --syn-function: #7038C4;  /* 函数 / 方法 / 标签 */
+      --syn-property: #0550AE;  /* 属性 / 特性名 */
+      --syn-constant: #0A3069;  /* 数字 / 布尔 / 常量 */
+      --syn-string: #116329;    /* 字符串 / 正则 / 属性值 */
+      --syn-variable: #24292F;  /* 变量名 */
+      --syn-comment: #5E6671;   /* 注释 / 元信息 */
+      --syn-invalid: #D1242F;   /* 非法 / 语法错误 */
+      --syn-bracket: #24292F;   /* 括号 / 分隔符 */
+      --syn-link: #0969DA;      /* 链接 / URL */
+      --syn-heading: #0550AE;   /* 标题 / 强调 */
+}

@@ -4,6 +4,292 @@
 
 ---
 
+## 1.6.9 — 2026-09-25
+
+> 本版聚焦**界面信息完整性**与**文档同实现对账**：右栏「上下文构成」补齐此前被折叠
+> 隐藏的「技能」与「MCP」两项（后端本就分别统计并下发，前端却把三项合并成一段，
+> 实测两项占用显著非零）；帮助文档六篇按当前实现逐项重新核对改写；同时修复 npm
+> 插件发布链的两处偏差（发布包缺主题 CSS、12 个区域包线上产物陈旧）。
+
+### 修复 / 改进
+
+- **右栏「上下文构成」补全技能与 MCP** —— 卡片此前只显示四段（提示词 / 历史 / 工具 /
+  其他），其中「提示词」= `systemTokens + skillsTokens + mcpTokens` 三项之和，导致**技能与
+  MCP 的占用在界面上完全不可见**。后端 `PromptBreakdown` 本就六项独立统计（技能段由
+  system prompt 的「# 可用技能」标记切分，MCP 段按工具名 `mcp_` 前缀区分），
+  `GET /api/conversations/{id}/token-stats` 也一直下发 `skillsTokens` / `mcpTokens`，
+  属纯前端展示折叠。实测本机工作区累计 `skillsTokens=7,091,325`、`mcpTokens=3,817,512`，
+  折叠确有信息损失。现拆为**六分项独立展示**：分段条六段（系统提示 / 技能 / MCP /
+  历史 / 工具 / 其他），明细为固定 3 列 × 2 行网格（每项独占一格、`nowrap`，
+  数值变长不会把某项挤成单独一行），悬停任意段显示该项名称与 token 数。
+  配色改用真实设计令牌（`--color-accent` / `--color-cat-purple` / `--color-cat-teal` /
+  `--color-success` / `--color-warning` / `--bg-active`）—— 原实现用的
+  `var(--success, #4FD8A4)` 与 `var(--warning, #F0C158)` 两个变量**在主题令牌里并未定义**，
+  实际一直取硬编码兜底值，亮色主题下不随主题变化。
+
+### 文档
+
+- **帮助文档全面重写（六篇）** —— 旧文档多处与实现不符：主题写「四套」而实际为八套；
+  快捷键列了 `Ctrl+P`（按文件名打开）、`Ctrl+W`（关闭标签）、`Ctrl+Tab`、终端
+  `Ctrl+Shift+\``、文件树 `F2` 等**已不存在或从未绑定**的键位，却漏掉实际存在的
+  `Ctrl+Shift+L`（会话列表 / Token 统计栏）与编辑器中文搜索面板（`Ctrl+F` / `Ctrl+H`）；
+  工具文档缺整个创作域（美术 / 设计 / 建模 / 音乐 / 角色 / 人声六域的工具族与工程文件）；
+  API 文档仍列着已于 2026-08-31 随 plan 体系移除的 `/api/taskplan`、已不存在的
+  `/api/git-log` 别名与 `/api/tools/save`，同时缺 12 个现行端点（`/api/ai-presets`、
+  `/api/commands`、`/api/plugins/*`、`/api/toolsets/active|edit`、`/api/ui-*`、
+  `/api/update/*`）。本次按源码与运行实例逐项核对后改写：快捷键以键位处理代码为准，
+  设置分组取自插件注册真值（九组），活动栏与主题数量取自实际定义，语法高亮按
+  `getLang` 映射表如实分三档说明，API 端点经「文档 × 真实路由」双向差集校正。
+  「快速开始」还补上了右栏四卡说明与 `/` 命令表；「常见问题」修正了「刷新后自动重开
+  打开的文件」这一错误描述（`openFiles` 并不持久化）。
+
+### 发布链修复
+
+- **发布包补回主题 CSS、清除快照残留**（`363641dc`）—— 15 个插件包的发布快照此前缺少
+  `theme-*.css`（主题 CSS 插件化后新增的文件未进白名单），线上安装后主题样式缺失。
+- **重发 12 个线上陈旧区域包**（`1568d8d0`）—— `ui-*` / `tool-*` 的线上产物停留在
+  2026-09-16 / 09-18 构建：构建配置（`build-ui.mjs` 的 `publicDir:false` 产物冗余修复）
+  与 UI 源码改动只改变构建产物、不改插件目录源码指纹，发布脚本「源码同 + 产物变 =
+  只刷基线不发布」的判据因此长期跳过它们，线上一直是每个包内嵌约 3.5MB mermaid 的旧包
+  （`ui-editor` 4,605,995 → 1,158,557 字节、`ui-right-panel` 3,646,044 → 201,948 字节）。
+  重发后逐包用 `npm pack` 下载线上 tarball 与发布快照做逐文件 sha256 比对：12/12 一致。
+
+---
+
+## 1.6.8 — 2026-09-25
+
+> 本版是 **v1.6.7 发布之后的修复与清理批次**（含后端「生成参数单源化」）：泛化死代码扫描
+> （`chat-utils.js` 整文件删除、14 处死绑定、6 个零调用 API）、编辑器右键选中链路修复与
+> 监听器累积、任务进度实时同步、聊天工具行排版、「上次运行 / 执行中…」冗余状态条删除。
+> 全部条目均由**真实 UI 实测**驱动，并新增右键链路回归守卫脚本。
+
+### 变更 / 改进
+
+- **生成参数单源化：设置面板「生成参数」页移除** —— 生成参数（温度 / 思考档位 / 最大输出 /
+  上下文窗口）此前有两处入口：设置面板的「生成参数」页（全局默认，存 `pluginSettings.generation`）
+  与「服务商」页（服务商级 + 模型级）。前者处于装配链**最低优先级**（服务商级一配即被覆盖），
+  在设置面板改了温度/输出/窗口却「改了不生效」；同时服务商级当时**没有思考档位字段**，
+  反倒让它成了思考档位的唯一全局入口。现收敛为**唯一来源 = 服务商配置**：
+  · 「服务商」页服务商级新增**默认思考档位**（`models.json` 服务商条目 `thinkingMode`）；
+    装配器「服务商配置为准」段一并纳入思考档位（模型级 `modelParams[模型].thinkingMode`
+    > 服务商级 `thinkingMode`）——此前服务商面板里设的思考档位不生效；
+  · 「生成参数」设置页删除；旧值（`pluginSettings.generation` + settings 顶层旧字段）由
+    `core.MigrateGenerationToProvider()` 一次性迁入**激活配置对应服务商**的服务商级字段
+    （只补空、不覆盖服务商面板里已设的值；激活配置无可用服务商时保留旧值待下次启动重试）；
+  · 装配器兜底改为 `GEN_DEFAULTS` **机制常量**（不是配置面、无 UI 入口，仅在服务商级/模型级/
+    AI 配置都未配置时使用）；「保存 AI 配置」快照的生成参数改从**激活配置**取（此前取全局段），
+    源头移除后仍保持「整套配置快照」语义。
+
+### 修复
+
+- **聊天里的工具调用行跑到最右侧、状态做成胶囊 tag** —— 用户反馈工具行「整体像右侧标签」：
+  `.tr-pill` 用 `margin-left:auto` 把状态推出行尾、工具名固定 `width:240px`，中间留大片空白。
+  现改为**消息流内左对齐成组**：工具名自适应（`max-width:220px`）+ 运行中 spinner +
+  结果摘要紧随其后（`.tr-status`，**无背景无圆角**、`max-width:62%` 可省略，仅以文字色区分
+  成功/错误/运行中）+ chevron 紧随内容；行本体沿用设计稿 th83/th90 的行式（h32 / bg=surface-2 /
+  r8 / border），整行可点与展开区（参数 / 结果 / 命令 / 输出）全部保留。
+- **右栏「任务进度」不实时同步** —— 此前只在挂载 / 切会话时 `GET /api/tasks`，agent 运行中调用
+  `update_tasks` 改了清单 UI 不刷新。现由 `agent-events.js` 在**任务类工具执行完成
+  （tool_result）**与**回合结束（done）**时广播 `paircode:tasks-changed`，`StatsRail` 据此重拉
+  当前会话任务（150ms 防抖；事件带 convId 时只刷当前会话）。★ 不在 `tool_call` 触发 —— 那是
+  「即将执行」，任务尚未落盘会读到旧清单；done 再广播一次作兜底（工具异常未发 tool_result 时
+  仍能对齐）。全程零轮询。
+- **聊天面板顶部的「上次运行 / 执行中…」状态条已删除** —— 用户反馈「运行统计本身已有状态，
+  这条是否已不需要」。核实后确认**冗余并整条删除**（`.phase-bar`，消息区最顶部）：
+  ① 它与右栏 StatsRail「运行统计」卡**同源**（同一份 `state.runStatsByConv` ←
+  `GET /api/conversations/{id}/run-stats`），而右栏摘要已给「运行中 / 已完成 · 耗时 · 输出速度」
+  + 步数 / 工具调用 / LLM 调用明细；② 它的「阶段」分支无生产方 —— Go 侧 `EventPhase` 常量
+  **只有定义、零发送点**，JS / 插件侧也无任何 `phase` 事件发送点 → `state.phaseByConv` 恒空；
+  ③ 进度条按「已耗时 ÷ 60min、封顶 95%」**估算**，非真实进度，易被误读为「快完成 / 卡住」；
+  ④ 设计稿 `shell-midnight` th130 子树本无该节点。删除后运行态可见性**不受影响**：消息流
+  「思考中...」banner + 输入区停止按钮（发送 ↔ 停止切换）+ 工具行 spinner + 右栏运行统计。
+- **清理只服务该状态条的死代码** —— `RightPanel.vue` 移除 `phaseText` / `runBarTitle` /
+  `phaseProgress` / `phaseIcon()` / `currentPhase` / `agentRunningConv` / `runStatsVisible` /
+  `hasRunStats` / `toggleRunStats` / `runTick` 计时器与 `phaseTimer`、`onPhaseChange` /
+  `onPhaseEnd` 钩子，以及 CSS `.phase-bar*` / `.phase-stats*` / `.phs-*` / `.pst-text`（模板侧
+  已无引用）；另移除构建期告警的未使用导入 `rightPanelWidth`。★ 保留 `fetchRunStats` 调用
+  （会话切换 / 续跑时拉取）—— 右栏运行统计卡依赖它写入状态，删 UI 不等于删数据链路。
+  同步订正两处指回已删 UI 的注释（`ui-state.js` 的 `runStatsCollapsed` 标注「已无 UI 消费者，
+  字段仅为兼容旧持久化偏好」；`StatsRail.vue` 运行统计卡头注改为「数据源唯一，本卡」），并给
+  三个仍断言 `.phase-bar` 的旧 CDP 脚本（`cdp-verify-conv-tasks` / `cdp-verify-runstats-backend`
+  / `cdp-verify-ws-gate-fallback`）加失效标注 —— 避免后人把它们当回归基线而误判失败。
+
+- **编辑器右键菜单丢选中片段（功能降级）+ 监听器累积** —— `CodeEditor.vue` 声明的事件名是
+  `contextmenu-selection` 而实际发的是 `emit('contextmenu')`，父组件 `EditorArea.vue` 的
+  `@contextmenu` 因此被 Vue 当作**原生 DOM 事件**透传到根元素：handler 收到裸 `MouseEvent`
+  （无 `hasSelection` / `text` / `lineStart` / `lineEnd`）→ 有选中文本时菜单**恒走「无选中」
+  分支**，「AI: 添加到对话」按**整文件**加入（实测载荷 `{type:'file'}`，期望
+  `{type:'selection'}` + 行号 + 内容）；同时 `createEditor()` 内 `addEventListener('contextmenu')`
+  用匿名函数且从不移除，而该方法会因切换文件 / 改字号被反复调用（wrapper 元素不重建）——
+  实测改 4 次字号后监听器 **1 → 5** 累积，一次右键被处理多次且 `ContextMenu.show` 的
+  `resolvePromise` 被覆盖（先到的 Promise 永久 pending）。现统一为 **emit 通道**（声明名与
+  发送名一致 → 不再 fallthrough）+ 句柄引用化**幂等注册**（另在 `onBeforeUnmount` 清理）。
+  实测：监听器恒为 1、菜单走「有选中」分支、载荷 `type=selection` 且带行号与内容。
+- **清理泛化扫描确认的死代码** —— `chat-utils.js` **整文件删除**（159 行；头注声称「供
+  RightPanel.vue 使用」但全仓零引用，两个导出 `useMessageCombos` / `isSystemMsg` 亦零引用）；
+  `RightPanel.vue` 摘除 **15 个死绑定**（`toggleRight` / `toggleFocus` / `toolsetLabel` /
+  `convListWidth` / `convList` / `reviewBtnLabel` / `showNudge` / `pendingAskCallId` /
+  `dismissNextSteps` / `segMode` / `wsTokenStats` / `convCtxStats` / `deleteConv` /
+  `handleTaskTool` / `currentNudge`——模板段命中数逐项为 0、无 `defineExpose` 暴露、跨文件零引用）
+  并移除随之无用的 `setFocusMode` 导入；`api.js` 删除 6 个零调用方法（`isWebSocketOpen` /
+  `answerChat` / `approveChat` / `chatCompact` / `getMessagesCount` / `getUIBoot`，同步从
+  `export default` 表移除——其中 `approveChat` 封装缺 `reply` 字段，真实调用点一直直发
+  `/chat/approve` 且带 `reply`）；`model-parsers.js` 删 `partsBbox` / `partsTriCount`，
+  `ui-state.js` 删 `showQuickSwitcher`。
+- **事件分发链补兜底（不再静默丢弃）** —— `agent-events.js` 的 `processAgentEvent` 分发链原本
+  没有 `else` 分支：有生产方但前端未接的事件无声消失（典型是 Go 侧 `OnToolUpdate` →
+  `EventToolUpdate` 携带的工具执行中间结果）。现加兜底分支累计类型计数 + 首次 `console.debug`
+  提示，并导出 `getUnconsumedEventTypes()` 供排查。★ 该通道「接通（需设计流式工具输出展示位）
+  还是下线 Go 侧 emit」属产品决策，代码中已就地标注。
+
+### 文档
+
+- 另给 3 个断言已失效选择器的旧 CDP 脚本（`cdp-verify-toolset-tab` / `-toolset-panel` /
+  `-chat-input`：`.tset-item` / `.toolset-card` / `.ts-header` / `.ts-divider` / `.tp-grabber` /
+  `sp-trigger` / `sp-pop` 均已随 UI 改版消失）加 ⚠️ 失效标注，避免后人误当回归基线。
+
+### 验证
+
+- **编辑器右键链路回归守卫**（`scripts/cdp-verify-ctxmenu-chain.cjs`，独立实例 9099 +
+  headless Chrome）：修复前 3 项 FAIL（监听器 1→5 累积 / 菜单呈无选中版 / 载荷 `type=file`），
+  修复后 **6/6 PASS**，控制台 0 error、0 warning。
+- **生成参数单源化实测**（独立实例 `WEB_PORT=9098` + 临时 install-dir，9090 未动）：以真实旧配置
+  启动（`pluginSettings.generation` = temperature 0.3 / thinkingMode high / maxTokens 131072 /
+  contextMaxTokens 1000000；激活配置 `ds-vision` → 服务商 deepseek）——启动日志
+  「已把生成参数旧值迁入服务商 "deepseek" 的服务商级配置」，`models.json` 的 deepseek 条目获得
+  四项值、`settings.json` 的 `generation` 注册段与顶层旧字段清空。数据面：`GET /api/settings`
+  的 `schemas` **不含** `generation`；`GET /api/models` 的 `providerThinkingModes.deepseek = "high"`。
+  装配链（假 Key 触发，看 `[provider] global 装配结果`）：模型级 `thinkingMode=max` 覆盖服务商级
+  `high`；清掉模型级后回落为**服务商级 `high`**（本次新增能力）。CDP 交互实测 **14/14 PASS**：
+  设置分类列表无「生成参数」、服务商编辑表单含「默认思考档位」且当前值 = 迁入的 `high`、
+  页面 0 异常。
+- **工具调用行展示 + 任务进度实时同步实测**（独立实例 `WEB_PORT=9098` + 临时 install-dir，
+  9090 未动；CDP 9223）：几何探针 `.tr-pill` **不存在**，工具行 rect left=328 / width=793，
+  工具名 24px（357→381），结果摘要紧随名称**左对齐同行**；截图视觉确认左对齐成组、无右侧胶囊、
+  成功 / 错误 / 运行中三色可辨。右栏实时性走**真实 UI 发送路径**（`.chat-input`
+  contenteditable 填文本 + `.send-btn` 点击，非 API 直发 —— 直发会绕过前端运行态就观察不到
+  「运行中」窗口）驱动真实 agent 调用 `update_tasks`：任务卡于 **+1585ms** 出现，而 agent
+  **+5114ms** 才结束（此刻 `chatLoading` / 运行态均为 true）→ 证明是**运行中实时同步**而非
+  结束后补刷；最终徽标 3/3、控制台 0 错误，**10/10 PASS**（另有静态链路含「无事件不刷新 /
+  有事件即刷新」对照 **12/12**）。因实例内既有 key 均为无效假 key（401），真实链路改用本地
+  mock LLM（内置延迟）驱动两轮 `tool_calls`；脚本自动清理临时会话与任务文件。
+- 任务相关回归：`go test ./internal/agent/ -run 'TestUpdateTasksBindsConvID*|TestUpdateTasksNoConv*|
+  TestUpdateTasksRuntimeRoot|TestUseTaskManagerPerRoot|TestCheckFinalReadiness_NoTodos'`
+  **6/6 PASS**。产物一致性：`ui-right-panel.js` / `.css` 与壳 `index-G_Ay0AZC.js` + `index.html`
+  的**真源 vs `bin/.pair` 镜像 md5 全等**，旧产物 `index-C6dXkUaW.js` 已无残留。
+- **「上次运行 / 执行中…」状态条删除实测**（独立实例 `WEB_PORT=9099` + 临时 install-dir，
+  9090 未动；CDP 9223）：真实 UI 发送路径（`.chat-input` contenteditable + `.send-btn`）驱动
+  真实 agent —— 运行中 `.phase-bar` **不存在**，同时 `.msg-loading-banner`「思考中...」与
+  `.stop-btn` 均在位；回合结束后该会话已有运行统计（`steps=2 / toolCalls=1 / durationMs=4846`，
+  即旧实现在此**必然**显示「上次运行」），而 `.phase-bar` 仍**不存在**、右栏摘要为
+  「已完成 · 4s · 5.3 t/s」；`.chat-area` 首个可见子元素 = 任务横幅、与 `.chat-messages`
+  间隙 **0px**（无残留空条），控制台 0 错误 —— **13/13 PASS**（空闲 / 运行 / 结束三态 + 几何
+  探针）。截图视觉复核：消息区顶部无橙色条、「思考中...」与红色停止按钮正常、布局无错位。
+
+---
+
+## 1.6.7 — 2026-09-25
+
+> 本版以**长会话加载性能**为主线（四轮专项，全部由真实会话实测数据驱动）：会话切换时
+> 50 条消息的响应体从 **19.57MB 降到 3.58MB（−81.7%）**、首屏白屏从 **15.7s 降到 2.7s**、
+> git 状态查询从 **1.2s 降到 1~4ms** —— 而首屏渲染节点数与改造前**逐项一致**、控制台零
+> 错误，因为削掉的全部是「折叠态不消费」的字段（展开时按需取回全文），可见交互未变。
+> 同期落地**主题 v2（8 套主题插件化 + 设置面板主题画廊）**，并修复场景胶囊、选择器
+> 当前值、滚动条、监督者面板遮挡等一批实测缺陷。
+
+### 变更 / 改进
+
+- **首屏渲染：折叠优先 + 按需挂载（性能第 1 轮）** —— 会话切换白屏 13 秒的真凶是**折叠标记
+  注入时机晚于首次渲染**：`switchConv` 先把消息交给 Vue 渲染（此时全展开），之后才 `await`
+  任务与监督者数据，最后才折叠 → 实测 t=4.4s 已建 **47025 个 DOM 节点**（1547 个 Markdown
+  渲染器），t=15.7s 才降到 1674（白渲染 13 秒再整批丢弃）。现改为 ① `apiLoadAndBuildConv`
+  返回前就在**数据源头**注入折叠标记（幂等）；② `loadAutopilotRounds` 由 `await` 改后台执行
+  （不再推迟首屏滚底）；③ `AutopilotPanel` 折叠区 `v-if` 懒挂载 + 轨迹尾部 200 条；
+  ④ `MarkdownRenderer` 的 mermaid **改运行时按需注入** —— 此前 `import mermaid` 让
+  mermaid.min.js（3.6MB）被 rollup 打进**每一个**引用它的区域包（`ui-right-panel.js` 3.47MB /
+  `ui-editor.js` 4.39MB，首屏 JS 合计 7.86MB），而区域包是 iife 单包构建、动态 import 会被
+  内联，无法靠 code-splitting 拆分。**收益**：首屏 DOM 47025 → **1412**；达到最终态
+  15.7s → **2.7s**；`.chat-messages` 节点 46238 → 879；Markdown 渲染器 1547 → 26；
+  CPU program 11082ms → 1865ms、GC 3456ms → 599ms。
+- **接口瘦身与重复请求消除（性能第 2 轮）** —— `/api/conversations/<id>/messages` 省略前端
+  不消费的重字段（`message.reasoning_content` 与 `segments.thinking` 同内容、
+  `message.tool_calls` 与 `segments.tool_call` 重复），响应 **−38.3%**；
+  `/api/autopilot/rounds` 的 trace 全文按折叠态消费口径裁剪，**−66.8%**（条数不变）；
+  前端 `apiGet` 层新增 **GET 并发合并**（同 URL 在途请求共享，订阅窗口内的重复拉取合并为
+  一次），实测 messages ×2→×1、rounds ×5→×2。
+- **折叠段惰性加载（性能第 3 轮）** —— 实测证明瓶颈是**单条消息内的超长段**而非条数
+  （前 30 条已占满全部体量，缩小页长收益为 0）：`thinking.content` 与 `tool_call.argsRaw`
+  在折叠态**完全不消费**，故只回前 400 字符预览 + `_trunc`（原始字符数）标记，展开时经
+  新增接口 `GET /api/conversations/<id>/messages/segment?idx=&seg=` 按需取回全文
+  （毫秒级、在途合并、失败静默降级保留预览）。消息摘要只用正文前 60 字符与工具计数，
+  完全不受影响。
+- **`tool_call.result` 段级裁断 + 错误标志预计算（性能第 4 轮）** —— result 是剩余体积的
+  最大头（可裁 1069 段 / 2.79M 字符）。折叠行只用它做三件事：胶囊文案（前 120 字符）、
+  未知工具摘要（前 80 字符）、错误正则判色（**跑全文**）—— 前两者 400 字符预览足够，
+  后者改为**后端在裁断前按全文预计算 `_err`**，前端 `isToolErr()` 优先取该标志、未裁断时
+  照旧跑正则。★ 这不是过度设计：实测该会话有 **156 段**的错误关键词只落在 400 字符之后，
+  只留预览会让这些胶囊的错误色变成成功色。`finish_task` 的 result **不裁**（它会被转成
+  正文 content 段）。**收益**：消息响应体 6.93MB → **3.58MB**（再降 45.8%）。
+- **`/api/git/status` 短 TTL 缓存** —— 该接口每次要跑 4~5 个 git 子进程（实测 1.2~1.4s），
+  而状态栏每 15s 轮询一次。现加 **5s TTL**（按工作区目录分键）并支持 `?refresh=1` 强制实时；
+  `GitPanel` 的每个写操作后刷新一律带 `?refresh=1`（否则用户暂存/提交后会看到**操作前**的
+  文件列表）。实测命中 **1~4ms（约 290×）**，TTL 过期后恢复真实执行，命中与实时返回内容
+  逐字节一致。
+- **主题 v2：8 套主题插件化 + 主题画廊** —— 主题 CSS 原本硬编码在壳 `index.html`（8 套主题块，
+  678 行），换主题必须改壳。现迁入 `ui-appearance` 插件（`theme-<id>.css`，每份 54 个令牌），
+  由 client 半用 `MutationObserver` 监听 `<html>` 的 class 注入 `<link>`；壳仅保留一份 `:root`
+  基准令牌兜底（插件未装配时回落到 Midnight，界面不裸奔）。设置面板的 `theme` 由下拉框
+  改为 **8 项缩略色卡画廊**（值仍是 string、绑定未变，只换呈现）。旧 id（dark/night/light/warm）
+  经别名表**行为不变**。
+- **插件设置 schema 支持色板/画廊字段** —— 注册字段新增 `swatches`（每项
+  `{value,label,scheme,colors}`），解析侧校验必需键（`value` 为空即丢弃，防止数组里混入
+  非选项对象而渲染出「坏卡」）。
+- **应用背景能力** —— 新增背景来源 / 图片 / 不透明度 / 模糊四个设置项（`ui-appearance`）。
+- **标题栏「帮助」菜单移至左侧**（按用户指令调整 `ui-titlebar` 结构）。
+- **任务进度卡展示完整列表** —— 右栏「任务进度」卡改为**卡内滚动**展示全部任务，不再
+  截断行数或用「还有 N 项…」摘要（按用户明确指令）。
+
+### 修复
+
+- **应用内「API 文档 / 更新日志」与主壳是两条产物链** —— 二者经 `?raw` 打进 **UI 区域包**
+  （ui-modals），只重建主壳不会生效；本版发版时**全量重建 15 个区域包**。
+- **会话「场景」胶囊** —— 此前是写死的假数据，现改为真实**会话级工具集**，并修复切换对话
+  瞬间显示「上一个对话的场景」的窗口期。
+- **下拉选择器不显示当前值** —— 原生 `<select>` 的 `v-model` 值不在选项集合时
+  `selectedIndex` 回落为 -1，浏览器会显示成第一个 disabled 占位项；模型/场景选择器现按值
+  归一化后匹配。
+- **滚动条样式不生效** —— `scrollbar-color` 是继承属性且会**废掉** `::-webkit-scrollbar`
+  伪元素（实测写了 4px 仍显示平台原生 17px）；另有两处遗漏容器一并修正。
+- **监督者面板展开时被输入框遮挡** —— 根因是高度几何算术（头部 32 + body 写死 300 + 边距 4
+  = 336px）而非 z-index；改为按内容自适应 + 关键信息优先（评判 / 下一步 / 证据），并修正
+  滚动锚点。
+- **终端配色不跟随主题** —— `@xterm/xterm@6` 已无 `setOption()`，原 `watch(state.theme)`
+  里的调用静默失败，改用 `options` 赋值。
+- **主题画廊无任何卡片高亮** —— 默认值与存量配置是旧 id 而画廊按新 id 判定选中态；新增
+  `ThemeIDAliases` 与 `NormalizeThemeID()`，加载时归一化（无配置文件时也生效），幂等。
+- **外观页背景设置项消失** —— 插件 schema 里 4 个背景字段被误插进 `swatches` 数组内部
+  （语法合法、预检不报错），移回 `fields` 顶层；解析侧同时加必需键校验。
+
+### 文档
+
+- 应用内「更新日志 / API 文档」同步本版内容；`/api/system/info` 版本示例更新为 `v1.6.7`。
+
+### 验证
+
+- `go build ./cmd/companion ./internal/agent` 与同范围 `go vet` 通过（`go build ./...` 因
+  `embedding_onnx.go` 引用的 onnxruntime_go 需 build tag 而失败，属固有环境问题）。
+- **性能（同口径实测）**：消息响应体 19.57MB → **3.58MB（−81.7%）**；`segments` 类型分布
+  与完整响应**完全一致**（thinking 1766 / content 1625 / tool_call 1851 / ask_user 1）；
+  逐字段校验 5019 段**非预期差异 0**；`_trunc` 按「等于任一被裁字段原文长度」校验
+  2838/2838 吻合；非裁剪路径仍可取回**完整数据**（19.56MB）。
+- **CDP 端到端**：全量展开 24 条消息 → 页面 **1776** 个工具行与接口 `tool_call` 段
+  **一一对应、逐行错误色判定不一致 0**（其中 1089 段依 `_err` 预计算）；展开被裁断的段
+  取回全文长度与原文**完全一致**（3290 / 8225 字符）；首屏 DOM 1696、控制台 **0 错误**。
+- 回归基线：首屏 `dom / chat / ap / folded / md` = 1690 / 879 / 268 / 24 / 26，与优化前
+  逐项一致。
+
+---
+
 ## 1.6.6 — 2026-09-22
 
 ### 变更 / 改进

@@ -1,3 +1,7 @@
+// ⚠️ 部分已失效（2026-09-25 扫描确认）：`.tp-grabber`（bottom-sheet 抓手）与
+//   `.sp-pop`（SheetPicker 旧 popover）在现版 UI 中均不存在 —— SheetPicker 已改为
+//   原生 `<select>` 风格（`.sp-wrap` / `.sp-select` / `.sp-chevron`，无 popover 层）
+//   → 对应 check 必然 FAIL。重写断言前，请勿把本脚本的失败当作回归信号。
 // 工具集面板验证（左右分栏 master-detail + 添加插件浮层卡片 + 居中 modal + 无 checkbox chip）
 // 用法：node scripts/cdp-verify-toolset-panel.js <port>
 const http = require('http'); const net = require('net'); const crypto = require('crypto')

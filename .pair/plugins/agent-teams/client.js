@@ -17,6 +17,9 @@
 // ═══════════════════════════════════════════════════════════════
 (ui) => {
   const PLUGIN = 'agent-teams'
+  // ★ 2026-09-25 用户指令（反向调整）：改回 titlebar-right 槽位 —— 插件注册的菜单入口
+  //   （团队 / 监督看板 / 快速执行）回归**状态栏**承载（titlebar-right 是 list 型槽位，
+  //   由 StatusBar.vue 渲染），撤销本日早些时候迁到活动栏的改动。
   const SLOT = 'titlebar-right'
   const API = '/api/agent-teams/teams'
 

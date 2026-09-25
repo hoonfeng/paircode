@@ -18,6 +18,7 @@ import { reactive, nextTick } from 'vue'
 import api from './api.js'
 import {
   state, layout, loadPersistentState, savePersistentState, setFocusMode,
+  syncThemeFromSettings,
   showSettings, showSystem,
 } from './ui-state.js'
 import {
@@ -159,7 +160,9 @@ export async function loadConversationsForWorkspace(path) {
 export function switchActivity(id) {
   if (id === 'settings') { showSettings.value = true; return }
   if (id === 'system') { showSystem.value = true; return }
-  if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
+  // ★ 2026-09-25 对齐设计稿：活动栏「会话」图标改为【切换左栏视图到会话列表】
+  //   （原行为是显隐主区对话面板；对话面板常驻主区，不再占用该图标）。
+  if (id === 'chat') { state.activeActivity = 'chat'; state.sidebarVisible = true; return }
   // ★ 市场已迁至主内容区 tab（2026-09）：活动栏/菜单「市场」→ 开/关市场 tab，
   //   不再切换侧边栏视图
   if (id === 'marketplace') { toggleMarketTab(); return }
@@ -314,6 +317,8 @@ export function initAppGlobals() {
         state.settings = sresp.settings
         state.settingsLoaded = true
         state.pluginSchemas = sresp.schemas || []
+        // ★ P1-a：后端 AppSettings.theme 为权威源，预取完成即应用（跨设备一致）
+        syncThemeFromSettings()
       }
     } catch {}
     try {

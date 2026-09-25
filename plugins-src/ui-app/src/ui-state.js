@@ -7,7 +7,7 @@
 // 所有区域读写同一份 reactive 状态（替代原 App.vue 的 provide/inject）。
 // 壳（ShellApp）与 app-actions 也引用本模块。
 // ═══════════════════════════════════════════════════════════════
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 // ★ 视图打开状态真源在 plugin-runtime（localStorage viewOpen:<插件>:<视图id>）——
 //   本模块只做「主区 tab 激活位」与「并排布局」的状态机，打开/关闭动作委托它。
 //   （plugin-runtime 不反向 import 本模块，无循环依赖。）
@@ -95,12 +95,26 @@ window.$toast = (message, type = 'info', duration = 3000) => {
 }
 
 export const state = reactive({
-  activeActivity: 'explorer',
+  // ★ 2026-09-25 对齐设计稿 shell-midnight：左栏默认显示【会话列表】（th61「会话」），
+  //   文件浏览器改为活动栏第二个图标进入（原默认 explorer）。
+  activeActivity: 'chat',
   sidebarVisible: true,
   rightPanelVisible: true,
   // ★ 会话列表面板（.conv-sidebar，250px，含 Token 统计/上下文占用）整体显隐。
   //   默认显示；用户选择持久化；进入专注模式自动收起、退出还原（setFocusMode）。
   convListVisible: true,
+  // ★ 右栏（2026-09-25 对齐设计稿 th178）：运行统计 / 任务进度 / 上下文构成 / 底提示，
+  //   宽 288px，占网格第 4 列。默认显示。
+  statsRailVisible: true,
+  // ★ 右栏运行统计条折叠（P4-2，2026-09-25）——.phase-bar 里的步数/工具次数与
+  //   耗时/墙钟耗时/输出速度/输出 token 六个数字整体收起，只留阶段图标+阶段文案+
+  //   进度条（「正在做什么」始终可见，「做过多少」按需展开）。
+  //   属纯展示偏好（非 focusMode 那类临时视图态）→ 持久化，与 convListVisible 同规则。
+  //   ★ 2026-09-26 起**无 UI 消费者**：原消费方是消息区顶部 .phase-bar 的六个数字折叠按钮，
+  //   而该条已整条删除（判据见 RightPanel.vue 模板注释）。本字段保留仅为兼容已持久化的旧
+  //   偏好（仍在 savePersistentState / loadPersistentState 白名单内），不再有组件读写；
+  //   若确认无需迁移，可连同持久化白名单一并摘除。
+  runStatsCollapsed: false,
   bottomPanelVisible: true,
   bottomPanelTab: 'terminal',
   workspaceRoot: '',
@@ -149,12 +163,21 @@ export const state = reactive({
   settings: {},
   settingsLoaded: false,
   pluginSchemas: [], // 插件注册的配置段（ctx.registerSettings → GET /api/settings.schemas）
+  // ★ 2026-09-25 会话级「场景（=工具集）」生效信息镜像 —— 供会话侧栏底部胶囊
+  //   （设计稿 th60「全栈开发 · 14 插件」= 场景名 + 该场景装配的插件数）读取。
+  //   权威源 = GET /api/toolsets/active（agent.ResolveConvToolsetActive），由
+  //   RightPanel.syncConvToolsetFromConv() 写入（唯一写方，避免双源不一致）。
+  //   ★ 修复前史：侧栏读 settings.scenarioName/toolsetName/defaultToolset —— 这
+  //   三个字段全项目从未被写入 → 胶囊恒显示硬编码兜底「默认场景」（假数据），
+  //   且读全局 settings（非当前会话）→ 切会话也不变。
+  //   { name, defaultName, isDefault, converged, pluginCount, resolved }
+  convToolsetInfo: { name: '', defaultName: '', isDefault: true, converged: false, pluginCount: 0, resolved: false },
   searchResults: [],
   selectedFilePaths: [],  // 文件树多选路径列表
   lastClickedFilePath: '', // 文件树最近点击（Shift范围选择用）
   tasks: [],
   notificationCount: 0,
-  theme: 'dark',
+  theme: 'midnight',
   focusMode: false, // ★ 默认非专注：编辑器+对话区并排（右侧宽度可拖拽调整）；Ctrl+K 切换专注（隐藏编辑器）
   // ── ★ chat 优先薄壳布局：编辑器按需打开的装配状态（默认编辑器隐藏）──
   //   权威面只在 ctx.uiLayout / __PAIRCODE_CORE.layout（见下方 layout 服务），
@@ -190,7 +213,6 @@ export const showSource = ref(false)
 export const showAbout = ref(false)
 // 软件更新弹窗（状态栏「新版本可用」徽标 / 菜单打开 → UpdateModal 消费）
 export const showUpdate = ref(false)
-export const showQuickSwitcher = ref(false)
 export const helpDocTarget = ref('features')
 export const showHelp = ref(false)
 // showHelp 可被设为字符串（文档id）或 true（默认 features）
@@ -211,7 +233,8 @@ export const showHelpWrapper = computed({
 // 面板尺寸（editor 包底部面板 / right-panel 包右侧面板 / sidebar 包侧栏）
 export const bottomPanelHeight = ref(180)
 export const rightPanelWidth = ref(320)
-export const sidebarWidth = ref(280)
+// ★ 2026-09-25 对齐设计稿 shell-midnight：侧栏（th61）标准宽 264px（原 280）。
+export const sidebarWidth = ref(264)
 
 // 面板尺寸持久化（原 App.vue loadPanelSize/savePanelSize）
 export function loadPanelSize() {
@@ -433,17 +456,25 @@ function loadThemeFonts(theme) {
 
 // ─── 应用主题 ────────────────────────────────────────────────
 export function applyTheme(themeName) {
-  const theme = themeName || state.theme || 'dark'
+  const theme = themeName || state.theme || 'midnight'
   state.theme = theme
 
-  // 移除所有主题 class
-  document.documentElement.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-night')
-  document.body.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-night')
-
-  // 添加对应 class
+  // ★ 主题系统 v2：主题 class **按前缀通用清除**，新增主题无需再改此处。
+  //   旧写法硬编码 4 个 remove 名 —— 扩到 8 套主题后会残留上一个主题的 class，
+  //   由于后声明的主题块同特异性覆盖前块，会直接串色（切到 slate 后切回也仍是 slate）。
   const cls = 'theme-' + theme
-  document.documentElement.classList.add(cls)
-  document.body.classList.add(cls)
+  for (const el of [document.documentElement, document.body]) {
+    for (const c of Array.from(el.classList)) {
+      if (c.startsWith('theme-')) el.classList.remove(c)
+    }
+    el.classList.add(cls)
+    // ★ P3：同时挂 data-theme 属性 —— class 面向样式表，data-* 面向插件/脚本
+    //   读取「当前主题 id」（避免插件去解析 class 名）。
+    //   取值是主题 id 本身（midnight/graphite/…/slate），不是 theme- 前缀形式。
+    el.dataset.theme = theme
+    // 同时标注明暗档，供背景/对比度守护等处直接用
+    el.dataset.themeScheme = isDarkTheme(theme) ? 'dark' : 'light'
+  }
 
   // 加载字体
   loadThemeFonts(theme)
@@ -462,6 +493,8 @@ export function savePersistentState() {
       rightPanelVisible: state.rightPanelVisible,
       // 会话列表面板显隐：属面板偏好（非 focusMode 那类临时视图态）→ 持久化
       convListVisible: state.convListVisible,
+      // 运行统计条折叠：同属面板偏好 → 持久化
+      runStatsCollapsed: state.runStatsCollapsed,
       bottomPanelVisible: state.bottomPanelVisible,
       bottomPanelTab: state.bottomPanelTab,
       theme: state.theme,
@@ -490,13 +523,17 @@ export function loadPersistentState() {
     if (typeof data.rightPanelVisible === 'boolean') state.rightPanelVisible = data.rightPanelVisible
     // ★ 老 localStorage 无该字段 → 保持默认 true（向后兼容，升级无感）
     if (typeof data.convListVisible === 'boolean') state.convListVisible = data.convListVisible
+    // ★ 老 localStorage 无该字段 → 保持默认 false（展开，向后兼容，升级无感）
+    if (typeof data.runStatsCollapsed === 'boolean') state.runStatsCollapsed = data.runStatsCollapsed
     if (typeof data.bottomPanelVisible === 'boolean') state.bottomPanelVisible = data.bottomPanelVisible
     if (data.bottomPanelTab) state.bottomPanelTab = data.bottomPanelTab
 
     // 恢复主题
     if (data.theme) {
-      // 只在主题有效时恢复
-      if (['dark', 'light', 'warm', 'night'].includes(data.theme)) {
+      // ★ 主题系统 v2：不再用硬编码白名单（旧写死 ['dark','light','warm','night']，
+      //   扩到 8 套主题后新 id 会被静默拒绝 → 重载后主题丢失）。
+      //   改为通用格式校验；未知 id 只会挂上不存在的 class，视觉回落默认主题，无害。
+      if (/^[a-z][a-z0-9-]{0,23}$/.test(data.theme)) {
         applyTheme(data.theme)
       }
     }
@@ -510,4 +547,50 @@ export function loadPersistentState() {
     //   workspaceRoot / workspaceFolders / workspaceName ← 从 /api/health
     //   openFiles / activeFile / fileContents ← 从编辑器状态恢复
   } catch (e) {}
+}
+
+// ─── ★ 2026-09-25 切换对话瞬间把「场景」胶囊置为"解析中" ────────────────────
+// 背景：会话切换只改 state.currentConvId，真实场景（会话级工具集）要靠
+//   RightPanel 的异步请求（GET /api/toolsets/active）解析出来。实测切回大对话
+//   （217 条消息）时主线程被消息渲染占满，该请求/响应可延迟数秒；若不置位，
+//   这几秒里胶囊继续显示**上一个对话**的场景名 —— 是错误信息而非加载态。
+// 位置选择：注册在本核心模块（先于所有区域包组件求值）→ watch 回调执行顺序
+//   在 RightPanel 的 watch 之前，切换那一刻即生效，无需在各切换入口分别插桩
+//   （切换入口有多处：Sidebar.onSwitchConv、app-actions 选首位/清空、
+//   open-conversation 事件）。
+watch(() => state.currentConvId, (id, old) => {
+  if (id === old) return
+  state.convToolsetInfo = {
+    name: '', defaultName: '', isDefault: true,
+    converged: false, pluginCount: 0, resolved: false,
+  }
+})
+
+// ─── 主题明暗判定（语法高亮 / mermaid 图表 / 终端配色按此双档）─────────────
+// ★ 8 套 UI 主题按明暗归两档。别名（dark=midnight / night=obsidian /
+//   light=daylight / warm=sand）一并识别，使旧值域调用点（历史组件传
+//   'dark'/'light'）也能得到正确判定，而不会再落到「全不匹配」的默认分支。
+const DARK_THEME_NAMES = new Set([
+  'midnight', 'graphite', 'obsidian', 'aurora', // 8 套中暗色 4 套
+  'dark', 'night',                               // 别名
+])
+export function isDarkTheme(name) {
+  return DARK_THEME_NAMES.has(name || state.theme || 'midnight')
+}
+
+// ─── 启动时应用主题（P1-a）─────────────────────────────────────────────
+// 问题：此前 applyTheme 只被「打开设置面板」这条路径调用（SettingsModal.loadSettings），
+//   于是 ① 首次启动（无 localStorage）时主题 class 从未挂载；
+//        ② 用户重载页面时后端 AppSettings.theme 不参与，主题回到默认。
+// 处理：启动即恢复本地持久化偏好（同步执行，避免首屏闪主题）；
+//   后端 AppSettings 预取就绪后再覆盖 —— 见 syncThemeFromSettings。
+export function initTheme() {
+  loadPersistentState()
+}
+
+// 后端 AppSettings.theme 为权威源（用户在设置面板的显式选择、跨设备一致）；
+// 由 app-actions 的 settings 预取完成后调用。未设置时保留本地偏好，不写默认值。
+export function syncThemeFromSettings() {
+  const t = state.settings && state.settings.theme
+  if (t && t !== state.theme) applyTheme(t)
 }

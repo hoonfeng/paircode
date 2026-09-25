@@ -393,10 +393,12 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/API URL（完整端点）/模型列表 + 每模型参数）──
+      // ── 服务商：维护服务商列表（名称/API URL/协议/模型列表 + 服务商级与模型级生成参数）──
       // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
-      // 模型参数（温度/思考档位/输出上限/上下文窗口/多模态）在服务商编辑表单内逐模型维护，
-      // 存 settings.json 顶层 modelParams（装配器按 服务商+模型 精确匹配）。
+      // ★ 2026-09-25 生成参数唯一来源 = 本页：服务商级字段（默认温度 / 思考档位 / 默认输出 Token /
+      //   上下文大小）+ 模型级 modelParams[模型]（同页模型参数表，优先级更高）。此前设置面板另有
+      //   一页「生成参数」（全局默认，存 pluginSettings.generation），与服务商配置完全重复且优先级
+      //   最低 → 已移除（旧值由 core 一次性迁入激活配置对应服务商的服务商级字段）。
       // ★ 2026-09-01 Key 回归 AI 配置：API Key 在「AI 配置」中按配置填写，服务商不再维护 Key。
       // ★ 2026-08-21 模型参数区 schema 驱动：字段定义全部在本 modelParamFields 声明，
       //   前端 ProviderManager 按此动态渲染（新增参数无需改前端组件）。
@@ -418,10 +420,10 @@ return {
             protocolOptions: ['', 'openai-completions', 'openai-responses', 'anthropic-messages'],
             protocolHint: '请求协议：空=默认 OpenAI 兼容 /chat/completions；anthropic-messages=Anthropic 原生 /messages；openai-responses=OpenAI Responses /responses。非默认协议时 API URL 填基础地址（不含协议路径）。',
             modelParamFields: [
-              { name: 'temperature', label: '温度', type: 'select', options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'], hint: '温度（随机性），空=默认' },
-              { name: 'thinkingMode', label: '思考档位', type: 'select', options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], hint: '思考档位（OpenAI 定义），空=默认' },
-              { name: 'maxTokens', label: '输出 Token', type: 'number', min: 0, step: 1024, hint: '最大输出 Token（0=默认）' },
-              { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', min: 0, step: 4096, hint: '上下文窗口（0=默认）' },
+              { name: 'temperature', label: '温度', type: 'select', options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'], hint: '温度（随机性）：空=沿用服务商级默认，填了则覆盖' },
+              { name: 'thinkingMode', label: '思考档位', type: 'select', options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], hint: '思考档位（OpenAI 定义）：空=沿用服务商级默认，填了则覆盖' },
+              { name: 'maxTokens', label: '输出 Token', type: 'number', min: 0, step: 1024, hint: '最大输出 Token：0=沿用服务商级默认，填了则覆盖' },
+              { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', min: 0, step: 4096, hint: '上下文窗口：0=沿用服务商级默认，填了则覆盖' },
               { name: 'multimodal', label: '多模态', type: 'checkbox', hint: '勾选=该模型支持图片输入（对话中可直接粘贴/拖拽图片，agentloop 自动以多模态格式发送）' },
             ],
           },
@@ -429,37 +431,23 @@ return {
       })
 
     // ═══════════════════════════════════════════════════════════
-    // ★ 生成参数全局默认 = 插件注册配置域（★ 2026-09-20）
-    //   纪律：配置项一律由插件 ctx.registerSettings 注册，值存 settings.json 的
-    //   pluginSettings.<key>；核心（Go）不持有也不直读生成参数——此前 AppSettings 顶层的
-    //   temperature/thinkingMode/maxTokens/contextMaxTokens/modelParams 已由 core 一次性
-    //   迁入本域（全局默认）与 models.json（模型级）并清空（见 core/settings_generation.go）。
-    //   ★ 无 binding：值存 pluginSettings.generation（核心字段不再承载生成参数）。
-    //   取值层级（装配器 ⑤⑥⑦⑧ 段）：models.json 模型级 > models.json 服务商级
-    //   > ai-presets.json 配置级 > 本段全局默认。
+    // ★ 生成参数唯一来源 = 服务商配置（★ 2026-09-25 收敛）
+    //   生成参数（温度 / 思考档位 / 最大输出 / 上下文窗口）只在**服务商配置**里配：
+    //   models.json 服务商级字段（temperature/thinkingMode/maxTokens/contextMaxTokens，
+    //   即设置面板「服务商」页的 默认温度 / 思考档位 / 默认输出 Token / 上下文大小）
+    //   与模型级 modelParams[模型]（同页模型参数表，优先级更高）。
+    //   ★ 此前另有「全局默认」层：本插件 ctx.registerSettings({key:'generation'}) 注册的
+    //     「生成参数」页，值存 settings.json → pluginSettings.generation。它优先级最低
+    //     （服务商级一配即被 ⑧ 段覆盖），用户面与服务商配置完全重复——在设置面板改了不生效；
+    //     且服务商级当时缺「思考档位」字段，反倒让全局段成了思考档位的唯一全局入口。
+    //     现补上服务商级思考档位字段后删除该注册段，配置面不再有重复入口。
+    //   ★ 旧值迁移：pluginSettings.generation 与 settings 顶层旧字段由 core 一次性迁入
+    //     「激活配置对应服务商」的服务商级字段（见 core/settings_generation.go）。
     // ═══════════════════════════════════════════════════════════
-    const GEN_KEY = 'generation'
-    // GEN_DEFAULTS 与本插件 registerSettings 的 field.default 同源（单一来源）：
-    // 装配器兜底时用同一份默认值，避免「schema 默认值」与「运行时兜底」两处漂移。
+    // GEN_DEFAULTS = 机制兜底常量（**不是配置面**，无 UI 入口）：仅在服务商级 / 模型级 /
+    // AI 配置全都未配置时使用，保证请求参数与上下文窗口始终有确定值（窗口 0 会导致
+    // 不压缩、无限上下文）。要改默认值请改服务商配置。
     const GEN_DEFAULTS = { temperature: '0.3', thinkingMode: 'high', maxTokens: 131072, contextMaxTokens: 64000 }
-    ctx.registerSettings({
-      key: GEN_KEY,
-      title: '生成参数',
-      fields: [
-        { name: 'temperature', label: '温度', type: 'select', default: GEN_DEFAULTS.temperature,
-          options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'],
-          hint: '全局默认温度（随机性），空=不下发。服务商/模型级参数与 AI 配置优先于本项。' },
-        { name: 'thinkingMode', label: '思考档位', type: 'select', default: GEN_DEFAULTS.thinkingMode,
-          options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-          hint: '全局默认思考档位（OpenAI 定义），空=不下发。模型级参数与 AI 配置优先于本项。' },
-        { name: 'maxTokens', label: '最大输出 Token', type: 'number', min: 0, step: 1024,
-          default: GEN_DEFAULTS.maxTokens,
-          hint: '全局默认最大输出 Token（0=不下发）。模型级参数与 AI 配置优先于本项。' },
-        { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', min: 0, step: 4096,
-          default: GEN_DEFAULTS.contextMaxTokens,
-          hint: '全局默认上下文窗口（token），影响历史精简与交接阈值。模型级/服务商级参数与 AI 配置优先于本项。' },
-      ],
-    })
 
     // ═══════════════════════════════════════════════════════════
     // ★ 配置消费插件化（2026-08-19）+ 决策全量迁插件（2026-09-03）：
@@ -469,26 +457,22 @@ return {
     //   agent.ResolveProviderParams() → 本装配器获取最终参数。
     //   本装配器决策链：① 配置整套展开（会话配置 > 全局激活，经 ctx.aiPresets）
     //   → ② 会话级覆盖（conv*）→ ③ 服务商数据兜底（经 ctx.models）→ ④ Key 选择
-    //   → ⑤ 模型级参数（models.json）→ ⑥ 上下文窗口层级 → ⑦ 全局兜底
-    //   → ⑧ 服务商配置为准（★ 2026-09-19：models.json 的温度/最大输出/上下文窗口
-    //        覆盖上述 settings 取值——生成参数的唯一来源是「服务商」）
+    //   → ⑤ 模型级参数（models.json）→ ⑥ 上下文窗口层级 → ⑦ 机制兜底（GEN_DEFAULTS 常量）
+    //   → ⑧ 服务商配置为准（★ 2026-09-19：models.json 的温度/思考档位/最大输出/上下文窗口
+    //        覆盖上述取值——生成参数的唯一来源是「服务商」）
     //   → ⑨ 统一模型同步（plan/review 跟随执行模型）。
-    //   ★ 2026-09-20：⑤⑥⑦ 的取值源已从核心字段（ctx.app.settings 顶层）改为
-    //     插件注册配置域（ctx.getSettings('generation')）+ models.json；
-    //     本插件不再读任何生成参数核心字段。
+    //   ★ 2026-09-25：⑤⑥⑦ 的取值源全部为 models.json（服务商配置）+ GEN_DEFAULTS 机制常量；
+    //     「全局默认」注册段（ctx.getSettings('generation')）已随设置面板「生成参数」页移除，
+    //     本插件不读任何生成参数核心字段，也不读该注册段。
     //   ★ 2026-09-20 连接字段同样不再读核心字段：③ 段的 s.provider/s.executeModel/s.model
     //     兜底已移除——settings 顶层旧连接字段已由 core 迁入 ai-presets.json 的一条配置并
     //     清空（core/settings_connection.go）。连接信息唯一来源：① 激活配置整套展开
     //     （ctx.aiPresets）+ ② 会话三元组 + ④ 服务商数据（ctx.models）。
     // ═══════════════════════════════════════════════════════════
     ctx.providerFactory.register((current) => {
-      // ★ 2026-09-20 生成参数全局默认的取值源 = 插件注册配置域 pluginSettings.generation
-      //   （核心 Go 已不直读生成参数）。默认值用 GEN_DEFAULTS（与 schema default 同源）。
-      const gset = ctx.getSettings(GEN_KEY) || {};
-      const genVal = (k) => {
-        const v = gset[k];
-        return (v === undefined || v === null || v === '') ? GEN_DEFAULTS[k] : v;
-      };
+      // ★ 2026-09-25 生成参数取值层级（「全局默认」配置层已移除，GEN_DEFAULTS 只是机制兜底）：
+      //   ① AI 配置（ai-presets.json）→ ⑤ 模型级（models.json modelParams[模型]）
+      //   → ⑦ GEN_DEFAULTS 常量兜底 → ⑧ 服务商级（models.json 服务商条目，覆盖前文）。
       const over = {};
       // ── ① 配置整套展开（会话配置 > 全局激活；配置不存在/无效 → 跳过）──
       const presetName = current.convPreset || current.preset || '';
@@ -556,34 +540,32 @@ return {
         // ★ 2026-08-21 多模态：模型级参数标记该模型支持图片输入 → Provider 以多模态格式发送
         if (mp.multimodal === true) over.multimodal = true;
       }
-      // ── ⑥ 上下文窗口层级：模型级 > 服务商级（最终服务商）> 配置级 > 全局（插件注册配置域）──
+      // ── ⑥ 上下文窗口层级：模型级 > 服务商级（最终服务商）> 配置级 > 机制兜底常量 ──
       let cctx = (mp && mp.contextMaxTokens) ? Number(mp.contextMaxTokens) : 0;
       if (!(cctx > 0) && me.contextMaxTokens) cctx = Number(me.contextMaxTokens);
       if (!(cctx > 0) && pres && Number(pres.contextMaxTokens) > 0) cctx = Number(pres.contextMaxTokens);
-      if (!(cctx > 0)) {
-        const gctx = Number(genVal('contextMaxTokens'));
-        if (gctx > 0) cctx = gctx;
-      }
+      if (!(cctx > 0)) cctx = Number(GEN_DEFAULTS.contextMaxTokens); // 机制兜底（非配置面）
       if (cctx > 0) over.contextMaxTokens = cctx;
-      // ── ⑦ 全局兜底（插件注册配置域 generation 段；模型级/配置级未配置时生效）──
+      // ── ⑦ 机制兜底（GEN_DEFAULTS 常量，非配置面；模型级/服务商级/AI 配置都未配置时生效）──
       if (!(mp && mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '')) {
-        const gtv = genVal('temperature');
+        const gtv = GEN_DEFAULTS.temperature;
         if (gtv !== undefined && gtv !== null && gtv !== '') {
           const t = parseFloat(gtv);
           if (!isNaN(t) && t >= 0) over.temperature = t;
         }
       }
       if (!(mp && mp.thinkingMode)) {
-        const gtm = String(genVal('thinkingMode') || '');
+        const gtm = String(GEN_DEFAULTS.thinkingMode || '');
         if (gtm) over.thinkingMode = gtm;
       }
       if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0)) {
-        const gmt = Number(genVal('maxTokens'));
+        const gmt = Number(GEN_DEFAULTS.maxTokens);
         if (gmt > 0) over.maxTokens = gmt;
       }
-      // ── ⑧ 服务商配置为准（★ 2026-09-19 修复）：温度/最大输出/上下文窗口的唯一来源 = models.json ──
-      //   层级：模型级（me.modelParams[模型]）> 服务商级（me.temperature/maxTokens/contextMaxTokens）。
-      //   上方 ⑤⑥⑦ 的 settings 取值仅在两处都未配置时兜底——不再覆盖服务商值。
+      // ── ⑧ 服务商配置为准（★ 2026-09-19 修复；★ 2026-09-25 纳入思考档位）──
+      //   生成参数（温度 / 思考档位 / 最大输出 / 上下文窗口）唯一来源 = models.json：
+      //   层级 模型级（me.modelParams[模型]）> 服务商级（me.temperature/thinkingMode/
+      //   maxTokens/contextMaxTokens）。上方 ⑤⑥⑦ 仅在两处都未配置时兜底——不覆盖服务商值。
       const mpm = mp; // ★ 2026-09-20 与 ⑤ 同源（models.json 服务商 modelParams[模型]）
       // 取「已配置」的值：undefined/null/空串/数字 0 一律视为未配置（0=不设），
       // 逐级回退：models.json 模型级 → models.json 服务商级。
@@ -605,6 +587,10 @@ return {
       if (svcMax > 0) over.maxTokens = svcMax;
       const svcCtx = Number(svcPick('contextMaxTokens'));
       if (svcCtx > 0) over.contextMaxTokens = svcCtx;
+      // ★ 2026-09-25 思考档位同样「服务商配置为准」：此前本节不含 thinkingMode，
+      //   服务商面板里设的思考档位不生效（只能靠模型级或已移除的全局段）。
+      const svcThink = String(svcPick('thinkingMode') || '');
+      if (svcThink !== '') over.thinkingMode = svcThink;
       if (mpm && mpm.multimodal === true) over.multimodal = true;
       // ── ⑨ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
       if (model) { over.planModel = model; over.reviewModel = model; }
@@ -646,21 +632,13 @@ return {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
       // ★ 2026-09-19 上下文窗口以服务商配置（models.json）为准：宿主已按装配结果
-      //   （服务商级 > 配置级 > 全局默认）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
-      //   才用插件设置 / 插件注册配置域兜底——不再无条件覆盖服务商值。
-      // ★ 2026-09-20：全局兜底改读插件注册配置域 generation 段——settings 顶层
-      //   contextMaxTokens 旧字段已迁入该域并清空（core/settings_generation.go），
-      //   核心字段零读取。
+      //   （服务商级 > 配置级 > 机制兜底）传入 opts.maxContextTokens；仅当宿主未传（<=0）时
+      //   才由插件兜底——不再无条件覆盖服务商值。
+      // ★ 2026-09-25：兜底值改为 GEN_DEFAULTS 机制常量——「全局默认」配置层已移除，
+      //   agentloop 段也没有 maxContextTokens 字段（旧分支实际永不命中），故不再读任何设置。
       if (!(Number(opts.maxContextTokens) > 0)) {
-        if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) {
-          over.maxContextTokens = Number(cfg.maxContextTokens);
-        } else {
-          const gsetCtx = ctx.getSettings(GEN_KEY) || {};
-          const gv = (gsetCtx.contextMaxTokens === undefined || gsetCtx.contextMaxTokens === null || gsetCtx.contextMaxTokens === '')
-            ? GEN_DEFAULTS.contextMaxTokens : gsetCtx.contextMaxTokens;
-          const ctxMax = Number(gv);
-          if (ctxMax > 0) over.maxContextTokens = ctxMax;
-        }
+        const ctxMax = Number(GEN_DEFAULTS.contextMaxTokens);
+        if (ctxMax > 0) over.maxContextTokens = ctxMax;
       }
       return over;
     });

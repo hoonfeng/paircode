@@ -11,7 +11,12 @@
 // render 返回 cleanup：槽位重渲染/插件卸载前宿主调用（清定时器+事件）。
 // ═══════════════════════════════════════════════════════════════
 (ui) => {
-  const SLOT = 'statusbar-items'
+  // ★ 2026-09-25 停用（监督第 11 次指令 第 1 步）：内置 .status-right 已按设计稿
+  //   th213+th214 显示「✔ 已连接 · 本地」，本插件经 statusbar-items 槽注入的
+  //   绿色圆点 + 「已连接」成为**重复项**（底栏出现两次「已连接」，与设计只允许
+  //   一个连接态单元不符）。改指向不存在的槽位 → 本条不再渲染；插件仍保持装载，
+  //   如需恢复把槽位名改回 'statusbar-items' 即可。
+  const SLOT = 'statusbar-items-merged-into-builtin'
 
   ui.registerSlot({
     slotId: SLOT,

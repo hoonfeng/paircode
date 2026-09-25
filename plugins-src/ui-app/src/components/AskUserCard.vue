@@ -315,7 +315,7 @@ watch(() => [props.answer, props.answers], restoreFromAnswer, { immediate: true,
 }
 .ask-option:hover { background: var(--bg-hover); border-color: var(--accent); }
 .ask-option.selected {
-  background: rgba(126, 184, 218, 0.08);
+  background: var(--color-accent-bg);
   border-color: var(--accent);
 }
 
@@ -333,7 +333,7 @@ watch(() => [props.answer, props.answers], restoreFromAnswer, { immediate: true,
 .ask-radio-circle.checked::after {
   content: ''; position: absolute;
   top: 3px; left: 3px; width: 6px; height: 6px;
-  border-radius: 50%; background: #fff;
+  border-radius: 50%; background: var(--color-accent-fg);
 }
 
 /* ── 多选方框 ── */
@@ -345,7 +345,7 @@ watch(() => [props.answer, props.answers], restoreFromAnswer, { immediate: true,
   transition: all 0.12s;
 }
 .ask-checkbox.checked { border-color: var(--accent); background: var(--accent); }
-.ask-checkmark { color: #fff; font-size: 11px; font-weight: 700; }
+.ask-checkmark { color: var(--color-accent-fg); font-size: 11px; font-weight: 700; }
 
 .ask-option-text { font-size: 13px; color: var(--text-primary); }
 
@@ -360,7 +360,7 @@ watch(() => [props.answer, props.answers], restoreFromAnswer, { immediate: true,
 
 /* ── 按钮 ── */
 .ask-user-btn {
-  padding: 7px 16px; background: var(--accent); color: #fff;
+  padding: 7px 16px; background: var(--accent); color: var(--color-accent-fg);
   border: none; border-radius: 4px; font-size: 13px; cursor: pointer;
   white-space: nowrap; transition: opacity 0.12s;
 }

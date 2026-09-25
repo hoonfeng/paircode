@@ -1,3 +1,7 @@
+// ⚠️ 已失效（2026-09-26）：本脚本中 **phase-bar 相关断言**已失效 —— 消息区顶部
+//    `.phase-bar`（运行统计条）已整条删除 → 对应 check 必然 FAIL。运行统计的唯一展示处
+//    现为右栏 `.sr-card`「运行统计」卡（`.sr-summary` / 明细行）。
+//    见 _temp/verify-chat/verify-phasebar-removed.cjs（本轮替代验证脚本）。
 // cdp-verify-runstats-backend.js — 端到端验证：运行统计「后端真源 + 刷新不丢」
 //
 // 覆盖（★ 2026-09-12 后端统计改造的验收点）：

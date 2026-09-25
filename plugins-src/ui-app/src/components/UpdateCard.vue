@@ -93,7 +93,7 @@ const iconName = computed(() => {
     default: return 'refresh'
   }
 })
-const iconColor = computed(() => (stage.value === 'error' ? 'var(--danger, #e5534b)' : 'var(--accent)'))
+const iconColor = computed(() => (stage.value === 'error' ? 'var(--danger)' : 'var(--accent)'))
 const speedMB = computed(() => (((progress.value || {}).speedBps || 0) / 1048576).toFixed(2))
 
 function mb(n) {
@@ -230,8 +230,8 @@ onUnmounted(stopPoll)
 .uc-cur { color: var(--text-secondary); }
 .uc-new { color: var(--accent); font-weight: 600; }
 .uc-state { color: var(--text-secondary); }
-.uc-err { color: var(--danger, #e5534b); }
-.uc-warn { color: var(--danger, #e5534b); font-weight: 600; }
+.uc-err { color: var(--danger); }
+.uc-warn { color: var(--danger); font-weight: 600; }
 .uc-gap { flex: 1; }
 .uc-btn {
   display: inline-flex;
@@ -250,7 +250,7 @@ onUnmounted(stopPoll)
 .uc-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--color-accent-fg);
 }
 .uc-prog { display: flex; align-items: center; gap: 10px; }
 .uc-bar {
@@ -274,7 +274,7 @@ onUnmounted(stopPoll)
   overflow: auto;
   margin: 6px 0 0;
   padding: 8px;
-  background: var(--bg-primary, #1b1b1f);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 11px;

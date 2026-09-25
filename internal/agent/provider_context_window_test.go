@@ -7,8 +7,9 @@ import (
 )
 
 // TestContextWindowUsesAssembledValue 上下文窗口只消费装配结果。
-// ★ 2026-09-20：核心零直读生成参数——settings 顶层 contextMaxTokens 已迁入插件注册域
-// （pluginSettings.generation）并清空；装配器未给值时回退机制兜底常量（运行保障，非配置面）。
+// ★ 2026-09-20：核心零直读生成参数——settings 顶层 contextMaxTokens 已迁入服务商配置并清空
+// （★ 2026-09-25 迁移目标 = 激活配置对应服务商的级字段，见 core/settings_generation.go）；
+// 装配器未给值时回退机制兜底常量（运行保障，非配置面）。
 func TestContextWindowUsesAssembledValue(t *testing.T) {
 	if got := ContextWindow(ProviderParams{ContextMaxTokens: 1000000}); got != 1000000 {
 		t.Fatalf("装配结果应优先：want 1000000, got %d", got)
@@ -31,7 +32,8 @@ func TestContextWindowUsesAssembledValue(t *testing.T) {
 // TestResolveProviderBaseHasNoConfigReads 裸基线不携带任何配置值（连接字段 + 生成参数）。
 //
 // ★ 2026-09-20 生成参数零直读：温度/思考档位/最大输出/上下文窗口/模型级参数表一律由
-// 插件装配器决策（全局默认取插件注册域 pluginSettings.generation，模型/服务商级取 models.json）。
+// 插件装配器决策（★ 2026-09-25 起唯一来源 = 服务商配置 models.json，模型级 > 服务商级；
+// 原「全局默认」配置层随设置面板「生成参数」页移除，插件侧仅余机制常量 GEN_DEFAULTS 兜底）。
 // ★ 2026-09-20 连接字段零直读：服务商/地址/Key/模型不再从 settings 顶层兜底——
 // 旧顶层值已迁入 ai-presets.json 的一条 AI 配置并清空（core/settings_connection.go），
 // 装配器按激活配置（core.Settings.Preset → ctx.aiPresets）经 ctx.models 展开。

@@ -621,7 +621,7 @@ onUnmounted(() => {
 }
 .item-row:hover { background: var(--bg-hover); }
 .item-row.selected { background: var(--accent-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
-.item-row.drag-over { background: rgba(126, 184, 218, 0.2); outline: 1px dashed var(--accent); }
+.item-row.drag-over { background: var(--color-accent-bg); outline: 1px dashed var(--color-accent); }
 .chevron-wrap { width: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .chevron { transition: transform .15s; color: var(--text-muted); }
 .chevron.expanded { transform: rotate(90deg); }

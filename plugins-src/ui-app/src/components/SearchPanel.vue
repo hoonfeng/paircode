@@ -307,7 +307,7 @@ const replaceAll = async () => {
 .sp-go-btn {
   background: var(--accent);
   border: none;
-  color: #fff;
+  color: var(--color-accent-fg);
   padding: 4px 10px;
   cursor: pointer;
   border-radius: 4px;
@@ -318,9 +318,9 @@ const replaceAll = async () => {
   filter: brightness(1.1);
 }
 .sp-replace-btn {
-  background: #e06c75;
+  background: var(--color-danger);
   border: none;
-  color: #fff;
+  color: var(--color-accent-fg);
   padding: 4px 10px;
   cursor: pointer;
   border-radius: 4px;
@@ -414,14 +414,14 @@ const replaceAll = async () => {
 .sp-replace-all-sm {
   background: none;
   border: 1px solid var(--border-color);
-  color: #e06c75;
+  color: var(--color-danger);
   padding: 1px 6px;
   font-size: 10px;
   cursor: pointer;
   border-radius: 3px;
 }
 .sp-replace-all-sm:hover {
-  background: #e06c7520;
+  background: var(--color-danger-bg);
 }
 
 /* 文件分组 */
@@ -485,8 +485,8 @@ const replaceAll = async () => {
   line-height: 1.4;
 }
 :deep(.sp-match) {
-  background: #e2b71433;
-  color: #e2b714;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
   border-radius: 2px;
   padding: 0 1px;
 }
@@ -528,11 +528,11 @@ const replaceAll = async () => {
   color: var(--accent);
 }
 .sp-status.success {
-  background: #1b3a2d;
-  color: #7ec8a3;
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 .sp-status.warn {
-  background: #3a2d1b;
-  color: #d4a05a;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 </style>

@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -870,6 +871,14 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				continue
 			}
+			// ★ 2026-09-22 修复：pluginSettings 已在上方按「段」合并（插件命名空间值），
+			//   此处若再走反射整体替换，会把请求体里**未出现**的插件段整体清掉——
+			//   实测：只提交 {pluginSettings:{autopilot:{...}}} → settings.json 里
+			//   其余插件段（如 agentloop）消失（用户配置静默丢失）。
+			//   语义以「按段合并」为准（与 internal/server/handler/workspace.go 一致）。
+			if jsonKey == "pluginSettings" {
+				continue
+			}
 			// 用 json.Unmarshal 解析到字段类型，保留类型精度
 			newVal := reflect.New(field.Type).Interface()
 			if err := json.Unmarshal(rawVal, newVal); err == nil {
@@ -1126,6 +1135,98 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// slimStoredMessages 响应瘦身：省略前端不消费的重字段（slim=false 原样返回）。
+//
+// 实测（2026-09-25，单会话 50 条合并消息 = 19.57MB 原始 JSON 响应）：
+//
+//	segments                     8.86M 字符（61%，前端渲染必需 → 保留）
+//	message.reasoning_content    3.32M 字符（24%）★ 与 segments 的 thinking 段同内容
+//	message.tool_calls           1.78M 字符（13%）★ 与 segments 的 tool_call 段重复
+//	message.content              0.28M 字符（ 2%）
+//
+// 前端 apiLoadAndBuildConv 只读 message 的 role/content/images + segments
+// （grep 全前端无 reasoning_content/tool_calls 消费点）→ 后两者可安全省略（约省 37%）。
+//
+// ★ 仅在 HTTP 响应层裁剪：Message.Reasoning 是 DeepSeek 工具调用轮次回传契约要求的
+//
+//	字段，磁盘 JSONL 必须完整保留（见 types.go 注释与 copyHistoryNoReasoning）；
+//	displayMessages 每次从磁盘重新反序列化 → 此处清空不影响缓存与后续请求。
+func slimStoredMessages(msgs []agent.StoredMessage, slim bool) []agent.StoredMessage {
+	if !slim {
+		return msgs
+	}
+	for i := range msgs {
+		msgs[i].Message.Reasoning = ""
+		msgs[i].Message.ToolCalls = nil
+		// ★ 2026-09-25 性能（段级惰性加载）：单条合并消息可达 1.5MB，瓶颈在**单条内的
+		//   超长段**而非条数（实测 50 条中前 30 条占 100% ⇒ 缩小 limit 无效）。
+		//   仅裁「折叠态完全不消费」的字段，保证可见交互零变化：
+		//     · thinking.content  —— 折叠态只渲染「思考…」标签（RightPanel 模板
+		//       `v-if="!seg._collapsed"` 才输出 content）；消息折叠摘要 msgSummary
+		//       也不用它（只用 tool_call 计数 + content 段前 60 字符）。
+		//     · tool_call.argsRaw —— 仅在展开时渲染「参数」（同理由 v-if 守卫）；
+		//       折叠行的摘要来自 Result（前 120 字符）与工具名，与本字段无关。
+		//     · tool_call.result —— 折叠行只用它做三件事：`toolResultSummary`
+		//       胶囊文案（前 120 字符）、未知工具的 summary（前 80 字符）、
+		//       /错误|失败|error…/.test(result) 判错误色（**跑全文**）。
+		//       前两者 400 字符预览足够；后者改由后端按全文预计算 `_err`
+		//       （见 agent.Segment.Err）保证判定等价 —— 实测该会话有 156 段的
+		//       错误关键词只落在 400 字符之后，只留预览会把它们误判成成功色。
+		//       实测可裁 1069 段 / 2.79M 字符，裁后省约 2.36M 字符（占 result
+		//       总量 2.89M 的 81.7%）→ 剩余体积的最大头。
+		//       ★ finish_task 例外：其 result 会被前端转成正文 content 段
+		//       （RightPanel apiLoadAndBuildConv）→ 必须保留全文。
+		//   预览长度 400：实测 thinking p50=2261 / argsRaw p50=431 ⇒ 多数 thinking 段
+		//   折叠时无需取全文，而 argsRaw 约半数完整保留，减少展开时的按需请求次数。
+		segs := msgs[i].Segments
+		for j := range segs {
+			switch segs[j].Type {
+			case "thinking":
+				if n := len([]rune(segs[j].Content)); n > slimSegPreviewRunes {
+					segs[j].Content = cutRunes(segs[j].Content, slimSegPreviewRunes)
+					segs[j].TruncLen = n
+				}
+			case "tool_call":
+				if n := len([]rune(segs[j].ArgsRaw)); n > slimSegPreviewRunes {
+					segs[j].ArgsRaw = cutRunes(segs[j].ArgsRaw, slimSegPreviewRunes)
+					segs[j].TruncLen = n
+				}
+				if segs[j].Name != "finish_task" {
+					if n := len([]rune(segs[j].Result)); n > slimSegPreviewRunes {
+						// ★ 错误色判定必须按**全文**（在裁断之前完成），否则关键词
+						//   落在预览之外时会被漏判（前端只拿得到预览片段）。
+						errFlag := toolResultErrRe.MatchString(segs[j].Result)
+						segs[j].Result = cutRunes(segs[j].Result, slimSegPreviewRunes)
+						segs[j].Err = &errFlag
+						if segs[j].TruncLen == 0 {
+							segs[j].TruncLen = n
+						}
+					}
+				}
+			}
+		}
+	}
+	return msgs
+}
+
+// slimSegPreviewRunes 折叠段首包预览的字符数（见 slimStoredMessages）。
+const slimSegPreviewRunes = 400
+
+// toolResultErrRe 工具胶囊「错误色」的关键词正则，与前端 RightPanel.vue 的判定
+// （/错误|失败|error|Error|✗|Exception/）逐词一致（无 flag 的字面量交替）。
+// result 在 slim 响应中只回预览片段，该判定却必须作用于**全文** —— 故由
+// slimStoredMessages 在裁断之前调用本正则预计算出 _err（见 agent.Segment.Err）。
+var toolResultErrRe = regexp.MustCompile(`错误|失败|error|Error|✗|Exception`)
+
+// cutRunes 按**字符**（非字节）截断，避免切断多字节字符产生乱码。
+func cutRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
+
 func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/conversations/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
@@ -1163,11 +1264,48 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			}
 			jsonResp(w, map[string]any{"count": n})
 
+		case sub == "messages" && subSub == "segment":
+			// ★ 2026-09-25 性能（折叠段惰性加载）：取单段全文。
+			//   GET /api/conversations/<id>/messages/segment?idx=<消息 idx>&seg=<段序号>&limit=<窗口>
+			//   必须走与 /messages **完全相同**的读取+合并管道并传同一 limit →
+			//   合并后的 idx / 段序号才能与前端手中的对象一一对应（否则展开时会取错段）。
+			//   本接口**不做 slim 裁断**（返回原始完整字段），故任何片段都能取回全文。
+			var midx, segIdx, lim int
+			fmt.Sscanf(r.URL.Query().Get("idx"), "%d", &midx)
+			fmt.Sscanf(r.URL.Query().Get("seg"), "%d", &segIdx)
+			lim = 50
+			if l := r.URL.Query().Get("limit"); l != "" {
+				fmt.Sscanf(l, "%d", &lim)
+			}
+			full, _, err := store.LoadLatestForDisplay(id, lim)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			for _, m := range full {
+				if m.Idx != midx {
+					continue
+				}
+				if segIdx < 0 || segIdx >= len(m.Segments) {
+					jsonErr(w, "段序号越界")
+					return
+				}
+				s := m.Segments[segIdx]
+				jsonResp(w, map[string]any{
+					"type": s.Type, "content": s.Content, "argsRaw": s.ArgsRaw, "result": s.Result,
+				})
+				return
+			}
+			jsonErr(w, "未找到该消息")
+
 		case sub == "messages":
 			limit := 50
 			if l := r.URL.Query().Get("limit"); l != "" {
 				fmt.Sscanf(l, "%d", &limit)
 			}
+			// ★ 2026-09-25 性能（接口瘦身）：slim=1 裁剪前端不消费的重字段，
+			//   实测该接口单次响应 19.57MB → 裁剪后约 12.3MB（−37%）。
+			slim := r.URL.Query().Get("slim") == "1"
 			beforeStr := r.URL.Query().Get("before")
 			if beforeStr != "" {
 				var before int
@@ -1183,7 +1321,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 					msgs = []agent.StoredMessage{}
 				}
 				total, _ := store.Count(id)
-				jsonResp(w, map[string]any{"messages": msgs, "total": total})
+				jsonResp(w, map[string]any{"messages": slimStoredMessages(msgs, slim), "total": total})
 			} else {
 				msgs, total, err := store.LoadLatestForDisplay(id, limit)
 				if err != nil {
@@ -1193,10 +1331,17 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				if msgs == nil {
 					msgs = []agent.StoredMessage{}
 				}
-				jsonResp(w, map[string]any{"messages": msgs, "total": total})
+				jsonResp(w, map[string]any{"messages": slimStoredMessages(msgs, slim), "total": total})
 			}
 
 		case sub == "token-stats":
+			// ★ 生效上下文窗口真值（后端装配口径，2026-09-24）：
+			//   一律取服务商配置（models.json）的装配结果（模型级 > 服务商级），
+			//   未配置时回退机制常量 core.DefaultContextWindow（见 agent.ContextWindow）。
+			//   前端不得再读 settings 顶层 contextMaxTokens（该字段已迁入插件注册域、
+			//   按机制不参与窗口取值），更不得硬编码兜底——旧前端 `|| 1000000`
+			//   会显示与后端实际生效口径不一致的假上限（本次修复的臆测点）。
+			ctxWindow := agent.ContextWindow(agent.ResolveProviderParamsForConv(id, wsRoot))
 			meta, err := store.GetConversation(id)
 			if err != nil {
 				jsonErr(w, err.Error())
@@ -1206,6 +1351,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				jsonResp(w, map[string]any{
 					"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
 					"cacheHitTokens": 0, "cacheMissTokens": 0,
+					"contextMaxTokens": ctxWindow,
 				})
 				return
 			}
@@ -1216,6 +1362,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				"totalTokens":      cs.TotalTokens,
 				"cacheHitTokens":   cs.PromptCacheHitTokens,
 				"cacheMissTokens":  cs.PromptCacheMissTokens,
+				"contextMaxTokens": ctxWindow,
 			}
 			if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
 				cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {

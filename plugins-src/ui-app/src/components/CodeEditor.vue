@@ -25,8 +25,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { xml } from '@codemirror/lang-xml'
 import { sql } from '@codemirror/lang-sql'
 import { indentWithTab } from '@codemirror/commands'
-import { oneDark } from '@codemirror/theme-one-dark'
-import { state } from '../ui-state.js'
+import { state, isDarkTheme } from '../ui-state.js'
 import api from '../api.js'
 import FindPanel from './FindPanel.vue'
 
@@ -36,11 +35,23 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'save', 'cursorPos', 'contextmenu-selection'])
+// ★ 事件名必须与父组件监听名一致（EditorArea.vue 用 @contextmenu）。
+// 若声明成别的名字（历史遗留 'contextmenu-selection'），Vue 会把父组件的
+// @contextmenu 当作**原生 DOM 事件**透传到根元素（fallthrough），handler 收到
+// 裸 MouseEvent（无 hasSelection/text/lineStart/lineEnd）→ 右键菜单恒走
+// 「无选中」分支、「AI: 添加到对话」退化为整文件。声明为 'contextmenu' 后该
+// 监听被识别为组件自定义事件，只走 emit 通道（带完整载荷）。
+const emit = defineEmits(['update:modelValue', 'save', 'cursorPos', 'contextmenu'])
 
 const wrapperRef = ref(null)
 const searchPanelRef = ref(null)
 let view = null
+// ★ 保存 contextmenu 监听器引用：createEditor 会因切换文件（path watch）、
+//   改字号（fontSize watch）被重复调用，而 wrapper DOM 元素是同一个
+//   （Vue 不重建）→ 匿名监听器会逐次累积（实测改 4 次字号后 1→5 个），
+//   一次右键被处理 N 次，且 ContextMenu.show 的 resolvePromise 被覆盖
+//   （先到的 Promise 永久 pending）。注册前必须先移除旧引用。
+let contextMenuHandler = null
 
 function getLang(path) {
   if (!path) return null
@@ -136,126 +147,50 @@ function createEditor() {
     }),
   ]
 
-  // 主题：为每个模式创建完整的语法高亮
-  let themeExt = null
-  let syntaxExt = null
-
-  if (state.theme === 'dark') {
-    // 暗色主题：使用 oneDark + 微调
-    themeExt = oneDark
-    syntaxExt = syntaxHighlighting(HighlightStyle.define([])) // oneDark 自带高亮
-  } else if (state.theme === 'light') {
-    themeExt = EditorView.theme({
-      '&': { backgroundColor: '#ffffff', color: '#1a1a2e' },
-      '.cm-gutters': { backgroundColor: '#f8f9fa', borderRight: '1px solid #dadce0', color: '#6e7681' },
-      '.cm-activeLineGutter': { backgroundColor: '#e8eaed' },
-      '.cm-activeLine': { backgroundColor: '#f0f4ff' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#1a73e8' },
-      '.cm-selectionBackground': { background: '#1a73e830 !important' },
-      '.cm-matchingBracket': { background: '#1a73e820', outline: '1px solid #1a73e840' },
-    })
-    syntaxExt = syntaxHighlighting(HighlightStyle.define([
-      { tag: tags.keyword, color: '#d73a49' },
-      { tag: [tags.definitionKeyword, tags.modifier], color: '#d73a49' },
-      { tag: tags.typeName, color: '#005cc5' },
-      { tag: tags.className, color: '#6f42c1' },
-      { tag: tags.function(tags.variableName), color: '#6f42c1' },
-      { tag: tags.function(tags.propertyName), color: '#6f42c1' },
-      { tag: tags.definition(tags.propertyName), color: '#005cc5' },
-      { tag: tags.definition(tags.typeName), color: '#6f42c1' },
-      { tag: tags.propertyName, color: '#005cc5' },
-      { tag: tags.attributeName, color: '#005cc5' },
-      { tag: tags.attributeValue, color: '#032f62' },
-      { tag: tags.number, color: '#005cc5' },
-      { tag: tags.string, color: '#032f62' },
-      { tag: tags.bool, color: '#005cc5' },
-      { tag: tags.regexp, color: '#032f62' },
-      { tag: tags.variableName, color: '#e36209' },
-      { tag: tags.comment, color: '#6a737d', fontStyle: 'italic' },
-      { tag: tags.invalid, color: '#d73a49' },
-      { tag: tags.operator, color: '#d73a49' },
-      { tag: tags.bracket, color: '#1a1a2e' },
-      { tag: tags.paren, color: '#1a1a2e' },
-      { tag: tags.separator, color: '#1a1a2e' },
-      { tag: tags.link, color: '#032f62', textDecoration: 'underline' },
-      { tag: tags.strong, fontWeight: 'bold' },
-      { tag: tags.emphasis, fontStyle: 'italic' },
-      { tag: tags.strikethrough, textDecoration: 'line-through' },
-      { tag: tags.heading, color: '#005cc5', fontWeight: 'bold' },
-      { tag: tags.processingInstruction, color: '#6a737d' },
-      { tag: tags.meta, color: '#6a737d' },
-    ]))
-  } else if (state.theme === 'warm') {
-    themeExt = EditorView.theme({
-      '&': { backgroundColor: '#faf3e8', color: '#3d2c1e' },
-      '.cm-gutters': { backgroundColor: '#f5ece0', borderRight: '1px solid #d6c8b8', color: '#a09080' },
-      '.cm-activeLineGutter': { backgroundColor: '#e8dbcb' },
-      '.cm-activeLine': { backgroundColor: '#f0e8d8' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#b87333' },
-      '.cm-selectionBackground': { background: '#b8733330 !important' },
-      '.cm-matchingBracket': { background: '#b8733320', outline: '1px solid #b8733340' },
-    })
-    syntaxExt = syntaxHighlighting(HighlightStyle.define([
-      { tag: tags.keyword, color: '#8b6f47' },
-      { tag: [tags.definitionKeyword, tags.modifier], color: '#8b6f47' },
-      { tag: tags.typeName, color: '#6b4c7a' },
-      { tag: tags.className, color: '#6b4c7a' },
-      { tag: tags.function(tags.variableName), color: '#8b5c3a' },
-      { tag: tags.function(tags.propertyName), color: '#8b5c3a' },
-      { tag: tags.definition(tags.propertyName), color: '#5a7a4a' },
-      { tag: tags.definition(tags.typeName), color: '#6b4c7a' },
-      { tag: tags.propertyName, color: '#5a7a4a' },
-      { tag: tags.attributeName, color: '#5a7a4a' },
-      { tag: tags.attributeValue, color: '#7a6a5a' },
-      { tag: tags.number, color: '#b87333' },
-      { tag: tags.string, color: '#7a5a3a' },
-      { tag: tags.bool, color: '#b87333' },
-      { tag: tags.regexp, color: '#7a5a3a' },
-      { tag: tags.variableName, color: '#3d2c1e' },
-      { tag: tags.comment, color: '#a09080', fontStyle: 'italic' },
-      { tag: tags.invalid, color: '#c04040' },
-      { tag: tags.operator, color: '#8b6f47' },
-      { tag: tags.bracket, color: '#5a4a3a' },
-      { tag: tags.paren, color: '#5a4a3a' },
-      { tag: tags.link, color: '#7a5a3a', textDecoration: 'underline' },
-      { tag: tags.heading, color: '#8b6f47', fontWeight: 'bold' },
-    ]))
-  } else if (state.theme === 'night') {
-    themeExt = EditorView.theme({
-      '&': { backgroundColor: '#12101a', color: '#d8d4e0' },
-      '.cm-gutters': { backgroundColor: '#1a1726', borderRight: '1px solid #2d2940', color: '#6a6680' },
-      '.cm-activeLineGutter': { backgroundColor: '#252235' },
-      '.cm-activeLine': { backgroundColor: '#1e1b30' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#9b8ec4' },
-      '.cm-selectionBackground': { background: '#9b8ec430 !important' },
-      '.cm-matchingBracket': { background: '#9b8ec420', outline: '1px solid #9b8ec440' },
-    })
-    syntaxExt = syntaxHighlighting(HighlightStyle.define([
-      { tag: tags.keyword, color: '#c4b8e8' },
-      { tag: [tags.definitionKeyword, tags.modifier], color: '#c4b8e8' },
-      { tag: tags.typeName, color: '#8ab8d4' },
-      { tag: tags.className, color: '#b8add4' },
-      { tag: tags.function(tags.variableName), color: '#b8add4' },
-      { tag: tags.function(tags.propertyName), color: '#b8add4' },
-      { tag: tags.definition(tags.propertyName), color: '#8ab8d4' },
-      { tag: tags.definition(tags.typeName), color: '#b8add4' },
-      { tag: tags.propertyName, color: '#8ab8d4' },
-      { tag: tags.attributeName, color: '#8ab8d4' },
-      { tag: tags.attributeValue, color: '#a8b4c0' },
-      { tag: tags.number, color: '#b8add4' },
-      { tag: tags.string, color: '#a8b4c0' },
-      { tag: tags.bool, color: '#b8add4' },
-      { tag: tags.regexp, color: '#a8b4c0' },
-      { tag: tags.variableName, color: '#d8d4e0' },
-      { tag: tags.comment, color: '#6a6680', fontStyle: 'italic' },
-      { tag: tags.invalid, color: '#d08080' },
-      { tag: tags.operator, color: '#c4b8e8' },
-      { tag: tags.bracket, color: '#8884a0' },
-      { tag: tags.paren, color: '#8884a0' },
-      { tag: tags.link, color: '#a8b4c0', textDecoration: 'underline' },
-      { tag: tags.heading, color: '#c4b8e8', fontWeight: 'bold' },
-    ]))
-  }
+  // ── 主题与语法高亮（★ 全部走令牌） ──
+  // 旧实现按 'dark'/'light'/'warm'/'night' 四个硬编码主题名分支，而 state.theme 的
+  // 实际取值是 8 套 UI 主题名（midnight/graphite/obsidian/aurora/daylight/paper/sand/slate）
+  // → 四个分支永不命中 → themeExt/syntaxExt 恒为 null，语法高亮与编辑器主题从未生效。
+  // 现改为：明暗两档由 isDarkTheme 判定（仅用于告知 CodeMirror 当前明/暗），
+  // 颜色本身**全部走令牌**（--syn-* 语法角色 + --color-* 编辑器 chrome）。
+  // 令牌是 CSS 变量 → 由浏览器在渲染时解析 → 切换 UI 主题即时跟随，无需重建编辑器。
+  const dark = isDarkTheme(state.theme)
+  const themeExt = EditorView.theme({
+    '&': { backgroundColor: 'transparent', color: 'var(--color-fg)' },
+    '.cm-content': { caretColor: 'var(--color-accent)' },
+    '.cm-gutters': {
+      backgroundColor: 'var(--color-surface)',
+      borderRight: '1px solid var(--color-border)',
+      color: 'var(--color-muted)',
+    },
+    '.cm-activeLineGutter': { backgroundColor: 'var(--color-surface-2)' },
+    '.cm-activeLine': { backgroundColor: 'var(--color-surface-2)' },
+    '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--color-accent)' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': { backgroundColor: 'var(--color-accent-soft)' },
+    '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
+      backgroundColor: 'var(--color-accent-bg)',
+      outline: '1px solid var(--color-accent-ring)',
+    },
+    '.cm-nonmatchingBracket': { color: 'var(--color-danger)' },
+  }, { dark })
+  const syntaxExt = syntaxHighlighting(HighlightStyle.define([
+    { tag: [tags.keyword, tags.definitionKeyword, tags.modifier, tags.operatorKeyword, tags.controlKeyword], color: 'var(--syn-keyword)' },
+    { tag: [tags.typeName, tags.className, tags.namespace, tags.definition(tags.typeName)], color: 'var(--syn-type)' },
+    { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.labelName], color: 'var(--syn-function)' },
+    { tag: [tags.propertyName, tags.attributeName, tags.definition(tags.propertyName)], color: 'var(--syn-property)' },
+    { tag: [tags.number, tags.bool, tags.atom, tags.null, tags.constant(tags.variableName)], color: 'var(--syn-constant)' },
+    { tag: [tags.string, tags.attributeValue, tags.regexp, tags.special(tags.string)], color: 'var(--syn-string)' },
+    { tag: [tags.variableName, tags.definition(tags.variableName), tags.local(tags.variableName)], color: 'var(--syn-variable)' },
+    { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.meta, tags.processingInstruction], color: 'var(--syn-comment)', fontStyle: 'italic' },
+    { tag: tags.invalid, color: 'var(--syn-invalid)' },
+    { tag: [tags.bracket, tags.paren, tags.squareBracket, tags.brace, tags.separator, tags.operator], color: 'var(--syn-bracket)' },
+    { tag: [tags.link, tags.url], color: 'var(--syn-link)', textDecoration: 'underline' },
+    { tag: [tags.heading, tags.heading1, tags.heading2, tags.heading3, tags.heading4, tags.strong], color: 'var(--syn-heading)', fontWeight: 'bold' },
+    { tag: tags.emphasis, fontStyle: 'italic' },
+    { tag: tags.strikethrough, textDecoration: 'line-through' },
+    { tag: tags.quote, color: 'var(--syn-comment)', fontStyle: 'italic' },
+    { tag: tags.escape, color: 'var(--syn-constant)' },
+  ]))
 
   if (themeExt) extensions.push(themeExt)
   if (syntaxExt) extensions.push(syntaxExt)
@@ -295,8 +230,13 @@ function createEditor() {
   // ★ 调试探针：暴露 CM6 view（probe 验证编辑链路 state 同步；真实运行无害）
   if (typeof window !== 'undefined') window.__editorView = view
 
-  // 监听编辑器区域的右键事件 — 无论有无选中都发射
-  wrapperRef.value.addEventListener('contextmenu', (e) => {
+  // 监听编辑器区域的右键事件 — 无论有无选中都发射（emit 通道，载荷含选区信息）
+  // ★ 幂等注册：先移除上一次的监听器，避免 createEditor 重入导致累积
+  if (contextMenuHandler) {
+    wrapperRef.value.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
+  contextMenuHandler = (e) => {
     if (!view) return
     const sel = view.state.selection.main
     const selectedText = view.state.sliceDoc(sel.from, sel.to)
@@ -317,7 +257,8 @@ function createEditor() {
       y: e.clientY,
       path: props.path,
     })
-  })
+  }
+  wrapperRef.value.addEventListener('contextmenu', contextMenuHandler)
 }
 
 onMounted(() => {
@@ -389,6 +330,11 @@ watch(() => state.settings?.fontSize, (val) => {
 })
 
 onBeforeUnmount(() => {
+  // ★ 卸载时清理 DOM 监听器（组件销毁后 wrapper 元素可能仍被引用）
+  if (wrapperRef.value && contextMenuHandler) {
+    wrapperRef.value.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
   if (view) {
     view.destroy()
     view = null

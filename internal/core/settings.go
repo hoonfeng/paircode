@@ -30,9 +30,10 @@ type AppSettings struct {
 	PlanModel        string `json:"planModel,omitempty"`
 	ExecuteModel     string `json:"executeModel,omitempty"`
 	ReviewModel      string `json:"reviewModel,omitempty"`
-	// ★ 2026-09-20 生成参数旧字段（仅迁移读取；运行期零消费者）：
-	//   启动时一次性迁入插件注册域 pluginSettings.generation（settings_generation.go）
-	//   并清空，omitempty 保证此后不再写回 settings.json。取值一律走插件注册配置。
+	// ★ 生成参数旧字段（仅迁移读取；运行期零消费者）：
+	//   启动时一次性迁入「激活配置对应服务商」的服务商级字段（models.json，
+	//   见 settings_generation.go 的 MigrateGenerationToProvider）并清空，omitempty 保证
+	//   此后不再写回 settings.json。取值一律走**服务商配置**（模型级 > 服务商级）。
 	Temperature      string `json:"temperature,omitempty"`
 	ThinkingMode     string `json:"thinkingMode,omitempty"`
 	MaxTokens        int    `json:"maxTokens,omitempty"`
@@ -126,17 +127,41 @@ func Default() AppSettings {
 	return AppSettings{
 		// ★ 2026-08-21 AI 业务字段不再设默认（配置来源收敛到 ai-presets.json：
 		//   装配按 settings.preset 展开；无预设时 models.json 服务商 key/baseURL 兜底。
-		// ★ 2026-09-20 生成参数（温度/思考/输出/上下文窗口）默认值也移出核心：
-		//   改由插件 agentloop 经 ctx.registerSettings 注册（generation 段，
-		//   见 settings_generation.go）——核心不再持有生成参数默认值。
+		// ★ 2026-09-25 生成参数（温度/思考/输出/上下文窗口）不再有「全局默认」配置层：
+		//   唯一来源 = 服务商配置（models.json 服务商级 + 模型级），设置面板「生成参数」页
+		//   已移除（该页与服务商配置重复且优先级最低）。核心不持有生成参数默认值，
+		//   插件侧仅留机制兜底常量 GEN_DEFAULTS（非配置面）。
 		// ★ 2026-09-20 连接字段（provider/baseURL/apiKey/model）同样无默认值：
 		//   唯一来源是 AI 配置（ai-presets.json）；旧顶层值启动时一次性迁入配置并清空
 		//   （见 settings_connection.go）——核心零直读连接字段。
 		Provider: "", BaseURL: "", APIKey: "",
 		PlanModel: "", ExecuteModel: "", ReviewModel: "",
 		AutoIterate: true, ReviewMode: "auto",
-		Theme: "dark", FontSize: 14, TabSize: 2,
+		// ★ 2026-09-25：主题 v2（8 套）落地后默认值改为新主题 id。
+		//   旧 id "dark" 虽是 midnight 的别名（client.js 仍能注入正确 CSS 文件），
+		//   但设置面板的「主题画廊」按新 id 判定选中态，故默认值也必须是新 id。
+		Theme: "midnight", FontSize: 14, TabSize: 2,
 	}
+}
+
+// ThemeIDAliases 旧 4 主题 id → 主题 v2 的 8 套新 id。
+//
+// ★ 与 ui-appearance 插件 client.js 的 THEME_FILE 别名表保持一致：旧 id 的 CSS
+// 选择器仍保留在各 theme-<id>.css 中（旧配置值的视觉行为不变），但设置面板的
+// 「主题画廊」按新 id 判定选中态 —— 不迁移则没有任何卡片高亮（实测 activeCard=无）。
+var ThemeIDAliases = map[string]string{
+	"dark":  "midnight",
+	"night": "obsidian",
+	"light": "daylight",
+	"warm":  "sand",
+}
+
+// NormalizeThemeID 把旧主题 id 归一化为新 id（未知值原样返回）。
+func NormalizeThemeID(id string) string {
+	if n, ok := ThemeIDAliases[id]; ok {
+		return n
+	}
+	return id
 }
 
 // Load 读 settings.json 进 Settings。同时确保 models.json 存在并加载模型列表。
@@ -177,6 +202,11 @@ func Load() bool {
 			}
 		}
 	}
+	// ★ 2026-09-25：迁移旧 4 主题 id → 主题 v2 的 8 套新 id（见 NormalizeThemeID）。
+	//   幂等：已是新 id 原样返回。
+	//   ★ 放在 if 块**之外**：无论是否读到 settings.json、是否命中上面的旧字段迁移分支，
+	//     最终 Theme 都必须是新 id —— 否则设置面板画廊没有任何卡片高亮（实测 activeCard=无）。
+	Settings.Theme = NormalizeThemeID(Settings.Theme)
 	if Settings.ExecuteModel == "" && Settings.Model != "" {
 		Settings.ExecuteModel = Settings.Model
 	}
@@ -189,11 +219,11 @@ func Load() bool {
 	// ★ 2026-09-19：把 settings 里的生成参数（温度/最大输出/上下文窗口）一次性迁进
 	//   models.json（此后服务商配置为唯一来源）；幂等，迁过即跳过。
 	MigrateParamSettingsToModels()
-	// ★ 2026-09-20：再把 settings 顶层的全局生成参数迁进插件注册域
-	//   （pluginSettings.generation，由 agentloop 注册）并清空旧字段——此后 Go 内核
-	//   零直读，全局默认取值一律走插件注册配置。
+	// ★ 2026-09-25：生成参数的**唯一来源 = 服务商配置** —— 设置面板「生成参数」段（插件注册的
+	//   pluginSettings.generation）已整体移除，其旧值与 settings 顶层旧字段一并迁进
+	//   「激活配置对应服务商」的服务商级字段（只补空、不覆盖服务商面板里已设的值）。
 	//   ★ 顺序：必须在 MigrateParamSettingsToModels 之后（模型级参数先搬进 models.json）。
-	MigrateGenerationSettingsFromLegacy()
+	MigrateGenerationToProvider()
 	// ★ 2026-09-20：把 settings 顶层的旧连接字段（provider/baseURL/apiKey/模型）迁进
 	//   ai-presets.json 的一条 AI 配置（并把 preset 指向它）后清空——此后核心零直读连接
 	//   字段，连接信息唯一来源 = AI 配置（插件经 ctx.aiPresets 读写）。

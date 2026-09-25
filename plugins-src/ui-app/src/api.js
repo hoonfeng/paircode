@@ -21,13 +21,38 @@ function apiURL(path, params = {}) {
 
 }
 
+// ── GET 并发合并（★ 2026-09-25 性能）─────────────────────────────
+// 同一 URL+参数的 GET 在「请求在途」窗口内复用同一 Promise。
+// 实测首屏重复（CDP 时序）：/conversations/<id>/messages（12.6MB）被并发请求 2 次
+// （t=209ms 与 t=221ms，间隔 12ms，参数完全相同 → 白拉 12.6MB）；/git/status 并发
+// 2 次（间隔 1ms）；/tasks 5 次。来源是多个组件在同一帧各自触发（mounted nextTick /
+// switchConv / WS 重连 / 定时器探测），彼此不知道对方已在拉同一份数据。
+// ★ 只合并「在途」窗口，**不缓存结果**：请求一返回即移出表，后续调用仍真实发请求
+//   →「强制刷新」语义（WS 重连补拉、会话结束补拉、手动刷新按钮）完全不受影响。
+// ★ 逃生开关：opts.dedupe === false 时该请求不参与合并。
+const _getInflight = new Map()
+
 async function apiGet(path, params = {}, opts = {}) {
-  const r = await fetch(apiURL(path, params), { signal: apiSignal(opts) })
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({ error: r.statusText }))
-    throw new Error(e.error || e.message || r.statusText)
+  const url = apiURL(path, params)
+  const dedupe = opts.dedupe !== false
+  if (dedupe) {
+    const pending = _getInflight.get(url)
+    if (pending) return pending
   }
-  return r.json()
+  const task = (async () => {
+    const r = await fetch(url, { signal: apiSignal(opts) })
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({ error: r.statusText }))
+      throw new Error(e.error || e.message || r.statusText)
+    }
+    return r.json()
+  })()
+  if (dedupe) {
+    _getInflight.set(url, task)
+    const cleanup = () => { _getInflight.delete(url) }
+    task.then(cleanup, cleanup)
+  }
+  return task
 }
 
 async function apiPost(path, body = {}, params = {}, opts = {}) {
@@ -448,12 +473,6 @@ function closeWebSocket() {
 
 }
 
-function isWebSocketOpen() {
-
-  return !!(wsSocket && wsSocket.readyState === WebSocket.OPEN)
-
-}
-
 // 等待 WebSocket 连接就绪（用于发送消息前确保能接收 WS 事件）。
 
 // 若已连接立即返回 true；若正在连接则等待最多 timeout ms；
@@ -510,14 +529,6 @@ async function chatStop(convId) {
 
 }
 
-// 回答 ask_user 问题
-
-async function answerChat(convId, answer) {
-
-  return apiPost('/chat/answer', { convId, answer })
-
-}
-
 // ─── Slash 命令（Round3 ④.2：ctx.commands 面前端消费） ───────────
 
 // listCommands 获取 slash 命令清单（输入框 "/" 菜单提示）。
@@ -532,27 +543,11 @@ async function runCommand(name, args, convId, workspaceRoot) {
   return apiPost('/commands/run', { name, args: args || {}, convId: convId || '', workspaceRoot: workspaceRoot || '' })
 }
 
-// 审批写工具
-
-async function approveChat(convId, approved) {
-
-  return apiPost('/chat/approve', { convId, approved })
-
-}
-
 // 运行时反馈：Agent 执行中用户可补充/纠正
 
 async function sendFeedback(convId, content) {
 
   return apiPost('/chat/feedback', { convId, content })
-
-}
-
-// 请求当前运行中的对话在下一轮迭代压缩上下文
-
-async function chatCompact(convId) {
-
-  return apiPost('/chat/compact?convId=' + encodeURIComponent(convId), {})
 
 }
 
@@ -565,27 +560,22 @@ async function chatCompact(convId) {
 // ★ 2026-08-23 工作区隔离：workspaceRoot 参数透传（对话消息回放按所属工作区路由，
 // 运行中切换工作区后回放旧工作区对话不再落到新工作区存储）
 
-async function getMessages(convId, { limit = 50, before = null, workspaceRoot = '' } = {}) {
+async function getMessages(convId, { limit = 50, before = null, workspaceRoot = '', slim = true } = {}) {
 
   const params = { limit }
+
+  // ★ 2026-09-25 性能（接口瘦身）：slim=1 → 后端省略前端不消费的重字段
+  //   （message.reasoning_content / message.tool_calls —— 实测与 segments 的
+  //   thinking / tool_call 段同内容：单会话 50 条 19.57MB 中两者合计 5.1M 字符，
+  //   裁剪后约 12.3MB，−37%）。前端只用 message.role/content/images + segments
+  //   （见 RightPanel.vue 的 apiLoadAndBuildConv）。
+  if (slim) params.slim = 1
 
   if (before !== null && before !== undefined) params.before = before
 
   if (workspaceRoot) params.workspaceRoot = workspaceRoot
 
   return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages', params)
-
-}
-
-// 获取对话消息总数
-
-async function getMessagesCount(convId, workspaceRoot = '') {
-
-  const params = {}
-
-  if (workspaceRoot) params.workspaceRoot = workspaceRoot
-
-  return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages/count', params)
 
 }
 
@@ -718,17 +708,18 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, renameProvider, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
+// ★ 2026-09-25 摘除零调用方法：isWebSocketOpen / answerChat / approveChat /
+//   chatCompact / getMessagesCount / getUIBoot（扫描确认全域零调用；其中
+//   approveChat 封装缺 reply 字段，真实调用点直发 /chat/approve 已带 reply）。
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, waitForWebSocket, chatStart, sendFeedback, chatStop, getMessages, setConvModel, getConversationMeta, getModels, saveModels, renameProvider, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
 
 // ─── UI 插件 boot 图（外部兼容 /api/ui-boot 单图）──────────────
-// getUIBoot 取外部 boot 图（WebBootGraph 等价，{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
-// ★ boot() 两源合并（spec §7）：① 本图装配 dsh.ui 区域包（主源）;
+// ★ 2026-09-25 删除 getUIBoot()：全域零调用（唯一取用方 plugin-runtime.js 的 boot()
+//   直接 fetch('/api/ui-boot')）——后续若要统一，应让 boot() 改走封装而非裸 fetch。
+// boot() 两源合并（spec §7）：① boot 图装配 dsh.ui 区域包（主源）;
 //   ② 再由 boot() 经 listPlugins() 装载非 dsh.ui 直载插件
 //   （agent-teams/ui-quick-exec/ui-statusbar-conn，恢复首屏 titlebar-right/statusbar-items）
 //   —— 见 plugin-runtime.boot() 与 ShellApp.vue onMounted。
-async function getUIBoot() {
-  return apiGet('/ui-boot')
-}
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 

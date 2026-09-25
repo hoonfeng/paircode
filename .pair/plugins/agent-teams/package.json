@@ -3,7 +3,7 @@
   "purpose": "多智能体团队（dsh-agent-teams 移植·单 Agent 多步执行）：任务 DAG 就绪推进、质量门禁修复循环、两阶段批准、Web 活动面板（不含成员子会话）",
   "scope": "global",
   "type": "plugin",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "index.js",
   "client": "client.js"
 }

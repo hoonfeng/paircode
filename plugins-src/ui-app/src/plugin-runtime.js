@@ -86,7 +86,7 @@ export const clientPanels = __registry.clientPanels
 let panelMountFn = null
 
 // ─── 中间区域视图注册表（registerView：插件在 IDE 主内容区开 tab）─────
-// views: [{ id, title, icon, order, open, render, pluginName, defId }]
+// views: [{ id, title, icon, order, open, regions, render, pluginName, defId }]
 // ★ 共享数组（同 __registry 语义）：壳（ShellApp）与 UI bundle 副本看到同一张表。
 export const clientViews = __registry.clientViews
 // 视图列表变化订阅（ShellApp 订阅 → 重渲染 tab 栏、增删视图容器）。
@@ -507,8 +507,15 @@ function makeUI(inst) {
     },
     // 注册中间区域视图（主内容区 tab；与 registerPanel 相互独立——面板在插件面板内，
     // 视图在 IDE 中间区域，两者可同时注册、共用同一个 bundle 的 mount）。
-    // spec: { id, title, icon?, order?, open?, render(el, ui) }
+    // spec: { id, title, icon?, order?, open?, regions?, render(el, ui) }
     //   open=true → 注册后默认打开为后台 tab（不抢占对话主视图）
+    //   ★ regions → 入驻区域（2026-09 新增，默认 ['titlebar','mainTab'] = 与旧行为一致）：
+    //     · 'titlebar' → 顶栏导航胶囊组（UiTitlebar 渲染）。自带入口的插件
+    //       （如 autopilot 已在 activitybar 槽位放了图标）可去掉它，不挤顶栏；
+    //     · 'mainTab'  → 主区内容出口（ShellApp 建 pane 容器）。**渲染的必要条件**：
+    //       没有它 → 视图无容器 DOM → 打开后主区空白，故声明缺失时自动补回 + 告警。
+    //     归一化：非数组/缺省 → 两项都进（向后兼容已发布插件）；未知值与非字符串丢弃；
+    //     去重保序；空数组 [] 合法 → 等价 ['mainTab']（不进顶栏、插件自备入口）。
     //   render 返回 cleanup；同一个 render 可能被调用两次（面板 + 视图各挂一次），
     //   实现方需保证 mount 可重入（各自创建独立实例）。
     registerView(spec) {
@@ -517,6 +524,16 @@ function makeUI(inst) {
         return
       }
       const idx = clientViews.findIndex(v => v.id === spec.id && v.pluginName === inst.name)
+      // ★ 入驻区域归一化（见上方 spec 说明）
+      const REGION_KEYS = ['titlebar', 'mainTab']
+      const regions = Array.isArray(spec.regions)
+        ? [...new Set(spec.regions.filter(r => typeof r === 'string' && REGION_KEYS.includes(r)))]
+        : [...REGION_KEYS]
+      if (!regions.includes('mainTab')) {
+        regions.push('mainTab')
+        console.warn('[plugin] registerView：视图「' + spec.title + '」声明不含 mainTab —— ' +
+          '主区内容出口是渲染的必要条件，已自动补回')
+      }
       const view = {
         id: spec.id,
         title: spec.title,
@@ -524,6 +541,7 @@ function makeUI(inst) {
         // order 控制 tab 栏顺序（数值小者靠前；默认 100，排在内置视图之后）
         order: Number.isFinite(Number(spec.order)) ? Number(spec.order) : 100,
         open: spec.open === true,
+        regions,   // ★ 入驻区域（'titlebar' 顶栏胶囊 / 'mainTab' 主区内容出口）
         render: typeof spec.render === 'function' ? spec.render : null,
         pluginName: inst.name,
         defId: inst.defId,
@@ -942,7 +960,7 @@ if (typeof window !== 'undefined') {
     instances: () => instances.map(i => ({ name: i.name, status: i.status, error: i.error || '' })),
     clientSlots: () => clientSlots.map(s => ({ slotId: s.slotId, pluginName: s.pluginName, title: s.title, hasRender: typeof s.render === 'function' })),
     clientPanels: () => clientPanels.map(p => ({ id: p.id, pluginName: p.pluginName })),
-    clientViews: () => clientViews.map(v => ({ id: v.id, pluginName: v.pluginName, title: v.title, open: isViewOpen(v), hasRender: typeof v.render === 'function' })),
+    clientViews: () => clientViews.map(v => ({ id: v.id, pluginName: v.pluginName, title: v.title, open: isViewOpen(v), regions: [...(v.regions || [])], hasRender: typeof v.render === 'function' })),
     getSlotOwner,
   }
 }

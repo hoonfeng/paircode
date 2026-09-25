@@ -63,6 +63,12 @@ if (!PKG_PREFIX || /\s/.test(PKG_PREFIX) || !/[\/-]$/.test(PKG_PREFIX)) {
 //   漏掉它会把 voice 发成「缺实现模块」的坏包（0.3.2 实测：tarball 里没有 lib/，装载即报错）。
 //   ⚠️ 同时必须同步白名单到 buildPackage 覆写的 pkg.files —— npm publish <dir> 仍按 files 字段过滤。
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'README.md']
+// ★ 2026-09-25 补：顶层主题 CSS 放行（与 publish-official-plugins.mjs 同一口径）——
+//   ui-appearance 的 8 套主题以 theme-<id>.css 存在插件包顶层，client.js 注入
+//   /plugins-assets/ui-appearance/theme-<id>.css 加载；此前不在白名单 → 发布包丢掉全部主题。
+//   两脚本共享 .content-hashes.json，规则必须逐字一致，否则同一插件算出的 src 指纹分叉。
+const PUBLISH_EXTRA_RE = /^theme-[a-z0-9-]+\.css$/
+const isPublishableTop = (name) => PUBLISH_FILES.includes(name) || PUBLISH_EXTRA_RE.test(name)
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
 // ── 代理配置：Web 配置(.pair/publish/.proxy 文件) → PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY ──
 // ★ node fetch 不读 HTTP(S)_PROXY 环境变量，故线上查询改走 curl（天然支持 -x）
@@ -283,7 +289,7 @@ function dirHashSplit(dir) {
   ;(function walk(p, rel) {
     for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
       if (ent.name === 'node_modules' || ent.name === '.git') continue
-      if (rel === '' && !PUBLISH_FILES.includes(ent.name)) continue
+      if (rel === '' && !isPublishableTop(ent.name)) continue
       const s = path.join(p, ent.name)
       const r = rel ? path.join(rel, ent.name) : ent.name
       if (ent.isDirectory()) walk(s, r)
@@ -313,7 +319,7 @@ function dirHash(dir) {
   ;(function walk(p, rel) {
     for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
       if (ent.name === 'node_modules' || ent.name === '.git') continue
-      if (rel === '' && !PUBLISH_FILES.includes(ent.name)) continue
+      if (rel === '' && !isPublishableTop(ent.name)) continue
       const s = path.join(p, ent.name)
       const r = rel ? path.join(rel, ent.name) : ent.name
       if (ent.isDirectory()) walk(s, r)
@@ -351,7 +357,7 @@ function copyDir(src, dst, topLevel = true) {
   fs.mkdirSync(dst, { recursive: true })
   for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
     if (ent.name === 'node_modules' || ent.name === '.git') continue
-    if (topLevel && !PUBLISH_FILES.includes(ent.name)) continue
+    if (topLevel && !isPublishableTop(ent.name)) continue
     const s = path.join(src, ent.name)
     const d = path.join(dst, ent.name)
     if (ent.isDirectory()) copyDir(s, d, false)
@@ -362,6 +368,9 @@ function buildPackage(name) {
   const src = path.join(pluginsDir, name)
   const dst = path.join(publishDir, name)
   try {
+    // 清空目标快照再拷贝 —— 根治「快照残留污染发布包」（同 publish-official-plugins.mjs）：
+    // 真源删除/改名的文件若不清理，旧快照文件会被 npm pack 一并打进 tarball。
+    fs.rmSync(dst, { recursive: true, force: true })
     copyDir(src, dst)
     const pkgPath = path.join(dst, 'package.json')
     let pkg = {}
@@ -375,7 +384,7 @@ function buildPackage(name) {
     pkg.publishConfig = { access: 'public' }
     // 与 PUBLISH_FILES 同步（含 'lib'）：npm publish <dir> 会再按 files 字段过滤一遍，
     // 只改拷贝白名单而漏掉这里，lib/ 照样进不了 tarball。
-    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json']
+    pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'lib', 'package.json', 'theme-*.css']
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
     return { ok: true, version: pkg.version }
   } catch (e) {

@@ -37,52 +37,14 @@
            二者互不影响。
          · 激活 tab 由 state.panels.editorOpen 决定（false=对话 tab，true=编辑器 tab）。
          · 点文件树 openEditor → editorOpen=true → 切到编辑器 tab；对话 tab 可手动切回。 -->
+    <!-- ★ 2026-09-25 对齐设计稿 shell-midnight th198：原 main-tabs（8 个 tab ＋
+         「视图/并排对比」工具区）已整体移除 —— 导航收敛为顶栏的 4 个胶囊
+         （UiTitlebar：对话/编辑器/设计/市场）；其余视图（工具集/画板/3D/音乐/
+         角色/市场）经活动栏图标进入，不再占用顶栏。主区内容（.main-views）
+         不受影响，仍按 state.panels.mainTab 切换。 -->
     <div class="main-area" :class="{ 'panel-only': panelMode }">
+      <!-- tab 栏已提到顶栏（P4 合并），此处不再渲染 -->
       <!-- tab 栏（工具栏：对话 / 编辑器 / 市场） -->
-      <div class="main-tabs" v-if="!panelMode">
-        <button class="main-tab" :class="{ active: mainView === 'conversation' }"
-                @click="layout.setMainView('conversation')">对话</button>
-        <button class="main-tab" :class="{ active: mainView === 'editor' }"
-                @click="layout.setMainView('editor')">编辑器<span class="main-tab-close" title="关闭" @click.stop="layout.closeEditor()">×</span></button>
-        <!-- ★ 市场 tab（2026-09）：点击活动栏「市场」打开；× 关闭后回对话主视图 -->
-        <button v-if="state.marketTabOpen" class="main-tab" :class="{ active: mainView === 'market' }"
-                @click="layout.setMainView('market')">市场<span class="main-tab-close" title="关闭" @click.stop="closeMarketTab()">×</span></button>
-        <!-- ★ 工具集 tab（2026-09）：点击活动栏「工具集」打开；× 关闭后回对话主视图 -->
-        <button v-if="state.toolsetsTabOpen" class="main-tab" :class="{ active: mainView === 'toolsets' }"
-                @click="layout.setMainView('toolsets')">工具集<span class="main-tab-close" title="关闭" @click.stop="closeToolsetsTab()">×</span></button>
-        <!-- ★ 插件中间区域视图 tab（2026-09；ui.registerView / clientViews）：
-             与内置视图同级 —— 可激活、可关闭、可与对话并排；打开状态持久化
-             （viewOpen:<插件>:<视图 id>），默认 open:true 的视图以「后台 tab」形式出现，
-             不抢占对话主视图。 -->
-        <button v-for="v in openViews" :key="v.key" class="main-tab"
-                :class="{ active: mainView === v.key }" :title="v.pluginName"
-                @click="layout.activateViewTab(v.pluginName, v.id)">{{ v.title }}<span
-                class="main-tab-close" title="关闭" @click.stop="layout.closeViewTab(v.pluginName, v.id)">×</span></button>
-        <!-- 右侧工具区：视图列表（开关各视图）+ 与对话并排切换 -->
-        <div class="main-tab-tools">
-          <button class="main-tab-tool" :class="{ active: viewMenuOpen }"
-                  title="视图列表（插件注册的中间区域视图）" @click.stop="viewMenuOpen = !viewMenuOpen">视图</button>
-          <button class="main-tab-tool" :class="{ active: splitActive }" :disabled="!canSplit"
-                  :title="canSplit ? (splitActive ? '取消并排（回到单栏）' : '与对话并排显示') : '对话本身已是当前视图（无需并排）'"
-                  @click.stop="layout.toggleSplit()">{{ splitActive ? '取消并排' : '并排对话' }}</button>
-          <button v-if="splitActive" class="main-tab-tool" title="切换对话所在侧"
-                  @click.stop="swapSplitSide()">换边</button>
-          <!-- 视图菜单浮层：勾选 = tab 打开（后台打开，不抢主视图） -->
-          <div v-if="viewMenuOpen" class="view-menu" @click.stop>
-            <div class="view-menu-head">中间区域视图（插件注册）</div>
-            <label v-for="v in views" :key="v.key" class="view-menu-item">
-              <input type="checkbox" :checked="v.open"
-                     @change="onToggleView(v, $event.target.checked)">
-              <span class="view-menu-title">{{ v.title }}</span>
-              <span class="view-menu-src">{{ v.pluginName }}</span>
-            </label>
-            <div v-if="views.length === 0" class="view-menu-empty">暂无插件注册视图</div>
-          </div>
-        </div>
-      </div>
-      <!-- 视图菜单外点关闭用的透明背板（不吃其他区域交互：仅 menu 打开时存在） -->
-      <div v-if="viewMenuOpen && !panelMode" class="view-menu-backdrop"
-           @click="viewMenuOpen = false"></div>
 
       <!-- ★ 内容区：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图）─────────
            split 时 = 一栏对话（可在左/右，换边按钮切换）+ 一栏当前激活视图；
@@ -123,6 +85,13 @@
       <div v-for="v in openViews" :key="v.key" class="view-pane view-pane-plugin"
            v-show="mainView === v.key" :ref="(el) => setViewHostEl(v.key, el)"></div>
       </div>
+    </div>
+
+    <!-- ═══ 右栏（grid col 4）：设计稿 th178 ═══
+         运行统计(188) / 任务进度(152) / 上下文构成(116，水平分段条) / 底提示(72)。
+         设计稿为常驻信息栏（宽 288），随主题令牌自动换肤。 -->
+    <div v-if="!panelMode && state.statsRailVisible !== false" class="right-rail-host">
+      <StatsRail />
     </div>
 
     <!-- statusbar 槽位（single）：底部状态栏 -->
@@ -168,6 +137,7 @@ import { state, sidebarWidth, layout } from './ui-state.js'
 import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab, closeToolsetsTab } from './app-actions.js'
 import PluginPanel from './components/PluginPanel.vue'
 import ToolsetPanel from './components/ToolsetPanel.vue'
+import StatsRail from './components/StatsRail.vue'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧对话面板占满全屏，隐藏 IDE 其他区域。
@@ -282,6 +252,9 @@ function refreshViews(list) {
     pluginName: v.pluginName,
     title: v.title,
     icon: v.icon,
+    // ★ 入驻区域（regions，2026-09）：'mainTab' 才在主区建内容容器；
+    //   老注册表项无该字段时兜底两项都算（与 plugin-runtime 的默认一致）。
+    regions: Array.isArray(v.regions) ? v.regions : ['titlebar', 'mainTab'],
     render: v.render,
     open: isViewOpen(v),
   }))
@@ -300,7 +273,10 @@ function refreshViews(list) {
   }
 }
 
-const openViews = computed(() => views.value.filter(v => v.open))
+// openViews 建立「主区内容容器（pane）」的视图清单：① 已打开 ② 声明含 mainTab 区域。
+//   二者缺一都不建容器 —— 未打开 = 不该占主区；无 mainTab = 无内容出口。
+//   （plugin-runtime 侧对缺失 mainTab 会自动补回 + 告警，故后者实为防御性过滤。）
+const openViews = computed(() => views.value.filter(v => v.open && v.regions.includes('mainTab')))
 // 并排开关可用性：对话本身是当前视图时无意义（会变成两栏对话）
 const canSplit = computed(() => mainView.value !== 'conversation' || state.panels.splitView)
 const splitActive = computed(() => layout.isSplitActive())
@@ -357,9 +333,15 @@ const gridStyle = computed(() => {
   // · main 列（col 3）：对话/编辑器 tab 区，占主导（无独立 editor 列）。
   //   ★ 编辑器不再是独立 details 列，而是 main 区内与对话 tab 切换（见 main-area）。
   const sidebarW = state.sidebarVisible ? (sidebarWidth.value + 'px') : '0px'
+  // ★ 2026-09-25 对齐设计稿 shell-midnight（th178）：新增第 4 列 = 右栏 288px。
+  //   设计稿四列 = 活动栏 48 ｜ 会话 264 ｜ 主区 840 ｜ 右栏 288（1440 总宽）。
+  const railW = state.statsRailVisible === false ? '0px' : '288px'
   return {
-    gridTemplateColumns: `48px ${sidebarW} minmax(0, 1fr)`,
-    gridTemplateRows: '30px 1fr 22px',
+    gridTemplateColumns: `48px ${sidebarW} minmax(0, 1fr) ${railW}`,
+    //   注意此处是内联 style，优先级高于 <style> 里的 .app-root 规则 —— 改行高必须改这里，
+    //   否则 CSS 改了也不生效（曾实测 gridTemplateRows 仍为 30px）。
+    // ★ 2026-09-25 对齐设计稿 shell-midnight：底栏 28px（th219 row h=28）。
+    gridTemplateRows: '40px 1fr 28px',
   }
 })
 
@@ -407,8 +389,11 @@ onUnmounted(() => {
   /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，
      editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。
      gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */
-  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);
-  grid-template-rows: 30px 1fr 22px;
+  /* ★ 2026-09-25 对齐设计稿：活动栏 48 ｜ 会话 264 ｜ 主区 1fr ｜ 右栏 288。 */
+  grid-template-columns: 48px var(--sidebar-w, 264px) minmax(0, 1fr) var(--rail-w, 288px);
+  /* ★ 2026-09-25：顶栏为整条（titlebar 跨全部列，见 UiTitlebar）；原 main-tabs 已移除。 */
+  /* ★ 2026-09-25 对齐设计稿：底栏 28px（th219）；顶栏 titlebar 跨全部列（整条 40px）。 */
+  grid-template-rows: 40px 1fr 28px;
   width: 100%; height: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -425,31 +410,21 @@ onUnmounted(() => {
   width: 100% !important;
   height: 100%;
 }
-.app-root.panel-only .main-tabs { display: none; }
-/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */
-.plugin-area-titlebar { grid-column: 1 / -1; grid-row: 1; height: 30px; }
+/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸
+   ★ 2026-09-25：设计稿顶栏是【整条】(th206 w=1440)，故 titlebar 跨全部列；
+   main-tabs 改为浮在顶栏行右侧的导航胶囊组（见下方 justify-self:end）。 */
+.plugin-area-titlebar { grid-column: 1 / -1; grid-row: 1; height: 40px; }
+.slot-empty.plugin-area-titlebar { grid-column: 1 / -1; grid-row: 1; height: 40px; }
 .plugin-area-activitybar { grid-column: 1; grid-row: 2; width: 48px; }
 .plugin-area-sidebar { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden; }
+/* ★ 右栏（设计稿第 4 列）：288px 常驻信息栏 */
+.right-rail-host { grid-column: 4; grid-row: 2; min-width: 0; height: 100%; overflow: hidden; }
 /* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */
 .main-area {
   grid-column: 3; grid-row: 2;
   display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;
 }
 /* tab 栏：对话 / 编辑器 */
-.main-tabs {
-  display: flex; flex-shrink: 0; height: 30px;
-  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
-  position: relative;
-}
-.main-tab {
-  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */
-  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;
-  color: var(--text-muted); font-size: 12px; font-weight: 600;
-  padding: 0 18px; border-bottom: 2px solid transparent;
-  transition: color .15s, background .15s;
-}
-.main-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
-.main-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active); }
 /* ★ 内容区（2026-09）：单栏（tab 互斥切换）或并排两栏（对话 + 当前视图） */
 .main-views {
   flex: 1; min-width: 0; min-height: 0;
@@ -474,44 +449,8 @@ onUnmounted(() => {
 /* 插件中间区域视图容器（registerView）：bundle 挂载点，撑满所在栏 */
 .view-pane-plugin { background: var(--bg-primary); }
 /* tab 栏右侧工具区（视图列表 + 并排开关） */
-.main-tab-tools {
-  margin-left: auto; display: flex; align-items: stretch;
-  position: relative; flex-shrink: 0;
-}
-.main-tab-tool {
-  border: none; background: none; cursor: pointer;
-  color: var(--text-muted); font-size: 11px; font-weight: 600;
-  padding: 0 10px; border-left: 1px solid var(--border-color);
-  transition: color .15s, background .15s;
-}
-.main-tab-tool:hover { color: var(--text-primary); background: var(--bg-hover); }
-.main-tab-tool.active { color: var(--text-primary); background: var(--bg-active); }
-.main-tab-tool:disabled { opacity: .4; cursor: default; }
-.main-tab-tool:disabled:hover { color: var(--text-muted); background: none; }
 /* 视图列表浮层（勾选 = tab 打开；后台打开，不抢对话主视图） */
-.view-menu {
-  position: absolute; top: 30px; right: 0; width: 240px;
-  max-height: 320px; overflow: auto; padding: 4px 0; z-index: 120;
-  background: var(--bg-elevated, #262932);
-  border: 1px solid var(--border-color); border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
-}
-.view-menu-head {
-  padding: 4px 10px 6px; margin-bottom: 2px;
-  font-size: 11px; color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-}
-.view-menu-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 10px; font-size: 12px; color: var(--text-primary);
-  cursor: pointer;
-}
-.view-menu-item:hover { background: var(--bg-hover); }
-.view-menu-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.view-menu-src { font-size: 10px; color: var(--text-muted); }
-.view-menu-empty { padding: 8px 10px; font-size: 11px; color: var(--text-muted); }
 /* 菜单外点关闭背板（仅菜单打开时存在，点一下就关） */
-.view-menu-backdrop { position: fixed; inset: 0; z-index: 110; }
 /* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */
 .conversation-container {
   flex: 1; min-width: 0; min-height: 0;
@@ -528,13 +467,8 @@ onUnmounted(() => {
   display: flex; flex-direction: column; overflow: hidden;
 }
 /* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */
-.main-tab-close {
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-left: 6px; font-size: 13px; line-height: 1;
-  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;
-}
-.main-tab-close:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary); }
-.app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px; }
+/* ★ 2026-09-25 对齐设计稿 th219（row h=28）。 */
+.app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 28px; }
 .plugin-slot-host { height: 100%; overflow: hidden; }
 /* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。
    以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */
@@ -559,11 +493,11 @@ onUnmounted(() => {
    插件全正常时零干扰；与常驻逃生按钮互为双保险） */
 .escape-link {
   background: none; border: 1px solid var(--border-color);
-  color: var(--accent, #4f8cff); font-size: 12px;
+  color: var(--accent); font-size: 12px;
   padding: 3px 12px; border-radius: 4px; cursor: pointer;
   opacity: .85; transition: opacity .15s;
 }
-.escape-link:hover { opacity: 1; background: rgba(79,140,255,.12); }
+.escape-link:hover { opacity: 1; background: var(--color-accent-bg); }
 /* ─── 壳级逃生口：插件面板浮动入口 ───
    常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。
    点击打开浮动插件面板（Fixed 560px 居中）。 */
@@ -571,33 +505,33 @@ onUnmounted(() => {
   position: fixed; left: 6px; bottom: 26px; z-index: 300;
   width: 22px; height: 22px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);
+  background: var(--bg-elevated); color: var(--text-muted);
   border: 1px solid var(--border-color); cursor: pointer;
   opacity: .3; transition: opacity .15s;
 }
-.plugin-escape-btn:hover { opacity: 1; color: var(--accent, #4f8cff); }
+.plugin-escape-btn:hover { opacity: 1; color: var(--accent); }
 .plugin-escape-overlay {
   position: fixed; inset: 0; z-index: 400;
-  background: rgba(0,0,0,.45);
+  background: var(--color-scrim);
   display: flex; align-items: center; justify-content: center;
 }
 .plugin-escape-panel {
   width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;
   background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  border-radius: 10px; box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .plugin-escape-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 10px; font-size: 12px; color: var(--text-muted);
   border-bottom: 1px solid var(--border-color);
-  background: var(--bg-elevated, #262932);
+  background: var(--bg-elevated);
 }
 .plugin-escape-close {
   border: none; background: none; color: var(--text-muted);
   cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;
 }
-.plugin-escape-close:hover { background: rgba(255,255,255,.08); color: #fff; }
+.plugin-escape-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 .plugin-escape-body { flex: 1; overflow: auto; }
 .plugin-escape-body .plugin-panel { height: 100%; border: none; }
 </style>

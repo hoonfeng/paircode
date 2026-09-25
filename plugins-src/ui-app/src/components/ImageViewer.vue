@@ -100,29 +100,29 @@ watch(() => props.path, () => { loading.value = true; error.value = ''; zoom.val
 <style scoped>
 .image-viewer {
   display: flex; flex-direction: column; height: 100%;
-  background: #1e1e1e; color: #d4d4d4;
+  background: var(--color-bg); color: var(--color-fg);
 }
 .img-toolbar {
   display: flex; align-items: center; gap: 6px;
-  padding: 4px 8px; background: #252526; border-bottom: 1px solid #3c3c3c;
+  padding: 4px 8px; background: var(--color-surface); border-bottom: 1px solid var(--color-border);
   flex-shrink: 0; font-size: 12px;
 }
-.img-file-info { color: #9cdcfe; }
+.img-file-info { color: var(--color-cat-blue); }
 .img-spacer { flex: 1; }
 .img-btn {
-  background: #3c3c3c; border: 1px solid #555; color: #d4d4d4;
+  background: var(--color-surface-2); border: 1px solid var(--color-border-strong); color: var(--color-fg);
   padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 13px; min-width: 28px; text-align: center;
 }
-.img-btn:hover { background: #505050; }
-.img-zoom { color: #6a9955; font-size: 11px; min-width: 48px; text-align: center; }
+.img-btn:hover { background: var(--color-surface-3); }
+.img-zoom { color: var(--color-cat-green); font-size: 11px; min-width: 48px; text-align: center; }
 .img-body {
   flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start;
-  padding: 8px; background: #1e1e1e;
+  padding: 8px; background: var(--color-canvas);
 }
 .img-loading, .img-error {
   display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%; color: #888; font-size: 14px;
+  width: 100%; height: 100%; color: var(--color-muted); font-size: 14px;
 }
-.img-error { color: #f48771; }
+.img-error { color: var(--color-danger); }
 .img-display { flex-shrink: 0; user-select: none; }
 </style>

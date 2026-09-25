@@ -1,18 +1,8 @@
 <template>
   <div class="right-panel">
-    <!-- 标题 -->
-    <div class="rp-header">
-      <span class="rp-header-title"><SvgIcon name="bot" :size="16" /> 对话</span>
-      <div class="rp-header-actions">
-        <button class="rp-btn" @click="newConversation" title="新对话"><SvgIcon name="plus" :size="14" /></button>
-        <button class="rp-btn" @click="showDebugLog = !showDebugLog" title="Debug 日志"><SvgIcon name="bug" :size="14" /></button>
-        <!-- 会话列表面板（Token 统计栏）显隐：状态经 ui-state.js 持久化，快捷键 Ctrl+Shift+L -->
-        <button v-if="!panelMode" class="rp-btn" :class="{ 'rp-btn-off': !state.convListVisible }" @click="toggleConvList" :title="state.convListVisible ? '隐藏会话列表（Token 统计，Ctrl+Shift+L）' : '显示会话列表（Token 统计，Ctrl+Shift+L）'"><SvgIcon name="message-square" :size="14" /></button>
-        <button v-if="!panelMode" class="rp-btn" @click="toggleFocus" :title="state.focusMode ? '退出专注（显示编辑器/终端/侧栏）' : '专注对话（隐藏编辑器与左右侧栏）'">          <SvgIcon :name="state.focusMode ? 'eye-off' : 'eye'" :size="14" />
-        </button>
-        <button v-if="!panelMode" class="rp-btn" @click="toggleRight" title="关闭"><SvgIcon name="close" :size="14" /></button>
-      </div>
-    </div>
+    <!-- ★ 2026-09-25 对齐设计稿 th130 主区子树：删除整行 .rp-header（680×36）——
+         设计主列第一个子元素就是任务横幅行。原 5 个按钮迁到顶栏 UiTitlebar 右侧图标区
+         （新对话 / 会话列表 / 专注 / Debug 日志 / 关闭），见 UiTitlebar.vue .tb-right。 -->
 
     <div class="rp-body">
       <!-- ★ chat 槽位（Slot 系统）：插件注册 chat 槽位并激活后，整个对话面板由插件渲染（UI 可更换） -->
@@ -20,21 +10,21 @@
       <template v-else>
       <!-- 左侧：聊天消息 + 输入区 -->
       <div class="chat-area">
-        <!-- 阶段指示器（自主模式多阶段切换）+ 运行统计（耗时/步数/token 速度）——
-             ★ 常态显示：不执行时定格展示该对话「上次运行」的结果（刷新/重启后仍在） -->
-        <div v-if="currentPhase || agentRunningConv || runStatsVisible" class="phase-bar">
-          <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
-          <span class="phase-text" :title="runBarTitle">{{ phaseText }}</span>
-          <span class="phase-stats">
-            <span v-if="runSteps > 0" class="phs-item" title="步数：一次 LLM 调用 + 工具执行 = 一步（后端统计）"><SvgIcon name="list" :size="10" /> {{ runSteps }} 步</span>
-            <span v-if="runToolCalls > 0" class="phs-item" :title="'工具调用次数（后端统计）' + (runToolMsText ? '，累计工具耗时 ' + runToolMsText : '')"><SvgIcon name="tool" :size="10" /> {{ runToolCalls }} 次<span v-if="runToolMsText" class="phs-sub"> · {{ runToolMsText }}</span></span>
-            <span v-if="runElapsedText" class="phs-item" title="本次运行墙钟耗时（含工具执行/审批等待）"><SvgIcon name="clock" :size="10" /> {{ runElapsedText }}</span>
-            <span v-if="runTokenSpeed" class="phs-item" title="输出速度 = 输出 token ÷ LLM 生成耗时（首 token → 末 token，不含工具执行；后端计算）"><SvgIcon name="output" :size="10" /> {{ runTokenSpeed }}</span>
-            <span v-if="runOutputTokens > 0" class="phs-item" title="本次运行累计输出 token（后端统计）"><SvgIcon name="database" :size="10" /> {{ formatTokens(runOutputTokens) }}</span>
-          </span>
-          <!-- 进度条仅在运行中显示（空闲定格态不保留满条，避免误读为进行中） -->
-          <span v-if="agentRunningConv || currentPhase" class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
+        <!-- ★ 2026-09-25 对齐设计稿 th65（row 816×48）＋ th64（内嵌 card 440×40,
+             bg=surface-3, r8, border）＝ 当前任务标题横幅，置于主区最顶部。 -->
+        <div v-if="currentTaskTitle" class="task-banner-row">
+          <div class="task-banner-card" :title="currentTaskTitle">{{ currentTaskTitle }}</div>
         </div>
+        <!-- ★ 2026-09-26 用户指令 + 实测判据：原消息区顶部 phase-bar（「上次运行 / 执行中…」
+             ＋ 估算进度条）已**整条删除**。四条判据：
+             ① 与右栏 StatsRail「运行统计」卡同源重复——同一份 state.runStatsByConv，
+                右栏已给出「运行中/已完成 · 耗时 · 输出速度」+ 步数/工具调用/LLM 调用明细；
+             ② 它的「阶段」分支（currentPhase ← state.phaseByConv）无生产方：Go 侧
+                EventPhase 常量仅定义未发送、JS/插件侧无任何 phase 事件发送点 → 恒为空；
+             ③ 进度条按「已耗时 ÷ 60min、封顶 95%」估算，非真实进度，易被误读为卡住/将完成；
+             ④ 设计稿 shell-midnight th130 子树本无该节点。
+             运行态可见性不受影响：消息流「思考中...」banner + 输入区停止按钮 +
+             工具行 spinner + 右栏运行统计。 -->
         <div class="chat-messages" ref="msgRef" @scroll="onScroll">
           <!-- 顶部加载更多提示 -->
           <div v-if="hasMoreTop" class="scroll-more-hint" ref="topSentinel">
@@ -70,8 +60,17 @@
               </div>
               <!-- ── Agent 回复独立气泡（左对齐），不分段，直接显示到一起 ── -->
               <div v-if="combo.assistant" class="msg-item msg-assistant" :data-idx="combo.assistant._idx">
-                <div class="msg-avatar"><SvgIcon name="bot" :size="16" /></div>
                 <div class="msg-bubble bubble-assistant">
+                  <!-- ★ 2026-09-25 对齐设计稿 th70（row h24）：accent icon16 + 「PairCode」
+                       (600, fg) + 模型胶囊 th69 124×24（r=full, bg=surface-3, 文字 accent）。
+                       ★ 模型名取**真实会话模型**（composerModel → parseModelValue().model），
+                         取不到则整颗胶囊不渲染 —— 不硬编码 deepseek-flash。
+                       （原 .msg-avatar 头像已被本头行取代，图标改由 mh-icon 承担。） -->
+                  <div class="msg-head">
+                    <SvgIcon name="bot" :size="16" class="mh-icon" />
+                    <span class="mh-brand">PairCode</span>
+                    <span v-if="convModelName" class="mh-model-pill" :title="'当前模型：' + convModelName">{{ convModelName }}</span>
+                  </div>
                   <!-- ★ 2026-09-10 slash 命令结果卡片：命令命中执行后本地渲染（不唤醒模型） -->
                   <div v-if="combo.assistant._isSlashResult" class="slash-result-card">
                     <div class="slash-result-head">
@@ -100,22 +99,32 @@
                           <span class="tl-dot tl-dot-thinking"></span>
                           <div class="tl-body tl-think-body">
                             <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
-                            <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
-                            <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
+                            <div v-else class="tl-thinking-collapsed" @click="toggleThinking(seg, combo.assistant._idx, si)"><SvgIcon name="message-square" :size="12" /> 思考…</div>
+                            <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="toggleThinking(seg, combo.assistant._idx, si)" title="折叠思考">▲ 收起</div>
                           </div>
                         </div>
-                        <div v-else-if="seg.type === 'tool_call'" class="tl-item">
-                          <span class="tl-dot tl-dot-tool"></span>
-                          <div class="tl-body tl-tool">
-                            <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
-                              <svg v-if="!seg._expanded" class="tl-tc-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
-                              <svg v-else class="tl-tc-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
-                              <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
-                              <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
-                              <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
-                              <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
-                            </div>
-                            <div v-if="seg._expanded" class="tl-tc-detail">
+                        <!-- ★ 2026-09-26 用户反馈修正：原实现把状态做成**贴最右的胶囊(tag)**
+                             （.tr-pill 用 margin-left:auto 推出 + 名称固定 240 宽 → 中间大片
+                             留白、整体像右侧标签），不符合预期。现改为**消息流内左对齐成组**：
+                             accent icon14 + 工具名(xs, 自适应 max220, 单行省略)
+                             + 运行中 spinner + 结果摘要(xs, 紧随其后、单行省略，用文字色区分
+                             成功/错误/运行中，**无背景无圆角**) + chevron 紧随其后。
+                             行本体沿用 th83/th90 行式（h32, bg=surface-2, r8, border）。
+                             ★ 能力保留：整行可点，展开区（参数/结果/命令/输出）照旧，未删任何分支。 -->
+                        <div v-else-if="seg.type === 'tool_call'" class="tool-row-wrap">
+                          <div class="tool-row" :class="{ 'is-open': seg._expanded }"
+                               @click="toggleTool(seg, combo.assistant._idx, si)">
+                            <SvgIcon :name="toolMeta(seg).icon" :size="14" class="tr-icon" />
+                            <span class="tr-name" :title="toolMeta(seg).title">{{ toolMeta(seg).title }}</span>
+                            <span v-if="!seg.result" class="tr-spinner" title="运行中"></span>
+                            <span class="tr-status"
+                                  :class="isToolErr(seg) ? 'tr-status-err' : (seg.result ? 'tr-status-ok' : 'tr-status-run')"
+                                  :title="seg.result ? toolResultSummary(seg) : '运行中'">{{ seg.result ? toolResultSummary(seg) : '运行中' }}</span>
+                            <svg class="tr-chevron" viewBox="0 0 8 8" width="10" height="10" fill="currentColor" aria-hidden="true">
+                              <path :d="seg._expanded ? 'M1.2 2.6 L4 6.8 L6.8 2.6 Z' : 'M2.6 1.2 L6.8 4 L2.6 6.8 Z'"/>
+                            </svg>
+                          </div>
+                          <div v-if="seg._expanded" class="tl-tc-detail tool-row-detail">
                               <template v-if="isTerminalTool(seg)">
                                 <div class="tl-tc-section"><div class="tl-tc-section-title">命令</div><div class="tl-tc-command">{{ formatTerminalCommand(seg) }}</div></div>
                                 <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">输出</div><pre class="tl-tc-output">{{ seg.result }}</pre></div>
@@ -124,7 +133,6 @@
                                 <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
                                 <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
                               </template>
-                            </div>
                           </div>
                         </div>
                         <div v-else-if="seg.type === 'ask_user'" class="tl-item">
@@ -160,10 +168,70 @@
           <div v-if="state.chatLoading && state.messages && state.messages.length > 0" class="msg-loading-banner">
             <span class="dot-pulse"></span><span>思考中...</span>
           </div>
+          <!-- ★ 2026-09-25（设计稿屏 1 ③）：「下一步可以试试」引导卡。
+               首轮对话结束后出现在消息流末尾 —— 此时用户最常问「那你还能做什么」，
+               用 4 个可点芯片把能力边界具体化；点击**填入输入框**（不直接发送，可先编辑）。
+               可关闭，关闭后写独立 key，不再出现。 -->
+          <div v-if="nextStepsVisible" class="next-steps">
+            <div class="ns-head">
+              <span class="ns-title">下一步可以试试</span>
+              <span class="ns-hint">也可以直接描述你的目标</span>
+              <!-- ★ 2026-09-25 对齐设计稿 th106：设计引导卡**无关闭「×」按钮**（原 close 入口下线）。 -->
+            </div>
+            <div class="ns-chips">
+              <button v-for="(s, si) in NEXT_STEPS" :key="s.text" class="ns-chip"
+                      :class="{ 'ns-chip-primary': si === 0 }" :title="s.hint" @click="useNextStep(s.text)">
+                <span>{{ s.text }}</span>
+              </button>
+            </div>
+            <!-- ★ 2026-09-25 对齐设计稿 th105（底部提示行 xs muted） -->
+            <div class="ns-foot">不确定怎么开始？输入 Ctrl+K 打开命令面板，或让 Agent 先读项目再给方案。</div>
+          </div>
           <div v-if="(!state.messages || state.messages.length === 0) && !state.chatLoading" class="chat-empty">
-            <div class="chat-empty-icon"><SvgIcon name="bot" :size="32" /></div>
-            <div class="chat-empty-text">开始新的对话</div>
-            <div class="chat-empty-hint">发送消息即可与 AI 助手对话</div>
+            <!-- ★ P4-3（2026-09-25）首启引导卡：空对话 + 三步未走完时替代朴素空态，
+                 给出「配置服务商 → 打开项目 → 开始对话」动线；两步都完成或点「不再显示」即消失。 -->
+            <div v-if="onboardingVisible" class="ob-card">
+              <div class="ob-head">
+                <div class="ob-logo"><SvgIcon name="bot" :size="20" /></div>
+                <div>
+                  <div class="ob-title">欢迎使用 PairCode</div>
+                  <div class="ob-sub">三步开始：接通模型 → 打开项目 → 开始对话</div>
+                </div>
+              </div>
+              <ul class="ob-steps">
+                <li class="ob-step" :class="{ 'is-done': obHasProvider }">
+                  <span class="ob-no"><SvgIcon v-if="obHasProvider" name="check" :size="11" /><template v-else>1</template></span>
+                  <span class="ob-body">
+                    <span class="ob-t">配置模型服务商</span>
+                    <span class="ob-d">{{ obHasProvider ? '已配置 ' + obProviderCount + ' 个服务商' : '填入 API Key 与模型，AI 才能工作' }}</span>
+                  </span>
+                  <button v-if="!obHasProvider" class="ob-act" @click="obOpenSettings">去配置</button>
+                </li>
+                <li class="ob-step" :class="{ 'is-done': obHasWorkspace }">
+                  <span class="ob-no"><SvgIcon v-if="obHasWorkspace" name="check" :size="11" /><template v-else>2</template></span>
+                  <span class="ob-body">
+                    <span class="ob-t">打开项目文件夹</span>
+                    <span class="ob-d">{{ obHasWorkspace ? obWorkspaceLabel : '让 AI 能读写你的代码（菜单 文件 → 打开文件夹 亦可）' }}</span>
+                  </span>
+                  <button v-if="!obHasWorkspace" class="ob-act" @click="obOpenFolder">打开</button>
+                </li>
+                <li class="ob-step" :class="{ 'is-done': obReady }">
+                  <span class="ob-no"><SvgIcon v-if="obReady" name="check" :size="11" /><template v-else>3</template></span>
+                  <span class="ob-body">
+                    <span class="ob-t">开始对话</span>
+                    <span class="ob-d">{{ obReady ? '准备就绪：在下方输入框描述任务，Enter 发送' : '完成前两步后即可开始' }}</span>
+                  </span>
+                </li>
+              </ul>
+              <div class="ob-foot">
+                <button class="ob-dismiss" @click="dismissOnboarding">不再显示</button>
+              </div>
+            </div>
+            <template v-else>
+              <div class="chat-empty-icon"><SvgIcon name="bot" :size="32" /></div>
+              <div class="chat-empty-text">开始新的对话</div>
+              <div class="chat-empty-hint">发送消息即可与 AI 助手对话</div>
+            </template>
           </div>
           <!-- 新消息跳底按钮 -->
           <div v-if="showScrollDown" class="scroll-down-btn" :class="{ 'show-pulse': state.chatLoading }" @click.stop="scrollToBottom">
@@ -171,9 +239,8 @@
           </div>
         </div>
         <!-- 任务进度面板（task 体系：扁平任务列表） -->
-        <div class="task-container" :class="{ 'task-empty': currentTasks.length === 0 }">
-          <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
-        </div>
+        <!-- ★ 2026-09-25 对齐设计稿 th130：删除主区内的「任务进度」面板（与右栏
+             StatsRail th164「任务进度」卡 264×152 重复）——任务进度唯一归宿是右栏。 -->
         <!-- 自主模式监督看板（autopilot 插件数据面：GET /api/autopilot/rounds + ui:autopilot:round 事件；
              无监督回合（插件未装载/未开启自主模式）时容器高度为 0，不占位） -->
         <div class="autopilot-container" :class="{ 'autopilot-empty': autopilotRounds.length === 0 }">
@@ -199,6 +266,30 @@
           </div>
           <div class="input-resizer" @mousedown.prevent="startInputResize" title="拖拽调整高度"></div>
           <div class="input-wrapper">
+            <!-- ★ 2026-09-25 对齐设计稿 th129 行1（th114, h24）：模型胶囊(th107, bg=surface-3,
+                 r=full, accent 文字, xs) + 工具集胶囊(th109, bg=surface-2, muted, xs)
+                 + 弹性空隙。
+                 ★ 2026-09-24 修复：行1 右端的「自主模式」文字状态已删除——它与行3 操作区
+                 的 .obtn-agent 是同一开关的两处表达（即「输入框右上角还有状态显示」），
+                 开关本体只保留操作区一处。 -->
+            <div class="input-row1">
+              <span class="ir-pill ir-pill-model" v-if="convModelName" :title="'当前模型：' + convModelName">{{ convModelName }}</span>
+              <!-- ★ 2026-09-24 修复：原为 v-if="toolsetItems.length" —— 场景列表为空时
+                   （<InstallDir>/.pair/toolsets/ 下无集合文件）整条降级为只读 span，用户
+                   看到的就是「场景选择点了没反应／没有实现」。改为始终渲染可交互选择器：
+                   空列表由 SheetPicker 的 empty-text 明示，功能入口恒在、不再静默消失。
+                   ★ 行3 原有一处重复的工具集 SheetPicker 已删除（勿重复入口）。 -->
+              <SheetPicker
+                class="ir-pill-picker"
+                v-model="convToolset"
+                :items="toolsetSheetItems"
+                :title="toolsetPickerTitle"
+                :placeholder="toolsetPlaceholder"
+                empty-text="暂无场景：请先在「工具集」面板创建或导入"
+                @change="onConvToolsetChange"
+              />
+              <span class="ir-spacer"></span>
+            </div>
             <!-- ★ Round3 ④.2 slash 命令菜单：输入以 "/" 开头时拉 /api/commands 提示，
                   ↑/↓ 移动选中，Enter 把选中命令写入输入框（可继续编辑/加参数），再次 Enter 执行
                   （结果由后端注入系统消息）；菜单外以 "/" 开头回车=直接执行；无匹配命令时原样发送（降级零破坏） -->
@@ -213,7 +304,8 @@
             <!-- ★ 2026-08-22 输入框改造：contenteditable，附件以内联 tag 渲染在输入框内（光标处），
                  不再「上方 badge 区 + 文本内 token」。tag 点 × 或 Backspace/Delete 可删除。
                  文本内容由 @input 序列化到 inputText（tag → @@attN@@ token），发送时替换为语义化引用。 -->
-            <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
+            <!-- ★ 2026-09-25 对齐设计稿 th115：占位文案改为设计原文 -->
+            <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="描述你要做的事，Agent 会自己选工具、跑验证…" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
                 <!-- ★ composer 模型选择器（2026-09-03 配置列表驱动；2026-09-05 移动端化：
@@ -229,28 +321,20 @@
                   empty-text="暂无可用 AI 配置：请先在「设置 → AI → AI 配置」添加"
                   @change="onCmpModelChange"
                 />
-                <!-- ★ 2026-09-04 工具集（通用集合）模式选择器：会话级——选择当前对话
-                     使用的工具集（计划讨论/全栈开发/办公/调试/基础/全功能 或自定义集合），
-                     写入会话元数据（PUT /conversations/{id} toolset）只影响本会话；
-                     agent 工具面按所选集合收敛（发送消息时后端应用）。
-                     ★ 2026-09 修复：未显式选择时显示后端实际生效的默认集合（不再空白）——
-                       否则用户不知道当前对话正在使用哪个工具集。
-                     ★ 2026-09-05 移动端化：bottom-sheet 弹层替代传统 <select>。 -->
-                <SheetPicker
-                  v-if="toolsetItems.length"
-                  v-model="convToolset"
-                  :items="toolsetSheetItems"
-                  :title="toolsetPickerTitle"
-                  :placeholder="toolsetPlaceholder"
-                  @change="onConvToolsetChange"
-                />
-                <span class="obtn-sep"></span>
-                <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
-                <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
-                <span class="obtn-sep"></span>
-                <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="cycle" :size="12" color="#d4a74e" /> 自主</span>
+                <!-- ★ 2026-09-25 监督纠正（缺陷 2）：此处原有的工具集 SheetPicker 已删除——
+                     它是行1 胶囊的重复入口。现统一由行1 的 .ir-pill-picker 承载（单一入口）。 -->
+                <!-- ★ 2026-09-25 监督纠正（缺陷 3）：按设计稿 ui-theme.notes.md:1262 重做输入卡操作区。
+                     去掉 放行/折叠/自主 那套「自绘 checkbox + 勾选字形（☑/✓）+ 文字」表现，
+                     统一为设计稿控件规格：3 个 32×32 圆角图标卡（radius=8，选中态走 --accent），
+                     三者外观完全一致；模式名与其含义改由 title 悬浮提示承载（不再挤占宽度）。 -->
+                <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="14" /></span>
+                <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="14" /></span>
+                <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" :title="autonomous ? '自主模式：开（连续执行全部计划步骤）' : '自主模式：关（单次回复）'"><SvgIcon name="cycle" :size="14" color="var(--color-cat-amber)" /></span>
               </div>
-              <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim() && pendingAttachments.length === 0"><SvgIcon name="send-plane" :size="16" /></button>
+              <!-- ★ 2026-09-25 对齐设计稿 th127：右侧「Enter 发送 · Shift+Enter 换行」(xs muted) -->
+              <span class="ibb-enter-hint">Enter 发送 · Shift+Enter 换行</span>
+              <!-- ★ 2026-09-25 对齐设计稿 th126：72×32 蓝底**文字**按钮「发送」（原为纯图标 = 错） -->
+              <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim() && pendingAttachments.length === 0">发送</button>
               <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
             </div>
           </div>
@@ -258,8 +342,9 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <!-- v-show 而非 v-if：会话列表保持挂载，仅切可见性（会话状态/Token 统计不重挂）-->
-      <ConvSidebar v-else v-show="state.convListVisible" :conversations="convList" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <!-- ★ 2026-09-25 对齐设计稿：会话列表已迁至【左栏】（Sidebar 的 chat 视图，
+           th61），Token 统计/上下文构成已迁至【右栏】（StatsRail，th148/th173）。
+           主区不再重复渲染会话列表与圆环统计（此前会与左右栏三处重复）。 -->
       </template>
     </div>
   </div>
@@ -267,7 +352,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { state, layout, setFocusMode, rightPanelWidth, savePersistentState } from '../ui-state.js'
+// ★ 2026-09-26：移除未使用的 rightPanelWidth 导入（构建期告警 "imported but never used"，
+//   文件内零引用；右栏宽度由 layout.rightPanelWidth 直接读，不经此具名导入）。
+import { state, layout, savePersistentState, showSettings } from '../ui-state.js'
 import api from '../api.js'
 import { visibleConversations } from '../conv-filters.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
@@ -287,12 +374,6 @@ const showDebugLog = ref(false)
 
 const props = defineProps({ panelMode: { type: Boolean, default: false } })
 const panelMode = computed(() => !!props.panelMode)
-const toggleRight = () => { state.rightPanelVisible = false }
-// 专注对话切换：专注 = 纯对话视图（隐藏编辑器 + 收起左栏文件浏览器与会话列表）。
-// ★ 统一走 ui-state.setFocusMode（唯一入口）：进入收起、退出还原用户原值。
-const toggleFocus = () => {
-  setFocusMode(!state.focusMode)
-}
 
 // ─── 会话列表面板（Token 统计栏）显隐（2026-09-12 新增）───
 //   头部按钮与 Ctrl+Shift+L 都走这里；状态读写见 ui-state.js（持久化 + layout.toggleConvList）。
@@ -413,6 +494,10 @@ const LAST_MODEL_KEY = 'paircode.lastPickedModel'
 const modelData = ref(null)          // /api/models + presets 快照
 const composerProvider = ref('')     // 当前会话生效的服务商
 const composerModel = ref('')        // 下拉值：'preset::<配置名>::<模型>'（配置分组）或旧编码 'provider::model'
+// ★ 2026-09-25 对齐设计稿 th69：模型胶囊文案 = 当前会话真实模型名（不硬编码；取不到则隐藏胶囊）
+const convModelName = computed(() => {
+  try { return (parseModelValue(composerModel.value) || {}).model || '' } catch (e) { return '' }
+})
 // ★ 2026-09-03 配置列表驱动：直接遍历 /api/ai-presets 的配置（= AI 设置面板「AI 配置」列表），
 //   分组=配置名，每组模型取该配置 provider 在 models.json 的模型列表。
 const composerItems = computed(() => {
@@ -440,6 +525,17 @@ const modelSheetItems = computed(() => {
     for (const m of g.models) {
       // desc 只保留服务商（配置名已作为 optgroup 分组标题展示，避免重复）
       out.push({ value: 'preset::' + g.name + '::' + m, label: m, desc: g.provider, group: g.name })
+    }
+  }
+  // ★ 2026-09-24 修复：会话当前模型可能不在候选列表里（服务商模型表更新、模型别名、
+  //   自定义 model 名——例：会话存 "deepseek-flash" 而列表里是 "deepseek-v4-flash"）。
+  //   此时原生 select 无匹配 option → selectedIndex=-1 → 回落显示 placeholder「选择模型…」，
+  //   用户看不到本会话正在使用的模型。补一项「当前使用」置顶，保证下拉始终表达会话真值。
+  const cur = composerModel.value
+  if (cur && !out.some(it => it.value === cur)) {
+    const parsed = parseModelValue(cur)
+    if (parsed.model) {
+      out.unshift({ value: cur, label: parsed.model, desc: (parsed.provider ? parsed.provider + ' · ' : '') + '当前使用' })
     }
   }
   return out
@@ -507,6 +603,40 @@ async function loadModelData() {
     modelData.value = md
   } catch {}
 }
+
+// ─── ★ P4-3（2026-09-25）首启引导卡 ─────────────────────────────────────────
+//   目标：首次使用者在空对话里拿到一条「三步动线」，而不是一句「发送消息即可对话」。
+//   显示条件：① 未点过「不再显示」② 前两步未同时完成（都完成了引导已无意义 → 自动消失）。
+//   判定数据：服务商 ← modelData.providers（loadModelData 已拉 /api/models，直接复用，不额外请求）；
+//            工作区 ← state.workspaceRoot / workspaceName（启动时由 /api/health 注入）。
+//   「不再显示」写独立 key（不进 paircode-ide-state）：那是布局偏好，
+//   这是「一次性引导已完成」语义，混入会导致清布局时引导意外复活。
+const OB_DISMISS_KEY = 'paircode-onboarding-dismissed'
+const onboardingDismissed = ref(false)
+try { onboardingDismissed.value = localStorage.getItem(OB_DISMISS_KEY) === '1' } catch {}
+const obProviderCount = computed(() => {
+  const md = modelData.value
+  return md && Array.isArray(md.providers) ? md.providers.length : 0
+})
+const obHasProvider = computed(() => obProviderCount.value > 0)
+const obHasWorkspace = computed(() => !!(state.workspaceRoot && state.workspaceRoot !== ''))
+const obWorkspaceLabel = computed(() => state.workspaceName || state.workspaceRoot || '')
+const obReady = computed(() => obHasProvider.value && obHasWorkspace.value)
+const onboardingVisible = computed(() => !onboardingDismissed.value && !obReady.value)
+function obOpenSettings() { showSettings.value = true }
+async function obOpenFolder() {
+  // 与 MenuBar「文件 → 打开文件夹」同一条链路（后端 /workspace add-folder + 刷新文件树）
+  const path = await window.$prompt('输入文件夹路径:', '', '打开文件夹')
+  if (!path) return
+  try {
+    await api.apiPost('/workspace', { action: 'add-folder', path })
+    window.dispatchEvent(new CustomEvent('refresh-tree'))
+  } catch (err) { window.$toast('添加失败: ' + err.message, 'error') }
+}
+function dismissOnboarding() {
+  onboardingDismissed.value = true
+  try { localStorage.setItem(OB_DISMISS_KEY, '1') } catch {}
+}
 // 依据当前会话元数据同步下拉（会话有自己的模型 → 显示它；否则显示全局默认）
 // ★ 2026-09-03 会话记录了配置名（meta.preset）→ 直接按配置编码显示（不再反向猜）。
 async function syncComposerModelFromConv() {
@@ -565,22 +695,45 @@ const toolsetItems = ref([])           // 全局工具集列表（GET /api/tools
 const convToolset = ref('')            // 选择器显示值（= 当前实际生效的集合名）
 const convToolsetEffective = ref('')   // 实际生效集合名（未显式选择 → 后端默认集合；'' = 未收敛）
 const convToolsetIsDefault = ref(true) // true = 会话未显式选择（生效值来自默认集合）
+const convToolsetConverged = ref(false) // true = 按集合收敛工具面（false = 集合缺失，全量保留）
+const convToolsetDefaultName = ref('')  // 默认集合名（presetNameDefault，如「基础」）
 const pendingConvToolset = ref('')     // 新对话尚未创建时的暂存选择（建会话后写入）
-function toolsetLabel(t) {
-  const scope = t.scope === 'builtin' ? '内置' : '全局'
-  return t.name + '（' + scope + '·' + (t.pluginCount || 0) + ' 插件）'
+// ★ 2026-09-25 会话列表底部「场景」胶囊接线：把本处解析出的权威值镜像到共享
+//   state.convToolsetInfo，供 ConvSidebar（设计稿 th60「场景名 · N 插件」）显示。
+//   ★ 本函数是 state.convToolsetInfo 的唯一写方（避免双源不一致）。
+//   pluginCount 取「该集合装配的插件数」（toolsetItems 的 pluginCount），不是
+//   state.pluginSchemas.length（后者是全部已装插件数，与场景无关）。
+function publishConvToolsetInfo() {
+  const name = convToolsetEffective.value || ''
+  const hit = (toolsetItems.value || []).find(t => t.name === name)
+  state.convToolsetInfo = {
+    name: name,
+    defaultName: convToolsetDefaultName.value || '',
+    isDefault: convToolsetIsDefault.value,
+    converged: convToolsetConverged.value,
+    pluginCount: hit ? (hit.pluginCount || 0) : 0,
+    resolved: true,
+  }
 }
 // ★ 2026-09-05 移动端化：工具集选择器 bottom-sheet 选项
 // ★ 2026-09 修复：生效项标注「默认生效 / 当前」——用户一眼看出当前对话用的是哪个集合。
 const toolsetSheetItems = computed(() => {
   const eff = convToolsetEffective.value
-  return toolsetItems.value.map(t => {
+  const out = toolsetItems.value.map(t => {
     const n = (t.pluginCount || 0) + ' 个插件'
     if (eff && t.name === eff) {
       return { value: t.name, label: t.name, desc: (convToolsetIsDefault.value ? '默认生效' : '当前') + ' · ' + n }
     }
     return { value: t.name, label: t.name, desc: n }
   })
+  // ★ 2026-09-24 修复（与模型选择器同源问题）：生效集合不在列表里（集合文件缺失/被删/
+  //   来自旧配置）时，原生 select 无匹配 option → 回落 placeholder，选择器读不出真实
+  //   生效值。补一项「当前生效」保证控件恒能表达 /api/toolsets/active 返回的 effective。
+  const cur = convToolset.value
+  if (cur && !out.some(it => it.value === cur)) {
+    out.unshift({ value: cur, label: cur, desc: '当前生效' })
+  }
+  return out
 })
 // 未收敛（集合缺失/无工具集配置）时不能留空白：明确告知「全部工具可用」
 const toolsetPlaceholder = computed(() => (convToolsetEffective.value ? '选择工具集…' : '未收敛（全部工具可用）'))
@@ -593,6 +746,8 @@ async function loadToolsetItems() {
   try {
     const list = await api.getToolsets()
     toolsetItems.value = (list || []).filter(t => t.scope !== 'builtin' && t.name)
+    // ★ 列表到达后重发一次胶囊：pluginCount 依赖本列表（首帧 sync 可能早于列表返回）
+    publishConvToolsetInfo()
   } catch (e) {
     console.warn('[toolset] 工具集列表加载失败', e)
   }
@@ -608,6 +763,9 @@ async function syncConvToolsetFromConv() {
     convToolsetIsDefault.value = !selected
     convToolsetEffective.value = effective
     convToolset.value = effective || selected
+    convToolsetConverged.value = !!(info && info.converged)
+    convToolsetDefaultName.value = (info && info.defaultName) || ''
+    publishConvToolsetInfo()   // ★ 会话切换 → 场景胶囊同步为该会话的真实生效集合
   } catch (e) {
     console.warn('[toolset] 生效集合解析失败，回退会话元数据', e)
     try {
@@ -618,8 +776,13 @@ async function syncConvToolsetFromConv() {
       convToolsetIsDefault.value = !selected
       convToolsetEffective.value = selected
       convToolset.value = selected
+      convToolsetConverged.value = !!selected
+      convToolsetDefaultName.value = ''
+      publishConvToolsetInfo()
     } catch {
       convToolsetIsDefault.value = true; convToolsetEffective.value = ''; convToolset.value = ''
+      convToolsetConverged.value = false; convToolsetDefaultName.value = ''
+      publishConvToolsetInfo()
     }
   }
 }
@@ -630,6 +793,8 @@ async function onConvToolsetChange() {
   if (!name) return
   convToolsetEffective.value = name
   convToolsetIsDefault.value = false
+  convToolsetConverged.value = true
+  publishConvToolsetInfo()   // ★ 场景胶囊立即跟随（不等下一次 sync）
   if (!convId) {
     // 新对话尚未创建：暂存，首条消息建会话后写入（见 sendMessage）
     pendingConvToolset.value = name
@@ -668,25 +833,16 @@ const chatToolsEl = ref(null)
 let chatToolsUnsub = null
 // 按钮已移至 textarea 外部下方（.input-bottom-bar），无需动态 padding
 function updateInputPadding() {
-  if (inputHeight.value < 80) inputHeight.value = 80
+  // ★ 2026-09-25 对齐设计稿 th129 行2（th116 h40）：钳制下限 80 → 40
+  if (inputHeight.value < 40) inputHeight.value = 40
 }
-const inputHeight = ref(150)
-const convListWidth = ref(250)
-// ★ wb-ui(goja) workaround：state.conversations 数组整体赋值（loadConvList
-//   里 state.conversations = list）触发不了 prop 响应式更新——直接传
-//   state.conversations 时 ConvSidebar 拿到的是旧引用/空数组。改用
-//   computed 包装：渲染时实时求值 state.conversations（与 FileExplorer 的
-//   currentFolders 同一模式），首次渲染即读到预取/加载的数据。
-const convList = computed(() => state.conversations)
+// ★ 2026-09-25 对齐设计稿 th129 行2：输入区默认高 150 → 40（拖拽能力保留）
+const inputHeight = ref(40)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
 const reviewBtnTitle = computed(() => {
   const m = reviewMode.value
   return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
-})
-const reviewBtnLabel = computed(() => {
-  const m = reviewMode.value
-  return m === 'auto' ? '审核' : m === 'manual' ? '审批' : '放行'
 })
 const reviewIconName = computed(() => {
   const m = reviewMode.value
@@ -1003,122 +1159,66 @@ function buildAttachRefText(att) {
   return '\n\n📎 附件: `' + (att.path || att.filename) + '`（请用 read 读取）'
 }
 
-// nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
-const currentNudge = computed(() => state.nudgeByConv[state.currentConvId] || '')
+// nudge 自动清除定时器（state.nudgeByConv 的写入点见本文件右侧消息处理分支）。
+// ★ 2026-09-25 扫描：本组件 nudge 展示 UI 已不存在（原 currentNudge 计算属性经证实
+//   为死绑定，已摘除），state.nudgeByConv 当前无前端消费者——保留写入链路待产品决策。
 let nudgeTimer = null
-function showNudge(text) {
-  // nudge 写入全局 state，由 currentNudge computed 响应
-  state.nudgeByConv[state.currentConvId] = text
-  if (nudgeTimer) clearTimeout(nudgeTimer)
-  nudgeTimer = setTimeout(() => { state.nudgeByConv[state.currentConvId] = '' }, 4000)
-}
-
-let pendingAskCallId = ''
 // ★ 2026-08-31：plan 体系已移除——currentPlan/planExpanded 下线，任务追踪只用 currentTasks。
 const currentTasks = ref([])
 const tasksExpanded = ref(false)
-const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
-// ★ 当前对话是否运行中（原模板引用的 agentRunning 未定义 → phase-bar 仅靠 currentPhase
-//   显示，运行中无 phase 事件时统计条整条不出现；现显式声明）
-const agentRunningConv = computed(() => !!state.agentRunningByConv[state.currentConvId])
 
-// ── ★ 运行统计（耗时 · 步数 · 工具调用 · token 速度）──
-// 数据源：**后端**运行统计（state.runStatsByConv；由 agent-events 的 fetchRunStats
-//   经 GET /api/conversations/{id}/run-stats 拉取）。后端 agent 循环埋点累加
-//   （Go 循环与 JS 循环共用入口）并持久化到 .pair/run-stats.json —— 前端不累加、
-//   不本地持久化（前端累加受丢事件/刷新影响，不可信）。
-//   ★ token 速度由后端派生：输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
-//     不含工具执行 / 审批等待 / prefill 排队；旧实现用整段运行墙钟当分母 → 严重低估。
-// 展示位置：消息区顶部 phase-bar（运行中实时刷新，结束后定格为本轮结果）。
-const currentRunStat = computed(() => state.runStatsByConv[state.currentConvId] || null)
-const runTick = ref(0)   // 计时 tick（运行中每秒 +1 驱动刷新）
-let runTickTimer = null
+// ── 运行统计（★ 2026-09-26 收敛为「只拉取、不展示」）──
+// 数据源：**后端**运行统计（state.runStatsByConv ← agent-events 的 fetchRunStats
+//   经 GET /api/conversations/{id}/run-stats 拉取；后端 agent 循环埋点累加，
+//   落盘 .pair/run-stats.json —— 前端不累加、不本地持久化）。
+//   后端派生口径：token 速度 = 输出 token ÷ Σ LLM **生成阶段**耗时（首 chunk → 末 chunk），
+//   不含工具执行 / 审批等待 / prefill 排队。
+// ★ 展示位置唯一：右栏 StatsRail「运行统计」卡 —— 本组件不再重复展示任何状态/数字
+//   （原消息区顶部 phase-bar 及只服务它的 computed / 函数 / CSS 已删除）。
+// ★ 本组件仍负责在**会话切换 / 续跑**时调用 fetchRunStats 触发拉取
+//   （见 loadConvMessages / reloadConvMessages）—— 该调用不可删：右栏卡依赖它写入的状态。
 
-// formatDuration 耗时人性化（12s / 1m 23s / 1h 05m）
-function formatDuration(ms) {
-  const sec = Math.floor(ms / 1000)
-  if (sec < 60) return sec + 's'
-  const min = Math.floor(sec / 60)
-  if (min < 60) return min + 'm ' + String(sec % 60).padStart(2, '0') + 's'
-  return Math.floor(min / 60) + 'h ' + String(min % 60).padStart(2, '0') + 'm'
+// ★ 2026-09-25（设计稿屏 1 ③）：「下一步可以试试」引导卡。
+//   出现条件 = 有对话内容 + 不在生成中 + 未被关闭。
+//   ★ 回填输入框用 DOM 事件而非直接改 Vue 状态：输入框的 v-model 监听原生 input 事件，
+//     派发该事件即可同步 —— 无需为「填一句话」新增跨组件状态或改输入区绑定。
+const NEXT_STEPS = [
+  // ★ 2026-09-25 对齐设计稿 th96/th98/th100/th102：文案逐字一致
+  //   （原「先带我读一遍这个项目 / 找出最近改动里的问题 / 跑一遍测试并总结结果 /
+  //    给这个模块补一份文档」→ 改为设计稿的 4 条）。
+  { icon: 'file-code', text: '解释这段代码', hint: '选中或指定文件，说明它的作用与关键实现' },
+  { icon: 'check', text: '跑一次测试', hint: '执行测试套件，汇总失败项与原因' },
+  { icon: 'bug', text: '修掉这个报错', hint: '定位报错根因并给出修复' },
+  { icon: 'file-text', text: '补一份文档', hint: '按现有代码生成说明文档（含用法与示例）' },
+]
+const nextStepsDismissed = ref(false)
+// ★ 2026-09-25 对齐设计稿 th64：任务横幅文案 = 当前任务标题（list 首项 subject）；
+//   无任务时回退当前会话标题，二者皆空则不渲染该行。
+const currentTaskTitle = computed(() => {
+  const t = (currentTasks.value && currentTasks.value.length) ? currentTasks.value[0] : null
+  if (t && (t.step || t.subject)) return t.step || t.subject
+  const conv = (state.conversations || []).find(c => c.id === state.currentConvId)
+  return conv ? (conv.title || '') : ''
+})
+const nextStepsVisible = computed(() =>
+  !nextStepsDismissed.value
+  && !state.chatLoading
+  && Array.isArray(state.messages) && state.messages.length > 0)
+function useNextStep(text) {
+  try {
+    const all = Array.prototype.slice.call(document.querySelectorAll('textarea'))
+    const ta = all.filter(function (t) { return t.offsetParent !== null }).pop()
+    if (!ta) return
+    ta.value = text
+    ta.dispatchEvent(new Event('input', { bubbles: true }))
+    ta.focus()
+  } catch (e) { }
 }
+try { nextStepsDismissed.value = localStorage.getItem('paircode-next-steps-dismissed') === '1' } catch (e) { }
 
-// formatTokens 紧凑 token 数（2.4k / 12k / 1.2M）
-function formatTokens(n) {
-  const v = Number(n) || 0
-  if (v < 1000) return String(v)
-  if (v < 1000000) return (v / 1000).toFixed(v < 10000 ? 1 : 0) + 'k'
-  return (v / 1000000).toFixed(1) + 'M'
-}
-
-// runElapsedMs 本次运行耗时：运行中随 tick 每秒增长（后端 startAt 为同机时间），
-// 结束后定格为后端派生值 durationMs。
-const runElapsedMs = computed(() => {
-  const rs = currentRunStat.value
-  void runTick.value   // 依赖 tick → 运行中每秒重算
-  if (!rs || !rs.startAt) return 0
-  if (rs.endAt || !rs.running) {
-    return rs.durationMs || (rs.endAt > rs.startAt ? rs.endAt - rs.startAt : 0)
-  }
-  return Math.max(0, Date.now() - rs.startAt)
-})
-const runElapsedText = computed(() => (runElapsedMs.value >= 1000 ? formatDuration(runElapsedMs.value) : ''))
-const runSteps = computed(() => { const rs = currentRunStat.value; return rs && rs.steps > 0 ? rs.steps : 0 })
-const runToolCalls = computed(() => (currentRunStat.value ? currentRunStat.value.toolCalls : 0))
-// runToolMsText 工具执行累计耗时（仅 ≥1s 显示，避免碎片数字干扰）
-const runToolMsText = computed(() => {
-  const ms = currentRunStat.value ? currentRunStat.value.toolMs : 0
-  return ms >= 1000 ? formatDuration(ms) : ''
-})
-const runOutputTokens = computed(() => (currentRunStat.value ? currentRunStat.value.completionTokens : 0))
-// runTokenSpeed 输出速度：直接用后端派生值（输出 token ÷ LLM 生成耗时），
-// 前端不做除法——避免再次把工具/审批等待算进生成时间。
-const runTokenSpeed = computed(() => {
-  const rs = currentRunStat.value
-  if (!rs || !(rs.tokensPerSecond > 0)) return ''
-  const tps = rs.tokensPerSecond
-  return (tps >= 100 ? Math.round(tps) : tps.toFixed(1)) + ' t/s'
-})
-// runStatsVisible 统计条显示条件：本次运行有任一数据（结束定格后仍显示，切会话即切换）
-const runStatsVisible = computed(() => {
-  const rs = currentRunStat.value
-  return !!(rs && rs.startAt && (rs.completionTokens > 0 || rs.steps > 0 || rs.toolCalls > 0))
-})
-
-// ★ 常态显示（2026-09-12）：统计条不再只在执行期间可见——打开/切换会话时
-//   fetchRunStats 从后端拉取该会话「最近一次运行」的定格值（后端持久化于
-//   .pair/run-stats.json），因此刷新页面 / 重启 IDE 后同样展示耗时/步数/token 速度。
-// phaseText 统计条文案：运行中跟随阶段（自主模式）或「执行中…」；空闲为「上次运行」。
-const phaseText = computed(() => {
-  if (currentPhase.value) return currentPhase.value
-  if (agentRunningConv.value) return '执行中…'
-  return '上次运行'
-})
-// runBarTitle 统计条悬浮说明（区分实时运行 / 已保留的上次结果）。
-const runBarTitle = computed(() => (agentRunningConv.value || currentPhase.value)
-  ? '本次运行（后端统计）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度（运行中每 2s 刷新）'
-  : '上次运行（后端统计，已落盘）：耗时 / 步数 / 工具次数与耗时 / 输出 token / 输出速度；速度 = 输出 token ÷ LLM 生成耗时')
-
-// 计时 tick：仅运行中启动（结束后停止 → 定格值不再变化）
-watch(() => state.agentRunningByConv[state.currentConvId], (running) => {
-  if (running) {
-    if (!runTickTimer) runTickTimer = setInterval(() => { runTick.value++ }, 1000)
-  } else if (runTickTimer) {
-    clearInterval(runTickTimer)
-    runTickTimer = null
-    runTick.value++   // 立即重算一次，显示定格后的最终耗时
-  }
-}, { immediate: true })
-
-// ★ 进度条：运行中按总耗时估算（长时任务最多 60 分钟，顶值 95%）；结束定格 100%
-const phaseProgress = computed(() => {
-  const rs = currentRunStat.value
-  if (!state.agentRunningByConv[state.currentConvId]) return (rs && rs.endAt) ? 100 : 0
-  if (!rs || !rs.startAt) return 0
-  const maxSec = 60 * 60 // 60 分钟
-  return Math.min(Math.round((runElapsedMs.value / 1000 / maxSec) * 100), 95)
-})
-let phaseTimer = null
+// ★ 2026-09-26 删除：phase-bar 的文案 / 计时 / 估算进度条（phaseText、runBarTitle、
+//   runTick 计时器、phaseProgress）与 phaseTimer —— 只服务已删除的顶部统计条。
+//   右栏 StatsRail 自带同口径的耗时/速度计算（本组件不参与）。
 
 // ── 滚动控制 ──
 const scrollTopRef = ref(0)
@@ -1349,15 +1449,6 @@ const fillViewport = async () => {
   if (!window.__scrollLockTimer) forceScrollToBottom()
 }
 
-// ── 段模式（兼容旧版）──
-function segMode(seg) {
-  if (seg._mode) return seg._mode
-  if (seg.type === 'thinking') return seg._collapsed !== false ? 'collapsed' : 'expanded'
-  if (seg.type === 'tool_call') return seg._expanded ? 'expanded' : 'collapsed'
-  if (seg.type === 'ask_user') return 'expanded'
-  return seg._collapsed === false ? 'expanded' : 'collapsed'
-}
-
 // ── 工具智能分类（简化版）──
 function safeParse(json) {
   if (!json) return {}
@@ -1405,6 +1496,73 @@ function toolResultSummary(seg) {
   return r.length > 120 ? r.slice(0, 120) + '…' : r
 }
 
+// isToolErr 工具胶囊的错误色判定（原为模板内联正则，2026-09-25 提取以适配 result 裁断）。
+// result 在 slim 响应中可能只带前 400 字符预览：此时后端已在裁断**之前**按全文算好
+// `_err`（见 agent.Segment.Err），必须以后者为准 —— 否则关键词落在预览之外时会把
+// 错误色误判成成功色（实测该会话 411 段含关键词的 result 中有 156 段属此情形）。
+// `_err` 为 undefined 表示 result 未被裁断（含流式期间刚写入的段）→ 照旧跑完整内容；
+// 后端侧同名正则见 cmd/companion/web_server.go 的 toolResultErrRe（逐词一致）。
+const TOOL_ERR_RE = /错误|失败|error|Error|✗|Exception/
+function isToolErr(seg) {
+  if (!seg) return false
+  if (seg._err !== undefined && seg._err !== null) return !!seg._err
+  return TOOL_ERR_RE.test(seg.result || '')
+}
+
+// ── 折叠段的惰性加载（★ 2026-09-25 性能）─────────────────────────
+// 首包中「折叠态不消费」的字段只带前 400 字符预览 + `_trunc`（原始字符数）标记：
+//   · thinking.content  —— 折叠行只渲染「思考…」标签（content 有 v-if 守卫）
+//   · tool_call.argsRaw —— 仅展开时渲染「参数」（同理由 v-if 守卫）
+//   · tool_call.result  —— 折叠行只用前 120 字符（胶囊文案）/前 80 字符（未知工具
+//     summary）/错误色判定，三者 400 字符预览均足够。
+//     ★★ finish_task 的 result 例外（后端不裁）：它在 apiLoadAndBuildConv 里被
+//     转成正文 content 段渲染，裁断会截断最终回答。
+// 展开动作触发按需取全文（本地接口毫秒级返回）；请求期间保留预览、失败静默降级
+// → 可见交互不变（消息摘要只用 content 段前 60 字符 + tool_call 计数，不受影响）。
+// 唯一需要「跨裁断保持语义」的是错误色判定 → 见 isToolErr（后端 _err 预计算）。
+// 索引口径与 /messages 完全一致（同一 limit、同一合并管道），否则会取错段。
+const _segInflight = new Map()
+const ensureSegFull = async (seg, msgIdx, segIdx) => {
+  if (!seg || !seg._trunc) return
+  const conv = state.currentConvId
+  if (!conv) return
+  const key = conv + '#' + msgIdx + '#' + segIdx
+  const pending = _segInflight.get(key)
+  if (pending) return pending
+  const task = (async () => {
+    try {
+      const r = await api.apiGet('/conversations/' + conv + '/messages/segment', {
+        idx: msgIdx, seg: segIdx, limit: 50, workspaceRoot: state.workspaceRoot,
+      })
+      if (r) {
+        if (typeof r.content === 'string' && r.content) seg.content = r.content
+        if (typeof r.argsRaw === 'string' && r.argsRaw) seg.argsRaw = r.argsRaw
+        if (typeof r.result === 'string' && r.result) seg.result = r.result
+      }
+      seg._trunc = 0
+    } catch (e) {
+      // 静默降级：保留预览内容（不打断阅读、不报错）
+      console.warn('[RP] 段全文加载失败 idx=%s seg=%s', msgIdx, segIdx, e)
+    } finally {
+      _segInflight.delete(key)
+    }
+  })()
+  _segInflight.set(key, task)
+  return task
+}
+
+// toggleThinking 思考段折叠/展开（展开时按需取全文）。
+function toggleThinking(seg, msgIdx, segIdx) {
+  seg._collapsed = !seg._collapsed
+  if (!seg._collapsed) ensureSegFull(seg, msgIdx, segIdx)
+}
+
+// toggleTool 工具调用段折叠/展开（展开时按需取全文）。
+function toggleTool(seg, msgIdx, segIdx) {
+  seg._expanded = !seg._expanded
+  if (seg._expanded) ensureSegFull(seg, msgIdx, segIdx)
+}
+
 function isTerminalTool(seg) {
   return /^(run_command|run_test|run_background|go_build|go_run|code_fix|code_format)$/.test(seg.name || '')
 }
@@ -1416,8 +1574,6 @@ function formatTerminalCommand(seg) {
 }
 
 // ── 工作区 Token 统计（使用全局 state，与 agent-events.js 共享）──
-const wsTokenStats = computed(() => state.wsTokenStatsByWs[state.workspaceRoot] || { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 })
-const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
 
 const loadWsTokenStats = async () => {
   try {
@@ -1995,35 +2151,6 @@ const newConversation = async () => {
   nextTick(() => inputRef.value?.focus())
 }
 
-const deleteConv = async (id) => {
-  // 若该对话有运行中的 agent，停止它
-  if (state.agentRunningByConv[id]) {
-    try { await api.chatStop(id) } catch {}
-    resetConvRuntime(id)
-  }
-  try {
-    await api.apiDelete('/conversations/' + id)
-    state.conversations = state.conversations.filter(c => c.id !== id)
-    // 删除后立即同步到 localStorage，防止页面刷新后旧数据复现
-    window.dispatchEvent(new Event('save-conversations'))
-    delete state.messagesByConv[id]
-    delete state.loadingByConv[id]
-    delete state.agentRunningByConv[id]
-    delete state.approvalByConv[id]
-    delete state.phaseByConv[id]
-    delete state.nudgeByConv[id]
-    delete state.convCtxStatsByConv[id]
-    delete state.msgTotalByConv[id]
-    delete state.msgLoadedByConv[id]
-    if (state.currentConvId === id) {
-      state.currentConvId = ''
-      state.messages = []
-      state.chatLoading = false
-      state.agentRunning = false
-    }
-  } catch {}
-}
-
 // ── 对话切换：纯历史消息加载，不管理运行时/不创建占位/不挂起 WS
 //   WS 事件通过 processAgentEvent 直接写入 messagesByConv[convId]，
 //   不受 switchConv 影响（多对话并行场景下各 conv 独立更新）。
@@ -2061,7 +2188,22 @@ async function apiLoadAndBuildConv(convId) {
       })
       .sort((a, b) => (a._idx || 0) - (b._idx || 0))
     // ★ 合并：API 返回的消息直接使用（processStatus 不再创建 loading 占位，无需保留逻辑）
-    return { mergedMsgs: mergeConsecutiveAssistant(loaded), total: data.total || loaded.length }
+    const mergedMsgs = mergeConsecutiveAssistant(loaded)
+    // ══════════════════════════════════════════════════════════════
+    // ★★ 2026-09-25 性能修复（首屏 13s → 亚秒级）：**在消息交给渲染之前**注入折叠标记 ★★
+    //   原实现只在 switchConv 末尾调用 applyAutoCollapse()，而那里已被
+    //   `await loadConvTasks()` / `await loadAutopilotRounds()`（实测 /autopilot/rounds
+    //   对大对话返回 4.3MB、耗时 4.1s）推到很后面。于是首屏先按「全展开」渲染了一整遍：
+    //   实测 1547 个 MarkdownRenderer / 46238 个 DOM 节点 / 391 万字符，Vue 同步渲染
+    //   阻塞主线程约 13 秒（CPU profile：(program) 11.1s + GC 3.5s），随后
+    //   applyAutoCollapse 才把 _folded 置 true → 整批 DOM 被丢弃重渲染（DOM 骤降至 1674）。
+    //   现改为在**数据源头**同步注入 → 首次渲染即折叠态（实测 26 个 MarkdownRenderer），
+    //   渲染量降约 98%，并与调用方（switchConv / reloadConvMessages）解耦。
+    //   ★ 幂等安全：applyAutoCollapse 只对 _folded === undefined 的消息生效；
+    //     autoCollapse 关闭时函数首行直接 return（用户选择「不自动折叠」的行为不变）。
+    // ══════════════════════════════════════════════════════════════
+    applyAutoCollapse(mergedMsgs)
+    return { mergedMsgs, total: data.total || loaded.length }
   } catch (e) {
     console.warn('[RP] apiLoadAndBuildConv 失败 conv=%s err=%v', convId, e)
     return null
@@ -2151,16 +2293,33 @@ const loadConvTasks = async (convId) => {
 // ★ 数据面由 autopilot 插件提供（GET /api/autopilot/rounds?convId=…，记录落盘
 //   .pair/autopilot/<convId>.jsonl）；插件未装载/从未监督过时接口 404 或 rounds 为空
 //   → 静默置空（看板不显示）。竞态保护：返回时已切换会话则丢弃结果。
+// ★ 2026-09-25 性能（并发请求合并）：同一会话的请求在途时复用同一 Promise，所有
+//   等待方共享结果。实测首屏该接口被请求 5 次（单次 4.6MB → 合计约 23MB 传输）：
+//   本组件有 4 处触发点（switchConv / WS 重连 / 会话结束补拉 / mounted nextTick），
+//   其中「mounted 的 nextTick 补拉」与「switchConv 内的调用」在首屏几乎同帧触发
+//   （见下方 onMounted 的 switchConv 与 L2419），叠加 autopilot 插件 client 半的
+//   首拉 → 同一份数据被并发拉了多遍。合并后并发只发 1 次请求。
+//   各调用点语义不变：拿到的一定是该会话的最新快照（合并窗口仅覆盖「请求在途」期间，
+//   一旦返回即从表中移除，后续触发（如 WS 重连补拉）仍会真实发起新请求）。
+const _roundsInflight = new Map()
 const loadAutopilotRounds = async (convId) => {
   if (!convId) { autopilotRounds.value = []; return }
-  try {
-    const res = await api.apiGet('/autopilot/rounds', { convId })
-    if (state.currentConvId !== convId) return
-    autopilotRounds.value = (res && Array.isArray(res.rounds)) ? res.rounds : []
-  } catch (e) {
-    // 静默：插件未装载或接口不可用时看板置空（不打扰用户）
-    if (state.currentConvId === convId) autopilotRounds.value = []
-  }
+  const pending = _roundsInflight.get(convId)
+  if (pending) return pending
+  const task = (async () => {
+    try {
+      const res = await api.apiGet('/autopilot/rounds', { convId })
+      if (state.currentConvId !== convId) return
+      autopilotRounds.value = (res && Array.isArray(res.rounds)) ? res.rounds : []
+    } catch (e) {
+      // 静默：插件未装载或接口不可用时看板置空（不打扰用户）
+      if (state.currentConvId === convId) autopilotRounds.value = []
+    } finally {
+      _roundsInflight.delete(convId)
+    }
+  })()
+  _roundsInflight.set(convId, task)
+  return task
 }
 
 // roundKey 监督回合唯一键（★ round 是「本次运行内的监督序号」，宿主每次 Run 从 1 重数，
@@ -2238,7 +2397,11 @@ const switchConv = async (id) => {
   // 加载任务状态（★ 任务按会话持久化在 .pair/tasks/*.json，见 loadConvTasks）
   await loadConvTasks(id)
   // 加载自主模式监督回合（看板；★ 按会话持久化在 .pair/autopilot/*.jsonl，见 loadAutopilotRounds）
-  await loadAutopilotRounds(id)
+  // ★ 2026-09-25 性能：改为**后台执行**（原为 await）—— 实测该接口对大对话返回 4.3MB /
+  //   耗时 4.1s，await 会把紧随其后的首屏滚底（fillViewport / forceScrollToBottom）
+  //   整体推迟 4 秒以上，表现为「切会话后要等好几秒才滚到底」。看板数据只喂右栏
+  //   AutopilotPanel，与消息显示无关，无需阻塞主流程。
+  loadAutopilotRounds(id)
 
   // ★ 2026-08-31：plan 体系已移除，不再从消息重建计划（currentPlan 下线）。
   applyAutoCollapse()
@@ -2281,25 +2444,11 @@ const autoNameConv = async (convId, content) => {
   } catch {}
 }
 
-function phaseIcon(phase) {
-  if (phase.includes('规划')) return 'list'
-  if (phase.includes('探索')) return 'search'
-  if (phase.includes('执行')) return 'terminal'
-  if (phase.includes('验证')) return 'check'
-  if (phase.includes('评测')) return 'layers'
-  if (phase.includes('完成')) return 'check'
-  if (phase.includes('继续')) return 'send'
-  return 'cycle'
-}
+// ★ 2026-09-26 删除 phaseIcon()：只服务 phase-bar 的阶段图标；phase 事件已无生产方
+//   （state.phaseByConv 恒空），函数恒不命中。
 
-function handleTaskTool(data) {
-  const toolName = data.tool || data.name || ''
-  const taskTools = ['task_create', 'task_update', 'task_list', 'task_delete', 'task_summary']
-  if (!taskTools.includes(toolName)) return false
-  try {
-    return true
-  } catch { return false }
-}
+// ★ 2026-09-25 删除 handleTaskTool()：全域零引用的死函数（模板/脚本段/跨文件均无调用，
+//   函数体只是「命中任务工具名则 return true」且调用方从未使用返回值）。
 
 
 // ── 输入框拖拽调整 ──
@@ -2316,7 +2465,7 @@ const onInputResizeMove = (e) => {
   if (!inputDragging) return
   const newH = inputStartH + (inputStartY - e.clientY)
   // min-height + 拖拽方向保护
-  inputHeight.value = Math.max(80, Math.min(600, newH))
+  inputHeight.value = Math.max(40, Math.min(600, newH))
 }
 const stopInputResize = () => { inputDragging = false; document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize); nextTick(() => updateInputPadding()) }
 
@@ -2628,15 +2777,6 @@ onMounted(() => {
       currentTasks.value = [...tasks]
       tasksExpanded.value = true
     },
-    onPhaseChange: (convId) => {
-      // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
-      if (phaseTimer) clearTimeout(phaseTimer)
-      phaseTimer = setTimeout(() => { state.phaseByConv[convId] = '' }, 6000)
-    },
-    onPhaseEnd: (convId) => {
-      if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-      state.phaseByConv[convId] = ''
-    },
     onNudge: (convId) => {
       // nudge 自动从 state.nudgeByConv 读取，此处启动定时器清除
       if (nudgeTimer) clearTimeout(nudgeTimer)
@@ -2666,8 +2806,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-  if (runTickTimer) { clearInterval(runTickTimer); runTickTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   window.removeEventListener('pair-plugin-event', onPluginEvent)
   stopContentResizeObserver()
@@ -2689,9 +2827,57 @@ onUnmounted(() => {
 /* 会话列表已收起：按钮半透明提示「当前为隐藏态」*/ 
 .rp-btn-off { opacity: 0.45; }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
-.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 10px 14px; min-height: 0; position: relative; overflow-anchor: none; }
+/* ★ 2026-09-25 对齐设计稿 th130（col 840, pad=space.md）：主区内容列左右内边距 12px。
+   宽度不硬编码 —— 由视口推导：1440 下 840−24=816；1280 下 680−24=656。 */
+.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; padding: 12px; box-sizing: border-box; }
+/* 内边距已上提到 .chat-area：消息区自身不再叠加左右内边距（否则双重缩进）。 */
+.chat-messages { flex: 1; overflow-y: auto; padding: 0; min-height: 0; position: relative; overflow-anchor: none; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+/* ★ 2026-09-25（设计稿屏 1 ③）：「下一步可以试试」引导卡（消息流末尾的建议芯片） */
+.next-steps {
+  margin: 4px 0 8px; padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border-strong);
+  background: var(--color-surface);
+}
+/* ★ 2026-09-25 对齐设计稿 th95：标题行 — 标题(600,fg) + 右侧 muted xs 提示 + 关闭 */
+.ns-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+/* ★ th92：标题 sm + 600 + fg */
+.ns-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); }
+/* ★ th94：右侧 muted xs「也可以直接描述你的目标」 */
+.ns-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-muted); }
+.ns-close {
+  border: none; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 3px;
+}
+.ns-close:hover { color: var(--text-primary); }
+/* ★ 2026-09-25 对齐设计稿 th104（芯片行 792×32, gap=8）与 th97/99/101/103（芯片 h=32, r=full） */
+.ns-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ns-chip { height: 32px; padding: 0 10px; border-radius: 999px; font-size: var(--fs-xs); }
+/* ★ th97：首个芯片 accent 高亮（border=accent / accent 文字 / surface-3 底） */
+/* ★ 提权：原 `.ns-chip-primary` 被既有 `.ns-chip { color: … }` 覆盖（实测 color=fg），
+   改为双类选择器提高特异性，确保文字色真正等于当前主题 --accent。 */
+.ns-chip.ns-chip-primary { border-color: var(--accent); color: var(--accent); background: var(--bg-active); }
+/* ★ th65/th64：任务横幅行 816×48 + 内嵌 440×40 卡片 */
+.task-banner-row { display: flex; align-items: center; height: 48px; flex: 0 0 auto; }
+.task-banner-card {
+  margin-left: auto; width: 440px; height: 40px; box-sizing: border-box;
+  padding: 0 8px; display: flex; align-items: center;
+  background: var(--bg-active); border: 1px solid var(--border-color); border-radius: 8px;
+  font-size: var(--fs-sm); color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* ★ th105：底部提示行 xs muted */
+.ns-foot { margin-top: 8px; font-size: var(--fs-xs); color: var(--text-muted); }
+/* ★ th106：卡片 816×140, bg=surface, r12, border, pad=12 */
+.next-steps { border-radius: 12px; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); }
+.ns-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--border-color); border-radius: var(--radius-full);
+  background: var(--color-surface-2); color: var(--text-primary);
+  font-size: var(--fs-sm); cursor: pointer; transition: all .15s;
+}
+.ns-chip:hover { border-color: var(--accent); background: var(--color-accent-bg); }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; border-radius: 10px; padding: 2px 4px; transition: background 0.12s; }
 .msg-item:hover { background: var(--bg-hover); }
 
@@ -2706,9 +2892,29 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
 }
-.chat-empty-icon { margin-bottom: 16px; opacity: 0.35; color: var(--accent); filter: drop-shadow(0 0 12px rgba(88, 166, 255, 0.35)); }
+.chat-empty-icon { margin-bottom: 16px; opacity: 0.35; color: var(--accent); filter: drop-shadow(0 0 12px var(--color-accent-ring)); }
 .chat-empty-text { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary); }
 .chat-empty-hint { font-size: 13px; opacity: 0.7; }
+/* ★ P4-3 首启引导卡：空对话位置的三步动线（.chat-empty 为居中容器，卡片自身左对齐排版） */
+.ob-card { width: min(430px, 92%); text-align: left; background: var(--color-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-lg); }
+.ob-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ob-logo { width: 34px; height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 9px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ob-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ob-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.ob-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ob-step { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px; }
+.ob-step:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.ob-no { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border-color); }
+.ob-step.is-done .ob-no { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.ob-body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.ob-t { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.ob-step.is-done .ob-t { color: var(--text-muted); }
+.ob-d { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-act { margin-left: auto; flex-shrink: 0; padding: 3px 9px; font-size: 11px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); cursor: pointer; }
+.ob-act:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.ob-foot { display: flex; justify-content: flex-end; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color); }
+.ob-dismiss { border: none; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.ob-dismiss:hover { color: var(--text-secondary); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
 
 
@@ -2720,24 +2926,24 @@ onUnmounted(() => {
   min-width: 40px;
   /* ★ 2026-08-21 可视优化：纯色蓝底 → accent 渐变 + 柔和阴影，保持主题 accent 色调 */
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
-  color: #fff;
+  color: var(--color-accent-fg);
   padding: 10px 16px;
   border-radius: 14px 14px 4px 14px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
   margin: 2px 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+  box-shadow: var(--shadow-sm);
   transition: box-shadow 0.15s ease, transform 0.1s ease;
   position: relative;
 }
 .msg-user .bubble-user:hover {
-  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-sm);
 }
 /* 选中文字在深色气泡上可见 */
 .msg-user .bubble-user ::selection {
   background: rgba(255, 255, 255, 0.3);
-  color: #fff;
+  color: var(--color-accent-fg);
 }
 .user-msg-content { width: 100%; text-align: left; }
 .user-msg-content :deep(p) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
@@ -2747,12 +2953,12 @@ onUnmounted(() => {
 .user-msg-content :deep(code) { font-size: 12px; }
 .user-msg-header { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 .umh-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.badge-delegation { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
-.badge-feedback { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+.badge-delegation { background: var(--color-cat-purple-bg); color: var(--color-cat-purple); border: 1px solid var(--color-cat-purple-bg); }
+.badge-feedback { background: var(--color-cat-amber-bg); color: var(--color-cat-amber); border: 1px solid var(--color-cat-amber-bg); }
 .umh-agent { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px; }
-.user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
+.user-msg-placeholder { color: var(--color-subtle); font-style: italic; font-size: 12px; }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.msg-user .msg-avatar { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; box-shadow: 0 1px 4px rgba(88, 166, 255, 0.25); }
+.msg-user .msg-avatar { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: var(--color-accent-fg); box-shadow: 0 1px 4px var(--color-accent-ring); }
 .msg-assistant .msg-avatar { background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-active) 100%); color: var(--accent); border: 1px solid var(--border-color); }
 .msg-bubble { flex: 1; min-width: 0; max-width: 85%; font-size: 13px; line-height: 1.6; word-break: break-word; overflow-wrap: break-word; position: relative; padding: 2px 0; }
 
@@ -2769,22 +2975,13 @@ onUnmounted(() => {
 .bubble-agent { background: transparent; border: none; padding: 0 0 0 18px; position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
 .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; opacity: 0.7; text-align: right; }
-.bubble-user .msg-time { color: rgba(255,255,255,0.6); }
+.bubble-user .msg-time { color: var(--color-muted); }
 .msg-loading-dots { display: flex; align-items: center; gap: 3px; padding: 8px 12px; }
 .msg-loading-dots .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: dotPulse 1.4s infinite; }
 .msg-loading-dots .dot:nth-child(2) { animation-delay: 0.2s; }
 .msg-loading-dots .dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes dotPulse { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1.2); } }
 .msg-loading-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: var(--text-muted); font-size: 12px; }
-.phase-bar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: linear-gradient(90deg, rgba(212, 167, 78, 0.08), rgba(212, 167, 78, 0.02)); border-bottom: 1px solid rgba(212, 167, 78, 0.2); font-size: 12px; color: #d4a74e; flex-shrink: 0; flex-wrap: wrap; }
-.phase-icon { flex-shrink: 0; }
-.phase-text { font-weight: 600; }
-.phase-stats { display: flex; gap: 12px; margin-left: auto; }
-.phs-item { display: flex; align-items: center; gap: 3px; color: rgba(212, 167, 78, 0.6); font-size: 10px; }
-/* phs-sub 统计条内的次要数值（如工具累计耗时），弱化一级避免与主数值抢注意力 */
-.phs-sub { color: rgba(212, 167, 78, 0.42); }
-.phase-bar-track { width: 100%; height: 2px; background: rgba(212, 167, 78, 0.1); border-radius: 1px; margin-top: 2px; }
-.phase-bar-fill { height: 100%; background: #d4a74e; border-radius: 1px; transition: width 1s ease; }
 .folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
 .folded-chevron { flex-shrink: 0; color: var(--text-muted); display: block; }
@@ -2806,11 +3003,11 @@ onUnmounted(() => {
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
 .tl-item { display: flex; align-items: flex-start; gap: 6px; padding: 2px 0; position: relative; }
 .tl-dot { width: 8px; height: 8px; min-width: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; box-shadow: 0 0 0 2px var(--bg-primary); }
-.tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.3); }
-.tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.2); }
-.tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(197,134,192,0.2); }
-.tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
-.tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(126,184,218,0.4); }
+.tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px var(--color-cat-amber-bg); }
+.tl-dot-tool { border-color: var(--color-cat-amber); background: var(--color-cat-amber-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px var(--color-cat-amber-bg); }
+.tl-dot-ask { border-color: var(--color-cat-purple); background: var(--color-cat-purple-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px var(--color-cat-purple-bg); }
+.tl-dot-content { border-color: var(--color-cat-green); background: var(--color-cat-green-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px var(--color-cat-green-bg); }
+.tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px var(--color-cat-blue-bg); }
 .tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; }
 /* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
@@ -2818,6 +3015,109 @@ onUnmounted(() => {
 .tl-think-fold { position: sticky; bottom: 0; display: inline-block; font-size: 11px; color: var(--accent); cursor: pointer; padding: 3px 10px; margin-top: 4px; user-select: none; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; transition: background 0.15s; }
 .tl-think-fold:hover { background: var(--bg-hover); color: var(--accent-light); }
 .tl-thinking-collapsed { color: var(--text-muted); font-style: italic; font-size: 12px; cursor: pointer; padding: 2px 0; }
+/* ★ 2026-09-26 用户反馈修正：工具行不再用「贴最右的状态胶囊(tag)」——
+   名称自适应宽度（原固定 240px 造成中间留白）、结果摘要**左对齐紧随其后**
+   （文字色区分成功/错误/运行中，无背景无圆角；原 margin-left:auto 把胶囊推到行尾），
+   chevron 紧随内容之后。行本体仍是 th83/th90 的行式（h32, bg=surface-2, r8, border）。
+   旧的 .tl-tc-header 规则保留（思考段等仍在复用），不受影响。 */
+.tool-row-wrap { display: flex; flex-direction: column; gap: 4px; margin: 2px 0; }
+.tool-row {
+  display: flex; align-items: center; height: 32px; padding: 0 6px; gap: 8px;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: 8px; cursor: pointer; transition: border-color .15s;
+}
+.tool-row:hover, .tool-row.is-open { border-color: var(--accent); }
+.tr-icon { flex: 0 0 auto; color: var(--accent); }
+.tr-name {
+  flex: 0 1 auto; max-width: 220px; font-size: var(--fs-xs); color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tr-spinner {
+  flex: 0 0 auto; width: 10px; height: 10px; border: 2px solid var(--accent);
+  border-top-color: transparent; border-radius: 50%; animation: tr-spin .8s linear infinite;
+}
+@keyframes tr-spin { to { transform: rotate(360deg); } }
+/* 结果摘要：左对齐、紧随工具名成组（不再吃满剩余宽度把 chevron 顶到最右）。
+   max-width 62% 保证与名称共处一行且可省略；无背景/无圆角 → 不是 tag。 */
+.tr-status {
+  flex: 0 1 auto; min-width: 0; max-width: 62%; font-size: var(--fs-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+}
+.tr-status-ok { color: var(--success, #4FD8A4); }
+.tr-status-err { color: var(--danger, #FF8085); }
+.tr-status-run { color: var(--text-muted); }
+/* ★ 2026-09-25 对齐设计稿 th70/th69：助手消息头行（h24）与模型胶囊（124×24, r=full） */
+.msg-head { display: flex; align-items: center; gap: 8px; height: 24px; margin-bottom: 4px; }
+.mh-icon { flex: 0 0 auto; color: var(--accent); }
+.mh-brand { flex: 0 0 auto; font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); }
+.mh-model-pill {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  /* ★ th68：设计为 124×24 固定胶囊（原为内容自适应 99 宽） */
+  min-width: 124px; height: 24px; padding: 0 10px; border-radius: 999px;
+  background: var(--bg-active); color: var(--accent); font-size: var(--fs-xs);
+}
+/* ★ th71/th72 正文改 sm 字号（原继承值偏小） */
+/* ★ 2026-09-25 对齐设计稿 th76（816 = 整内容列）：助手消息整块占满内容列 ——
+   原通用 .msg-bubble{max-width:85%} 把助手头行(th70)/工具行(th83/90)压到 537（内容列 656）。
+   ★ 就地改本规则（不新增同名规则）；用户气泡走 .msg-user，仍保持 85% 右对齐。
+   ★ th75 命令卡 520×64 亦在此宽度内居左。 */
+.msg-assistant .msg-bubble { font-size: var(--fs-sm); max-width: 100%; }
+/* ★ 2026-09-25 对齐设计稿 th129（输入融合卡 816×128）
+   notes §15.2「单一容器包裹三段」：输入区去掉自带描边与底色，描边/底色**上提到外层容器**。
+   三段高度自洽：pad8 + 行1(24) + gap8 + 行2(40) + gap8 + 行3(32) + pad8 = 128。
+   ★ 监督纠正：融合卡定义**合并进下方唯一的老规则 `.input-wrapper`**，
+     本处不再保留第二条同名规则（此前同特异性双规则 → 老规则胜出，样式反复不生效）。 */
+/* 行1（th114）：h24 — 模型胶囊 + 场景工具集选择器 + 弹性空隙 */
+.input-row1 { display: flex; align-items: center; gap: 8px; height: 24px; flex: 0 0 auto; }
+.ir-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 24px; padding: 0 10px; border-radius: 999px;
+  font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* th107：模型胶囊 bg=surface-3 + accent 文字 */
+.ir-pill-model { background: var(--bg-active); color: var(--accent); }
+/* ★ 2026-09-25 监督纠正（缺陷 2）：行1 场景工具集选择器 = SheetPicker 胶囊化外观。
+   对齐设计稿 th109（bg=surface-2/hover、muted 文字、radius=full、xs 字号、h24），
+   使可交互的选择器与行1 其它胶囊（模型/自主模式）视觉一致。 */
+.ir-pill-picker { flex: 0 0 auto; }
+.ir-pill-picker :deep(.sp-wrap) { height: 24px; }
+.ir-pill-picker :deep(.sp-select) {
+  height: 24px;
+  padding: 0 20px 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 160px;
+  cursor: pointer;
+}
+.ir-pill-picker :deep(.sp-select):hover { color: var(--text-primary); }
+.ir-pill-picker :deep(.sp-chevron) { right: 6px; pointer-events: none; }
+.ir-spacer { flex: 1 1 auto; min-width: 0; }
+/* 行2（th116）：输入区本身 —— 去掉自带 border/background，高度 40，字号 sm */
+.input-wrapper .chat-input {
+  border: 0 !important; background: transparent !important;
+  height: 40px; min-height: 40px; font-size: var(--fs-sm);
+  padding: 8px 0; box-sizing: border-box;
+}
+.input-wrapper .chat-input:empty::before { color: var(--text-muted); font-size: var(--fs-sm); }
+/* 行3（th128）：h32 — 3 个 32×32 r8 图标卡 + 空隙 + Enter 提示 + 发送 72×32 */
+.input-wrapper .input-bottom-bar { height: 32px; gap: 8px; }
+.input-wrapper .ibb-btns { height: 32px; gap: 8px; align-items: center; }
+.input-wrapper .ibb-btns > * { flex: 0 0 auto; }
+.input-wrapper .obtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  width: 32px; height: 32px; border-radius: 8px; padding: 0;
+}
+.input-wrapper .obtn-sep { display: none; }
+.input-wrapper .send-btn, .input-wrapper .stop-btn { width: 72px; height: 32px; border-radius: 8px; }
+/* ★ th127：Enter 提示（xs muted），靠右置于发送按钮左侧 */
+.ibb-enter-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; flex: 0 0 auto; }
+.input-wrapper .send-btn { font-size: var(--fs-sm); }
+.tr-chevron { flex: 0 0 auto; color: var(--text-muted); }
+.tool-row-detail { margin-top: 4px; }
 .tl-tc-header { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; user-select: none; border-radius: 4px; transition: background 0.15s; }
 .tl-tc-header:hover { background: var(--bg-hover); }
 .tl-tc-chevron { color: var(--text-muted); width: 8px; flex-shrink: 0; display: block; }
@@ -2829,8 +3129,8 @@ onUnmounted(() => {
 .tl-tc-section { margin-bottom: 4px; }
 .tl-tc-section-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; font-weight: 500; }
 .tl-tc-section pre { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 8px; font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow: auto; white-space: pre-wrap; font-family: var(--font-code); margin: 0; }
-.tl-tc-command { background: #1e1e1e; color: #d4d4d4; padding: 6px 10px 6px 14px; border-radius: 4px; font-family: var(--font-code); font-size: 12px; white-space: pre-wrap; border: 1px solid var(--border-color); }
-.tl-tc-output { background: #1e1e1e; color: #6a9955; padding: 8px 10px; border-radius: 4px; font-family: var(--font-code); font-size: 11px; white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid var(--border-color); }
+.tl-tc-command { background: var(--color-canvas); color: var(--color-fg); padding: 6px 10px 6px 14px; border-radius: 4px; font-family: var(--font-code); font-size: 12px; white-space: pre-wrap; border: 1px solid var(--border-color); }
+.tl-tc-output { background: var(--color-canvas); color: var(--color-cat-green); padding: 8px 10px; border-radius: 4px; font-family: var(--font-code); font-size: 11px; white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid var(--border-color); }
 /* Content 段：纯 Markdown，由 MarkdownRenderer 统一管理样式，此处不覆盖 */
 
 /* ── nudge 提示条 ── */
@@ -2849,9 +3149,9 @@ onUnmounted(() => {
   pointer-events: auto;
   display: flex; align-items: center; justify-content: center; gap: 5px;
   padding: 5px 14px; border-radius: 20px;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--color-accent-fg);
   border: none; font-size: 12px; cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-sm);
   transition: background 0.15s, transform 0.15s;
   white-space: nowrap;
 }
@@ -2863,8 +3163,8 @@ onUnmounted(() => {
   transform: scale(0.95);
 }
 @keyframes scrollDownPulse {
-  0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
-  50% { box-shadow: 0 2px 16px rgba(0,0,0,0.4); }
+  0%, 100% { box-shadow: var(--shadow-sm); }
+  50% { box-shadow: var(--shadow-md); }
 }
 .scroll-down-btn.show-pulse > button {
   animation: scrollDownPulse 1.5s ease infinite;
@@ -2891,10 +3191,10 @@ onUnmounted(() => {
 .resume-banner {
   display: flex; align-items: center; gap: 8px;
   margin: 0 0 6px 0; padding: 6px 10px;
-  background: rgba(232, 172, 82, 0.12);
-  border: 1px solid rgba(232, 172, 82, 0.35);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-bg);
   border-radius: 6px;
-  font-size: 12px; color: #e8ac52;
+  font-size: 12px; color: var(--color-warning);
 }
 .resume-icon { flex-shrink: 0; font-size: 13px; }
 .resume-text { flex: 1; line-height: 1.4; }
@@ -2902,62 +3202,68 @@ onUnmounted(() => {
   flex-shrink: 0;
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 4px;
-  background: rgba(232, 172, 82, 0.25);
-  border: 1px solid rgba(232, 172, 82, 0.5);
-  color: #f0c674; font-size: 11px; font-weight: 500;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning); font-size: 11px; font-weight: 500;
   cursor: pointer; white-space: nowrap;
 }
-.resume-btn:hover { background: rgba(232, 172, 82, 0.4); }
+.resume-btn:hover { background: var(--color-warning-bg); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.input-wrapper { position: relative; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 16px; transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+/* ★ 2026-09-25 对齐设计稿 th129：融合卡**唯一**规则 ——
+   必须带 display:flex + flex-direction:column，否则 gap:8px 不生效（三段之间无 8px 衔接）。 */
+.input-wrapper { position: relative; display: flex; flex-direction: column; background: var(--color-surface-2); border: 1px solid var(--color-input-border); border-radius: 12px; padding: 8px; gap: 8px; width: 100%; box-sizing: border-box; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; box-shadow: var(--shadow-sm); }
 /* ★ Round3 ④.2 slash 命令菜单（输入 "/" 前缀时显示在输入框上方） */
-.slash-menu { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--panel-bg, #1f2430); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); max-height: 280px; overflow-y: auto; z-index: 60; padding: 4px; }
+.slash-menu { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 280px; overflow-y: auto; z-index: 60; padding: 4px; }
 .slash-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
-.slash-item.active { background: rgba(0, 120, 212, 0.16); }
-.slash-name { font-family: var(--mono-font, monospace); color: #4daafc; font-size: 13px; flex-shrink: 0; }
-.slash-name .slash-ondemand { font-style: normal; font-size: 10px; color: #ffb454; border: 1px solid #ffb45455; border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
-.slash-desc { color: var(--text-muted, #9aa4b2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-item.active { background: var(--color-accent-bg); }
+.slash-name { font-family: var(--mono-font); color: var(--color-accent); font-size: 13px; flex-shrink: 0; }
+.slash-name .slash-ondemand { font-style: normal; font-size: 10px; color: var(--color-warning); border: 1px solid var(--color-warning-bg); border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
+.slash-desc { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ★ 2026-08-21 可视优化：输入框聚焦时 accent 描边（键盘可达性/审美） */
-.input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring), 0 4px 16px rgba(0, 0, 0, 0.16); }
+.input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring), 0 4px 16px var(--color-scrim); }
 /* ★ 2026-08-22 contenteditable 输入框改造：附件内联 tag 渲染在输入框内 */
 .chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 16px 18px 8px 18px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; overflow-y: auto; white-space: pre-wrap; word-break: break-word; cursor: text; }
 /* placeholder（contenteditable 无原生 placeholder，用 :empty 伪元素） */
 .chat-input:empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; }
 .chat-input[contenteditable="false"] { opacity: 0.55; cursor: not-allowed; }
 /* 附件内联 tag：contenteditable=false 药丸，与文字混排 */
-.att-inline { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; margin: 0 2px; border-radius: 11px; font-size: 12px; line-height: 1.5; vertical-align: middle; user-select: none; cursor: default; max-width: 340px; background: rgba(0, 120, 212, 0.12); color: #4daafc; border: 1px solid rgba(0, 120, 212, 0.25); }
-.att-inline-image { background: rgba(0, 180, 120, 0.12); color: #4cc9a0; border-color: rgba(0, 180, 120, 0.25); }
-.att-inline-dir { background: rgba(180, 130, 30, 0.12); color: #e0b45e; border-color: rgba(180, 130, 30, 0.25); }
+.att-inline { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; margin: 0 2px; border-radius: 11px; font-size: 12px; line-height: 1.5; vertical-align: middle; user-select: none; cursor: default; max-width: 340px; background: var(--color-cat-blue-bg); color: var(--color-cat-blue); border: 1px solid var(--color-cat-blue-bg); }
+.att-inline-image { background: var(--color-cat-green-bg); color: var(--color-cat-green); border-color: var(--color-cat-green-bg); }
+.att-inline-dir { background: var(--color-cat-amber-bg); color: var(--color-cat-amber); border-color: var(--color-cat-amber-bg); }
 .att-inline .att-inline-icon { display: inline-flex; flex-shrink: 0; }
 .att-inline .att-inline-svg { width: 12px; height: 12px; }
 .att-inline .att-inline-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-inline .att-inline-x { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; font-size: 12px; line-height: 1; color: inherit; opacity: 0.7; cursor: pointer; flex-shrink: 0; }
-.att-inline .att-inline-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.25); }
+.att-inline .att-inline-x:hover { opacity: 1; background: var(--color-surface-3); }
 .input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px 10px 10px; }
 .ibb-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: relative; }
 /* ★ 2026-09-05 移动端化：传统 <select> 已由 SheetPicker（bottom-sheet）替换，.cmp-sel 移除 */
-.obtn { display: flex; align-items: center; gap: 3px; padding: 4px 10px; border-radius: 999px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; transition: all 0.12s; }
+/* ★ 2026-09-25 监督纠正（缺陷 3）：设计稿 ui-theme.notes.md:1262 规定的输入卡操作控件规格
+   —— 32×32 圆角图标卡（radius=8、图标居中、选中态走 --accent），三卡尺寸/圆角/边框一致：
+   放行（评审模式）/ 折叠（自动折叠）/ 自主（自主模式）。原 gap+padding+999px 胶囊 + 文字 +
+   自绘勾选字形已全部移除（模式名改由 title 承载）。 */
+.obtn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border-radius: 8px; cursor: pointer; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; transition: all 0.12s; }
 .obtn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
-.obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
-.obtn-obtn-agent.active { color: #d4a74e; }
+.obtn.active { color: var(--accent); background: var(--color-accent-bg); border-color: var(--color-accent-ring); }
+.obtn-obtn-agent.active { color: var(--color-cat-amber); }
 /* 三态审核按钮样式 */
-.obtn-review-auto { color: #5bbc7a; background: rgba(91, 188, 122, 0.1); border-color: rgba(91, 188, 122, 0.3); }
-.obtn-review-manual { color: #d4a74e; background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
+.obtn-review-auto { color: var(--color-success); background: var(--color-success-bg); border-color: var(--color-success-bg); }
+.obtn-review-manual { color: var(--color-warning); background: var(--color-warning-bg); border-color: var(--color-warning-bg); }
 .obtn-review-off { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); opacity: 0.6; }
 
 
 
 /* ★ 2026-09-05 移动端融合设计：发送/停止 = 圆形 FAB 按钮 */
-.send-btn { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px rgba(79, 140, 255, 0.35); }
+.send-btn { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: var(--color-accent-fg); width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px var(--color-accent-ring); }
 .send-btn svg { margin-left: 2px; }
-.send-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 5px 14px rgba(79, 140, 255, 0.45); }
+.send-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 5px 14px var(--color-accent-ring); }
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
-.stop-btn { background: #c03; color: #fff; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px rgba(204, 0, 51, 0.35); }
+.stop-btn { background: var(--color-danger); color: var(--color-accent-fg); width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px var(--color-danger-bg); }
 /* ── 用户消息附件标签 ── */
 .user-attachments { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .att-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; border-radius: 11px; font-size: 12px; cursor: default; }
-.att-tag-file, .att-tag-code, .att-tag-dir { background: rgba(0, 120, 212, 0.12); color: #4daafc; border: 1px solid rgba(0, 120, 212, 0.25); }
-.att-tag-image { background: rgba(0, 180, 120, 0.12); color: #4cc9a0; border: 1px solid rgba(0, 180, 120, 0.25); }
+.att-tag-file, .att-tag-code, .att-tag-dir { background: var(--color-cat-blue-bg); color: var(--color-cat-blue); border: 1px solid var(--color-cat-blue-bg); }
+.att-tag-image { background: var(--color-cat-green-bg); color: var(--color-cat-green); border: 1px solid var(--color-cat-green-bg); }
 .att-tag-label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ★ 2026-08-22 附件 chip 只显示「左侧图标 + 文件名」文字大小尺寸：图片附件不再渲染 96px 大缩略图 */
 /* ★ 2026-08-21 气泡内附件反色：用户气泡为 accent 渐变底色，原淡蓝标签与气泡同色系难辨认。
@@ -2968,7 +3274,7 @@ onUnmounted(() => {
 .bubble-user .att-tag-dir,
 .bubble-user .att-tag-image {
   background: rgba(255, 255, 255, 0.22);
-  color: #fff;
+  color: var(--color-accent-fg);
   border: 1px solid rgba(255, 255, 255, 0.55);
 }
 
@@ -2989,7 +3295,7 @@ onUnmounted(() => {
 }
 .feedback-input::placeholder { color: var(--text-muted); font-size: 11px; }
 .feedback-send-btn {
-  background: var(--accent); color: #fff; border: none;
+  background: var(--accent); color: var(--color-accent-fg); border: none;
   padding: 4px 8px; border-radius: 4px; cursor: pointer;
   display: flex; align-items: center; flex-shrink: 0;
 }
@@ -2997,7 +3303,7 @@ onUnmounted(() => {
 
 /* ── 合并到 agent 气泡中的用户反馈标记 ── */
 .fb-merged-section {
-  background: rgba(255, 193, 7, 0.08); border: 1px dashed rgba(255, 193, 7, 0.35);
+  background: var(--color-warning-bg); border: 1px dashed var(--color-warning);
   border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;
 }
 .fb-merged-item { margin-bottom: 4px; }
@@ -3006,7 +3312,7 @@ onUnmounted(() => {
 .fb-merge-label {
   font-size: 11px;
   font-weight: 600;
-  color: #d4a74e;
+  color: var(--color-cat-amber);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -3045,6 +3351,13 @@ onUnmounted(() => {
   flex-shrink: 0;
   transition: max-height 0.25s ease;
   padding: 0 8px;
+  /* ★ 2026-09-25：容器自身做成 flex 列 + overflow:hidden，与 .ap-panel 的高度模型
+     配套（面板 flex:0 1 auto + min-height:0、.ap-body flex:1 内滚）—— 面板高度恒
+     ≤ 320px，不再溢出到下方被不透明的 .chat-input-area 盖住（用户报「展开被输入框
+     盖住一部分」）。overflow:hidden 是兜底：即使未来面板内部再超界，也只在本容器
+     内被裁，不会外溢遮挡输入区。 */
+  display: flex; flex-direction: column;
+  overflow: hidden;
 }
 .autopilot-container.autopilot-empty {
   max-height: 0;
@@ -3068,17 +3381,17 @@ onUnmounted(() => {
   border-radius: 11px; font-size: 12px; line-height: 1.5;
   vertical-align: middle; user-select: none; cursor: default;
   max-width: 340px;
-  background: rgba(0, 120, 212, 0.12); color: #4daafc;
-  border: 1px solid rgba(0, 120, 212, 0.25);
+  background: var(--color-cat-blue-bg); color: var(--color-cat-blue);
+  border: 1px solid var(--color-cat-blue-bg);
   box-sizing: border-box;
 }
 .chat-input .att-inline-image {
-  background: rgba(0, 180, 120, 0.12); color: #4cc9a0;
-  border-color: rgba(0, 180, 120, 0.25);
+  background: var(--color-cat-green-bg); color: var(--color-cat-green);
+  border-color: var(--color-cat-green-bg);
 }
 .chat-input .att-inline-dir {
-  background: rgba(180, 130, 30, 0.12); color: #e0b45e;
-  border-color: rgba(180, 130, 30, 0.25);
+  background: var(--color-cat-amber-bg); color: var(--color-cat-amber);
+  border-color: var(--color-cat-amber-bg);
 }
 .chat-input .att-inline .att-inline-icon { display: inline-flex; flex-shrink: 0; }
 .chat-input .att-inline .att-inline-svg { width: 12px; height: 12px; display: block; }
@@ -3090,5 +3403,5 @@ onUnmounted(() => {
   width: 14px; height: 14px; border-radius: 50%; font-size: 12px; line-height: 1;
   color: inherit; opacity: 0.7; cursor: pointer; flex-shrink: 0;
 }
-.chat-input .att-inline .att-inline-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.25); }
+.chat-input .att-inline .att-inline-x:hover { opacity: 1; background: var(--color-surface-3); }
 </style>

@@ -36,4 +36,10 @@ window.__PAIRCODE_CORE = {
   version: '1.0.0',          // ★ 共享核心契约版本锚（region 包兼容检测）
 }
 
+// ★ 启动即应用主题（P1-a）：先恢复本地持久化偏好（同步，避免首屏闪主题）；
+//   后端 AppSettings.theme 为权威源，在 app-actions 的 settings 预取完成后覆盖
+//   （见 uiState.syncThemeFromSettings）。此前 applyTheme 只在打开设置面板时被调用，
+//   导致首次启动/重载后主题回到默认。
+uiState.initTheme()
+
 createApp(ShellApp).mount('#app')

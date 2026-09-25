@@ -1,7 +1,7 @@
 {
   "name": "ui-right-panel",
   "purpose": "对话面板（含 chat/chat-tools 叠加挂载）",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",

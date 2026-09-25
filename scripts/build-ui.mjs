@@ -137,6 +137,14 @@ async function buildRegion(r) {
       root: uiRoot,
       plugins: [vuePlugin()],
       logLevel: 'warn',
+      // ★ 2026-09-25 产物冗余修复：区域包**不使用** public 目录。
+      //   vite 默认 publicDir = <root>/public，会把 plugins-src/ui-app/public/ 的内容
+      //   （vendor/mermaid.min.js 3.5MB + favicon.svg）复制进**每一个**区域包的 outDir。
+      //   实测 .pair/plugins 下 9 个区域包各带一份 mermaid（合计 31.5MB 死文件），
+      //   而运行时真正加载的是 `new URL('vendor/mermaid.min.js', document.baseURI)`
+      //   —— 即 **web 根**（由壳构建投放），区域包内那份永远不会被请求。
+      //   壳构建（vite.config.js）保持默认 publicDir，仍会把 vendor 放到 web 根。
+      publicDir: false,
       build: {
         lib: {
           entry: path.join(uiRoot, r.entry),

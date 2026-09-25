@@ -275,6 +275,7 @@ Node API（require/setTimeout/fetch/process 等）沙箱中**不可用**，调�
 | UI 文本被当 HTML 解析 / 排版错乱 / 内容消失 | client 半用了 innerHTML | 模型与用户文本一律 textContent（内含 `<` `>` `&`） |
 | 两个插件的装配参数互相"吃掉" | 按旧的单槽位覆盖语义理解 ctx.loopFactory.register | 2026-09-21 起为装配器**链**（按注册顺序叠加，仅同插件名替换该项） |
 | ctx.subagent.run 报"无会话运行环境" | 在装载期 / 无会话回调里派发 | 先 `ctx.subagent.available()` 判，不可用则降级为纯文本判断 |
+| 子 agent 回合的思考/输出变成英文 | `spec.system` 是**完整替换**——不带内核「语言锁定（中文）」铁律，也不经插件装配器链 | 在 `spec.system` 首部自带语言约束（任务书里再重申一次更稳）；参考 `.pair/plugins/autopilot/index.js` 的 `LANGUAGE_LOCK` |
 | 声明 inject:['toolset'] 后 registerTemplate 变 undefined | 同键被工具集服务覆盖 | 二选一：要模板注册就别 inject toolset |
 
 ## 9. 数据纪律

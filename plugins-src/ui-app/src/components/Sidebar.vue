@@ -4,7 +4,22 @@
       <span>{{ headerTitle }}</span>
     </div>
     <div class="sidebar-content">
-      <FileExplorer v-if="state.activeActivity === 'explorer'" />
+      <!-- ★ 2026-09-25 对齐设计稿 shell-midnight th61：左栏（264px）默认 = 会话列表
+           （标题「会话」/ 分组「今天·更早」/ 条目含消息数）。数据与动作全部走全局
+           state + api：切换会话只改 state.currentConvId，由 RightPanel 的 watch
+           负责加载消息与统计（不再复制其 switchConv 逻辑）。 -->
+      <ConvSidebar v-if="state.activeActivity === 'chat'"
+        :conversations="state.conversations"
+        :current-conv-id="state.currentConvId"
+        :loading-by-conv="state.loadingByConv"
+        :ws-token-stats="wsTokenStats"
+        :conv-ctx-stats="convCtxStats"
+        :ctx-max-tokens-val="ctxMaxTokens"
+        :width="sidebarWidth"
+        @new-conversation="onNewConv"
+        @switch-conversation="onSwitchConv"
+        @delete-conversation="onDeleteConv" />
+      <FileExplorer v-else-if="state.activeActivity === 'explorer'" />
       <SearchPanel v-else-if="state.activeActivity === 'search'" />
       <!-- Git 源代码管理面板：由 git-api 插件加载 bundle 到 window.GitPanel，
            本组件动态挂载（跨 bundle，不能静态 import） -->
@@ -23,14 +38,62 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { state, sidebarWidth } from '../ui-state.js'
+import api from '../api.js'
+import { getConvCtxStats } from '../agent-events.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
 import PluginPanel from './PluginPanel.vue'
+import ConvSidebar from './ConvSidebar.vue'
 
 const headerTitle = computed(() => {
-  const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', marketplace: '市场', plugins: '插件' }
+  const titles = { chat: '会话', explorer: '文件浏览器', search: '搜索', source: '源代码管理', marketplace: '市场', plugins: '插件' }
   return titles[state.activeActivity] || ''
 })
+
+// ─── 会话列表（设计稿 th61）数据/动作：与 RightPanel 同源，避免状态分叉 ───
+// ★ 上下文上限 = 后端装配口径真值（/conversations/{id}/token-stats 的 contextMaxTokens
+//   字段，即 agent.ContextWindow：服务商级 models.json > 机制常量 DefaultContextWindow）。
+//   不再读 settings 顶层 contextMaxTokens（2026-09-20 已迁入插件注册域、不参与取值），
+//   也不再 `|| 1000000` 硬编码兜底。后端正常总会给出 > 0 的真值。
+const ctxMaxTokens = computed(() => (state.convCtxStatsByConv[state.currentConvId]
+  && state.convCtxStatsByConv[state.currentConvId].contextMaxTokens) || 0)
+const wsTokenStats = computed(() => state.wsTokenStatsByWs[state.workspaceRoot] || {
+  totalTokens: 0, promptTokens: 0, completionTokens: 0,
+  cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0,
+  mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0,
+})
+const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
+
+// 切换会话：只改 currentConvId —— RightPanel watch 会加载消息/统计并同步 currentTasks
+function onSwitchConv(id) {
+  if (id && id !== state.currentConvId) state.currentConvId = id
+}
+
+async function onNewConv() {
+  try {
+    const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
+    if (!conv || !conv.id) return
+    state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
+    state.currentConvId = conv.id
+  } catch (e) {
+    window.$toast && window.$toast('新建会话失败：' + (e && e.message ? e.message : e), 'error')
+  }
+}
+
+async function onDeleteConv(id) {
+  try {
+    await api.apiDelete('/conversations/' + id)
+    state.conversations = state.conversations.filter(c => c.id !== id)
+    delete state.messagesByConv[id]
+    delete state.convCtxStatsByConv[id]
+    delete state.loadingByConv[id]
+    window.dispatchEvent(new Event('save-conversations'))
+    if (state.currentConvId === id) state.currentConvId = ''
+  } catch (e) {
+    window.$toast && window.$toast('删除会话失败：' + (e && e.message ? e.message : e), 'error')
+  }
+}
 
 // ─── Git 面板动态挂载（git-api 插件 bundle → window.GitPanel）───
 // 2026-08-20：Git 面板从插件面板「客户端面板」区移出，改为活动栏 source 图标

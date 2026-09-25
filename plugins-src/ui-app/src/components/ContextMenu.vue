@@ -130,7 +130,7 @@ defineExpose({ show, close })
   text-align: center;
 }
 .ctx-item:hover:not(.disabled) .ctx-icon {
-  color: rgba(255,255,255,0.7);
+  color: var(--color-muted);
 }
 .ctx-label {
   flex: 1;
@@ -144,7 +144,7 @@ defineExpose({ show, close })
   padding-left: 16px;
 }
 .ctx-item:hover:not(.disabled) .ctx-shortcut {
-  color: rgba(255,255,255,0.7);
+  color: var(--color-muted);
 }
 
 /* ── 独立分隔线（不再包裹在 ctx-item 中）── */

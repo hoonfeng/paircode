@@ -268,13 +268,13 @@ defineExpose({ open, openReplace, close: onClose })
   left: 0;
   right: 0;
   z-index: 100;
-  background: var(--bg-secondary, #1e1e2e);
-  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
   gap: 5px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-sm);
   font-size: 13px;
 }
 
@@ -286,16 +286,16 @@ defineExpose({ open, openReplace, close: onClose })
 
 .fp-icon {
   flex-shrink: 0;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   opacity: 0.7;
 }
 
 .fp-input {
   flex: 1;
   min-width: 0;
-  background: var(--bg-primary, #111);
-  border: 1px solid var(--border-color, #444);
-  color: var(--text-primary, #ddd);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   padding: 3px 8px;
   border-radius: 3px;
   font-size: 13px;
@@ -304,12 +304,12 @@ defineExpose({ open, openReplace, close: onClose })
   transition: border-color 0.15s;
 }
 .fp-input:focus {
-  border-color: var(--accent, #4a9eff);
+  border-color: var(--accent);
 }
 
 .fp-count {
   font-size: 11px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   min-width: 40px;
   text-align: center;
   white-space: nowrap;
@@ -320,9 +320,9 @@ defineExpose({ open, openReplace, close: onClose })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-tertiary, #252535);
-  border: 1px solid var(--border-color, #444);
-  color: var(--text-secondary, #aaa);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
   padding: 2px 8px;
   border-radius: 3px;
   cursor: pointer;
@@ -332,21 +332,21 @@ defineExpose({ open, openReplace, close: onClose })
   transition: all 0.12s;
 }
 .fp-btn:hover {
-  background: var(--bg-hover, #333);
-  color: var(--text-primary, #eee);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .fp-btn:active {
   transform: scale(0.96);
 }
 .fp-toggle.active {
-  background: var(--accent, #4a9eff);
-  color: #fff;
-  border-color: var(--accent, #4a9eff);
+  background: var(--accent);
+  color: var(--color-accent-fg);
+  border-color: var(--accent);
 }
 .fp-action {
-  background: var(--accent, #4a9eff);
-  color: #fff;
-  border-color: var(--accent, #4a9eff);
+  background: var(--accent);
+  color: var(--color-accent-fg);
+  border-color: var(--accent);
 }
 .fp-close {
   display: inline-flex;
@@ -354,7 +354,7 @@ defineExpose({ open, openReplace, close: onClose })
   justify-content: center;
   background: none;
   border: none;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -363,7 +363,7 @@ defineExpose({ open, openReplace, close: onClose })
 }
 .fp-close:hover {
   opacity: 1;
-  color: var(--text-primary, #eee);
+  color: var(--text-primary);
 }
 
 .fp-options {
@@ -377,7 +377,7 @@ defineExpose({ open, openReplace, close: onClose })
   align-items: center;
   gap: 3px;
   font-size: 11px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 1px 6px;
   border-radius: 3px;
@@ -390,11 +390,11 @@ defineExpose({ open, openReplace, close: onClose })
   display: none;
 }
 .fp-opt.active {
-  color: var(--accent, #4a9eff);
-  border-color: var(--accent, #4a9eff);
-  background: color-mix(in srgb, var(--accent, #4a9eff) 10%, transparent);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .fp-opt:hover {
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
 }
 </style>

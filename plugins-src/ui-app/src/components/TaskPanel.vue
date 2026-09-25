@@ -72,7 +72,7 @@ function statusLabel(s) {
 .task-bar {
   width: 40px; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden; display: inline-block; vertical-align: middle;
 }
-.task-bar-fill { height: 100%; background: #6a9955; border-radius: 2px; transition: width 0.3s; }
+.task-bar-fill { height: 100%; background: var(--color-success); border-radius: 2px; transition: width 0.3s; }
 .task-body { border-top: 1px solid var(--border-color); padding: 4px 0; max-height: 200px; overflow-y: auto; }
 .task-step { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12px; }
 .task-step.task-completed { opacity: 0.6; }
@@ -82,6 +82,6 @@ function statusLabel(s) {
 .task-step-text { color: var(--text-primary); line-height: 1.4; word-break: break-word; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-step-status { flex-shrink: 0; font-size: 11px; color: var(--text-muted); }
 .ti-done { color: var(--accent); }
-.ti-run { color: #d4a74e; }
+.ti-run { color: var(--color-warning); }
 .ti-pending { color: var(--text-muted); }
 </style>

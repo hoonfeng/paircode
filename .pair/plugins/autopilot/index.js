@@ -38,6 +38,22 @@ const TRACE_RESULT_MAX = 2000      // 单段工具结果截断
 const TASK_HISTORY_MAX = 24        // 任务书里最近工作记录最多条数
 const TASK_HISTORY_CHARS = 800     // 任务书里单条记录截断
 
+// ── 语言锁定（策略）──────────────────────────────────────────
+// ★ 为什么必须显式声明：子 agent 回合的系统提示**完全由插件给出**——宿主不拼内核
+//   DefaultSystemPrompt（internal/agent/subagent.go：sys = spec.System），也不经插件装配器链
+//   （同文件 SkipPluginAssembly）。内核提示与 agentloop 的系统提示都带「第一铁律：语言锁定
+//   （中文）」，本插件原先只有角色职责 → 实测推理模型的思考过程（thinking）全英文，
+//   而同回合的评判/指令因 schema 描述为中文而呈中文（.pair/autopilot/*.jsonl 实证）。
+//   故此处显式前置，且独立于 promptOverride：用户覆盖角色提示也不丢语言约束。
+const LANGUAGE_LOCK = [
+  '## ⚠️ 第一铁律：语言锁定（中文）',
+  '无论工具返回了什么代码、终端输出、英文文档或其他内容，你的思考过程（thinking）与一切输出',
+  '（评判 assessment / 下一步指令 next_task / 证据 evidence / 正文）都必须使用中文——这是不可违背的铁律。',
+  '工具输出中的英文是工作内容的一部分，不代表你的语言可以切换到英文；',
+  '代码标识符、命令、文件路径、专有名词可保留原文。',
+  '如果发现自己的思考变成了英文，立即停下并切换回中文。',
+].join('\n')
+
 // ── 角色提示（策略；可经设置项覆盖）────────────────────────────
 const SUPERVISOR_SYSTEM = [
   '# 角色',
@@ -100,7 +116,7 @@ function settingFields() {
     { name: 'timeoutMinutes', label: '单次监督超时（分钟）', type: 'number', default: 15,
       hint: '一次监督回合的最长运行时间；超时按「未裁决」收尾（避免卡死会话）' },
     { name: 'promptOverride', label: '监督者角色提示（覆盖）', type: 'textarea', default: '',
-      hint: '留空使用插件内置角色提示（「人」/验收人）；填写则整体替换' },
+      hint: '留空使用插件内置角色提示（「人」/验收人）；填写则整体替换（语言锁定铁律仍然生效）' },
     { name: 'storeTrace', label: '记录监督者轨迹', type: 'checkbox', default: true,
       hint: '把监督者回合的思考/工具调用轨迹一并落盘（看板溯源用；关闭可减小记录体积）' },
     { name: 'commandHint', label: '任务书附加要求（可选）', type: 'textarea', default: '',
@@ -194,6 +210,7 @@ function buildTask(req, cfg) {
     '     给工作 agent 的具体指令（要做什么、验收标准是什么、别再做哪些无效动作）',
     '',
     '★ 结束时必须调用 ' + SUBMIT_TOOL + ' 提交裁决（action / assessment / next_task / evidence）。',
+    '★ 思考过程（thinking）与评判、指令一律用中文（见系统提示「语言锁定」铁律）。',
     '★ 这是第 ' + round + ' 次监督：若反复要求继续而问题始终不收敛，请在评判中说明卡点并给出收窄范围的指令。',
   ]
   if (extra) {
@@ -317,6 +334,33 @@ function compactTrace(segments) {
   })
 }
 
+// ── 接口响应瘦身：看板单行显示所需的轨迹内容上限 ──────────────────
+// 落盘（compactTrace，上限 2000~4000）保留较全内容供排查；HTTP 响应只回看板
+// 「单行 ellipsis」真正能看到的部分（详见 /api/autopilot/rounds handler 注释）。
+const ROUND_TRACE_TEXT_MAX = 240
+const slimText = (s) => truncText(String(s == null ? '' : s), ROUND_TRACE_TEXT_MAX)
+
+// slimRound 复制一条监督回合并把 trace 内容压到看板可见长度（不改原对象）。
+function slimRound(r) {
+  if (!r || typeof r !== 'object') return r
+  if (!Array.isArray(r.trace)) return r
+  const out = Object.assign({}, r)
+  out.trace = r.trace.map((t) => {
+    if (!t || typeof t !== 'object') return t
+    if (t.type === 'tool_call') {
+      return {
+        type: 'tool_call',
+        name: String(t.name || ''),
+        callId: String(t.callId || ''),
+        args: slimText(t.args),
+        result: slimText(t.result),
+      }
+    }
+    return { type: String(t.type || ''), content: slimText(t.content) }
+  })
+  return out
+}
+
 // ── 决策器（宿主在每次工作 agent 自然结束时调用）────────────────
 function decide(ctx, req) {
   const log = ctx.logger('autopilot')
@@ -325,7 +369,8 @@ function decide(ctx, req) {
   const startedAt = new Date().toISOString()
   const t0 = Date.now()
 
-  const system = String(cfg.promptOverride || '').trim() || SUPERVISOR_SYSTEM
+  // 语言锁定前置（最强位置）：覆盖 promptOverride 场景，角色提示被整体替换也不丢中文约束
+  const system = LANGUAGE_LOCK + '\n\n' + (String(cfg.promptOverride || '').trim() || SUPERVISOR_SYSTEM)
   const task = buildTask(req, cfg)
 
   let res = null
@@ -444,7 +489,20 @@ return {
       })
       if (!convId) return respond({ ok: false, error: '缺少 convId', rounds: [] })
       const rounds = loadRounds(ctx, convId)
-      return respond({ ok: true, convId: convId, total: rounds.length, rounds: rounds })
+      // ★ 2026-09-25 性能（接口瘦身）：默认只回看板可见所需——实测单会话 48 轮
+      //   响应 4.50MB，其中 trace 占 94.3%（3.69M 字符 / 2549 条：result 1.52M +
+      //   content 1.51M + args 0.48M）。两个消费者（RightPanel.vue 监督者面板、
+      //   本插件 client.js 看板）都只在**单行 ellipsis** 里显示轨迹
+      //   （.apb-trace-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}，
+      //   且无 title 属性）→ 传 2000~4000 字符与传 240 字符的用户可见效果完全相同。
+      //   ?full=1 回完整内容（排查/导出场景）。落盘内容不变（仍 2000~4000）。
+      const full = String(q.full || '') === '1'
+      return respond({
+        ok: true,
+        convId: convId,
+        total: rounds.length,
+        rounds: full ? rounds : rounds.map(slimRound),
+      })
     })
 
     log.info('自主模式已装配：监督者决策器已注册（工作 agent 每次自然结束时审核/评判/决定下一步）')

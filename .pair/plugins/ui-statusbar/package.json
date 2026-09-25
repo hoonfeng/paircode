@@ -1,7 +1,7 @@
 {
   "name": "ui-statusbar",
   "purpose": "工作区/git/文件信息 + statusbar-items 叠加挂载",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",

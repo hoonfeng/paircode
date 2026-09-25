@@ -32,6 +32,14 @@
         <span class="pm-field-label">默认温度</span>
         <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
       </div>
+      <!-- ★ 2026-09-25 服务商级生成参数：生成参数唯一来源 = 本页（模型级可逐模型覆盖），
+           设置面板的「生成参数」页已移除（选项来自插件 schema modelParamFields）。 -->
+      <div class="pm-field">
+        <span class="pm-field-label">默认思考档位</span>
+        <select v-model="editForm.thinkingMode" title="思考档位（OpenAI reasoning.effort 口径）：空=不下发；模型级可覆盖">
+          <option v-for="o in thinkOptions" :key="'t'+o" :value="o">{{ o || '默认（不设）' }}</option>
+        </select>
+      </div>
       <div class="pm-field">
         <span class="pm-field-label">默认输出 Token（最大输出）</span>
         <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
@@ -95,6 +103,12 @@
             <input v-model="editForm.temperature" placeholder="如 0.3（空=不设；模型级可覆盖）" />
           </div>
           <div class="pm-field">
+            <span class="pm-field-label">默认思考档位</span>
+            <select v-model="editForm.thinkingMode" title="思考档位（OpenAI reasoning.effort 口径）：空=不下发；模型级可覆盖">
+              <option v-for="o in thinkOptions" :key="'t'+o" :value="o">{{ o || '默认（不设）' }}</option>
+            </select>
+          </div>
+          <div class="pm-field">
             <span class="pm-field-label">默认输出 Token（最大输出）</span>
             <input v-model="editForm.maxTokens" type="number" min="0" step="1024" placeholder="0=不设（模型级可覆盖）" />
           </div>
@@ -156,7 +170,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import api from '../api.js'
 import ModelEditor from './ModelEditor.vue'
 
@@ -178,24 +192,21 @@ const props = defineProps({
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
 // ★ 2026-09-19 生成参数（温度/最大输出）改为服务商级字段，随 models.json 一起保存
-const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' })
+// ★ 2026-09-25 生成参数唯一来源 = 本页（服务商级 + 模型级）：设置面板的「生成参数」页已移除，
+//   服务商级补齐「默认思考档位」（此前只有模型级可配思考档位）。
+const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0, temperature: '', thinkingMode: '', maxTokens: 0, protocol: '' })
 const editModels = ref([])
 const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → models.json 该服务商的 modelParams
 const error = ref('')
 const saving = ref(false)
 
-// 思考档位（OpenAI ReasoningEffort）+ 温度档位（兼容旧硬编码，schema 未声明时兜底）
-const THINK_TIERS = [
-  { v: '', label: '默认' },
-  { v: 'none', label: 'none（关闭）' },
-  { v: 'minimal', label: 'minimal（极简）' },
-  { v: 'low', label: 'low（低）' },
-  { v: 'medium', label: 'medium（中）' },
-  { v: 'high', label: 'high（高）' },
-  { v: 'xhigh', label: 'xhigh（超高）' },
-  { v: 'max', label: 'max（最大化）' },
-]
-const TEMPS = ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0']
+// ★ 2026-09-25 服务商级「默认思考档位」选项来源 = 插件 schema（modelParamFields 里 thinkingMode
+//   的 options，单一真源，插件改档位清单前端自动跟随）；schema 未声明时用本地兜底清单。
+const THINK_FALLBACK = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const thinkOptions = computed(() => {
+  const f = props.modelParamFields.find(x => x.name === 'thinkingMode')
+  return (f && Array.isArray(f.options) && f.options.length) ? f.options : THINK_FALLBACK
+})
 
 // ★ 2026-08-21 按 schema 生成某模型的默认参数键（模板 v-model 需要键存在）
 function defaultParamKeys() {
@@ -220,6 +231,7 @@ async function load() {
     const mp = d.providerModelParams || {}
     const temps = d.providerTemperatures || {}
     const maxes = d.providerMaxTokens || {}
+    const thinks = d.providerThinkingModes || {}
     providers.value = (d.providers || []).map(name => ({
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
@@ -228,6 +240,7 @@ async function load() {
       models: (d.models || {})[name] || [],
       // ★ 2026-09-19 生成参数唯一来源 = models.json（服务商级 + 模型级）
       temperature: temps[name] || '',
+      thinkingMode: thinks[name] || '',                         // ★ 2026-09-25 服务商级默认思考档位
       maxTokens: maxes[name] || 0,
       modelParams: mp[name] || {},
     }))
@@ -240,7 +253,7 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, temperature: '', maxTokens: 0, protocol: '' }
+  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, temperature: '', thinkingMode: '', maxTokens: 0, protocol: '' }
   editModels.value = []
   editParams.value = {}
   error.value = ''
@@ -249,7 +262,8 @@ function startEdit(p) {
   editingName.value = p.name
   editForm.value = {
     name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0,
-    temperature: p.temperature || '', maxTokens: p.maxTokens || 0, protocol: p.protocol || '',
+    temperature: p.temperature || '', thinkingMode: p.thinkingMode || '',
+    maxTokens: p.maxTokens || 0, protocol: p.protocol || '',
   }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
@@ -282,6 +296,7 @@ function snapshot() {
       contextMaxTokens: p.contextMaxTokens || 0,
       protocol: p.protocol || '',
       temperature: p.temperature || '',
+      thinkingMode: p.thinkingMode || '',
       maxTokens: p.maxTokens || 0,
       modelParams: p.modelParams || {},
     }
@@ -311,6 +326,7 @@ async function saveEdit() {
       contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0),
       protocol: (editForm.value.protocol || '').trim(),
       temperature: String(editForm.value.temperature ?? '').trim(),
+      thinkingMode: String(editForm.value.thinkingMode ?? '').trim(),
       maxTokens: Math.max(0, Number(editForm.value.maxTokens) || 0),
       modelParams: cleanModelParams(),
     }
@@ -385,6 +401,7 @@ function paramsSummary(providerName) {
   const n = Object.keys(p.modelParams || {}).length
   const svc = []
   if (p.temperature) svc.push('温度 ' + p.temperature)
+  if (p.thinkingMode) svc.push('思考 ' + p.thinkingMode)
   if (p.maxTokens > 0) svc.push('输出上限 ' + p.maxTokens)
   if (n) svc.push('模型参数 ' + n + ' 个')
   return svc.join(' · ')
@@ -394,53 +411,53 @@ function paramsSummary(providerName) {
 <style scoped>
 .provider-manager { display: flex; flex-direction: column; gap: 14px; }
 .pm-toolbar { display: flex; align-items: center; justify-content: space-between; }
-.pm-count { font-size: 12px; color: var(--text-secondary, #999); }
+.pm-count { font-size: 12px; color: var(--text-secondary); }
 .pm-btn {
   padding: 6px 14px; border-radius: 7px; font-size: 13px; cursor: pointer;
-  border: 1px solid var(--border-color, #444); background: none;
-  color: var(--text-primary, #ddd); transition: all .15s;
+  border: 1px solid var(--border-color); background: none;
+  color: var(--text-primary); transition: all .15s;
 }
-.pm-btn:hover { background: var(--bg-hover, rgba(255,255,255,.06)); }
+.pm-btn:hover { background: var(--bg-hover); }
 .pm-btn:disabled { opacity: .5; cursor: not-allowed; }
 .pm-btn.pm-primary {
-  background: var(--accent, #4f8cff); color: #fff; border-color: var(--accent, #4f8cff); font-weight: 600;
+  background: var(--accent); color: var(--color-accent-fg); border-color: var(--accent); font-weight: 600;
 }
-.pm-btn.pm-primary:hover { filter: brightness(1.12); background: var(--accent, #4f8cff); }
+.pm-btn.pm-primary:hover { filter: brightness(1.12); background: var(--accent); }
 .pm-btn.pm-small { padding: 3px 10px; font-size: 12px; }
-.pm-btn.pm-danger { color: #e06c6c; border-color: rgba(224,108,108,.4); }
-.pm-btn.pm-danger:hover { background: rgba(224,108,108,.12); }
+.pm-btn.pm-danger { color: var(--color-danger); border-color: var(--color-danger-bg); }
+.pm-btn.pm-danger:hover { background: var(--color-danger-bg); }
 
 /* ─── 编辑表单（卡片式分组；在卡片列表内 grid-column 跨整行，就地展开）─── */
 .pm-edit {
   display: flex; flex-direction: column; gap: 12px;
-  padding: 16px; border: 1px solid var(--border-color, #3a3a4a);
-  border-radius: 10px; background: var(--bg-tertiary, rgba(0,0,0,.15));
+  padding: 16px; border: 1px solid var(--border-color);
+  border-radius: 10px; background: var(--bg-tertiary);
   grid-column: 1 / -1; /* 列表内编辑：占满整行，就地展开不跳动 */
 }
 .pm-edit-title {
-  font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);
-  padding-bottom: 10px; border-bottom: 1px solid var(--border-color, #333);
+  font-size: 14px; font-weight: 600; color: var(--text-primary);
+  padding-bottom: 10px; border-bottom: 1px solid var(--border-color);
 }
 .pm-field { display: flex; flex-direction: column; gap: 5px; }
-.pm-field-label { font-size: 12px; color: var(--text-secondary, #999); font-weight: 500; }
+.pm-field-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 .pm-field input[type="text"], .pm-field > input {
   width: 100%; box-sizing: border-box;
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee); border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary); border-radius: 6px;
   padding: 7px 10px; font-size: 13px; outline: none; font-family: inherit;
   transition: border-color .15s;
 }
-.pm-field > input:focus { border-color: var(--accent, #4f8cff); }
+.pm-field > input:focus { border-color: var(--accent); }
 .pm-field > input:disabled { opacity: .5; }
 .pm-field > select {
   width: 100%; box-sizing: border-box;
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee); border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary); border-radius: 6px;
   padding: 7px 10px; font-size: 13px; outline: none; font-family: inherit;
 }
-.pm-field > select:focus { border-color: var(--accent, #4f8cff); }
+.pm-field > select:focus { border-color: var(--accent); }
 
 .pm-edit-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
 
@@ -448,63 +465,63 @@ function paramsSummary(providerName) {
 .pm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .pm-card {
   display: flex; flex-direction: column; gap: 8px;
-  padding: 12px 14px; border: 1px solid var(--border-color, #333);
-  border-radius: 9px; background: var(--bg-tertiary, rgba(0,0,0,.12));
+  padding: 12px 14px; border: 1px solid var(--border-color);
+  border-radius: 9px; background: var(--bg-tertiary);
   transition: border-color .15s, background .15s;
 }
-.pm-card:hover { border-color: var(--border-color, #4a4a5a); background: var(--bg-tertiary, rgba(0,0,0,.18)); }
+.pm-card:hover { border-color: var(--border-color); background: var(--bg-tertiary); }
 .pm-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pm-name { font-weight: 600; color: var(--text-primary, #eee); font-size: 13px;
+.pm-name { font-weight: 600; color: var(--text-primary); font-size: 13px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-ops { display: flex; gap: 6px; flex-shrink: 0; }
 .pm-url {
-  font-size: 11px; color: var(--text-secondary, #999);
+  font-size: 11px; color: var(--text-secondary);
   word-break: break-all; line-height: 1.5;
 }
 .pm-protocol {
-  font-size: 11px; color: #4cc9a0;
-  border: 1px solid rgba(76,201,160,.3);
+  font-size: 11px; color: var(--color-success);
+  border: 1px solid var(--color-success-bg);
   border-radius: 4px; padding: 1px 7px; display: inline-block; margin-bottom: 4px;
 }
-.pm-protocol-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; }
-.pm-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; line-height: 1.5; }
-.pm-ctx { font-size: 11px; color: var(--text-secondary, #999); }
+.pm-protocol-hint { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.pm-hint { font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.5; }
+.pm-ctx { font-size: 11px; color: var(--text-secondary); }
 .pm-models { display: flex; flex-wrap: wrap; gap: 5px; }
 .pm-tag {
   font-size: 11px; padding: 2px 9px; border-radius: 10px;
-  background: rgba(79,140,255,.1); color: #8ab4ff;
-  border: 1px solid rgba(79,140,255,.22); white-space: nowrap;
+  background: var(--color-info-bg); color: var(--color-info);
+  border: 1px solid var(--color-accent-bg); white-space: nowrap;
 }
-.pm-none { color: var(--text-secondary, #777); font-size: 12px; }
-.pm-empty { color: var(--text-secondary, #888); text-align: center; padding: 30px 0; font-size: 13px; }
+.pm-none { color: var(--text-secondary); font-size: 12px; }
+.pm-empty { color: var(--text-secondary); text-align: center; padding: 30px 0; font-size: 13px; }
 .pm-error {
-  color: #e06c6c; font-size: 12px; padding: 8px 10px;
-  border: 1px solid rgba(224,108,108,.3); border-radius: 6px;
-  background: rgba(224,108,108,.08);
+  color: var(--color-danger); font-size: 12px; padding: 8px 10px;
+  border: 1px solid var(--color-danger-bg); border-radius: 6px;
+  background: var(--color-danger-bg);
 }
 .pm-params { display: flex; flex-direction: column; gap: 6px; }
-.pm-params-title { font-size: 12px; color: var(--text-secondary, #999); font-weight: 600; }
+.pm-params-title { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
 .pm-param-rows { display: flex; flex-direction: column; gap: 6px; }
 .pm-param-row {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 8px; border: 1px solid var(--border-color, #333);
-  border-radius: 6px; background: var(--bg-tertiary, rgba(0,0,0,.1));
+  padding: 6px 8px; border: 1px solid var(--border-color);
+  border-radius: 6px; background: var(--bg-tertiary);
 }
 .pm-param-model {
   flex: 0 0 auto; max-width: 140px; font-size: 12px; font-weight: 500;
-  color: var(--text-primary, #ddd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .pm-param-row select, .pm-param-row input {
-  background: var(--input-bg, #14141f);
-  border: 1px solid var(--border-color, #3a3a4a);
-  border-radius: 4px; color: var(--text-primary, #ddd);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px; color: var(--text-primary);
   padding: 3px 6px; font-size: 11px;
 }
-.pm-param-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #4cc9a0; cursor: pointer; white-space: nowrap; }
-.pm-param-check input { accent-color: #4cc9a0; }
+.pm-param-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-success); cursor: pointer; white-space: nowrap; }
+.pm-param-check input { accent-color: var(--color-success); }
 .pm-param-row select { flex: 1.1; min-width: 0; }
 .pm-param-row input { flex: 0 0 84px; width: 84px; }
-.pm-param-row select:focus, .pm-param-row input:focus { border-color: var(--accent, #4f8cff); }
-.pm-params-empty { font-size: 12px; color: var(--text-secondary, #777); padding: 4px 0; }
-.pm-params-summary { font-size: 11px; color: var(--text-secondary, #999); }
+.pm-param-row select:focus, .pm-param-row input:focus { border-color: var(--accent); }
+.pm-params-empty { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+.pm-params-summary { font-size: 11px; color: var(--text-secondary); }
 </style>

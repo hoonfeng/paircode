@@ -1,0 +1,67 @@
+/*! ui-appearance · theme-aurora —— Aurora 极光（暗）
+ *
+ * 由 plugins-src/ui-app/index.html 迁移而来（P2：主题 CSS 插件化）。
+ * 令牌真相源：design/ui-theme.tokens.json
+ * 注入方式：client.js 按当前主题插入 <link href="/plugins-assets/ui-appearance/theme-aurora.css">
+ *
+ * ★ 选择器不含 :root —— 基准令牌兜底由壳 index.html 的 :root 块承担（插件未装配时不裸奔）。
+ * ★ 别名选择器（）保留，兼容旧主题 id。
+ */
+.theme-aurora {
+      color-scheme: dark;
+      --color-canvas: #0c0b13;
+      --color-bg: #12101C;
+      --color-surface: #191625;
+      --color-surface-2: #211D30;
+      --color-surface-3: #282436;
+      --color-border: #322C49;
+      --color-border-subtle: #241f35;
+      --color-border-strong: #48425e;
+      --color-input-border: #606C88;
+      --color-fg: #EAE7F6;
+      --color-muted: #918BAA;
+      --color-subtle: #8e89a7;
+      --color-accent: #5FE3C4;
+      --color-accent-fg: #06101F;
+      --color-accent-soft: rgba(95,227,196,0.14);
+      --color-accent-bg: rgba(95,227,196,0.10);
+      --color-accent-ring: rgba(95,227,196,0.25);
+      --color-success: #4FD8A4;
+      --color-warning: #F0C158;
+      --color-danger: #FF8085;
+      --color-info: #5FE3C4;
+      --color-success-bg: rgba(79,216,164,0.16);
+      --color-warning-bg: rgba(240,193,88,0.16);
+      --color-danger-bg: rgba(255,128,133,0.16);
+      --color-info-bg: rgba(95,227,196,0.16);
+      --color-glass: #1e1a2c;
+      --color-glass-alpha: rgba(30,26,44,0.72);
+      --color-scrim: rgba(6,10,20,0.56);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.28);
+      --shadow-md: 0 6px 20px rgba(0,0,0,0.38);
+      --shadow-lg: 0 12px 44px rgba(0,0,0,0.52);
+      --shadow-xl: 0 24px 80px rgba(0,0,0,0.62);
+      --color-cat-blue: #6FA8FF;
+      --color-cat-blue-bg: rgba(111,168,255,0.18);
+      --color-cat-teal: #3FD0E0;
+      --color-cat-teal-bg: rgba(63,208,224,0.18);
+      --color-cat-amber: #F0C158;
+      --color-cat-amber-bg: rgba(240,193,88,0.18);
+      --color-cat-purple: #C0A6F5;
+      --color-cat-purple-bg: rgba(192,166,245,0.18);
+      --color-cat-green: #6BD98A;
+      --color-cat-green-bg: rgba(107,217,138,0.18);
+      /* ── 语法高亮 · 暗档（CodeEditor / Markdown / mermaid 共用）── */
+      --syn-keyword: #C678DD;   /* 关键字 / 修饰符 / 操作符 */
+      --syn-type: #E5C07B;      /* 类型 / 类名 / 命名空间 */
+      --syn-function: #61AFEF;  /* 函数 / 方法 / 标签 */
+      --syn-property: #E06C75;  /* 属性 / 特性名 */
+      --syn-constant: #D19A66;  /* 数字 / 布尔 / 常量 */
+      --syn-string: #98C379;    /* 字符串 / 正则 / 属性值 */
+      --syn-variable: #56B6C2;  /* 变量名 */
+      --syn-comment: #7F848E;   /* 注释 / 元信息 */
+      --syn-invalid: #FF8085;   /* 非法 / 语法错误 */
+      --syn-bracket: #ABB2BF;   /* 括号 / 分隔符 */
+      --syn-link: #56B6C2;      /* 链接 / URL */
+      --syn-heading: #61AFEF;   /* 标题 / 强调 */
+}

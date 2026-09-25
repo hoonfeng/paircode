@@ -28,6 +28,13 @@ type ProviderEntry struct {
 	//   settings.json 同名字段不再参与运行期取值（一次性迁移见 MigrateParamSettingsToModels）。
 	Temperature string                     `json:"temperature,omitempty"` // 服务商级默认温度（"0"~"2.0"；空=不设）
 	MaxTokens   int                        `json:"maxTokens,omitempty"`   // 服务商级默认最大输出 token（0=不设）
+	// ★ 2026-09-25 生成参数唯一来源收敛（设置面板「生成参数」段已移除）：
+	//   思考档位此前只有「模型级」（ModelParams[模型].ThinkingMode）与「全局默认」
+	//   （settings.json → pluginSettings.generation）两处可配，服务商级缺失 —— 于是全局段
+	//   成了唯一全局入口。现补服务商级默认思考档位，生成参数（温度/思考档位/最大输出/
+	//   上下文窗口）唯一来源 = 服务商配置（模型级 > 服务商级）。
+	//   取值：none/minimal/low/medium/high/xhigh/max（OpenAI reasoning.effort 口径）；空=不设。
+	ThinkingMode string                     `json:"thinkingMode,omitempty"`
 	ModelParams map[string]ModelParamEntry `json:"modelParams,omitempty"` // 模型级参数（模型名 → 参数；覆盖服务商级）
 }
 
@@ -223,6 +230,20 @@ func GetProviderMaxTokens() map[string]int {
 	out := make(map[string]int, len(ModelList))
 	for k, v := range ModelList {
 		out[k] = v.MaxTokens
+	}
+	return out
+}
+
+// GetProviderThinkingModes 返回各服务商默认思考档位（空=未配置；前端面板读取用）。
+// ★ 2026-09-25：与温度/最大输出/上下文窗口同口径——models.json 服务商级字段，
+// 模型级 ModelParams[模型].thinkingMode 可覆盖。
+func GetProviderThinkingModes() map[string]string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]string, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.ThinkingMode
 	}
 	return out
 }

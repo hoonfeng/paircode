@@ -1,8 +1,9 @@
 {
   "name": "ui-appearance",
-  "purpose": "外观设置：主题与界面字体（配置注册化）",
-  "version": "0.1.1",
+  "purpose": "外观设置：主题（8 套画廊）与界面字体；主题 CSS 随插件下发（theme-<id>.css），client 半按当前主题注入 <link>",
+  "version": "0.2.0",
   "scope": "global",
   "type": "plugin",
-  "main": "index.js"
+  "main": "index.js",
+  "client": "client.js"
 }

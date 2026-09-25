@@ -2,7 +2,7 @@
   <div class="activity-bar">
     <div class="activity-top">
       <button v-for="item in items" :key="item.id"
-              :class="{ active: isActive(item.id), highlight: item.id === 'chat' && state.rightPanelVisible }"
+              :class="{ active: isActive(item.id) }"
               :title="item.label"
               @click="switchIt(item.id)">
         <SvgIcon :name="item.icon" :size="18" />
@@ -36,17 +36,22 @@ onUnmounted(() => {
 })
 
 const items = [
+  // ★ 2026-09-25 对齐设计稿：会话（th61「会话」列表）放在首位并默认选中；
+  //   文件浏览器次之（原为第一位）。
+  { id: 'chat', label: '会话', icon: 'chat' },
   { id: 'explorer', label: '文件浏览器', icon: 'folder' },
   { id: 'search', label: '搜索', icon: 'search' },
   { id: 'source', label: '源代码管理', icon: 'source-control' },
   { id: 'toolsets', label: '工具集', icon: 'layers' },
   { id: 'plugins', label: '插件', icon: 'puzzle' },
   { id: 'marketplace', label: '市场', icon: 'package' },
-  { id: 'chat', label: '对话', icon: 'chat' },
 ]
 
 const isActive = (id) => {
-  if (id === 'chat') return false
+  // ★ 2026-09-25 对齐设计稿 shell-midnight th2（首个图标卡 bg=surface-3 选中）：
+  //   会话已改为左栏视图（activeActivity==='chat'）→ 按通用规则判定选中。
+  //   （原硬编码 return false 的由来：chat 曾是「显隐主区对话面板」的开关，非侧栏视图。）
+  if (id === 'chat') return state.activeActivity === 'chat'
   // ★ 市场/工具集已迁至主内容区 tab：tab 打开时图标高亮（不再依赖侧栏 activeActivity）
   if (id === 'marketplace') return state.marketTabOpen
   if (id === 'toolsets') return state.toolsetsTabOpen
@@ -73,8 +78,10 @@ const switchIt = (id) => { switchActivity(id) }
 }
 .activity-bottom { margin-top: auto; }
 .activity-bar button {
-  width: 40px;
-  height: 40px;
+  /* ★ 2026-09-25 对齐设计稿 th18/th2：活动栏图标卡 32×32、圆角 8（原 40×40）。 */
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -487,7 +487,17 @@ function layoutNode(node, x, y, availW, availH, ctx2) {
   var kids = node.children || [];
   var innerX = x + pad; var innerY = y + pad;
   var mainUsed = 0;
+  var crossMax = 0;   // ★ 交叉轴内容最大尺寸：row 未写 h 时容器高 = max(子 h)（CSS flex 语义）
   var boxesTmp = [];
+  // ★ 对齐声明（2026-09-24 修复）：此前 align/justify 只在「属性白名单」里，
+  //   布局引擎从不消费 → 设计稿 259 处「居中 / 垂直居中」意图全部落空
+  //   （row 子节点恒贴顶、col 子节点恒贴左），只能靠 GX 占位槽硬凑水平，
+  //   垂直方向根本凑不出来。现按 CSS flex 语义实现；★ 只在显式声明时改写位置，
+  //   未声明 = 与旧布局逐像素一致（向后兼容）。
+  var jf = str(p.justify, '');
+  var al = str(p.align, '');
+  var jfOn = (jf === 'center' || jf === 'end' || jf === 'between' || jf === 'around');
+  var alOn = (al === 'center' || al === 'end' || al === 'start');
 
   for (var i = 0; i < kids.length; i++) {
     var kid = kids[i];
@@ -502,7 +512,9 @@ function layoutNode(node, x, y, availW, availH, ctx2) {
       depth: (ctx2.depth || 0) + 1,
     });
     // cross 轴拉伸：子节点未显式指定 size 且是容器或 fill → 填满交叉轴
-    if (dir === 'col' && !(kid.props && (kid.props.w !== undefined && kid.props.w !== 'auto'))) {
+    // 显式 align 声明优先于「col 交叉轴拉伸」的旧默认行为：
+    // 写了 align 就是明确要居中/靠边，而不是撑满（stretch 仍走旧分支）
+    if (dir === 'col' && !alOn && !(kid.props && (kid.props.w !== undefined && kid.props.w !== 'auto'))) {
       var stretch = CONTAINER_TYPES.indexOf(kid.type) >= 0 || kid.type === 'divider' || kid.type === 'input' || kid.type === 'image' || kid.type === 'spacer';
       if (stretch) {
         kb.w = innerW;
@@ -511,11 +523,42 @@ function layoutNode(node, x, y, availW, availH, ctx2) {
       }
     }
     mainUsed += (dir === 'row' ? kb.w : kb.h) + (i < kids.length - 1 ? gap : 0);
+    if (dir === 'row' && kb.h > crossMax) crossMax = kb.h;
     boxesTmp.push(kb);
     if (ctx2.problems.length > before) { /* 子节点问题已记录 */ }
   }
 
   var contentMain = mainUsed;
+  // ── 主轴 justify / 交叉轴 align：按声明平移子树（盒子是绝对定位，整体位移即可） ──
+  if (jfOn || alOn) {
+    var nK = boxesTmp.length;
+    var availMain = dir === 'row' ? innerW : innerH;    // col 未定高 → null（无处可居中，跳过）
+    // ★ 交叉轴可用尺寸（2026-09-24 二次修复）：row 未写 h → innerH=null，此前整段 align 被跳过
+    //   （row 子节点恒贴顶 → 同一行里矮项与最高项差半高，表现为「标签/图标与同级不齐」）。
+    //   按 CSS flex 语义：容器高 auto 时容器高 = 最高子项，矮项居中于该高。
+    var availCross = dir === 'row' ? (innerH === null ? crossMax : innerH) : innerW;
+    var slackMain = availMain === null ? 0 : Math.max(0, availMain - contentMain);
+    var jo = [];
+    for (var j1 = 0; j1 < nK; j1++) {
+      if (!jfOn || availMain === null) { jo.push(0); continue; }
+      if (jf === 'center') jo.push(slackMain / 2);
+      else if (jf === 'end') jo.push(slackMain);
+      else if (jf === 'between') jo.push(nK > 1 ? slackMain * j1 / (nK - 1) : 0);
+      else jo.push(nK > 0 ? slackMain * (j1 + 0.5) / nK : 0);   // around
+    }
+    for (var j2 = 0; j2 < nK; j2++) {
+      var kb2 = boxesTmp[j2];
+      var sdx = 0; var sdy = 0;
+      if (dir === 'row') sdx += jo[j2]; else sdy += jo[j2];
+      if (alOn && availCross !== null) {
+        var kidCross = dir === 'row' ? kb2.h : kb2.w;
+        var scx = Math.max(0, availCross - kidCross);
+        var ocx = al === 'center' ? scx / 2 : (al === 'end' ? scx : 0);
+        if (dir === 'row') sdy += ocx; else sdx += ocx;
+      }
+      if (sdx !== 0 || sdy !== 0) shiftBoxTree(kb2, sdx, sdy, ctx2.boxes);
+    }
+  }
   var finalH = outerH;
   if (finalH === null) finalH = Math.round((dir === 'row' ? maxOf(boxesTmp.map(function (b) { return b.h; })) : contentMain) * 1000) / 1000 + pad * 2;
   var finalW = outerW;
@@ -550,6 +593,16 @@ function maxOf(arr) {
   var m = -Infinity;
   for (var i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
   return m === -Infinity ? 0 : m;
+}
+// 平移一棵已布局完成的子树（对齐用）：盒子是绝对定位，整体位移即可。
+function shiftBoxTree(box, dx, dy, boxes) {
+  box.x = Math.round((box.x + dx) * 1000) / 1000;
+  box.y = Math.round((box.y + dy) * 1000) / 1000;
+  var kids = box.children || [];
+  for (var i = 0; i < kids.length; i++) {
+    var k = boxes[kids[i]];
+    if (k) shiftBoxTree(k, dx, dy, boxes);
+  }
 }
 
 function layoutScreen(screen, tokens) {
@@ -1530,6 +1583,12 @@ function renderNodeHtml(node, boxes, tokens, out, inheritedBg) {
   } else if (node.type === 'icon') {
     var icol = cssColor(p.color !== undefined ? p.color : '$color.fg', tokens, '#111827');
     var isz = num(b.w, 20);
+    // ★ 图标盒 flex 居中（2026-09-24）：容器是 block，内部 <svg> 默认 display:inline +
+    //   vertical-align:baseline → svg 底边坐在行盒基线上，而 strut 由容器继承的 font-size(16px)
+    //   撑起 → svg 顶部被整体推下 (16 − size) px（实测：size=12 偏 4px、14 偏 2px、≥16 不偏；
+    //   35 个图标里 19 个受害）。与 button / badge / checkbox 一致改为 flex 居中，
+    //   图标严格落在盒子中线（不再依赖「svg 高恰好等于盒高」的巧合）。
+    style += 'display:flex;align-items:center;justify-content:center;';
     inner = iconSvg(str(p.name, ''), isz, icol, tokens, 1.6);
     if (!inner) inner = '<span style="display:block;width:100%;height:100%;border:1px dashed ' + cssColor('$color.border', tokens, '#E5E7EB') + ';"></span>';
   } else if (node.type === 'image') {

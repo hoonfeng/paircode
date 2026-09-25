@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { state, bottomPanelHeight } from '../ui-state.js'
+import { state, bottomPanelHeight, isDarkTheme } from '../ui-state.js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -131,6 +131,21 @@ function saveShellPreference() {
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
 const wsUrl = proto + '//' + location.host + '/api/terminal/ws'
 
+// ── ANSI 16 色：终端标准色板，按 UI 主题明暗双档 ──
+// ★ ANSI 色属终端领域标准（不是 UI 设计令牌），且需保持「bright 比 normal 亮」的
+//   内部一致性，故不拆成 8×16 令牌槽；但亮色主题下浅色前景压在浅底上不可读，
+//   所以必须按明暗取档 —— 旧实现两档共用一套浅色（如 #E57373），亮色主题下泛白。
+const ANSI_DARK = {
+  red: '#E57373', yellow: '#D4A74E', magenta: '#B39DDB', cyan: '#4DD0E1',
+  brightRed: '#EF9A9A', brightGreen: '#81C784', brightYellow: '#FFD54F',
+  brightMagenta: '#CE93D8', brightCyan: '#80DEEA',
+}
+const ANSI_LIGHT = {
+  red: '#C42B2B', yellow: '#8A5A00', magenta: '#6B3FA0', cyan: '#0A6E7A',
+  brightRed: '#E0443F', brightGreen: '#158A55', brightYellow: '#A86E00',
+  brightMagenta: '#7E4FB8', brightCyan: '#0C8291',
+}
+
 // ── xterm 主题（从 CSS 变量动态读取） ──
 function getXtermTheme() {
   const s = getComputedStyle(document.documentElement)
@@ -141,6 +156,7 @@ function getXtermTheme() {
   const muted = s.getPropertyValue('--text-muted').trim() || '#6e7681'
   const sec = s.getPropertyValue('--text-secondary').trim() || '#8b949e'
   const prompt = s.getPropertyValue('--term-prompt').trim() || '#6a9955'
+  const ansi = isDarkTheme(state.theme) ? ANSI_DARK : ANSI_LIGHT
   return {
     background: bg,
     foreground: fg,
@@ -148,20 +164,20 @@ function getXtermTheme() {
     cursorAccent: bg,
     selectionBackground: accent + '44',
     black: border,
-    red: '#e57373',
+    red: ansi.red,
     green: prompt,
-    yellow: '#d4a74e',
+    yellow: ansi.yellow,
     blue: accent,
-    magenta: '#b39ddb',
-    cyan: '#4dd0e1',
+    magenta: ansi.magenta,
+    cyan: ansi.cyan,
     white: sec,
     brightBlack: muted,
-    brightRed: '#ef9a9a',
-    brightGreen: '#81c784',
-    brightYellow: '#ffd54f',
+    brightRed: ansi.brightRed,
+    brightGreen: ansi.brightGreen,
+    brightYellow: ansi.brightYellow,
     brightBlue: accent,
-    brightMagenta: '#ce93d8',
-    brightCyan: '#80deea',
+    brightMagenta: ansi.brightMagenta,
+    brightCyan: ansi.brightCyan,
     brightWhite: fg,
   }
 }
@@ -385,6 +401,9 @@ function setTermRef(idx, el) {
     const ws = createWebSocket(term, terminal, fitAddon)
     term.ws = ws
 
+    // ★ 实例已建 → 按 link 实际状态对齐主题（见 syncTermThemeAfterCreate）
+    syncTermThemeAfterCreate()
+
     // ★ 创建后立即 fit（引擎已修复：getComputedStyle 未声明 padding 返回
     // "0px" + canvas 精确测量 → fit 一次即得正确 cols/rows，不再需要
     // 200/800/2000ms 多档重试——重试让终端启动最坏等 2 秒才显示正确列数）。
@@ -442,6 +461,8 @@ function switchTerm(idx) {
 
       const ws = createWebSocket(term, terminal, fitAddon)
       term.ws = ws
+      // ★ 延迟创建也要对齐主题
+      syncTermThemeAfterCreate()
     }
 
     // 激活后重新 fit
@@ -546,14 +567,60 @@ function loadTerminals() {
   } catch { return false }
 }
 
+// ── xterm 配色刷新 ──
+// ★ 修复（2026-09-25）：xterm 5+/6 已移除 setOption()，只剩 options 对象
+//   （@xterm/xterm 类型定义：options: ITerminalOptions）。旧实现仅调 setOption，
+//   并用 `if (term.xterm.setOption)` 守卫 → 方法不存在 → **静默跳过** →
+//   终端配色永不跟随主题（亮色主题下终端仍是深色 = 深色割裂块）。
+function refreshXtermTheme() {
+  const theme = getXtermTheme()
+  for (const term of terminals.value) {
+    if (!term.xterm) continue
+    if (term.xterm.options && typeof term.xterm.options === "object") {
+      term.xterm.options.theme = theme          // xterm 5+/6 正确写法
+    } else if (typeof term.xterm.setOption === "function") {
+      term.xterm.setOption("theme", theme)      // xterm 4 及更早兼容
+    }
+    // theme 变更只作用于后续渲染，需强制重绘已有行（否则已输出的内容仍是旧底色）
+    try { if (typeof term.xterm.refresh === "function") term.xterm.refresh(0, (term.xterm.rows || 24) - 1) } catch (e) { }
+  }
+}
+
+// ★ P2 主题 CSS 由 ui-appearance 插件按当前主题**异步**注入 <link>（theme-<id>.css）：
+//   终端实例创建时该 CSS 可能尚未加载，读到的 --term-bg 是壳 :root 兜底值（Midnight 暗色）
+//   → 亮色主题下终端仍为深色。故监听插件在 link onload 之后派发的事件，再刷新一次。
+const onThemeCssLoaded = () => refreshXtermTheme()
+
+// ★ 终端实例创建完成后对齐一次主题。三种时序都要覆盖：
+//   (a) 主题 CSS 已就绪（sheet 非空）→ 直接刷新；
+//   (b) 仍在加载 → 挂一次性 load 监听（必须用 { once: true } 且**在 link 上挂**，
+//       因为全局事件 paircode:theme-css-loaded 常常在终端创建之前就已派发完毕）；
+//   (c) 插件未装配（无 link）→ 什么都不做，壳 :root 兜底值即当前主题，无需刷新。
+function syncTermThemeAfterCreate() {
+  const lk = document.getElementById("ui-appearance-theme-css")
+  if (lk && !lk.sheet) { lk.addEventListener("load", onThemeCssLoaded, { once: true }); return }
+  refreshXtermTheme()
+}
+
 // ── 生命周期 ──
 onMounted(() => {
+  window.addEventListener("paircode:theme-css-loaded", onThemeCssLoaded)
   if (!loadTerminals()) {
     newTerminal()
+  }
+  // ★ 时序兜漏：页面加载顺序为「壳启动 → client 半注入 <link> → link onload 派发事件
+  //   → 本组件 onMounted 注册监听」，故事件常常**早于**监听器注册而被错过。
+  //   这里按 link 的实际状态补一次：已加载完成（sheet 非空）直接刷新，未完成则挂一次性 load。
+  //   两处都要放在终端实例创建之后（newTerminal 已在上方执行）。
+  const lk = document.getElementById("ui-appearance-theme-css")
+  if (lk) {
+    if (lk.sheet) refreshXtermTheme()
+    else lk.addEventListener("load", onThemeCssLoaded, { once: true })
   }
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener("paircode:theme-css-loaded", onThemeCssLoaded)
   // 关闭所有 WebSocket 和 xterm
   for (const term of terminals.value) {
     if (term.ws) {
@@ -572,14 +639,7 @@ onBeforeUnmount(() => {
 })
 
 // ── 主题切换时刷新 xterm 配色 ──
-watch(() => state.theme, () => {
-  const theme = getXtermTheme()
-  for (const term of terminals.value) {
-    if (term.xterm && term.xterm.setOption) {
-      term.xterm.setOption('theme', theme)
-    }
-  }
-})
+watch(() => state.theme, refreshXtermTheme)
 </script>
 
 <style>
@@ -612,12 +672,12 @@ watch(() => state.theme, () => {
    与浏览器 step-end 视觉效果一致。 */
 .terminal-panel .xterm-cursor.xterm-cursor-bar {
   box-shadow: none !important;
-  background-color: #58a6ff !important;
+  background-color: var(--color-accent) !important;
   width: 1px !important;
   animation: wb-term-bar-blink 1s step-end infinite !important;
 }
 @keyframes wb-term-bar-blink {
-  0%, 49.9% { background-color: #58a6ff; }
+  0%, 49.9% { background-color: var(--color-accent); }
   50%, 100% { background-color: transparent; }
 }
 </style>
@@ -650,7 +710,7 @@ watch(() => state.theme, () => {
 }
 .term-tab:hover:not(.active) { background: var(--bg-hover); }
 .term-tab-close { font-size: 12px; margin-left: 2px; opacity: 0.5; }
-.term-tab-close:hover { opacity: 1; color: #e57373; }
+.term-tab-close:hover { opacity: 1; color: var(--color-danger); }
 .term-tab.new-tab { padding: 4px 8px; }
 .term-shell-select select {
   font-size: 11px; background: transparent; color: var(--text-secondary);
@@ -660,7 +720,7 @@ watch(() => state.theme, () => {
 .term-shell-select select:hover { border-color: var(--accent); }
 .term-tabs-filler { flex: 1; }
 .term-panel-close { opacity: 0.5; padding: 4px 8px; }
-.term-panel-close:hover { opacity: 1; color: #e57373; }
+.term-panel-close:hover { opacity: 1; color: var(--color-danger); }
 
 /* ── 终端内容区 ── */
 .term-content {
@@ -679,8 +739,8 @@ watch(() => state.theme, () => {
   flex: 1; display: flex; align-items: center; justify-content: center;
 }
 .term-create-btn {
-  background: #58a6ff; color: #000; border: none;
+  background: var(--color-accent); color: var(--color-accent-fg); border: none;
   padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
 }
-.term-create-btn:hover { background: #79c0ff; }
+.term-create-btn:hover { background: var(--color-accent-soft); }
 </style>

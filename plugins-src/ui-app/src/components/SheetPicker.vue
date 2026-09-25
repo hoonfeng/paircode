@@ -75,11 +75,11 @@ const selectStyle = computed(() => (props.width > 0 ? { maxWidth: props.width + 
   max-width: 240px;
   padding: 5px 26px 5px 10px;
   border-radius: 8px;
-  border: 1px solid var(--border-color, #3a3a4a);
+  border: 1px solid var(--border-color);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
-    var(--bg-tertiary, rgba(0, 0, 0, 0.15));
-  color: var(--text-primary, #eee);
+    var(--bg-tertiary);
+  color: var(--text-primary);
   font-size: 12px;
   font-family: inherit;
   line-height: 1.4;
@@ -90,10 +90,10 @@ const selectStyle = computed(() => (props.width > 0 ? { maxWidth: props.width + 
   color-scheme: dark;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.sp-select:hover { border-color: var(--accent, #4f8cff); }
+.sp-select:hover { border-color: var(--accent); }
 .sp-select:focus {
-  border-color: var(--accent, #4f8cff);
-  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
 }
 .sp-select:disabled { opacity: 0.55; cursor: not-allowed; }
 .sp-chevron {
@@ -101,7 +101,7 @@ const selectStyle = computed(() => (props.width > 0 ? { maxWidth: props.width + 
   right: 9px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--accent, #4f8cff);
+  color: var(--accent);
   pointer-events: none;
 }
 </style>

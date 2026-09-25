@@ -1,3 +1,7 @@
+// ⚠️ 已失效（2026-09-26）：本脚本中 **phase-bar 相关断言**已失效 —— 消息区顶部
+//    `.phase-bar`（「上次运行 / 执行中…」运行统计条）已整条删除 → 对应 check 必然 FAIL。
+//    其余断言（会话任务拉取 / WS 重连补偿）仍有效。运行统计请改用右栏 `.sr-card`
+//    「运行统计」卡（`.sr-summary`），或 _temp/verify-chat/verify-phasebar-removed.cjs。
 // cdp-verify-conv-tasks.js — 端到端验证：会话任务拉取 + 运行统计条 + WS 重连补偿
 //
 // 覆盖（本轮对话面板修复的三项验收点）：
