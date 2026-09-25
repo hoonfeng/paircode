@@ -69,169 +69,178 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { border-radius: 5px; }
     ::-webkit-scrollbar-thumb:hover { }
-    /* ─────────────────────────────────────────────────────
-       主题 1: 暗色科技风 (Dark Tech)
-       ───────────────────────────────────────────────────── */
-    :root, .theme-dark {
+    /* ══════════════════════════════════════════════════════════════
+       PairCode 主题系统 v2 · 设计令牌层
+       真相源：design/ui-theme.tokens.json（8 套主题 · 明暗双基线）
+       三层结构：
+         ① 节奏令牌（间距/圆角/字号/行高/字重/字体）—— 全局恒定
+         ② 兼容别名（旧变量 --bg-primary 等 → 新槽位，组件零改动跟随）
+         ③ 语义色槽 --color-*（每套主题一份，组件只引用槽位）
+       ══════════════════════════════════════════════════════════════ */
+
+    /* ── ① 节奏令牌（全局恒定，不随主题）── */
+    :root {
+      /* 间距：4px 网格 */
+      --space-none: 0px;  --space-xs: 4px;   --space-sm: 8px;   --space-md: 12px;
+      --space-lg: 16px;   --space-xl: 24px;  --space-2xl: 32px; --space-3xl: 48px;
+      /* 圆角 5 档 + 胶囊 */
+      --radius-none: 0px; --radius-sm: 4px; --radius-md: 8px;
+      --radius-lg: 12px;  --radius-xl: 16px; --radius-full: 999px;
+      /* 字号 7 档 */
+      --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px;
+      --fs-xl: 18px; --fs-2xl: 24px; --fs-3xl: 32px;
+      /* 字重 3 档 · 行高 3 档 */
+      --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600;
+      --lh-tight: 1.25;  --lh-normal: 1.5;  --lh-loose: 1.75;
+      /* 阴影占位（各主题块内按明暗覆盖）*/
+      --shadow-none: none;
+      /* 字体族 */
+      --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      /* ── 应用背景语义槽（P3）──
+         壳只声明「渲染层用的槽位与兜底值」；实际取值由 ui-appearance 插件按其设置写入，
+         使背景能力可在不碰壳的前提下演进（插件未装配 = 全部兜底 = 无背景，与旧行为一致）。
+         · --app-bg-image   背景图 url()/渐变，默认 none
+         · --app-bg-color   兜底层色，默认 transparent（不遮挡主题色）
+         · --app-bg-opacity 不透明度 0~1（插件侧含对比度守护，防文字不可读）
+         · --app-bg-size / --app-bg-position / --app-bg-repeat  铺满策略
+         · --app-bg-blur    背景虚化（毛玻璃），默认 none */
+      --app-bg-image: none;
+      --app-bg-color: transparent;
+      --app-bg-opacity: 1;
+      --app-bg-size: cover;
+      --app-bg-position: center center;
+      --app-bg-repeat: no-repeat;
+      --app-bg-blur: none;
+      /* 对比度守护遮罩（叠在背景图之上、内容之下）：由插件按「最坏情况背景」反推强度，
+         保证正文对比度 ≥4.5:1。兜底 transparent = 插件未装配时无遮罩。 */
+      --app-bg-scrim: transparent;
+      /* 面板不透明度（玻璃化）：由 ui-appearance 按「面板不透明度」写入（0.4~1，默认 1）。
+         下方主要面板别名经 color-mix 绑定本槽位 —— alpha=1 时等于原色（视觉零变化），
+         调低则面板底色透出背景。桌面端 Chromium 全支持 color-mix。 */
+      --app-surface-alpha: 1;
+    }
+
+    /* ── ② 兼容别名：旧变量 → 新语义槽位 ──
+       既有组件引用 var(--bg-primary) 等旧名，此处一次性接驳到新槽位，
+       因此换主题时无需改动任何组件即整体跟随新色板（P0-c 再分批改为直引槽位）。*/
+    :root {
+      --bg-primary: color-mix(in srgb, var(--color-bg) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --bg-secondary: color-mix(in srgb, var(--color-surface) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --bg-tertiary: color-mix(in srgb, var(--color-surface-2) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --bg-hover: color-mix(in srgb, var(--color-surface-2) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --bg-active: color-mix(in srgb, var(--color-surface-3) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --text-primary: var(--color-fg);
+      --text-secondary: var(--color-muted);
+      --text-muted: var(--color-subtle);
+      --border-color: var(--color-border);
+      --accent: var(--color-accent);
+      --accent-light: var(--color-accent);
+      --accent-bg: var(--color-accent-bg);
+      --activity-bar-bg: color-mix(in srgb, var(--color-surface) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --tab-active-bg: color-mix(in srgb, var(--color-bg) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --tab-inactive-bg: color-mix(in srgb, var(--color-surface) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --sidebar-bg: color-mix(in srgb, var(--color-surface) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --input-bg: var(--color-bg);
+      --scrollbar-thumb: var(--color-border-strong);
+      --scrollbar-thumb-hover: var(--color-muted);
+      --status-text: var(--color-fg);
+      --term-text: var(--color-fg);
+      --term-bg: var(--color-bg);
+      --term-prompt: var(--color-success);
+      --focus-ring: var(--color-accent-ring);
+      --border-radius: var(--radius-sm);
+      --border-radius-lg: var(--radius-md);
+      --font-ui: var(--font-sans);
+      --font-code: var(--font-mono);
+      --font-editor: var(--font-mono);
+      --font-size-base: var(--fs-md);
+      --font-size-sm: var(--fs-sm);
+      --font-size-lg: var(--fs-lg);
+      /* ── 补充别名（P0-c 第 1 步）：原先全仓未定义、靠暗色 hex 兜底的变量 ──
+         这些兜底值不随主题变化 → 亮色主题下浮层/面板露深色块。
+         接驳到令牌后，亮暗主题各自取色，组件无需再写兜底。*/
+      --bg-elevated: color-mix(in srgb, var(--color-surface-2) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --panel-bg: color-mix(in srgb, var(--color-surface) calc(var(--app-surface-alpha, 1) * 100%), transparent);
+      --bg-code: var(--color-bg);
+      --bg-2: var(--color-surface-2);
+      --bg: var(--color-bg);
+      --bd: var(--color-border);
+      --bd-hover: var(--color-border-strong);
+      --txt: var(--color-fg);
+      --txt-dim: var(--color-muted);
+      --danger: var(--color-danger);
+      --error: var(--color-danger);
+      --accent-hover: var(--color-accent);
+      --mono-font: var(--font-mono);
+    }
+
+    /* ── ③ 语义色槽 · 8 套主题 ── */
+    /* ── Midnight 午夜蓝（暗·默认） ── */
+    /* ── ③ 基准令牌兜底（Midnight 值） ──
+       8 套主题的完整 CSS 已插件化：.pair/plugins/ui-appearance/theme-<id>.css
+       由 ui-appearance 的 client 半按当前主题注入 <link>。此处仅保留一份**基准兜底**：
+       插件未装配/加载失败时 :root 仍提供完整令牌，界面不裸奔（视觉回落 Midnight）。
+       ★ 兜底用 :root 选择器；插件注入的 .theme-<id> 与其同特异性 → 靠注入顺序（head 末尾）覆盖。 */
+    :root {
       color-scheme: dark;
-      --bg-primary: #0d1117;
-      --bg-secondary: #161b22;
-      --bg-tertiary: #21262d;
-      --bg-hover: #1c2333;
-      --bg-active: #1f2b3d;
-      --text-primary: #e6edf3;
-      --text-secondary: #8b949e;
-      --text-muted: #6e7681;
-      --border-color: #30363d;
-      --accent: #58a6ff;
-      --accent-light: #79c0ff;
-      --accent-bg: rgba(88, 166, 255, 0.10);
-      --activity-bar-bg: #0d1117;
-      --tab-active-bg: #0d1117;
-      --tab-inactive-bg: #161b22;
-      --sidebar-bg: #161b22;
-      --input-bg: #0d1117;
-      --scrollbar-thumb: #4b5563;
-      --scrollbar-thumb-hover: #6e7681;
-      --status-text: #fff;
-      --term-text: #d4d4d4;
-      --term-bg: #0d1117;
-      --term-prompt: #6a9955;
-      --focus-ring: rgba(88, 166, 255, 0.25);
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
-      --border-radius: 4px;
-      --border-radius-lg: 8px;
-      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-code: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-editor: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-size-base: 13px;
-      --font-size-sm: 12px;
-      --font-size-lg: 15px;
+      --color-canvas: #0a0e16;
+      --color-bg: #0F1420;
+      --color-surface: #151B29;
+      --color-surface-2: #1C2436;
+      --color-surface-3: #232b3c;
+      --color-border: #2A3550;
+      --color-border-subtle: #1e263a;
+      --color-border-strong: #414b64;
+      --color-input-border: #606C88;
+      --color-fg: #E7ECF5;
+      --color-muted: #8D9BB3;
+      --color-subtle: #8593aa;
+      --color-accent: #6FA8FF;
+      --color-accent-fg: #06101F;
+      --color-accent-soft: rgba(111,168,255,0.14);
+      --color-accent-bg: rgba(111,168,255,0.10);
+      --color-accent-ring: rgba(111,168,255,0.25);
+      --color-success: #4FD8A4;
+      --color-warning: #F0C158;
+      --color-danger: #FF8085;
+      --color-info: #6FA8FF;
+      --color-success-bg: rgba(79,216,164,0.16);
+      --color-warning-bg: rgba(240,193,88,0.16);
+      --color-danger-bg: rgba(255,128,133,0.16);
+      --color-info-bg: rgba(111,168,255,0.16);
+      --color-glass: #192132;
+      --color-glass-alpha: rgba(25,33,50,0.72);
+      --color-scrim: rgba(6,10,20,0.56);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.28);
+      --shadow-md: 0 6px 20px rgba(0,0,0,0.38);
+      --shadow-lg: 0 12px 44px rgba(0,0,0,0.52);
+      --shadow-xl: 0 24px 80px rgba(0,0,0,0.62);
+      --color-cat-blue: #6FA8FF;
+      --color-cat-blue-bg: rgba(111,168,255,0.18);
+      --color-cat-teal: #3FD0E0;
+      --color-cat-teal-bg: rgba(63,208,224,0.18);
+      --color-cat-amber: #F0C158;
+      --color-cat-amber-bg: rgba(240,193,88,0.18);
+      --color-cat-purple: #C0A6F5;
+      --color-cat-purple-bg: rgba(192,166,245,0.18);
+      --color-cat-green: #6BD98A;
+      --color-cat-green-bg: rgba(107,217,138,0.18);
+      /* ── 语法高亮 · 暗档（CodeEditor / Markdown / mermaid 共用）── */
+      --syn-keyword: #C678DD;   /* 关键字 / 修饰符 / 操作符 */
+      --syn-type: #E5C07B;      /* 类型 / 类名 / 命名空间 */
+      --syn-function: #61AFEF;  /* 函数 / 方法 / 标签 */
+      --syn-property: #E06C75;  /* 属性 / 特性名 */
+      --syn-constant: #D19A66;  /* 数字 / 布尔 / 常量 */
+      --syn-string: #98C379;    /* 字符串 / 正则 / 属性值 */
+      --syn-variable: #56B6C2;  /* 变量名 */
+      --syn-comment: #7F848E;   /* 注释 / 元信息 */
+      --syn-invalid: #FF8085;   /* 非法 / 语法错误 */
+      --syn-bracket: #ABB2BF;   /* 括号 / 分隔符 */
+      --syn-link: #56B6C2;      /* 链接 / URL */
+      --syn-heading: #61AFEF;   /* 标题 / 强调 */
     }
 
-    /* ─────────────────────────────────────────────────────
-       主题 2: 白色简约风 (White Minimal)
-       ───────────────────────────────────────────────────── */
-    .theme-light {
-      color-scheme: light;
-      --bg-primary: #ffffff;
-      --bg-secondary: #f8f9fa;
-      --bg-tertiary: #f0f1f3;
-      --bg-hover: #e8eaed;
-      --bg-active: #d3e3fd;
-      --text-primary: #1a1a2e;
-      --text-secondary: #5f6368;
-      --text-muted: #9aa0a6;
-      --border-color: #dadce0;
-      --accent: #1a73e8;
-      --accent-light: #4285f4;
-      --accent-bg: rgba(26, 115, 232, 0.08);
-      --activity-bar-bg: #2c2c2c;
-      --tab-active-bg: #ffffff;
-      --tab-inactive-bg: #f0f1f3;
-      --sidebar-bg: #f8f9fa;
-      --input-bg: #ffffff;
-      --scrollbar-thumb: #a3a8b0;
-      --scrollbar-thumb-hover: #878d96;
-      --status-text: #fff;
-      --term-text: #1a1a2e;
-      --term-bg: #ffffff;
-      --term-prompt: #188038;
-      --focus-ring: rgba(26, 115, 232, 0.25);
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
-      --border-radius: 4px;
-      --border-radius-lg: 6px;
-      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-code: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-editor: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-size-base: 13px;
-      --font-size-sm: 12px;
-      --font-size-lg: 15px;
-    }
-
-    /* ─────────────────────────────────────────────────────
-       主题 3: 暖色温暖风 (Warm Cozy)
-       ───────────────────────────────────────────────────── */
-    .theme-warm {
-      color-scheme: light;
-      --bg-primary: #faf3e8;
-      --bg-secondary: #f5ece0;
-      --bg-tertiary: #efe4d4;
-      --bg-hover: #e8dbcb;
-      --bg-active: #deccb8;
-      --text-primary: #3d2c1e;
-      --text-secondary: #7a6a5a;
-      --text-muted: #a09080;
-      --border-color: #d6c8b8;
-      --accent: #b87333;
-      --accent-light: #d4956a;
-      --accent-bg: rgba(184, 115, 51, 0.10);
-      --activity-bar-bg: #5c4033;
-      --tab-active-bg: #faf3e8;
-      --tab-inactive-bg: #efe4d4;
-      --sidebar-bg: #f5ece0;
-      --input-bg: #fffcf7;
-      --scrollbar-thumb: #b3a28f;
-      --scrollbar-thumb-hover: #96826c;
-      --status-text: #fffcf7;
-      --term-text: #3d2c1e;
-      --term-bg: #faf3e8;
-      --term-prompt: #5a7a4a;
-      --focus-ring: rgba(184, 115, 51, 0.25);
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.10);
-      --shadow-md: 0 4px 14px rgba(0,0,0,0.12);
-      --border-radius: 6px;
-      --border-radius-lg: 10px;
-      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-code: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-editor: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-size-base: 13px;
-      --font-size-sm: 12px;
-      --font-size-lg: 15px;
-    }
-
-    /* ─────────────────────────────────────────────────────
-       主题 4: 暗夜紫 (Night Purple)
-       ───────────────────────────────────────────────────── */
-    .theme-night {
-      color-scheme: dark;
-      --bg-primary: #12101a;
-      --bg-secondary: #1a1726;
-      --bg-tertiary: #221f30;
-      --bg-hover: #252235;
-      --bg-active: #2d2940;
-      --text-primary: #d8d4e0;
-      --text-secondary: #8a86a0;
-      --text-muted: #6a6680;
-      --border-color: #2d2940;
-      --accent: #9b8ec4;
-      --accent-light: #b8add4;
-      --accent-bg: rgba(155, 142, 196, 0.10);
-      --activity-bar-bg: #12101a;
-      --tab-active-bg: #12101a;
-      --tab-inactive-bg: #1a1726;
-      --sidebar-bg: #1a1726;
-      --input-bg: #12101a;
-      --scrollbar-thumb: #4a4463;
-      --scrollbar-thumb-hover: #5d5680;
-      --status-text: #fff;
-      --term-text: #d8d4e0;
-      --term-bg: #12101a;
-      --term-prompt: #8ab88a;
-      --focus-ring: rgba(155, 142, 196, 0.25);
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.40);
-      --border-radius: 4px;
-      --border-radius-lg: 8px;
-      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-code: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-editor: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-      --font-size-base: 13px;
-      --font-size-sm: 12px;
-      --font-size-lg: 15px;
-    }
 
     /* ── 应用全局变量 ── */
     body {
@@ -301,10 +310,59 @@
     }
     select option:checked { background-color: var(--accent-bg); }
     select:disabled { opacity: .5; cursor: not-allowed; }
+    /* ── 应用背景渲染层（P3）──
+       固定铺满、置于内容之下（z-index:0），#app 提到 z-index:1。
+       全部取值走 --app-bg-* 槽位 → 插件改槽位即可换背景，壳无需变更。
+       pointer-events:none 保证不拦截任何交互。 */
+    #app-bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-color: var(--app-bg-color, transparent);
+      background-image: var(--app-bg-image, none);
+      background-size: var(--app-bg-size, cover);
+      background-position: var(--app-bg-position, center center);
+      background-repeat: var(--app-bg-repeat, no-repeat);
+      opacity: var(--app-bg-opacity, 1);
+      filter: var(--app-bg-blur, none);
+    }
+    /* 对比度守护遮罩层：叠在背景图之上、内容之下（P3）
+       强度由 ui-appearance 的 client 半按 WCAG 最坏情况反推（见 client.js computeScrim）。 */
+    #app-bg::after {
+      content: ''; position: absolute; inset: 0;
+      background: var(--app-bg-scrim, transparent);
+    }
+    /* 内容层高于背景层；#app 本身透明，背景从 #app-bg 透出 */
+    #app { position: relative; z-index: 1; }
   </style>
-  <script type="module" crossorigin src="./assets/index-D9R_uPpA.js"></script>
+  <!-- ★ 主题 CSS 预加载（消除 FOUC）。注意：本注释内不得出现任何标签字面量 ——
+       位置：head 结束标签之前，即最早可执行处、且在壳样式表之后。
+       原因：主题 CSS 由 ui-appearance 插件的 client 半注入，而 client 半依赖
+       plugin-runtime 启动（DOM + 多个 JS chunk 之后）→ 期间界面只能拿壳 :root 兜底
+       渲染（Midnight 暗色）→ 亮色主题用户会看到明显闪烁。
+       做法：此处同步读 localStorage 的主题（applyTheme 每次都会写入）并立即注入该主题的
+       样式表 link（id=ui-appearance-theme-css）；随后插件 client 半复用该节点、只更新 href，
+       二者不重复建节点。插件未装配时本段也无副作用（:root 兜底照常渲染）。 -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('paircode-ide-state')
+        if (!raw) return
+        var theme = (JSON.parse(raw) || {}).theme
+        if (!theme || !/^[a-z][a-z0-9-]{0,23}$/.test(theme)) return
+        var ALIAS = { dark: 'midnight', night: 'obsidian', light: 'daylight', warm: 'sand' }
+        var id = ALIAS[theme] || theme
+        var lk = document.createElement('link')
+        lk.id = 'ui-appearance-theme-css'
+        lk.rel = 'stylesheet'
+        lk.href = '/plugins-assets/ui-appearance/theme-' + id + '.css'
+        document.head.appendChild(lk)
+      } catch (e) { /* 隐私模式/无 localStorage：忽略，走 :root 兜底 */ }
+    })();
+  </script>
+  <script type="module" crossorigin src="./assets/index-B9ZeKb1q.js"></script>
 </head>
 <body>
+  <!-- ★ 应用背景渲染层（P3）：由 ui-appearance 插件写入 --app-bg-* 槽位驱动 -->
+  <div id="app-bg" aria-hidden="true"></div>
   <div id="app"></div>
   <!-- ★ 全局诊断：捕获早期 JS 错误（写 localStorage，eval 可读；console 重定向保留堆栈） -->
   <script>
