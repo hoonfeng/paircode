@@ -4,6 +4,40 @@
 
 ---
 
+## 1.6.12 — 2026-09-25
+
+> 本版把**插件源从内核硬编码独立为可配置项**：安装与搜索插件的「源仓库」「镜像源」都可在
+> 「设置 → 插件市场」切换（支持自定义地址），内核不再写死任何源地址；同时移除仓库中的
+> 微信互通插件与源码同步插件。
+
+### 新特性
+
+- **插件源可配置（源仓库 / 镜像源可切换）** —— 新增「设置 → 插件市场」配置段：
+  「使用镜像源」开关、「源仓库」（默认官方 npm registry）、「镜像源」（默认 npmmirror 加速）。
+  内核 `internal/agent/npm_plugin.go` 删除 `npmMirrorRegistry` 默认源常量，源地址改为
+  **每次调用按配置即时计算**（保存设置立即生效，无需重启）；优先级：环境变量
+  `PAIRCODE_NPM_REGISTRY` > 配置段（`useMirror ? mirror : registry`，所选项为空则回退另一项）
+  > 空串（接口提示去设置里配置）。默认值随插件 schema 下发，内核零硬编码源地址。
+- **源不可达 / 配错时给出可诊断提示** —— 此前源地址配错会把 `ctx.web.fetch` 的异常直接抛到
+  接口（表现为 500 + 堆栈外泄）；现统一经 `safeFetch` 包装，接口与 agent 工具返回
+  「市场源请求失败：<原因>（可在「设置 → 插件市场」切换源仓库/镜像源）」。
+
+### 移除
+
+- **微信互通插件** —— `plugins-src/plugins/wechat-bridge/`、`.pair/plugins/wechat-bridge/`、
+  构建脚本 `scripts/build-wx-bridge.mjs` 与两份配套方案文档。
+- **源码同步插件** —— `.pair/plugins/source-update/`、`scripts/source-update/`（含 focus-probe 探针）；
+  上游 PR 脚本的本机定制排除项随之清空，相关注释引用一并清理。
+
+### 验证
+
+- `go test ./internal/agent ./internal/core ./cmd/companion ./internal/server/handler` 全绿；
+  新增 `TestNPMRegistryFollowsSettings`（默认镜像 / 关闭镜像 / 自定义地址即时生效 /
+  空值回退源仓库 / 注入优先 / 无配置返回空串）。
+- 独立实例（9104）+ mock npm 源端到端：设置面板「插件市场」tab 渲染三个字段且值与落盘一致；
+  插件侧搜索与内核侧装包（latest 查询 + tarball 下载）均命中新源；源不可达时接口给明确提示
+  且**不回退**到任何内置源。
+
 ## 1.6.11 — 2026-09-25
 
 > 本版修复**未打开工作区时市场卸载 npm 插件「假成功」**：卸载只从内存摘除插件、不删磁盘
