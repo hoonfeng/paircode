@@ -15,7 +15,7 @@ import (
 func TestNPMPluginDiskName(t *testing.T) {
 	cases := map[string]string{
 		"paircode-plugin-x":             "x",
-		"paircode-plugin-wechat-bridge": "wechat-bridge",
+		"paircode-plugin-demo-bridge": "demo-bridge",
 		"@paircode/git":                 "git",
 		"@someorg/tool":                 "tool",
 		"plain-name":                    "plain-name",

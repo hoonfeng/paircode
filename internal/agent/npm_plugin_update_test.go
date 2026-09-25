@@ -58,9 +58,9 @@ func TestNPMPluginUpdateProbe(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	oldBase := npmRegistryBase
-	npmRegistryBase = srv.URL
-	defer func() { npmRegistryBase = oldBase }()
+	oldBase := npmRegistryBaseOverride
+	npmRegistryBaseOverride = srv.URL
+	defer func() { npmRegistryBaseOverride = oldBase }()
 	resetNpmPkgMissingCache()
 	defer resetNpmPkgMissingCache()
 
@@ -136,9 +136,9 @@ func TestNPMPluginCheckUpdatesScan(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	oldBase := npmRegistryBase
-	npmRegistryBase = srv.URL
-	defer func() { npmRegistryBase = oldBase }()
+	oldBase := npmRegistryBaseOverride
+	npmRegistryBaseOverride = srv.URL
+	defer func() { npmRegistryBaseOverride = oldBase }()
 	resetNpmPkgMissingCache()
 	defer resetNpmPkgMissingCache()
 

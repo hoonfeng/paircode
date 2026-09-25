@@ -45,9 +45,9 @@ func TestMarketInstallFullPackageFiles(t *testing.T) {
 	defer srv.Close()
 	tarballURL = srv.URL + "/demo-full/-/demo-full-2.0.0.tgz"
 
-	oldBase := npmRegistryBase
-	npmRegistryBase = srv.URL
-	defer func() { npmRegistryBase = oldBase }()
+	oldBase := npmRegistryBaseOverride
+	npmRegistryBaseOverride = srv.URL
+	defer func() { npmRegistryBaseOverride = oldBase }()
 
 	info, err := fetchNPMInfo("demo-full")
 	if err != nil {
@@ -184,9 +184,9 @@ func TestMarketInstallFullFlowLanding(t *testing.T) {
 	defer srv.Close()
 	tarballURL = srv.URL + "/x.tgz"
 
-	oldBase := npmRegistryBase
-	npmRegistryBase = srv.URL
-	defer func() { npmRegistryBase = oldBase }()
+	oldBase := npmRegistryBaseOverride
+	npmRegistryBaseOverride = srv.URL
+	defer func() { npmRegistryBaseOverride = oldBase }()
 
 	// 目标目录：测试环境 InstallDir 回退到包 cwd（go-build 判定），即 internal/agent/.pair/plugins
 	dst := filepath.Join(globalPluginsDir(), diskName)

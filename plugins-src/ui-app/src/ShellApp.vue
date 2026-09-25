@@ -338,7 +338,6 @@ const gridStyle = computed(() => {
   //   1. 在 ui-state.js 的 FOCUS_PANELS 登记一行（fold = 专注态取值）——
   //      专注模式（Ctrl+K）的收起/还原由该表驱动，不登记 = 专注不收；
   //   2. 在本 computed 中登记列宽公式（可见性开关 → '0px'）；
-  //   3. 跑收纳探针：node scripts/source-update/focus-probe.mjs（更新流程部署后自动跑，告警不阻断）。
   //   背景：右栏 StatsRail（v1.6.7 引入）曾未登记专注收纳（4fa3e367 修复）。
   // · sidebar 列宽：折叠（sidebarVisible=false）→ 0；否则 sidebarWidth（280）
   // · main 列（col 3）：对话/编辑器 tab 区，占主导（无独立 editor 列）。

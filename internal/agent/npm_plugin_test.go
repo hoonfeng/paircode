@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // TestNPMPluginPatch append/remove 幂等性。
@@ -188,19 +190,68 @@ func extractTarGzForTest(tgzPath, dst string) error {
 	}
 }
 
-// TestNPMRegistryDefaultsToMirror ★ 2026-09-25：默认源必须是 npmmirror 镜像
-// （官方源国内直连极慢 ≈3KB/s，市场安装在旧的 30s 超时内必然失败）；
-// 环境变量覆盖时不校验默认值。
-func TestNPMRegistryDefaultsToMirror(t *testing.T) {
+// TestNPMRegistryFollowsSettings ★ 2026-09-26 插件源配置化：内核不写死任何源地址，
+// registry 完全由「插件市场」配置段决定（useMirror / mirror / registry：源仓库与镜像源
+// 均可在设置里切换），且每次调用重新计算 → 保存设置后立即生效。
+// 环境变量覆盖时不校验配置（env 优先级最高）。
+func TestNPMRegistryFollowsSettings(t *testing.T) {
 	if v := os.Getenv("PAIRCODE_NPM_REGISTRY"); v != "" {
-		t.Skipf("PAIRCODE_NPM_REGISTRY 已覆盖为 %s，跳过默认值断言", v)
+		t.Skipf("PAIRCODE_NPM_REGISTRY 已覆盖为 %s，跳过配置断言", v)
 	}
-	if npmRegistryBase != npmMirrorRegistry {
-		t.Fatalf("默认 registry = %q，期望镜像 %q", npmRegistryBase, npmMirrorRegistry)
+	oldSchemas, oldSettings, oldOverride := core.PluginSettingSchemas, core.Settings, npmRegistryBaseOverride
+	defer func() {
+		core.PluginSettingSchemas, core.Settings, npmRegistryBaseOverride = oldSchemas, oldSettings, oldOverride
+	}()
+	npmRegistryBaseOverride = ""
+	core.Settings = core.Default()
+	core.PluginSettingSchemas = nil
+	// 默认值随插件 schema 下发（内核零默认地址）
+	core.RegisterPluginSettingSchema(core.SettingSchema{
+		Key: "marketplace", Title: "插件市场",
+		Fields: []core.SettingField{
+			{Name: "useMirror", Type: "checkbox", Default: true},
+			{Name: "mirror", Type: "text", Default: "https://registry.npmmirror.com"},
+			{Name: "registry", Type: "text", Default: "https://registry.npmjs.org"},
+		},
+	})
+	if got := npmRegistryBase(); got != "https://registry.npmmirror.com" {
+		t.Fatalf("默认（启用镜像）registry = %q，期望镜像源", got)
 	}
-	if npmMirrorRegistry != "https://registry.npmmirror.com" {
-		t.Fatalf("镜像地址异常变更: %q", npmMirrorRegistry)
+	// 关闭镜像 → 用源仓库（官方源）
+	setMarketSettings(map[string]any{"useMirror": false})
+	if got := npmRegistryBase(); got != "https://registry.npmjs.org" {
+		t.Fatalf("关闭镜像后 registry = %q，期望官方源", got)
 	}
+	// 自定义镜像地址 → 立即生效（尾斜杠归一）
+	setMarketSettings(map[string]any{"useMirror": true, "mirror": "https://npm.example.com/"})
+	if got := npmRegistryBase(); got != "https://npm.example.com" {
+		t.Fatalf("自定义镜像 registry = %q，期望 https://npm.example.com", got)
+	}
+	// 镜像留空 → 回退源仓库（单项空不致失效）
+	setMarketSettings(map[string]any{"useMirror": true, "mirror": "   "})
+	if got := npmRegistryBase(); got != "https://registry.npmjs.org" {
+		t.Fatalf("镜像为空应回退源仓库，实际 %q", got)
+	}
+	// 显式注入优先于配置
+	npmRegistryBaseOverride = "http://127.0.0.1:4873"
+	if got := npmRegistryBase(); got != "http://127.0.0.1:4873" {
+		t.Fatalf("注入值应优先，实际 %q", got)
+	}
+	// 无配置且无默认（插件未装载）→ 空串：调用方给「去设置里配」提示，不静默退回某源
+	npmRegistryBaseOverride = ""
+	core.PluginSettingSchemas = nil
+	core.Settings = core.Default()
+	if got := npmRegistryBase(); got != "" {
+		t.Fatalf("无配置时应返回空串（提示去设置），实际 %q", got)
+	}
+}
+
+// setMarketSettings 覆盖「插件市场」配置段（测试辅助）。
+func setMarketSettings(cfg map[string]any) {
+	if core.Settings.PluginSettings == nil {
+		core.Settings.PluginSettings = map[string]map[string]any{}
+	}
+	core.Settings.PluginSettings["marketplace"] = cfg
 }
 
 // TestNPMTimeoutsRaised ★ 2026-09-25：市场装包的超时下限（总超时/TLS/响应头），
@@ -224,14 +275,16 @@ func TestNPMTimeoutsRaised(t *testing.T) {
 // TestNPMMirrorTarballRewrite 官方源 tarball 地址在非官方 base 下被改写
 // （防「元数据残留官方地址 → 静默退回慢源」）。
 func TestNPMMirrorTarballRewrite(t *testing.T) {
-	old := npmRegistryBase
-	defer func() { npmRegistryBase = old }()
+	old := npmRegistryBaseOverride
+	defer func() { npmRegistryBaseOverride = old }()
 
+	// 镜像地址由测试自备（内核不再内置任何源地址）
+	const mirrorBase = "https://registry.npmmirror.com"
 	const officialTarball = "https://registry.npmjs.org/@paircode/tool-model/-/tool-model-1.2.3.tgz"
 
 	// ① 镜像 base：官方地址 → 镜像地址
-	npmRegistryBase = npmMirrorRegistry
-	want := npmMirrorRegistry + "/@paircode/tool-model/-/tool-model-1.2.3.tgz"
+	npmRegistryBaseOverride = mirrorBase
+	want := mirrorBase + "/@paircode/tool-model/-/tool-model-1.2.3.tgz"
 	if got := npmMirrorTarball(officialTarball); got != want {
 		t.Fatalf("改写结果 = %q，期望 %q", got, want)
 	}
@@ -240,16 +293,16 @@ func TestNPMMirrorTarballRewrite(t *testing.T) {
 		t.Fatalf("镜像地址被误改: %q", got)
 	}
 	// ③ 自定义 registry：非官方地址原样、官方地址对齐到该 base
-	npmRegistryBase = "http://127.0.0.1:4873"
+	npmRegistryBaseOverride = "http://127.0.0.1:4873"
 	local := "http://127.0.0.1:4873/pkg/-/pkg-1.0.0.tgz"
 	if got := npmMirrorTarball(local); got != local {
 		t.Fatalf("本地源地址被误改: %q", got)
 	}
-	if got := npmMirrorTarball(officialTarball); got != npmRegistryBase+"/@paircode/tool-model/-/tool-model-1.2.3.tgz" {
+	if got := npmMirrorTarball(officialTarball); got != npmRegistryBaseOverride+"/@paircode/tool-model/-/tool-model-1.2.3.tgz" {
 		t.Fatalf("自定义源下官方地址未对齐: %q", got)
 	}
 	// ④ base 就是官方源 → 原样
-	npmRegistryBase = npmOfficialRegistry
+	npmRegistryBaseOverride = npmOfficialRegistry
 	if got := npmMirrorTarball(officialTarball); got != officialTarball {
 		t.Fatalf("官方源 base 下不应改写: %q", got)
 	}

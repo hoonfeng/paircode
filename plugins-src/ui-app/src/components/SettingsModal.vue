@@ -376,6 +376,12 @@ const saveSettings = async () => {
       base = (latest && latest.settings) || {}
     } catch {}
     const top = { ...base }
+    // ★ 2026-09-25 修复：base 是完整 settings 快照，内含 pluginSettings **旧值**——若随
+    //   settings 一起提交，旧内核（handleSettings 展开 settings 段时）会用这份旧值覆盖请求体
+    //   顶层的 pluginSettings（本次真正的新值），插件设置于是永远保存不上（实测现象：设置里
+    //   打开某插件开关点保存，settings.json 里始终不出现该插件段）。插件段只走
+    //   pluginSettings 通道，settings 里不再冗余携带。
+    delete top.pluginSettings
     const pluginOut = { ...((base.pluginSettings) || {}) }
     let themeChanged = false
     for (const s of (state.pluginSchemas || [])) {
