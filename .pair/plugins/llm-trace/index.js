@@ -36,8 +36,33 @@ return {
 
     const fs = ctx.fs;
     const log = ctx.logger('llm-trace');
-    // 启动时确保目录存在（appendFile 不会自动建目录）
-    fs.mkdir(dir, true);
+    // ★ 目录确保**延迟**到首次写入（见 ensureDir）：无工作区 / 未绑定会话时
+    //   ctx.fs 无法解析相对路径（GoError: 工作区根为空），此前在 apply 里直接
+    //   fs.mkdir 会**抛出并中断整个插件装载** —— 每次启动日志出现
+    //   「llm-trace 装载失败」，该插件的 LLM 追踪能力全程缺失。
+    //   改为降级：apply 阶段不再触碰 fs（注册照常完成），目录在工作区就绪后的
+    //   首次写入时创建；届时仍失败则只在写入路径记错，不影响插件装载。
+    let dirReady = false;
+    function ensureDir() {
+      if (dirReady) {
+        return true;
+      }
+      try {
+        fs.mkdir(dir, true);
+        dirReady = true;
+      } catch (e) {
+        // 无工作区/未绑定会话：保持未就绪，下次写入再试（不抛出、不中断装载）
+        return false;
+      }
+      return true;
+    }
+    // 尽力而为：有工作区时启动即建目录（失败静默，交给 ensureDir 重试）。
+    try {
+      fs.mkdir(dir, true);
+      dirReady = true;
+    } catch (e) {
+      log.info('[llm-trace] 暂无可解析的工作区，目录将在首次写入时创建: ' + dir);
+    }
 
     // 当前写入文件路径（按天 + 超限序号轮转）
     let curPath = null;
@@ -72,6 +97,10 @@ return {
 
     function appendLine(obj) {
       try {
+        if (!ensureDir()) {
+          // 尚无工作区：跳过本次写入（会话/工作区就绪后自动恢复）
+          return;
+        }
         const line = JSON.stringify(obj);
         const p = nextPath();
         fs.appendFile(p, line + '\n');
