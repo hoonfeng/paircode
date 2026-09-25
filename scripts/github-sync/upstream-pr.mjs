@@ -19,6 +19,8 @@
 //   - --dry-run 模式不执行任何写操作：commit / push / POST 创建全部跳过；
 //     仅保留只读操作（本地 git status/log/rev-parse 与 GitHub GET 查询）
 //   - 全部文件为 UTF-8；token 只从本地文件或环境变量读取，任何情况下不打印 token 值
+//   - 本机定制排除：.pair/plugins/source-update 与 scripts/source-update（源码更新机制）
+//     属本机专属，提交前自动从暂存区撤出，不随 PR 外发（见 PR_EXCLUDES）
 //   - 错误处理：git 失败、网络失败、缺 token、origin 配置错误均给出明确提示并以非零码退出
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,6 +35,10 @@ const UPSTREAM = 'hoonfeng/paircode'; // PR 目标仓库（上游）
 const FORK_OWNER = 'xh290';           // 源仓库（fork）owner
 const FORK_REPO = 'xh290/paircode';   // 源仓库（fork）全名
 const BRANCH = 'master';
+
+// 本机定制（不上行）：提交前从暂存区撤出，避免随 PR 外发。
+// 说明见技能 paircode-source-update：该更新机制与插件仅适用于本机环境。
+const PR_EXCLUDES = ['.pair/plugins/source-update', 'scripts/source-update'];
 
 // ── 参数解析（argv 数组，无 shell 参与）──
 const argv = process.argv.slice(2);
@@ -197,9 +203,21 @@ async function main() {
     if (!MESSAGE) die('存在未提交改动。请加 --message "提交消息"（或先手动 git commit）');
     if (String(MESSAGE).startsWith('-')) die('--message 不能以 - 开头（避免被误解析为 git 选项）');
     log(`  - 提交消息: ${MESSAGE}`);
-    if (DRY) { willCommit = true; log('  - [dry-run] 将执行: git add -A && git commit -m <消息>'); }
-    else {
-      try { git('add', '-A'); git('commit', '-m', String(MESSAGE)); log('  - 已提交 [ok]'); }
+    if (DRY) {
+      willCommit = true;
+      log('  - [dry-run] 将执行: git add -A（排除本机定制: ' + PR_EXCLUDES.join('、') + '）&& git commit -m <消息>');
+    } else {
+      try {
+        git('add', '-A');
+        for (const p of PR_EXCLUDES) { try { git('reset', '-q', '--', p); } catch { /* 该路径无改动时忽略 */ } }
+        const staged = gitOk('diff', '--cached', '--name-only');
+        if (!staged.ok || !String(staged.out).trim()) {
+          log('  - 暂存区为空（改动均为本机定制排除项），跳过提交');
+        } else {
+          git('commit', '-m', String(MESSAGE));
+          log('  - 已提交 [ok]（已排除本机定制 ' + PR_EXCLUDES.length + ' 处）');
+        }
+      }
       catch (e) { die('提交失败：' + (e.stderr || e.message)); }
     }
   } else {
