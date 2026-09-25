@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // TestNPMPluginDiskName 验证 npm 包名 → 磁盘插件包目录名的转换：
@@ -87,4 +89,69 @@ func TestNPMPluginInstalledDiskPackage(t *testing.T) {
 		t.Fatal("npmPluginInstalled 应识别磁盘插件包（已安装）")
 	}
 	_ = host
+}
+
+// TestUninstallNPMPluginDeletesDiskPackageWithoutWorkspace 回归锁定「未打开工作区」卸载删盘：
+// 该场景下 core.Root() 为空（npmPluginProjectRoot() 也为空），而磁盘插件包目录取
+// globalPluginsDir()（= <InstallDir>/.pair/plugins，与工作区无关，安装侧同源）。
+// 修复前「删除插件包目录」被包在 projectRoot != "" 分支内 → 卸载静默跳过删盘却返回成功，
+// 目录残留、重启后被重新装配（前端显示「已卸载」但插件仍在）。
+func TestUninstallNPMPluginDeletesDiskPackageWithoutWorkspace(t *testing.T) {
+	savedFolders := core.Folders
+	core.Folders = nil
+	t.Cleanup(func() { core.Folders = savedFolders })
+	if ph := GetGlobalPluginHost(); ph != nil && ph.Context() != nil {
+		savedRoot := ph.Context().WorkspaceRoot
+		ph.Context().WorkspaceRoot = ""
+		t.Cleanup(func() { ph.Context().WorkspaceRoot = savedRoot })
+	}
+	if root := npmPluginProjectRoot(); root != "" {
+		t.Skipf("测试环境仍存在工作区根 %q，本用例专测无工作区路径", root)
+	}
+
+	name := "test-npm-nofs-uninstall"
+	dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(name))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+		if entries, err := os.ReadDir(globalPluginsDir()); err == nil && len(entries) == 0 {
+			_ = os.RemoveAll(globalPluginsDir())
+		}
+	})
+	_ = os.RemoveAll(dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("建插件包目录: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"`+name+`","version":"0.0.1"}`), 0o644); err != nil {
+		t.Fatalf("写 package.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte("return { name: '"+name+"', apply() {} }\n"), 0o644); err != nil {
+		t.Fatalf("写 index.js: %v", err)
+	}
+
+	if err := uninstallNPMPlugin(name); err != nil {
+		t.Fatalf("uninstallNPMPlugin(%s) 返回错误: %v", name, err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("卸载后磁盘插件包目录仍存在（stat err=%v）—— 无工作区卸载未真正删盘", err)
+	}
+}
+
+// TestUninstallNPMPluginMissingReturnsError 锁定「未安装 → 明确报错」：
+// 无工作区时旧实现会静默成功（假成功），修复后应返回「未找到插件」错误，
+// 以免市场面板把未装的条目误报为卸载成功。
+func TestUninstallNPMPluginMissingReturnsError(t *testing.T) {
+	savedFolders := core.Folders
+	core.Folders = nil
+	t.Cleanup(func() { core.Folders = savedFolders })
+
+	name := "test-npm-not-installed-" + "zzz"
+	dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(name))
+	_ = os.RemoveAll(dir)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	err := uninstallNPMPlugin(name)
+	if err == nil {
+		t.Fatalf("卸载未安装插件应返回错误，实际返回 nil（假成功）")
+	}
+	t.Logf("未安装卸载返回错误（预期）: %v", err)
 }

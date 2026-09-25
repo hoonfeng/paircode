@@ -5,10 +5,12 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestNPMPluginPatch append/remove 幂等性。
@@ -183,5 +185,76 @@ func extractTarGzForTest(tgzPath, dst string) error {
 			}
 			out.Close()
 		}
+	}
+}
+
+// TestNPMRegistryDefaultsToMirror ★ 2026-09-25：默认源必须是 npmmirror 镜像
+// （官方源国内直连极慢 ≈3KB/s，市场安装在旧的 30s 超时内必然失败）；
+// 环境变量覆盖时不校验默认值。
+func TestNPMRegistryDefaultsToMirror(t *testing.T) {
+	if v := os.Getenv("PAIRCODE_NPM_REGISTRY"); v != "" {
+		t.Skipf("PAIRCODE_NPM_REGISTRY 已覆盖为 %s，跳过默认值断言", v)
+	}
+	if npmRegistryBase != npmMirrorRegistry {
+		t.Fatalf("默认 registry = %q，期望镜像 %q", npmRegistryBase, npmMirrorRegistry)
+	}
+	if npmMirrorRegistry != "https://registry.npmmirror.com" {
+		t.Fatalf("镜像地址异常变更: %q", npmMirrorRegistry)
+	}
+}
+
+// TestNPMTimeoutsRaised ★ 2026-09-25：市场装包的超时下限（总超时/TLS/响应头），
+// 防有人把 30s 的卡点改回去。
+func TestNPMTimeoutsRaised(t *testing.T) {
+	if npmFetchTimeout < 300*time.Second {
+		t.Fatalf("npmFetchTimeout = %v，应 >= 300s", npmFetchTimeout)
+	}
+	tr, ok := npmHTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("npmHTTPClient.Transport 类型异常: %T", npmHTTPClient.Transport)
+	}
+	if tr.TLSHandshakeTimeout < 60*time.Second {
+		t.Fatalf("TLSHandshakeTimeout = %v，应 >= 60s", tr.TLSHandshakeTimeout)
+	}
+	if tr.ResponseHeaderTimeout < 120*time.Second {
+		t.Fatalf("ResponseHeaderTimeout = %v，应 >= 120s", tr.ResponseHeaderTimeout)
+	}
+}
+
+// TestNPMMirrorTarballRewrite 官方源 tarball 地址在非官方 base 下被改写
+// （防「元数据残留官方地址 → 静默退回慢源」）。
+func TestNPMMirrorTarballRewrite(t *testing.T) {
+	old := npmRegistryBase
+	defer func() { npmRegistryBase = old }()
+
+	const officialTarball = "https://registry.npmjs.org/@paircode/tool-model/-/tool-model-1.2.3.tgz"
+
+	// ① 镜像 base：官方地址 → 镜像地址
+	npmRegistryBase = npmMirrorRegistry
+	want := npmMirrorRegistry + "/@paircode/tool-model/-/tool-model-1.2.3.tgz"
+	if got := npmMirrorTarball(officialTarball); got != want {
+		t.Fatalf("改写结果 = %q，期望 %q", got, want)
+	}
+	// ② 已是镜像地址 → 原样（幂等）
+	if got := npmMirrorTarball(want); got != want {
+		t.Fatalf("镜像地址被误改: %q", got)
+	}
+	// ③ 自定义 registry：非官方地址原样、官方地址对齐到该 base
+	npmRegistryBase = "http://127.0.0.1:4873"
+	local := "http://127.0.0.1:4873/pkg/-/pkg-1.0.0.tgz"
+	if got := npmMirrorTarball(local); got != local {
+		t.Fatalf("本地源地址被误改: %q", got)
+	}
+	if got := npmMirrorTarball(officialTarball); got != npmRegistryBase+"/@paircode/tool-model/-/tool-model-1.2.3.tgz" {
+		t.Fatalf("自定义源下官方地址未对齐: %q", got)
+	}
+	// ④ base 就是官方源 → 原样
+	npmRegistryBase = npmOfficialRegistry
+	if got := npmMirrorTarball(officialTarball); got != officialTarball {
+		t.Fatalf("官方源 base 下不应改写: %q", got)
+	}
+	// ⑤ 空串 → 空串
+	if got := npmMirrorTarball(""); got != "" {
+		t.Fatalf("空串应原样返回: %q", got)
 	}
 }
