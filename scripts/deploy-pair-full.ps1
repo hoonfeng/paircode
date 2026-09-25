@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 # PairCode deploy: replace backend exe + sync UI artifacts to D:\PairCode
 # Atomic: precheck -> backup -> stop -> write -> verify -> restart -> self-check
 # On failure: automatic rollback to backup and restart of the old build.
@@ -188,14 +188,43 @@ if ($StatsUrl) {
 
 $shellOk = 'skipped'
 if ($ExpectShell) {
+    # NOTE (2026-09-25): was "$home = Invoke-WebRequest ..." -- $home is a
+    # READ-ONLY automatic variable in Windows PowerShell 5.1, so the assignment
+    # threw and the empty catch swallowed it -> this check always logged
+    # "False". Renamed to $page and added retries (first request right after
+    # restart may race the service warm-up).
     $shellOk = $false
-    try {
-        $home = Invoke-WebRequest -Uri $HomeUrl -TimeoutSec 8 -UseBasicParsing
-        if ($home.Content -match [regex]::Escape($ExpectShell)) { $shellOk = $true }
-    } catch { }
+    for ($i = 1; $i -le 3; $i++) {
+        try {
+            $page = Invoke-WebRequest -Uri $HomeUrl -TimeoutSec 8 -UseBasicParsing
+            if ($page.Content -match [regex]::Escape($ExpectShell)) { $shellOk = $true; break }
+        } catch { }
+        if ($i -lt 3) { Start-Sleep -Seconds 2 }
+    }
     Log ('front page references ' + $ExpectShell + ': ' + $shellOk)
 } else {
     Log 'front-page shell check skipped (no -ExpectShell given)'
+}
+
+# Archive obsolete shell bundles: keep only the index-*.js that this deploy
+# just wrote (older ones accumulate after every UI rebuild). Moved to the run
+# root (NOT BackupRoot -- BackupRoot is replayed verbatim by Rollback).
+$shellNames = @()
+foreach ($it in $items) { if ($it.dst -match '\\assets\\index-[^\\]+\.js$') { $shellNames += (Split-Path $it.dst -Leaf) } }
+if ($shellNames.Count -gt 0) {
+    $webAssetsDir = Join-Path $InstallDir '.pair\assets\runtime\web\assets'
+    if (Test-Path $webAssetsDir) {
+        $obsoleteDir = Join-Path $Root 'obsolete-shell'
+        $moved = 0
+        foreach ($f in (Get-ChildItem -Path $webAssetsDir -Filter 'index-*.js' -ErrorAction SilentlyContinue)) {
+            if ($shellNames -notcontains $f.Name) {
+                New-Item -ItemType Directory -Force -Path $obsoleteDir | Out-Null
+                Move-Item $f.FullName (Join-Path $obsoleteDir $f.Name) -Force
+                $moved++
+            }
+        }
+        if ($moved -gt 0) { Log ('obsolete shell bundles archived: ' + $moved + ' -> ' + $obsoleteDir) }
+    }
 }
 
 Log '================ deploy DONE ================'
