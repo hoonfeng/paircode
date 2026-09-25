@@ -431,6 +431,14 @@ function marketUpdate(item) {
 // updLoadedAt 更新对照数据的加载时间（60s 内复用，避免市场搜索/切 tab 反复查 registry）
 let updLoadedAt = 0
 
+// ★ 2026-09-25 市场网络请求超时：前端全局默认 30s 对 npm 拉包远远不够
+//   （实测官方源 5.78MB 包 ≈3KB/s，30s 只能下 ~100KB → 必然「请求超时(30s)」；
+//   镜像虽快，冷门包回源 + 大包仍可能超 30s）。
+//   安装/更新 = 下载 + 装载，耗时不可预估 → 不限时（timeout 0，语义同 /plugins/invoke：
+//   执行时长由宿主自控，内核侧已有 300s 网络超时兜底）；
+//   搜索/刷新/检查更新有明确上限 → 给 3 分钟宽松值。
+const MARKET_LONG_TIMEOUT = 180000
+
 // ensureUpdates 静默确保更新对照已加载（市场列表与已安装页共用同一份数据）。
 async function ensureUpdates() {
   if (updates.value.length && Date.now() - updLoadedAt < 60000) return
@@ -440,7 +448,7 @@ async function ensureUpdates() {
 async function checkUpdates(silent) {
   checkingUpd.value = true
   try {
-    const r = await api.apiGet('/marketplace/check-update')
+    const r = await api.apiGet('/marketplace/check-update', {}, { timeout: MARKET_LONG_TIMEOUT })
     // ★ ok() 直接序列化数组（body 即数组），非 {ok,data} 包装
     updates.value = Array.isArray(r) ? r : ((r && r.data) || [])
     updLoadedAt = Date.now()
@@ -464,7 +472,7 @@ async function updatePlugin(item) {
   if (!u) return
   if (!confirm(`更新「${item.name}」到 v${u.latest}？\n将卸载旧版本（v${u.current}）并重新安装最新版。`)) return
   try {
-    const r = await api.apiPost('/marketplace/update', { pkg: u.pkg })
+    const r = await api.apiPost('/marketplace/update', { pkg: u.pkg }, {}, { timeout: 0 })
     window.$toast?.(r.message || r.data?.message || `「${item.name}」已更新`, 'success')
     await Promise.all([loadInstalled(), checkUpdates(true)])
   } catch (err) {
@@ -611,7 +619,7 @@ async function doSearch() {
     const results = await api.apiGet('/marketplace/search', {
       q: query.value,
       kind: kind,
-    })
+    }, { timeout: MARKET_LONG_TIMEOUT })
     items.value = results || []
     // ★ 静默拉取版本对照（不阻塞搜索渲染）：市场条目据此显示「已装 vX · 有更新」
     ensureUpdates()
@@ -627,7 +635,7 @@ async function refreshRemote() {
   refreshing.value = true
   error.value = ''
   try {
-    const result = await api.apiPost('/marketplace/refresh', {})
+    const result = await api.apiPost('/marketplace/refresh', {}, {}, { timeout: MARKET_LONG_TIMEOUT })
     refreshTip.value = result.status || '已刷新'
     window.$toast?.(result.message || '远程市场已刷新', 'success')
     await doSearch()
@@ -658,7 +666,8 @@ async function installItem(item, scope) {
     } else if (item.kind === 'plugin') {
       body.scope = 'project' // 插件/工具集默认装到工作区（npm 插件 → .pair/plugins/<name>/ 插件包目录）
     }
-    const result = await api.apiPost('/marketplace/install', body)
+    // 不限时：npm 装包可能数分钟（下载 tarball + 编译装载），由内核 300s 网络超时兜底
+    const result = await api.apiPost('/marketplace/install', body, {}, { timeout: 0 })
     item.installed = true
     window.$toast?.(result.message || '安装成功', 'success')
   } catch (err) {

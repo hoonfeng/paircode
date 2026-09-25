@@ -25,7 +25,9 @@ return {
 
     // ── 搜索实现（ctx.web.fetch，同步返回 {ok, status, text}）──
     // registry 可覆盖（本地市场/私有 registry 测试）：PAIRCODE_NPM_REGISTRY=http://127.0.0.1:4873
-    const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmjs.org'
+    // ★ 2026-09-25：默认源改 npmmirror 镜像（与内核 npm_plugin.go 的 npmMirrorRegistry 对齐）。
+    //   官方源在国内直连极慢（搜索请求经常 >30s 无响应 → 市场面板空列表/超时）。
+    const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmmirror.com'
     const NPM_SEARCH = REG + '/-/v1/search?text='
     const MAX = 20
     const shortName = (n) => { const p = String(n).split('/'); return p.length > 1 ? p[1] : p[0] }

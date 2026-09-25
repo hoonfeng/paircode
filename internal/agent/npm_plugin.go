@@ -27,26 +27,52 @@ import (
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
+// npmOfficialRegistry npm 官方源（仅用于「tarball 域名对齐」判断，不作默认源）。
+const npmOfficialRegistry = "https://registry.npmjs.org"
+
+// npmMirrorRegistry 默认 registry = npmmirror 镜像。
+// ★ 2026-09-25：此前默认官方源，国内直连极慢（实测 5.78MB 包 ≈3KB/s，
+// 90s 只下 274KB，市场「安装」在前端 30s 超时内必然失败）；镜像同包 1.6s 下完。
+const npmMirrorRegistry = "https://registry.npmmirror.com"
+
 // npmRegistryBase npm registry 地址（测试可替换为 httptest server；
 // 运行时可用环境变量 PAIRCODE_NPM_REGISTRY 覆盖——本地市场/私有 registry）。
 var npmRegistryBase = func() string {
 	if v := os.Getenv("PAIRCODE_NPM_REGISTRY"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return "https://registry.npmjs.org"
+	return npmMirrorRegistry
 }()
 
-// npmFetchTimeout npm 拉取超时（下载 tarball 可能较慢）。
-var npmFetchTimeout = 120 * time.Second
+// npmFetchTimeout npm 拉取超时（下载 tarball 可能较慢：冷门包经镜像回源仍然慢，
+// 大包如 @paircode/tool-model 体积数 MB）。★ 2026-09-25：120s → 300s，
+// 避免慢网络下「下载一半被掐断」被误判为包不可用。
+var npmFetchTimeout = 300 * time.Second
 
 // npmHTTPClient 共享客户端：放宽 TLS 握手超时（慢网络下 Go 默认 10s 不够）。
+// ★ 2026-09-25：TLS 30→60s、响应头 30→120s（原 30s 是「市场装包必失败」的
+//   实际卡点：镜像回源冷包首字节可能 >30s，总超时 120s 根本来不及生效）。
 var npmHTTPClient = &http.Client{
 	Timeout: npmFetchTimeout,
 	Transport: &http.Transport{
-		TLSHandshakeTimeout:   30 * time.Second,
-		ResponseHeaderTimeout: 30 * time.Second,
+		TLSHandshakeTimeout:   60 * time.Second,
+		ResponseHeaderTimeout: 120 * time.Second,
 		MaxIdleConns:          4,
 	},
+}
+
+// npmMirrorTarball 把 registry 返回的 tarball 地址对齐到当前 registry base：
+// 旧版本写入的安装元数据 / 缓存 / 镜像未改写的响应里可能残留官方源地址，
+// 直接下载会静默退回慢源 —— 统一把 registry.npmjs.org 前缀改写成当前 base。
+// （当前 base 就是官方源、或本就是当前 base 的地址 → 原样返回。）
+func npmMirrorTarball(tarball string) string {
+	if tarball == "" || npmRegistryBase == npmOfficialRegistry {
+		return tarball
+	}
+	if strings.HasPrefix(tarball, npmOfficialRegistry+"/") {
+		return npmRegistryBase + strings.TrimPrefix(tarball, npmOfficialRegistry)
+	}
+	return tarball
 }
 
 // npmHTTPGet 带一次重试的 GET（npm registry 偶发 TLS/网络抖动）。
@@ -122,7 +148,7 @@ func fetchNPMInfoChecked(pkg string) (*npmPackageInfo, bool, error) {
 //
 // 调用方负责 os.RemoveAll(dir)。
 func fetchNPMPackage(info *npmPackageInfo) (dir string, manifest map[string]any, err error) {
-	resp, err := npmHTTPGet(info.Dist.Tarball)
+	resp, err := npmHTTPGet(npmMirrorTarball(info.Dist.Tarball))
 	if err != nil {
 		return "", nil, fmt.Errorf("下载 tarball 失败: %v", err)
 	}
