@@ -580,6 +580,7 @@ func copyPluginExtras(srcDir, dstDir string) error {
 func uninstallNPMPlugin(pkg string) error {
 	projectRoot := npmPluginProjectRoot()
 	var runtime string
+	removedPatch := false
 	if projectRoot != "" {
 		patchPath := filepath.Join(projectRoot, ".pair", "cordis.patch.json")
 		doc, err := readCordisPatch(patchPath)
@@ -597,19 +598,23 @@ func uninstallNPMPlugin(pkg string) error {
 		if err != nil {
 			return err
 		}
-		// 不在 patch（新安装走磁盘插件包）→ 删除插件包目录
-		if !removed {
-			dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
-			if _, serr := os.Stat(filepath.Join(dir, "package.json")); serr == nil {
-				if err := removeGlobalPluginPackage(dir); err != nil {
-					return fmt.Errorf("删除插件包目录失败: %w", err)
-				}
-			} else if !os.IsNotExist(serr) {
-				return fmt.Errorf("检查插件包目录失败: %w", serr)
-			} else {
-				// 磁盘插件包也不存在 → 未安装
-				return fmt.Errorf("未找到插件 %s（无 .pair/plugins/%s/，也不在 cordis.patch.json）", pkg, npmPluginDiskName(pkg))
+		removedPatch = removed
+	}
+	// 不在 patch（新安装走磁盘插件包）→ 删除插件包目录。
+	// ★ 磁盘包目录与工作区无关（安装侧 base 同为 globalPluginsDir = <InstallDir>/.pair/plugins）：
+	//   未打开工作区时 npmPluginProjectRoot() 为 ""（core.Root() 空），若把本段留在上面的分支内，
+	//   卸载会静默跳过磁盘删除却仍报成功 → 目录残留、重启后被重新装配。故本段必须独立于工作区判断。
+	if !removedPatch {
+		dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
+		if _, serr := os.Stat(filepath.Join(dir, "package.json")); serr == nil {
+			if err := removeGlobalPluginPackage(dir); err != nil {
+				return fmt.Errorf("删除插件包目录失败: %w", err)
 			}
+		} else if !os.IsNotExist(serr) {
+			return fmt.Errorf("检查插件包目录失败: %w", serr)
+		} else {
+			// 磁盘插件包也不存在 → 未安装
+			return fmt.Errorf("未找到插件 %s（无 .pair/plugins/%s/，也不在 cordis.patch.json）", pkg, npmPluginDiskName(pkg))
 		}
 	}
 	if runtime == "node" || runtime == "dsh" {
