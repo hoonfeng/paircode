@@ -36,6 +36,8 @@
 // 之前、段边界在 Run 之外，插件无从自主介入）：
 //   · onUserTurn  用户输入（新提交对话 / 点继续执行）—— 带判官（任务关系可能变化）
 //   · onSegment   段续跑边界（同一条消息内的分段，Run 之间）—— judge=null
+//   · onAutoTurn  自主续轮边界（监督续轮 / goal 续轮）—— judge=null，**强制折叠**
+//                 （args.force=true、args.keep=保留段深度）：续轮每轮上下文有界
 //
 // ★ 铁律：整理只替换「喂 LLM 的历史视图」，落盘/展示始终为完整时间线；
 //   一次 Run 的 step 之间不整理（轮内前缀 append-only —— 缓存命中率的前提）。
@@ -85,7 +87,9 @@ function hAnchorIndex(U, hist, rec, T) {
     return true;
   };
   if (rec.msgCount > 0) {
-    let idx = rec.msgCount - U.keepForRelevance(rec.relevance);
+    // 记录值优先（自主续轮强制折叠时用固定 keep —— 与 Go handoffKeepOf 同口径）
+    const keepN = (rec.keep > 0) ? rec.keep : U.keepForRelevance(rec.relevance);
+    let idx = rec.msgCount - keepN;
     if (idx > hist.length) idx = hist.length;
     while (idx > 0 && idx < hist.length && hist[idx] && hist[idx].role === 'tool') idx--;
     if (matchAt(idx)) return idx;
@@ -102,8 +106,9 @@ function hIncrement(U, history, rec, T) {
   if (!rec || !rec.anchor) return hist;
   const i = hAnchorIndex(U, hist, rec, T);
   if (i >= 0) return hist.slice(i);
-  let keep = T.keepRecent;
-  if (rec.relevance) keep = U.keepForRelevance(rec.relevance);
+  // 记录值优先（rec.keep）→ 相关性档位 → 默认保留条数（与 Go handoffKeepOf 同口径）
+  let keep = (rec && rec.keep > 0) ? rec.keep : T.keepRecent;
+  if (rec && !(rec.keep > 0) && rec.relevance) keep = U.keepForRelevance(rec.relevance);
   return hist.length > keep ? hist.slice(hist.length - keep) : hist;
 }
 
@@ -241,13 +246,19 @@ function hJudge(U, args, rec, task, T) {
 
 // hBuildView 主流程（等价 Go BuildHandoffView）：判断 →（生成 / 复用）→ 组装视图。
 // 返回 view 数组（启用整理）或 null（未达阈值 / 未启用 / 存储不支持）。
-function hBuildView(U, args, log) {
+// opts（可选）：{ force: true 跳过触发阈值（自主续轮强制折叠）, keep: N 固定保留段深度 }
+function hBuildView(U, args, log, opts) {
+  const O = opts || {};
+  const keepOverride = (O.keep > 0) ? O.keep : 0;
   const T = U.thresholds(args.maxContextTokens);
   const convID = args.convID || '';
   const history = args.history || [];
   const store = args.store;
   if (!U.enabled || !convID || !store || !history.length) return null;
-  if (!hShouldHandoff(U, history, args.maxContextTokens, T).ok) return null;
+  // ★ 自主续轮边界（autoTurn）：force 时跳过触发阈值——续轮膨胀来自「轮数 × 每轮工具输出」，
+  //   等阈值（30% 窗口 / 24K tokens / 100 条）时会已付出多轮全量 prompt 的代价。
+  //   其余边界（用户输入 / 段续跑）仍按阈值：未达阈值逐字节原样，缓存零影响。
+  if (!O.force && !hShouldHandoff(U, history, args.maxContextTokens, T).ok) return null;
   if (typeof store.loadRecord !== 'function') return null; // 存储不支持交接记录 → 不启用
 
   const prev = store.loadRecord();
@@ -273,6 +284,19 @@ function hBuildView(U, args, log) {
       }
       if (!forceRefresh) {
         rec = prev;
+        // ★ 自主续轮强制折叠：把复用记录的保留段深度收敛到 keepOverride（不重调 LLM，
+        //   只按新深度重算锚点/条数/基线）——否则用户输入边界生成的旧记录（keep=16）
+        //   会让后续每轮续跑视图一直保留 16 条原文（与 Go buildHandoffView 同逻辑）。
+        if (keepOverride && rec.keep !== keepOverride) {
+          rec = Object.assign({}, rec, {
+            keep: keepOverride,
+            anchor: hAnchorAt(U, history, keepOverride, T),
+            msgCount: (U.stripSystem(history) || []).length,
+          });
+          rec.keptTokens = U.estimateTokens(hIncrement(U, history, rec, T));
+          store.saveRecord(rec);
+          log('会话交接：保留段深度归一 → ' + keepOverride + ' 条（自主续轮强制折叠）');
+        }
         const histArr = U.stripSystem(history) || [];
         const histN = histArr.length;
         const idx = hAnchorIndex(U, histArr, rec, T);
@@ -298,12 +322,14 @@ function hBuildView(U, args, log) {
     const text = hBuildText(U, args, prev, history, args.task, T, log);
     if (!rel) rel = U.parseRelevance(text);
     if (!rel) rel = T.relHigh; // 解析失败 → 保守按高（不缩保留段）
+    const keep = keepOverride || U.keepForRelevance(rel);
     rec = {
       text: text,
       createdAt: new Date().toISOString(),
-      anchor: hAnchorAt(U, history, U.keepForRelevance(rel), T),
+      anchor: hAnchorAt(U, history, keep, T),
       msgCount: (U.stripSystem(history) || []).length,
       relevance: rel,
+      keep: keep,
       keptTokens: 0,
     };
     rec.keptTokens = U.estimateTokens(hIncrement(U, history, rec, T));
@@ -1104,8 +1130,18 @@ return {
             const view = hBuildView(handoffUtils, args, hlog);
             return view ? { view, applied: true } : { applied: false };
           },
+          // ★ 自主续轮边界（监督续轮 / goal 续轮，2026-09-27）：宿主传 force=true + keep
+          //   ——每轮续跑前把累计历史折叠为「交接提交消息 + 最近 keep 条原文」，
+          //   续轮上下文有界（此前 loop.Run(nil) 每轮携带全量时间线）。
+          onAutoTurn: async (args) => {
+            const view = hBuildView(handoffUtils, args, hlog, {
+              force: args.force !== false,
+              keep: args.keep,
+            });
+            return view ? { view, applied: true } : { applied: false };
+          },
         });
-        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
+        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界 / 自主续轮强制折叠；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
       } else {
         log.warn('ctx.handoff 能力不可用（宿主版本过旧？）——跳过会话交接注册，宿主走 Go 默认实现');
       }

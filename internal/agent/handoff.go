@@ -115,6 +115,11 @@ const (
 	// （视图漏段/前缀漂移）——连续多条指纹同时相同的概率可忽略，
 	// 定位跨轮稳定（KV 前缀稳定的前提）。
 	handoffAnchorSeq = 3
+	// handoffAutoTurnKeepDefault 自主续轮边界**强制折叠**的保留段深度（默认保留最近原文条数）。
+	// 与相关性档位（16/8/4）不同：续轮要的是「每轮上下文有界」，取更小值。
+	handoffAutoTurnKeepDefault = 6
+	// handoffAutoTurnKeepMax 保留段深度上限（PAIR_HANDOFF_AUTO_KEEP 误配保护）。
+	handoffAutoTurnKeepMax = 64
 )
 
 // HandoffRecord 会话交接记录（持久化于 {conv}.handoff.json）。
@@ -139,6 +144,11 @@ type HandoffRecord struct {
 	// RelCheckedInc 上次判官复检时的增量 tokens（相对 KeptTokens 基线）——
 	// 自复检以来的新增量再达 handoffRecheckTokens 才复检下一次（防每轮调用）。
 	RelCheckedInc int `json:"relCheckedInc,omitempty"`
+	// Keep 生成本交接时的保留段深度（视图保留的最近原文条数）。
+	// 自主续轮边界（HandoffAutoTurnView）用固定 Keep 而非相关性档位——
+	// 记录它以便 handoffAnchorIndex 精确复原基点（跨轮稳定）；
+	// 0 = 未记录（旧记录）→ 回退 keepForRelevance(Relevance)。
+	Keep int `json:"keep,omitempty"`
 }
 
 // handoffStore 交接记录持久化能力（MessageStore 实现；接口之外按需断言，
@@ -194,6 +204,33 @@ func handoffRecheckThreshold() int {
 	return handoffRecheckTokens
 }
 
+// HandoffAutoTurnEnabled 是否启用「自主续轮边界强制折叠」（默认启用）：
+// 监督续轮 / goal 续轮每轮开始前把累计历史折叠为「会话交接 + 最近 Keep 条原文」，
+// 续轮上下文有界（不再把全量时间线反复喂给 LLM）。
+// 环境变量 PAIR_HANDOFF_AUTO_TURN=0/off/false/no 关闭 → 续轮恢复携带全量历史。
+func HandoffAutoTurnEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PAIR_HANDOFF_AUTO_TURN"))) {
+	case "0", "off", "false", "no", "disable", "disabled":
+		return false
+	}
+	return true
+}
+
+// handoffAutoTurnKeep 强制折叠的保留段深度（PAIR_HANDOFF_AUTO_KEEP 覆盖；默认 6）。
+func handoffAutoTurnKeep() int {
+	if v := strings.TrimSpace(os.Getenv("PAIR_HANDOFF_AUTO_KEEP")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > handoffAutoTurnKeepMax {
+				log.Printf("[handoff] PAIR_HANDOFF_AUTO_KEEP=%d 超上限 %d，按上限处理", n, handoffAutoTurnKeepMax)
+				return handoffAutoTurnKeepMax
+			}
+			return n
+		}
+		log.Printf("[handoff] PAIR_HANDOFF_AUTO_KEEP=%q 非法（需正整数），忽略", v)
+	}
+	return handoffAutoTurnKeepDefault
+}
+
 // keepForRelevance 按相关性返回视图保留段深度（空/未知 → 高，保守不缩）。
 func keepForRelevance(rel string) int {
 	switch rel {
@@ -203,6 +240,19 @@ func keepForRelevance(rel string) int {
 		return handoffKeepRelPartial
 	}
 	return handoffKeepRelHigh
+}
+
+// handoffKeepOf 交接记录的生效保留段深度：记录值（Keep>0）优先——
+// 与生成时 handoffAnchorAt 所用深度一致，handoffAnchorIndex 据此精确复原基点；
+// 旧记录（Keep=0）回退相关性档位。
+func handoffKeepOf(rec *HandoffRecord) int {
+	if rec == nil {
+		return handoffKeepRecentMsgs
+	}
+	if rec.Keep > 0 {
+		return rec.Keep
+	}
+	return keepForRelevance(rec.Relevance)
 }
 
 // parseRelevance 解析相关性标注：取文本内**最早出现**的「高/部分/无关」
@@ -387,10 +437,7 @@ func handoffIncrement(history []Message, rec *HandoffRecord) []Message {
 	if i := handoffAnchorIndex(hist, rec); i >= 0 {
 		return hist[i:]
 	}
-	keep := handoffKeepRecentMsgs
-	if rec != nil && rec.Relevance != "" {
-		keep = keepForRelevance(rec.Relevance)
-	}
+	keep := handoffKeepOf(rec)
 	if len(hist) > keep {
 		return hist[len(hist)-keep:]
 	}
@@ -444,7 +491,7 @@ func handoffAnchorIndex(hist []Message, rec *HandoffRecord) int {
 	// ① 生成时基线位置（精确）：MsgCount 即生成时的历史条数，
 	//    基点 = MsgCount − 保留深度，并按生成时的「跳过孤立 tool」规则前移。
 	if rec.MsgCount > 0 {
-		idx := rec.MsgCount - keepForRelevance(rec.Relevance)
+		idx := rec.MsgCount - handoffKeepOf(rec)
 		if idx > len(hist) {
 			idx = len(hist)
 		}
@@ -635,12 +682,30 @@ func ruleHandoffFallback(history []Message) string {
 // 未达阈值/存储不支持（调用方保持原逻辑：原样或按压力精简）。
 // 副作用：达到刷新条件时调用一次 LLM 并持久化交接记录；调用方可据返回值发提示。
 func BuildHandoffView(ctx context.Context, prov Provider, judge Provider, store ConversationStore, convID string, history []Message, task string, maxContextTokens int) ([]Message, bool) {
+	return buildHandoffView(ctx, prov, judge, store, convID, history, task, maxContextTokens, handoffViewOpts{})
+}
+
+// handoffViewOpts 交接视图组装选项（buildHandoffView 的行为开关）。
+type handoffViewOpts struct {
+	// Force 跳过触发阈值判定（强制整理）：用于自主续轮边界——每轮续跑前都把
+	//   累计历史折叠一次，保证续轮上下文有界（见 HandoffAutoTurnView）。
+	Force bool
+	// Keep 保留段深度覆盖（≤0 = 按相关性档位）。
+	Keep int
+}
+
+// buildHandoffView BuildHandoffView 的完整实现（opt 控制强制折叠与保留段深度）。
+func buildHandoffView(ctx context.Context, prov Provider, judge Provider, store ConversationStore, convID string, history []Message, task string, maxContextTokens int, opt handoffViewOpts) ([]Message, bool) {
 	if !HandoffEnabled() || convID == "" || store == nil || len(history) == 0 {
 		return nil, false
 	}
-	ok, reason := ShouldHandoff(history, maxContextTokens)
-	if !ok {
-		return nil, false
+	reason := "强制折叠（自主续轮边界）"
+	if !opt.Force {
+		ok, why := ShouldHandoff(history, maxContextTokens)
+		if !ok {
+			return nil, false
+		}
+		reason = why
 	}
 	hs, sok := store.(handoffStore)
 	if !sok {
@@ -680,6 +745,21 @@ func BuildHandoffView(ctx context.Context, prov Provider, judge Provider, store 
 			}
 			if !forceRefresh {
 				rec = prev // 增量未达刷新阈值 → 复用（不调 LLM）
+				// ★ 自主续轮边界（强制折叠）：把复用记录的保留段深度收敛到 opt.Keep
+				//   ——不重新调 LLM，只按新深度重算锚点/条数/基线并保存。否则用户输入
+				//   边界生成的旧记录（keep=16）会让后续每轮续跑视图都保留 16 条原文。
+				if opt.Keep > 0 && rec.Keep != opt.Keep {
+					cp := *rec
+					cp.Keep = opt.Keep
+					cp.Anchor = handoffAnchorAt(history, opt.Keep)
+					cp.MsgCount = len(stripSystemMsgs(history))
+					cp.KeptTokens = estimateTokens(handoffIncrement(history, &cp))
+					rec = &cp
+					if serr := hs.SaveHandoff(convID, cp); serr != nil {
+						log.Printf("[handoff] 保存归一记录失败 conv=%s: %v", convID, serr)
+					}
+					log.Printf("[handoff] conv=%s 保留段深度归一 → %d 条（自主续轮强制折叠）", convID, opt.Keep)
+				}
 				log.Printf("[handoff] conv=%s 复用上次交接（增量 ~%d tokens < 刷新阈值 %d）（%s）",
 					convID, inc, handoffRefreshThreshold(), reason)
 			}
@@ -701,12 +781,17 @@ func BuildHandoffView(ctx context.Context, prov Provider, judge Provider, store 
 		if rel == "" {
 			rel = handoffRelHigh // 解析失败 → 保守按高（不缩保留段）
 		}
+		keep := keepForRelevance(rel)
+		if opt.Keep > 0 {
+			keep = opt.Keep // 自主续轮：固定深度（每轮上下文有界）
+		}
 		rec = &HandoffRecord{
 			Text:      text,
 			CreatedAt: time.Now().UTC().Format(time.RFC3339),
-			Anchor:    handoffAnchorAt(history, keepForRelevance(rel)),
+			Anchor:    handoffAnchorAt(history, keep),
 			MsgCount:  len(stripSystemMsgs(history)),
 			Relevance: rel,
+			Keep:      keep,
 			// RelCheckedInc=0：新交接即新复检周期的起点
 		}
 		// 保留段基线：锚后内容 tokens（刷新判断只看相对基线的新增量）。
@@ -786,5 +871,51 @@ func HandoffSegmentView(runCtx context.Context, l *Loop, store ConversationStore
 		}
 	}
 	view, ok := buildLoopHandoffView(runCtx, l, store, convID, task)
+	return view, ok, ""
+}
+
+// HandoffAutoTurnView 自主续轮边界（监督续轮 / goal 自动续轮）的**强制**整理视图。
+//
+// 背景（2026-09 排查）：监督续轮与 goal 续轮此前以 loop.Run(ctx, msg, nil) 唤醒工作
+// agent —— nil 表示复用 loop.History（累计全量时间线，含全部工具输出），每轮续跑都
+// 把全量历史重新喂给 LLM（默认上限 20 轮），上下文无界增长，唯一兜底是 Run 入口的
+// maybeCompact（45%/90% 窗口才腰斩一次，且每次腰斩 = 保留段全额重新 prefill）。
+// 段预算续跑（HandoffSegmentView）与用户输入边界（HandoffUserTurnView）都有整理，
+// 唯独这两条自主续轮路径缺失——本入口补齐，语义对齐「相当于一条新的用户输入」。
+//
+// 与另两个边界的差别（**强制**折叠）：不看触发阈值（历史很小也折叠），因为自主续轮
+// 的膨胀来自「轮数 × 每轮工具输出」，等阈值（30% 窗口 / 24K tokens / 100 条）时会
+// 已经付出多轮全量 prompt 的代价。视图 = [会话交接·提交消息] + [最近 Keep 条原文]
+// （Keep 默认 6，PAIR_HANDOFF_AUTO_KEEP 可调），每轮上下文因此有界。
+//
+// 成本控制：交接文本走既有复用机制——自上次交接的增量 < refresh 阈值（12K tokens）
+// 时**复用上次交接文本**（不调 LLM），达阈值才重新生成一次（见 ShouldRefreshHandoff）。
+//
+// 关闭：PAIR_HANDOFF_AUTO_TURN=0 → 返回 (nil,false) → 调用方保持原行为（携带全量历史）。
+// 落盘不变：整理只替换「喂 LLM 的历史视图」，完整原文仍在会话存储中。
+//
+// 返回 (view, applied, notice)；applied=false 时调用方传 nil 给 loop.Run（原行为）。
+func HandoffAutoTurnView(ctx context.Context, l *Loop, store ConversationStore, convID, task string) ([]Message, bool, string) {
+	if l == nil || !HandoffAutoTurnEnabled() {
+		return nil, false, ""
+	}
+	var prov Provider
+	if l.Compressor != nil {
+		prov = l.Compressor
+	} else {
+		prov = l.getProvider()
+	}
+	keep := handoffAutoTurnKeep()
+	if impl := CurrentJSHandoff(); impl != nil {
+		view, ok, notice, err := impl.AutoTurnView(convID, l.WorkspaceRoot, l.History, task,
+			l.MaxContextTokens, prov, store, keep)
+		if err != nil {
+			log.Printf("[handoff] JS 交接实现（自主续轮边界）失败，回退 Go 默认: %v", err)
+		} else {
+			return view, ok, notice
+		}
+	}
+	view, ok := buildHandoffView(ctx, prov, nil, store, convID, l.History, task,
+		l.MaxContextTokens, handoffViewOpts{Force: true, Keep: keep})
 	return view, ok, ""
 }

@@ -1095,6 +1095,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   自动发起下一轮（continuation 消息）。pause 停续轮、resume 重挂；
 		//   同一阻塞条件连续 ≥3 轮自动 blocked（MarkRound 内判定）。
 		//   零行为变化保证：无 goal(op=create) 时 goalManager.Get 返回 nil，循环直接退出。
+		// ★ 2026-09-27 目标锚点（防折叠后漂移）：会话原始任务在续轮循环外算**一次**并复用——
+		//   下面的续轮边界会把早期原文折进「会话交接·提交消息」（handoff.go），此后
+		//   FirstUserTask(loop.History) 可能取到保留段里的续轮指令（监督任务书目标漂移）。
+		objective := FirstUserTask(loop.History)
 		for !sess.stopped {
 			if seg, segOK := loop.TakeSegmentContinue(); segOK {
 				segmentNo++
@@ -1176,7 +1180,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 					WorkspaceRoot: opts.WorkspaceRoot,
 					Round:         superviseNo,
 					MaxRounds:     superviseLimit,
-					Objective:     FirstUserTask(loop.History),
+					Objective:     objective,
 					WorkerReport:  LastAssistantContent(msgs),
 					WorkerTurns:   loop.TurnNo,
 					RecentHistory: RecentHistoryTail(loop.History, AutopilotHistoryTail),
@@ -1201,9 +1205,28 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				contMsg := decision.Task
 				log.Printf("[session] 自主模式监督续跑 conv=%s round=%d/%d 指令=%q",
 					convID, superviseNo, superviseLimit, truncStr(contMsg, 80))
+				// ★ 2026-09-27 自主续轮边界强制折叠（handoff.go HandoffAutoTurnView）：
+				//   此前传 nil = 复用 loop.History（累计全量时间线，含每轮全部工具输出），
+				//   监督上限 20 轮下上下文无界增长。改为每轮续跑前折叠一次：
+				//   视图 = [会话交接·提交消息] + [最近 Keep 条原文]（默认 6 条，环境变量
+				//   PAIR_HANDOFF_AUTO_KEEP 可调）——语义等同「一条新的用户输入 + 交接要点」。
+				//   成本：自上次交接增量 < 刷新阈值（12K tokens）时复用上次交接文本（不调 LLM）。
+				//   关闭：PAIR_HANDOFF_AUTO_TURN=0（回退原行为）。落盘/展示仍为完整时间线。
+				nextHist := []Message(nil)
+				if view, hok, hnotice := HandoffAutoTurnView(runCtx, loop, store, convID, contMsg); hok {
+					nextHist = view
+					if hnotice == "" {
+						hnotice = fmt.Sprintf("已把此前对话折叠为「会话交接·提交消息」（历史 %d 条 → %d 条），本轮回溯到交接要点继续",
+							len(loop.History), len(view))
+					}
+					select {
+					case sess.Events <- Event{Type: EventNotice, Content: hnotice}:
+					default:
+					}
+				}
 				// 开新一轮前推进持久化基准（防上一轮新增被覆盖）。
 				refreshPersistBase()
-				msgs, err = loop.Run(runCtx, contMsg, nil)
+				msgs, err = loop.Run(runCtx, contMsg, nextHist)
 				sess.History = msgs
 				continue
 			}
@@ -1224,8 +1247,21 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			default:
 			}
 			// ★ 开新一轮前推进持久化基准（goal 续轮同样适用：防上一轮新增被覆盖）。
+			// ★ 2026-09-27 goal 续轮边界同样强制折叠（与监督续轮同一入口，见上方说明）。
+			nextHist := []Message(nil)
+			if view, hok, hnotice := HandoffAutoTurnView(runCtx, loop, store, convID, lmsg); hok {
+				nextHist = view
+				if hnotice == "" {
+					hnotice = fmt.Sprintf("已把此前对话折叠为「会话交接·提交消息」（历史 %d 条 → %d 条），本轮从交接要点继续",
+						len(loop.History), len(view))
+				}
+				select {
+				case sess.Events <- Event{Type: EventNotice, Content: hnotice}:
+				default:
+				}
+			}
 			refreshPersistBase()
-			msgs, err = loop.Run(runCtx, lmsg, nil)
+			msgs, err = loop.Run(runCtx, lmsg, nextHist)
 			sess.History = msgs
 		}
 		// ★ 记录会话结束方式：err != nil（LLM API 错误/panic/ctx 取消含用户停止）

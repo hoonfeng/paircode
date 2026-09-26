@@ -19,7 +19,7 @@ package agent
 // 能力面（注入 JS 的 args）：
 //
 //	args = {
-//	  kind: 'userTurn' | 'segment',
+//	  kind: 'userTurn' | 'segment' | 'autoTurn',
 //	  convID, workspaceRoot, task, maxContextTokens,
 //	  history: [ {role, content, toolCalls?, toolCallId?, name?} ],   // 完整历史（JSON 往返）
 //	  provider: { chat(msgs) → {role, content} } | null,               // 整理用（主/压缩模型）
@@ -28,6 +28,8 @@ package agent
 //	  handoff:  { marker, title, enabled, thresholds(maxCtx), estimateTokens(msgs),
 //	              ruleSummary(msgs), keepForRelevance(rel), parseRelevance(s),
 //	              fingerprint(msg), stripSystem(msgs), isHandoffText(s) }
+//	  force?:   true（仅 autoTurn：跳过触发阈值，强制折叠）
+//	  keep?:    N（仅 autoTurn：固定保留段深度）
 //	}
 //
 //	返回 = { view: [...], applied?: bool, notice?: string }
@@ -52,6 +54,7 @@ type jsHandoffImpl struct {
 	id         string
 	onUserTurn goja.Callable // async (args) → {view, applied?, notice?}
 	onSegment  goja.Callable // async (args) → {view, applied?, notice?}
+	onAutoTurn goja.Callable // async (args) → {view, applied?, notice?}
 	plugin     *jsPluginAdapter
 	vm         *goja.Runtime
 }
@@ -136,14 +139,17 @@ func (p *jsPluginAdapter) attachHandoffRegister(loopFactoryObj *goja.Object) {
 		if fn, ok := goja.AssertFunction(obj.Get("onSegment")); ok {
 			impl.onSegment = fn
 		}
-		if impl.onUserTurn == nil && impl.onSegment == nil {
-			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 至少需要 onUserTurn 或 onSegment 之一"))
+		if fn, ok := goja.AssertFunction(obj.Get("onAutoTurn")); ok {
+			impl.onAutoTurn = fn
+		}
+		if impl.onUserTurn == nil && impl.onSegment == nil && impl.onAutoTurn == nil {
+			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 至少需要 onUserTurn / onSegment / onAutoTurn 之一"))
 		}
 		restore := RegisterJSHandoff(impl)
 		p.addCleanup(restore)
 		p.def.addDiag(fmt.Sprintf(
-			"注册 JS 会话交接实现 %q（userTurn=%v segment=%v；卸载自动还原 Go 默认实现）",
-			id, impl.onUserTurn != nil, impl.onSegment != nil))
+			"注册 JS 会话交接实现 %q（userTurn=%v segment=%v autoTurn=%v；卸载自动还原 Go 默认实现）",
+			id, impl.onUserTurn != nil, impl.onSegment != nil, impl.onAutoTurn != nil))
 		log.Printf("[js-plugin:%s] registerHandoff: 已注册 JS 会话交接实现 %q（会话交接策略委托 JS）", p.def.id, id)
 		return vm.ToValue(map[string]any{"id": id, "ok": true})
 	})
@@ -161,12 +167,12 @@ func (h *jsHandoffImpl) UserTurnView(convID, workspaceRoot string, history []Mes
 	}
 	return h.invoke("userTurn", func(vm *goja.Runtime) *goja.Object {
 		args := handoffArgsObject(vm, map[string]any{
-			"kind":            "userTurn",
-			"convID":          convID,
-			"workspaceRoot":   workspaceRoot,
-			"task":            task,
+			"kind":             "userTurn",
+			"convID":           convID,
+			"workspaceRoot":    workspaceRoot,
+			"task":             task,
 			"maxContextTokens": maxContextTokens,
-			"history":         history,
+			"history":          history,
 		})
 		args.Set("provider", providerHandle(vm, prov, handoffTimeoutDefault))
 		args.Set("judge", providerHandle(vm, judge, handoffJudgeTimeout))
@@ -197,6 +203,32 @@ func (h *jsHandoffImpl) SegmentView(convID, workspaceRoot string, history []Mess
 		args.Set("handoff", handoffUtilsObject(vm))
 		return args
 	}, h.onSegment)
+}
+
+// AutoTurnView 自主续轮边界（监督续轮 / goal 自动续轮）调用 JS 交接实现：
+// force=true（跳过触发阈值，强制折叠）+ keep（固定保留段深度）——每轮续跑上下文有界。
+func (h *jsHandoffImpl) AutoTurnView(convID, workspaceRoot string, history []Message, task string,
+	maxContextTokens int, prov Provider, store ConversationStore, keep int) ([]Message, bool, string, error) {
+	if h == nil || h.onAutoTurn == nil {
+		return nil, false, "", fmt.Errorf("未注册 onAutoTurn")
+	}
+	return h.invoke("autoTurn", func(vm *goja.Runtime) *goja.Object {
+		args := handoffArgsObject(vm, map[string]any{
+			"kind":             "autoTurn",
+			"convID":           convID,
+			"workspaceRoot":    workspaceRoot,
+			"task":             task,
+			"maxContextTokens": maxContextTokens,
+			"history":          history,
+			"force":            true,
+			"keep":             keep,
+		})
+		args.Set("provider", providerHandle(vm, prov, handoffTimeoutDefault))
+		args.Set("judge", goja.Null())
+		args.Set("store", handoffStoreHandle(vm, store, convID))
+		args.Set("handoff", handoffUtilsObject(vm))
+		return args
+	}, h.onAutoTurn)
 }
 
 // invoke 统一调用路径：持 VM 锁构造参数 → 调用 async 函数 → 同步等待 Promise →
@@ -443,20 +475,20 @@ func handoffUtilsObject(vm *goja.Runtime) *goja.Object {
 			maxCtx = int(a.ToInteger())
 		}
 		v, _ := jsonToJSObject(vm, map[string]any{
-			"triggerTokens": HandoffTriggerThreshold(maxCtx),
-			"refreshTokens": handoffRefreshThreshold(),
-			"recheckTokens": handoffRecheckThreshold(),
-			"minMsgs":       handoffTriggerMinMsgs,
-			"keepRecent":    handoffKeepRecentMsgs,
-			"keepHigh":      handoffKeepRelHigh,
-			"keepPartial":   handoffKeepRelPartial,
-			"keepNone":      handoffKeepRelNone,
-			"anchorSeq":     handoffAnchorSeq,
-			"anchorSep":     handoffAnchorSep,
-			"inputMaxMsgs":  handoffInputMaxMsgs,
-			"inputMsgRunes": handoffInputMsgRunes,
-			"prevTextRunes": handoffPrevTextRunes,
-			"taskRunes":     handoffTaskRunes,
+			"triggerTokens":  HandoffTriggerThreshold(maxCtx),
+			"refreshTokens":  handoffRefreshThreshold(),
+			"recheckTokens":  handoffRecheckThreshold(),
+			"minMsgs":        handoffTriggerMinMsgs,
+			"keepRecent":     handoffKeepRecentMsgs,
+			"keepHigh":       handoffKeepRelHigh,
+			"keepPartial":    handoffKeepRelPartial,
+			"keepNone":       handoffKeepRelNone,
+			"anchorSeq":      handoffAnchorSeq,
+			"anchorSep":      handoffAnchorSep,
+			"inputMaxMsgs":   handoffInputMaxMsgs,
+			"inputMsgRunes":  handoffInputMsgRunes,
+			"prevTextRunes":  handoffPrevTextRunes,
+			"taskRunes":      handoffTaskRunes,
 			"judgeTaskRunes": handoffJudgeTaskRunes,
 			"judgePrevRunes": handoffJudgePrevRunes,
 			"relHigh":        handoffRelHigh,

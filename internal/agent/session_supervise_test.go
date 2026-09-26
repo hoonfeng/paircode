@@ -58,11 +58,19 @@ func TestSessionManager_AutopilotSuperviseResume(t *testing.T) {
 		{Role: RoleAssistant, Content: "我已完成自主模式插件的实现。"},
 		{Role: RoleAssistant, Content: "已跑通测试并附上输出。"},
 	}}
+	// ★ 2026-09-27 续轮边界强制折叠（handoff.go HandoffAutoTurnView）：交接整理走
+	//   **压缩模型**（生产装配同构，见 web_server 的 Compressor 注入）——故用独立实例：
+	//   既不消耗主 provider 的脚本化响应序列，也不影响「工作 agent 的 LLM 调用次数」
+	//   断言（prov.Calls 只统计工作 agent 的 Run）。
+	comp := &MockProvider{Responses: []Message{
+		{Role: RoleAssistant, Content: "（测试压缩模型：交接整理输出过短则回退规则式）"},
+	}}
 
 	m := NewSessionManager()
 	convID := "conv-supervise"
 	opts := LoopOpts{
 		Provider:      prov,
+		Compressor:    comp,
 		Registry:      reg,
 		WorkspaceRoot: dir,
 		Autonomous:    true, // 自主模式开关（前端「自主」按钮 → 每次请求传参）
@@ -111,6 +119,17 @@ func TestSessionManager_AutopilotSuperviseResume(t *testing.T) {
 	}
 	if len(injected) != 1 {
 		t.Fatalf("应有 1 条监督者指令进入历史，得 %d（历史共 %d 条）", len(injected), len(hist))
+	}
+	// ②.1 续轮边界强制折叠（2026-09-27）：续跑不再携带全量历史，而是把此前对话折叠成
+	//     「会话交接·提交消息」+ 最近若干条原文——历史中应出现该交接块（视图产物）。
+	sawHandoff := false
+	for _, msg := range hist {
+		if msg.Role == RoleUser && strings.HasPrefix(msg.Content, handoffTitle) {
+			sawHandoff = true
+		}
+	}
+	if !sawHandoff {
+		t.Errorf("续轮边界应折叠历史为交接提交消息（历史 %d 条未含 %q）", len(hist), handoffTitle)
 	}
 	// ③ 决策器被调用两次（第二次判定 done 后收尾，不再有第三次）
 	seenLen, serr := vm.RunString(`globalThis.__seen.length`)
@@ -176,11 +195,16 @@ func TestSessionManager_AutopilotRoundsLimit(t *testing.T) {
 		{Role: RoleAssistant, Content: "完成一版"}, {Role: RoleAssistant, Content: "又完成一版"},
 		{Role: RoleAssistant, Content: "再完成一版"}, {Role: RoleAssistant, Content: "最后完成一版"},
 	}}
+	// 续轮边界的交接整理走压缩模型（见上一个测试的说明）——保证 prov.Calls 只统计工作 agent。
+	comp := &MockProvider{Responses: []Message{
+		{Role: RoleAssistant, Content: "（测试压缩模型：交接整理输出过短则回退规则式）"},
+	}}
 
 	m := NewSessionManager()
 	convID := "conv-supervise-limit"
 	opts := LoopOpts{
 		Provider:           prov,
+		Compressor:         comp,
 		Registry:           reg,
 		WorkspaceRoot:      dir,
 		Autonomous:         true,
