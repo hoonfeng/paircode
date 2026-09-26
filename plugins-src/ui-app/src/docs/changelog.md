@@ -4,6 +4,52 @@
 
 ---
 
+## 1.6.13 — 2026-09-27
+
+> 本版含两处修复：① **自主续轮的上下文无界增长** —— 监督续轮与 goal 自动续轮此前以
+> `loop.Run(ctx, msg, nil)` 唤醒工作 agent，`nil` 会复用 `loop.History` 累计全量时间线（含每轮
+> 全部工具输出），而监督轮次上限默认 20 → 上下文档位随轮数线性膨胀（唯一兜底是 `Run` 入口的
+> `maybeCompact`，45% / 90% 才腰斩，且每次腰斩都要对保留段全额重新 prefill），现在**每次续轮
+> 唤醒前先把历史折叠为交接视图**；② **设置面板保存插件配置后，重开面板回退显示默认值** ——
+> 配置其实已写入后端与 `settings.json`，界面却回退成 schema 默认值（详见「修复」第二条）。
+
+### 新增
+
+- **自主续轮边界强制折叠历史（交接视图）** —— 新增 `HandoffAutoTurnView`：续轮每轮唤醒工作 agent
+  前把历史折叠为 `[会话交接·提交消息]` + 最近若干条原文（保留深度 Keep，默认 6 条，
+  `PAIR_HANDOFF_AUTO_KEEP` 可调、上限 64；`PAIR_HANDOFF_AUTO_TURN=0` 回退全量旧行为）。
+  折叠**强制生效**（`force=true` 跳过 `ShouldHandoff` 阈值判定）：续轮膨胀源自「轮数 × 每轮工具
+  输出」，等阈值触发时已付出多轮全量 prompt 的代价；记录的**复用机制保留**（增量低于刷新阈值即
+  不重新调用 LLM）。
+- **保留深度落盘并可归一** —— `HandoffRecord.Keep` 记录生成时的保留深度，
+  `handoffAnchorIndex` / `handoffIncrement` 据此精确复原折叠基点；复用旧记录时按**新深度归一**
+  （重算 `Anchor` / `MsgCount` / `KeptTokens` 落盘，不重调 LLM）。
+- **插件侧同步新边界** —— `agentloop` 的 `registerHandoff` 新增 `onAutoTurn` 边界；
+  `hBuildView({force, keep})`、`hAnchorIndex` / `hIncrement` 支持 `rec.keep`。
+
+### 修复
+
+- **续轮时任务书（Objective）漂移** —— `AutopilotRequest.Objective` 改为在续轮循环**外**计算一次，
+  避免历史折叠后 `FirstUserTask` 随之漂移。
+- **设置面板保存插件配置后，重开面板回退显示默认值** —— 根因在 `SettingsModal` 的保存收尾：
+  提交体为避免「旧快照里的 `pluginSettings` 覆盖本次新值」而正确地从顶层快照剥离了该字段
+  （`delete top.pluginSettings`），**但随后把这个已剥离字段的快照写回了全局状态**
+  （`state.settings = top`）。而设置面板每次打开都重新挂载、并从
+  `state.settings.pluginSettings` 取插件段初值 → 拿到空对象 → **所有插件段（含「自主模式」）
+  显示为 schema 默认值**：用户看到「改完保存，重开又变回旧值」，实际后端与 `settings.json`
+  已是新值（实测：改 37 → 重开面板显示 20，而磁盘为 37）。**更危险的是**在回退显示的界面上
+  再点一次保存，会把默认值真正写回后端、覆盖用户配置。现写回全局状态时连 `pluginSettings`
+  一并携带。
+
+### 验证
+
+- `go test ./internal/agent` 全绿；新增 `handoff_autoturn_test.go`（4 用例：强制折叠 / 保留深度
+  归一 / 复用不重调 LLM / 开关回退全量）；`session_supervise_test.go` 的交接整理改走**独立
+  Compressor**（与生产装配同构，避免消耗主脚本响应）。
+- 设置面板回退问题：隔离实例（独立端口 9096 + 独立二进制 companion_test.exe）上以真实 Chrome
+  经文（CDP 驱动真实点击）做 A/B —— 修复前「改 37 → 保存 → 重开面板显示 20（而 `settings.json`
+  为 37）」复现；修复后同流程保持 37，并核对落盘一致。
+
 ## 1.6.12 — 2026-09-25
 
 > 本版把**插件源从内核硬编码独立为可配置项**：安装与搜索插件的「源仓库」「镜像源」都可在

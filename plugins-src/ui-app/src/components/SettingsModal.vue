@@ -406,7 +406,15 @@ const saveSettings = async () => {
       }
     }
     await api.apiPut('/settings', { settings: top, pluginSettings: pluginOut })
-    state.settings = top
+    // ★ 2026-09-27 修复「插件设置保存后回退显示默认值」（用户反馈：设置 → 自主模式里
+    //   改完点保存，重开设置面板值又变回旧值）——根因：写回全局快照时丢掉了插件段。
+    //   buildForm 的插件段初值取自 state.settings.pluginSettings，而上面的 top 已经
+    //   delete 掉该字段（那是为**提交**而做的、正确的处理），于是保存后重开面板，
+    //   所有插件段（含「自主模式」）的值退回 schema 默认值：用户看到「值回退了」，
+    //   但后端/磁盘其实已写入新值（实测：改 37 → 重开面板显示 20，而 settings.json 里是 37）。
+    //   更危险的是：在回退显示的界面上再点一次保存，会把默认值真正写回后端、
+    //   覆盖用户配置（数据损坏）。因此这里必须连 pluginSettings 一起写回。
+    state.settings = { ...top, pluginSettings: pluginOut }
     if (themeChanged) applyTheme(top.theme)
     window.$toast('设置已保存', 'success')
     emit('close')
