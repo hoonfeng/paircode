@@ -300,4 +300,24 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .btn-secondary:hover { background: var(--bg-hover); }
+
+/* ★ 修复「技术栈第二行被裁切」：
+   根因 —— .modal-content 固定 height:580px + overflow:hidden，而内容实需
+   约 440px、其在 flex 列中可用高度仅约 403px（扣掉 header/footer/更新卡），
+   于是左列底部的技术栈第二行标签被 modal-body 的下边界削平（失去下圆角）。
+   ① 弹窗高度改为内容自适应，只受视口上限约束 → 内容完整不再被压；
+   ② modal-body 补 min-height:0（flex 子项默认 min-height:auto 会拒绝收缩，
+      导致超高时只能被裁而不是滚动）+ overflow-y:auto 兜底。 */
+.modal-content.about-modal {
+  height: auto;
+  /* ★ 用单一值而非 min()：wb-ui 引擎未实现 CSS min()（实测该声明被整体丢弃，
+     弹窗一度撑到 998px），max-height 必须写成引擎支持的长度/百分比才生效。
+     88vh 既留出视口余量，又不至于像原 580px 那样压扁内容。 */
+  max-height: 88vh;
+}
+.modal-content.about-modal .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 </style>
