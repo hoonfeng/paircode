@@ -294,10 +294,12 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
-  /* ★ nowrap：按钮文字永不折行（wb-ui 引擎中 content 恰等于文字宽时
-     会误折行竖排——AboutModal 关闭按钮变两行的根因；浏览器中同样
-     推荐按钮 nowrap，无副作用） */
-  white-space: nowrap;
+  /* ★ 2026-09-27 移除 `white-space: nowrap`：该声明原是为绕开「引擎中
+     content 恰等于文字宽时误折行竖排（关闭按钮变两行）」而加（6ab5ff36）。
+     实测（wb-ui dev/probes/nowrap_probe：复刻本弹窗的 overlay → flex 列 →
+     modal-footer flex 行结构 + 对文本宽做 15 档 ±px/小数宽度扫描）显示该
+     缺陷**已不存在**——所有宽度下按钮文本均为单行（textTopBands==1）。
+     故按「不用前端 hack 掩盖引擎行为」原则移除，回归标准写法。 */
 }
 .btn-secondary:hover { background: var(--bg-hover); }
 
@@ -310,10 +312,15 @@ onMounted(async () => {
       导致超高时只能被裁而不是滚动）+ overflow-y:auto 兜底。 */
 .modal-content.about-modal {
   height: auto;
-  /* ★ 用单一值而非 min()：wb-ui 引擎未实现 CSS min()（实测该声明被整体丢弃，
-     弹窗一度撑到 998px），max-height 必须写成引擎支持的长度/百分比才生效。
-     88vh 既留出视口余量，又不至于像原 580px 那样压扁内容。 */
-  max-height: 88vh;
+  /* ★ 标准写法（2026-09-27 还原）：此前曾降级为单一值 88vh，理由是
+     「引擎未实现 CSS min()、声明被整体丢弃」。该判断**不成立**——实测
+     （wb-ui dev/probes/mathfunc_probe）显示 min()/max()/clamp() 作为长度
+     属性值已被引擎原生支持：max-height:min(680px,88vh) 在 1440×900 视口
+     下 offsetHeight=680，与浏览器一致。原先的降级源于拿旧引擎二进制做的
+     假阴性判断，属**替代性绕过**，故还原为标准写法：
+     视口高时内容自适应（上限 680px），视口矮时收缩到 88vh 并交由
+     .modal-body 滚动。 */
+  max-height: min(680px, 88vh);
 }
 .modal-content.about-modal .modal-body {
   min-height: 0;
