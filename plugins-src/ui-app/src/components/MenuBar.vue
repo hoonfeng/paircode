@@ -253,6 +253,23 @@ const execItem = async (item) => {
     return
   }
 
+  // ── 模态框互斥 ──
+  // ★ 2026-09-27 修复「帮助弹在关于后方 / 关于关不掉」：本菜单此前对模态框只做单向
+  //   开窗（help-* 只置 showHelp、about 只置 showAbout），而 UiModals.vue 的
+  //   onAboutOpenHelp / onHelpOpenAbout 是互斥的 —— 两处语义不一致。后果：帮助已打开
+  //   时从菜单再点「关于 PairCode IDE」会留下两个同时打开的 overlay；又因模板中
+  //   HelpModal 排在 AboutModal 之前、两者 z-index 同为 2000，DOM 靠后的关于压在上层，
+  //   表现为「帮助出现在关于后方、关于在前面挡着」；点关于「关闭」后下方帮助立刻显形，
+  //   又被感知为「关于关不掉」。此处按同一互斥语义收口：开一个之前先关掉另一个。
+  //   注：引擎侧几何 / 命中测试 / Vue 卸载均已由 dev/probes/aboutmodal_engine_probe
+  //   在真实 9090 页面上验证正常（A/A2/B1/B2 全 PASS），故本次不涉及 z-index、
+  //   模板顺序或任何渲染层调整。
+  if (a === 'about') {
+    if (showHelpModal) showHelpModal.value = false
+  } else if (typeof a === 'string' && a.indexOf('help-') === 0) {
+    if (showAboutModal) showAboutModal.value = false
+  }
+
   // ── 帮助 ──
   if (a === 'help-faq') {
     if (showHelpModal) { showHelpModal.value = 'faq'; return }
