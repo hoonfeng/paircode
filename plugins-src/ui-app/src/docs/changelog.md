@@ -4,6 +4,79 @@
 
 ---
 
+## 1.6.14 — 2026-09-30
+
+> 本版把「是否 / 何时整理会话历史」的决策权从内核交给插件——整理**算法**此前已外置，整理
+> **时机**却写死在内核：段续跑与自主续轮的 Go 门控挡在插件委托之前，插件连表态机会都没有。
+> 同时**撤回** 1.6.13 引入的「自主续轮边界强制折叠」：该机制每轮唤醒前把历史折叠为「摘要 +
+> 最近若干条原文」，而折叠视图会被回写进 `loop.History`，导致自主模式监督者丢失自己前几轮的
+> 核查与决策脉络。整理时机现收敛到「用户发消息」这一边界。
+
+### 新增
+
+- **整理时机策略外置（插件表态、宿主兜底）** —— `registerHandoff` 新增可选 `policy` 回调：
+  `policy(args) → {enabled, force?, keep?, reason?}`，`args` 轻量透传 `kind / convID / task /
+  maxContextTokens / historyMsgs / historyTokens / historyTail（最近 8 条，截断 300 rune）/
+  defaultEnabled / keepDefault`，不做全量历史 JSON 往返。优先级链：
+  `PAIR_HANDOFF=0`（运维总闸）> 插件 `policy` 表态 > 环境变量 > 内置默认；`policy` 返回 `null`
+  或无 `enabled` 字段 = **未表态**，交回宿主——排障开关不会被插件吞掉。三态表达（未配置 /
+  显式 `true` / 显式 `false`）令「只注册策略、不带整理实现」成为合法插件形态
+  （`HasUserTurn` / `HasSegment` / `HasAutoTurn`），不再误报「委托失败」。
+- **整理时机可在设置面板逐边界开关** —— agentloop 插件新增「用户消息 / 段边界 / 自主续轮整理
+  历史」与「续轮保留原文条数」设置项；行为默认不变（只在用户发消息时整理）。
+
+### 变更
+
+- **整理时机收敛到用户消息边界** —— 自主续轮边界默认停用（`PAIR_HANDOFF_AUTO_TURN=1` 可显式
+  开启以回退），段预算续跑边界同样默认停用（`PAIR_HANDOFF_SEGMENT=1`）；两处调用点结构不变
+  （默认返回 `(nil, false)` → `nextHist` 保持 `nil`），续跑携带 `loop.History` 完整连续时间线
+  ——监督者看得见自己此前每一轮做过什么。用户发消息边界（达阈值才整理）保持不变，上下文膨胀
+  由 `loop` 内 `maybeCompact`（45% / 90% 窗口）压力兜底。
+
+### 修复
+
+- **自主模式监督者上下文不连贯** —— 根因是折叠视图经 `loop.go` 的
+  `l.History = l.fullHistory(msgs)` 回写：下一轮只剩「摘要 + 最近几条原文」，决策器收到的
+  `RecentHistoryTail(loop.History)` 同样是折叠版。
+- **菜单入口模态框互斥** —— 帮助弹窗已打开时从菜单再点「关于」，会出现两个 `.modal-overlay`
+  并存：`MenuBar.execItem` 对模态框只做单向开窗（`help-*` 七个 action 只置 `showHelp`、
+  `about` 只置 `showAbout`），而 `UiModals` 的 `onAboutOpenHelp` / `onHelpOpenAbout` 是互斥的，
+  两处语义不一致；又因 `HelpModal` 在模板中排在 `AboutModal` 之前、两者 `z-index` 同为 2000，
+  DOM 靠后的 AboutModal 压在上层 → 表现为「帮助出现在关于后方」，点「关闭」后帮助立刻显形则
+  被感知为「关于关不掉」。现按同一互斥语义收口（未改 z-index、未调模板顺序、未加渲染层 hack）。
+- **关于弹窗技术栈第二行被裁切** —— `.modal-content{height:580px;overflow:hidden}` 加
+  `.modal-body{flex:1;overflow:hidden}` 使 body 可用高约 403px，而左列内容实需约 440px，溢出被
+  `overflow:hidden` 直接裁掉（第二行标签下圆角被切平、与「软件更新」卡片视觉挤压）。现高度改为
+  内容自适应（`height:auto; max-height:88vh`），并补 `min-height:0`（flex 子项默认
+  `min-height:auto` 会拒绝收缩，只能被裁而非滚动）+ `overflow-y:auto` 滚动兜底。
+- **消除 AboutModal 两处「替代性绕过引擎」写法** —— ① `max-height: 88vh` → `min(680px, 88vh)`；
+  ② 移除 `white-space: nowrap`。两条绕过所依据的「引擎缺陷」判断经引擎级实测
+  （`mathfunc_probe` / `nowrap_probe`）均被推翻：`min()/max()/clamp()` 与 `calc()` 同路径处理、
+  实测与浏览器逐一一致，`content` 恰等于文字宽也不误折行——原降级系拿旧引擎二进制得出的
+  假阴性结论。
+
+### 文档
+
+- `docs/TECH_DEBT.md` 入库：登记上述两条「前端替代性绕过」的**核定结论**（均判为非引擎缺陷，
+  依据为两个探针的实测数据）与其余 5 处待核定项（如实标注「尚未实测」，附核定方法与改动前置
+  条件），并附「必须用当前源码构建的引擎实测」的防复发教训。
+
+### 验证
+
+- `go build` / `go vet` 通过；新增 `handoff_policy_test.go`（7 用例：插件开启宿主停用的段边界、
+  插件停用宿主启用的用户边界、未表态回退环境变量、策略抛错回退、`keep` 覆写、总闸优先、
+  无 `policy` 的老插件行为不变）；新增默认停用断言（autoturn / segment 各一，并验证显式开启后
+  能力仍在）；端到端断言反转（续跑历史不得出现交接块、首轮工作 agent 汇报须保留）；
+  `internal/agent` 全量回归 62.3s ok；隔离实例 9098 冒烟（policy 已注册、msgs=3、零异常、
+  无折叠日志）。
+- 两处前端修复在真实产物 + 真实引擎鼠标事件下做 before/after 对比：模态框 `overlays` 计数
+  （2 → 1）、`elementFromPoint` 命中子树、关闭后是否残留，截图留档；关于弹窗以真实桌面壳窗口
+  3 倍放大截图确认第二行标签胶囊形完整、系统信息 4 行齐全、软件更新卡片不重叠。
+- **插件旧品牌残留核查（零残留）** —— 全量检索确认插件源码与各副本（`.pair/plugins`、
+  `bin/.pair/plugins`、`plugins-dist`、`plugins-src`、`.pair/publish`）中**不存在**旧品牌
+  `yala` 残留，版本库 `git grep` 亦零命中，故本版无相应改动；检索命中的 `yala` 字样全部来自
+  第三方 locale / Unicode 数据（如 `Malayalam`「马拉雅拉姆语」）与历史对话记录，非品牌遗留。
+
 ## 1.6.13 — 2026-09-27
 
 > 本版含两处修复：① **自主续轮的上下文无界增长** —— 监督续轮与 goal 自动续轮此前以
