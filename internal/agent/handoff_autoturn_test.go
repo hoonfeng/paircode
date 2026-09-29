@@ -4,12 +4,21 @@ package agent
 // （2026-09-27）。
 //
 // 背景：监督续轮与 goal 续轮此前以 loop.Run(ctx, msg, nil) 唤醒工作 agent（nil = 复用
-// loop.History 累计全量时间线），每轮续跑都全量重喂历史 → 上下文无界增长。改为每轮
+// loop.History 累计全量时间线），每轮续跑都全量重喂历史 → 上下文无界增长。曾改为每轮
 // 续跑前经 HandoffAutoTurnView 强制折叠（视图 = [交接提交消息] + 最近 Keep 条原文）。
+//
+// ★ 2026-09-27 语义修正（同日第二次迭代，用户要求「监督者自身必须连贯」）：
+//   HandoffAutoTurnView 改为**默认停用**（HandoffAutoTurnEnabled 默认 false）——
+//   整理历史只在用户发消息时发生（HandoffUserTurnView）。原因：续轮边界折叠出的视图
+//   会被 loop.Run 的 `l.History = l.fullHistory(msgs)` 回写，下一轮监督者只剩
+//   「交接摘要 + Keep 条原文」，自己前几轮的核查脉络丢失 → 监督者不连贯。
+//   本文件的**机制类**测试因此显式开启 PAIR_HANDOFF_AUTO_TURN=1 验证折叠能力本身；
+//   「默认停用 → 续跑上下文连贯」由 TestHandoffAutoTurn_DefaultDisabled* 与
+//   session_supervise_test.go 的端到端断言覆盖。
 //
 // 覆盖：
 //  1. 强制折叠：历史**未达**触发阈值也折叠，视图深度 = 1 + Keep，Keep 可配；
-//  2. 关闭开关：PAIR_HANDOFF_AUTO_TURN=0 → 不启用（调用方回落全量历史原行为）；
+//  2. 开关：默认停用（不整理、上下文连贯）；PAIR_HANDOFF_AUTO_TURN=1 显式开启；
 //  3. 复用与归一：增量未达刷新阈值 → 复用交接文本（不重生成）；旧记录深度归一为 Keep；
 //  4. JS 优先：注册 onAutoTurn 后宿主委托 JS（args.color 契约正确），失败回退 Go 默认。
 
@@ -32,6 +41,7 @@ func TestHandoffAutoTurn_ForceCollapse(t *testing.T) {
 	t.Setenv("PAIR_HANDOFF_JS", "0")                     // 强制 Go 默认实现（隔离其它测试注册的 JS 实现）
 	t.Setenv("PAIR_HANDOFF_AUTO_KEEP", "")               // 默认 Keep
 	t.Setenv("PAIR_HANDOFF_TRIGGER_TOKENS", "100000000") // 阈值拉满 → 证明强制路径不看阈值
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "1")              // ★ 默认停用 → 显式开启以验证折叠机制
 
 	store := NewMessageStore(t.TempDir())
 	hist := handoffHist(12, "auto") // 12 条，远未达任何阈值
@@ -82,6 +92,7 @@ func TestHandoffAutoTurn_ForceCollapse(t *testing.T) {
 func TestHandoffAutoTurn_KeepConfigurableAndDisabled(t *testing.T) {
 	t.Setenv("PAIR_HANDOFF", "")
 	t.Setenv("PAIR_HANDOFF_JS", "0")
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "1") // ★ 默认停用 → 显式开启（本测试验证 Keep 配置与开关语义）
 	store := NewMessageStore(t.TempDir())
 	hist := handoffHist(20, "cfg")
 
@@ -105,11 +116,11 @@ func TestHandoffAutoTurn_KeepConfigurableAndDisabled(t *testing.T) {
 		t.Fatalf("非法值应回落默认 %d，实际 %d", handoffAutoTurnKeepDefault, got)
 	}
 
-	// 关闭开关 → 不启用（调用方保持「携带全量历史」原行为）
-	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "0")
+	// 开关复位（不设 = 生产默认）→ 不启用（调用方保持「携带全量连续历史」的连贯行为）
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "")
 	if view, ok, _ := HandoffAutoTurnView(context.Background(), autoTurnLoop(hist), store,
 		"conv_off", "继续"); ok || view != nil {
-		t.Fatalf("PAIR_HANDOFF_AUTO_TURN=0 时不应启用: ok=%v view=%+v", ok, view)
+		t.Fatalf("默认（未设 PAIR_HANDOFF_AUTO_TURN）时不应启用: ok=%v view=%+v", ok, view)
 	}
 	// nil Loop 保护
 	if _, ok, _ := HandoffAutoTurnView(context.Background(), nil, store, "conv_nil", "继续"); ok {
@@ -123,6 +134,7 @@ func TestHandoffAutoTurn_ReuseAndKeepNormalize(t *testing.T) {
 	t.Setenv("PAIR_HANDOFF_JS", "0")
 	t.Setenv("PAIR_HANDOFF_TRIGGER_TOKENS", "100")    // 常规边界可触发（先生成「相关性档位」记录）
 	t.Setenv("PAIR_HANDOFF_REFRESH_TOKENS", "100000") // 刷新阈值拉满 → 只验证复用（不重生成）
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "1")           // ★ 默认停用 → 显式开启
 	store := NewMessageStore(t.TempDir())
 	hist := handoffHist(20, "reuse")
 
@@ -179,6 +191,7 @@ func TestHandoffAutoTurn_JSInterface(t *testing.T) {
 	}
 	t.Setenv("PAIR_HANDOFF", "")
 	t.Setenv("PAIR_HANDOFF_AUTO_KEEP", "5")
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "1") // ★ 默认停用 → 显式开启
 	regFakeJSHandoffAuto(t, `(function(args){
 		if (args.kind !== 'autoTurn') throw new Error('kind 应为 autoTurn，实际 ' + args.kind);
 		if (args.force !== true) throw new Error('force 应为 true（强制折叠）');
@@ -208,5 +221,33 @@ func TestHandoffAutoTurn_JSInterface(t *testing.T) {
 	}
 	if !strings.HasPrefix(view2[0].Content, handoffTitle) {
 		t.Fatalf("回退视图首条应为交接消息，实际 %q", truncRunesAgent(view2[0].Content, 40))
+	}
+}
+
+// TestHandoffAutoTurn_DefaultDisabledKeepsHistoryContinuous 默认**停用**自主续轮边界整理
+// （2026-09-27 用户要求：监督者自身上下文必须连贯——整理只在用户发消息时发生）。
+//
+// 未设 PAIR_HANDOFF_AUTO_TURN（= 生产默认）时 HandoffAutoTurnView 必须返回 (nil,false)，
+// 调用方据此把 nil 传给 loop.Run → 续跑携带 loop.History 完整连续时间线（不折叠）→
+// 监督者看得见自己此前每一轮做过什么。
+func TestHandoffAutoTurn_DefaultDisabledKeepsHistoryContinuous(t *testing.T) {
+	t.Setenv("PAIR_HANDOFF", "")
+	t.Setenv("PAIR_HANDOFF_JS", "0")
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "")        // 生产默认：不设即停用
+	t.Setenv("PAIR_HANDOFF_TRIGGER_TOKENS", "100") // 即便达常规阈值，续轮边界也不得整理
+
+	store := NewMessageStore(t.TempDir())
+	hist := handoffHist(120, "keep") // 120 条：远超一切阈值
+	loop := autoTurnLoop(hist)
+
+	if view, ok, _ := HandoffAutoTurnView(context.Background(), loop, store, "conv_keep", "继续"); ok || view != nil {
+		t.Fatalf("默认应停用自主续轮边界整理（监督者上下文连贯优先），实际 ok=%v len=%d", ok, len(view))
+	}
+
+	// 能力未删除：显式开启后仍可强制折叠（便于按需回退/实验）
+	t.Setenv("PAIR_HANDOFF_AUTO_TURN", "1")
+	view, ok, _ := HandoffAutoTurnView(context.Background(), loop, store, "conv_keep", "继续")
+	if !ok || len(view) == 0 {
+		t.Fatal("显式 PAIR_HANDOFF_AUTO_TURN=1 应恢复强制折叠能力")
 	}
 }

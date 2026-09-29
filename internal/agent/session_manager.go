@@ -1113,10 +1113,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				}
 				contMsg := SegmentContinueMessage(seg)
 
-				// ★ 2026-09-11 会话交接（handoff.go）：段边界对累计历史做一次判断/整理——
-				//   达阈值时把上一段历史折叠为「提交消息」，替代全量历史注入
-				//   下一段（防续跑上下文膨胀）；未达阈值保持原样（同会话历史保留）。
-				//   整理只替换喂 LLM 的历史视图；落盘/展示仍为完整时间线。
+				// ★ 2026-09-11 会话交接（handoff.go）：段边界曾对累计历史做一次判断/整理。
+				// ★ 2026-09-27 **默认停用**（用户要求：只在用户发消息时才整理历史）：
+				//   段边界属于**同一条用户消息内**的自动续段，折叠会让工作 agent 丢掉
+				//   上一段的执行细节（同任务内上下文断裂 → 表现为「不连贯」）。现在
+				//   HandoffSegmentView 默认返回 (nil,false) → nextHist 保持 nil，下一段
+				//   携带完整连续历史（上下文连贯优先）；历史膨胀由 loop 内 maybeCompact
+				//   （45%/90% 窗口）压力兜底。显式恢复旧行为：PAIR_HANDOFF_SEGMENT=1。
 				// ★ 2026-09-12 策略外置：整理由 agentloop 插件（registerHandoff.onSegment）
 				//   实现；宿主只提供执行位置与能力（provider/store/口径工具），未注册或
 				//   执行失败即回退 Go 默认实现（handoff.go，语义不变）。
@@ -1205,13 +1208,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				contMsg := decision.Task
 				log.Printf("[session] 自主模式监督续跑 conv=%s round=%d/%d 指令=%q",
 					convID, superviseNo, superviseLimit, truncStr(contMsg, 80))
-				// ★ 2026-09-27 自主续轮边界强制折叠（handoff.go HandoffAutoTurnView）：
-				//   此前传 nil = 复用 loop.History（累计全量时间线，含每轮全部工具输出），
-				//   监督上限 20 轮下上下文无界增长。改为每轮续跑前折叠一次：
-				//   视图 = [会话交接·提交消息] + [最近 Keep 条原文]（默认 6 条，环境变量
-				//   PAIR_HANDOFF_AUTO_KEEP 可调）——语义等同「一条新的用户输入 + 交接要点」。
-				//   成本：自上次交接增量 < 刷新阈值（12K tokens）时复用上次交接文本（不调 LLM）。
-				//   关闭：PAIR_HANDOFF_AUTO_TURN=0（回退原行为）。落盘/展示仍为完整时间线。
+				// ★ 2026-09-27 自主续轮边界**默认不整理**（用户要求：监督者自身上下文必须连贯）：
+				//   同日早些时候此处曾强制折叠（视图 = [交接·提交消息] + 最近 6 条原文）以限
+				//   上下文——但折叠视图会被 loop.Run 的 `l.History = l.fullHistory(msgs)`
+				//   回写（loop.go），下一轮监督者只剩「交接摘要 + 6 条原文」，自己前几轮的
+				//   核查/决策脉络丢失 → 监督者自身不连贯（用户实测反馈）。
+				//   现在 HandoffAutoTurnView 默认返回 (nil,false) → nextHist 保持 nil：续跑
+				//   携带 loop.History 完整连续时间线（监督者看得见自己此前做过什么）。
+				//   整理时机只有一处：用户发消息（web_server 的 HandoffUserTurnView）。
+				//   显式恢复旧行为：PAIR_HANDOFF_AUTO_TURN=1（PAIR_HANDOFF_AUTO_KEEP 调深度）。
 				nextHist := []Message(nil)
 				if view, hok, hnotice := HandoffAutoTurnView(runCtx, loop, store, convID, contMsg); hok {
 					nextHist = view
@@ -1247,7 +1252,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			default:
 			}
 			// ★ 开新一轮前推进持久化基准（goal 续轮同样适用：防上一轮新增被覆盖）。
-			// ★ 2026-09-27 goal 续轮边界同样强制折叠（与监督续轮同一入口，见上方说明）。
+			// ★ 2026-09-27 goal 续轮边界与监督续轮同一入口（HandoffAutoTurnView）——
+			//   同属「用户消息之外」的时机，默认不整理（理由见上方说明）：续轮携带完整
+			//   连续历史，不再折叠（显式恢复见 PAIR_HANDOFF_AUTO_TURN=1）。
 			nextHist := []Message(nil)
 			if view, hok, hnotice := HandoffAutoTurnView(runCtx, loop, store, convID, lmsg); hok {
 				nextHist = view

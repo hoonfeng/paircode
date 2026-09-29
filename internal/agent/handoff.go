@@ -35,6 +35,16 @@ package agent
 //	（增量 ≥ 12K tokens 才重新生成）。未达触发阈值时历史**逐字节原样**，
 //	缓存行为与不启用交接完全一致。
 //
+// ★ 2026-09-27 整理时机（用户要求：监督者自身必须连贯）：
+//   整理**只在用户发消息时**发生——HandoffUserTurnView（宿主在会话装配前调用，
+//   见 cmd/companion/web_server.go 的 buildWebLoopOpts）。自动续跑的两个边界
+//   （段预算续跑 HandoffSegmentView / 自主续轮 HandoffAutoTurnView——监督续轮、
+//   goal 续轮）**默认不整理**：在续跑边界折叠历史会让工作 agent 与监督者看不到
+//   自己此前的执行脉络（同一任务内上下文断裂 → 表现为「监督者不连贯」）。历史
+//   膨胀由 loop 内的压力兜底负责（compress.go 的 maybeCompact，45%/90% 窗口），
+//   属保护性压缩而非策略性整理。需要旧的「续跑上下文有界」行为时可显式开启：
+//   PAIR_HANDOFF_SEGMENT=1（段边界）/ PAIR_HANDOFF_AUTO_TURN=1（自主续轮）。
+//
 // 边界与安全性：
 //   - 原文不删除：交接只替换「喂 LLM 的历史视图」；落盘/展示仍为完整时间线
 //     （视图文本以 handoffTitle 开头，落盘锚点/真实任务轮次统计自动跳过，
@@ -204,16 +214,34 @@ func handoffRecheckThreshold() int {
 	return handoffRecheckTokens
 }
 
-// HandoffAutoTurnEnabled 是否启用「自主续轮边界强制折叠」（默认启用）：
-// 监督续轮 / goal 续轮每轮开始前把累计历史折叠为「会话交接 + 最近 Keep 条原文」，
-// 续轮上下文有界（不再把全量时间线反复喂给 LLM）。
-// 环境变量 PAIR_HANDOFF_AUTO_TURN=0/off/false/no 关闭 → 续轮恢复携带全量历史。
+// HandoffAutoTurnEnabled 是否启用「自主续轮边界强制折叠」（**默认停用**）。
+//
+// ★ 2026-09-27 语义修正（用户要求：监督者自身上下文必须连贯）：
+//   整理历史只在**用户发消息**时发生（HandoffUserTurnView）。自主续轮（监督续轮 /
+//   goal 续轮）不再整理——在续轮边界折叠出的视图会被 loop.Run 的
+//   `l.History = l.fullHistory(msgs)` 回写（见 loop.go），下一轮监督者只能看到
+//   「交接摘要 + Keep 条原文」，自己前几轮的核查/决策脉络丢失 → 监督者不连贯。
+//   偶发需求（续轮上下文有界）可显式开启：PAIR_HANDOFF_AUTO_TURN=1/on/true。
 func HandoffAutoTurnEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("PAIR_HANDOFF_AUTO_TURN"))) {
-	case "0", "off", "false", "no", "disable", "disabled":
-		return false
+	case "1", "on", "true", "yes", "enable", "enabled":
+		return true
 	}
-	return true
+	return false
+}
+
+// HandoffSegmentEnabled 是否启用「段预算续跑边界整理」（**默认停用**）。
+//
+// 同 HandoffAutoTurnEnabled 的理由：段边界也在**同一条用户消息内**（工具预算耗尽
+// 后自动续段），此时整理会让工作 agent 丢掉上一段的执行细节——同一任务执行到一半
+// 忽然「失忆」，与用户要求的「只在用户发消息时才整理历史」相悖。
+// 偶发需求（段间上下文有界）可显式开启：PAIR_HANDOFF_SEGMENT=1/on/true。
+func HandoffSegmentEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PAIR_HANDOFF_SEGMENT"))) {
+	case "1", "on", "true", "yes", "enable", "enabled":
+		return true
+	}
+	return false
 }
 
 // handoffAutoTurnKeep 强制折叠的保留段深度（PAIR_HANDOFF_AUTO_KEEP 覆盖；默认 6）。
@@ -851,10 +879,17 @@ func HandoffUserTurnView(ctx context.Context, prov, judge Provider, store Conver
 	return view, ok, ""
 }
 
-// HandoffSegmentView 段续跑边界（跨轮）的整理视图：JS 实现优先，回退 Go 默认。
+// HandoffSegmentView 段续跑边界（跨轮）的整理视图（**默认停用**，见 HandoffSegmentEnabled）：
+// JS 实现优先，回退 Go 默认；未开启时返回 (nil,false) → 调用方携带完整历史（连贯优先）。
 // 返回的 view 作为下一段初始历史注入（loop.Run(runCtx, contMsg, view)）。
 // Provider 取压缩模型（轻量）优先，其次主模型——与 Go 默认实现同口径。
 func HandoffSegmentView(runCtx context.Context, l *Loop, store ConversationStore, convID, task string) ([]Message, bool, string) {
+	// ★ 2026-09-27 默认不整理：段边界在同一条用户消息内（工具预算耗尽后自动续段），
+	//   整理会让工作 agent 丢掉上一段的执行细节 → 同任务内上下文断裂。开启见
+	//   HandoffSegmentEnabled（PAIR_HANDOFF_SEGMENT=1）。
+	if l == nil || !HandoffSegmentEnabled() {
+		return nil, false, ""
+	}
 	if impl := CurrentJSHandoff(); impl != nil {
 		var prov Provider
 		if l.Compressor != nil {

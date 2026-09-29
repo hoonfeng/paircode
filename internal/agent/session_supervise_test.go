@@ -120,16 +120,27 @@ func TestSessionManager_AutopilotSuperviseResume(t *testing.T) {
 	if len(injected) != 1 {
 		t.Fatalf("应有 1 条监督者指令进入历史，得 %d（历史共 %d 条）", len(injected), len(hist))
 	}
-	// ②.1 续轮边界强制折叠（2026-09-27）：续跑不再携带全量历史，而是把此前对话折叠成
-	//     「会话交接·提交消息」+ 最近若干条原文——历史中应出现该交接块（视图产物）。
+	// ②.1 ★ 2026-09-27 续轮边界**不再整理**（用户要求：监督者自身上下文必须连贯）：
+	//     自主续跑必须携带完整连续历史——历史中不应出现交接折叠块；且首轮工作 agent
+	//     的汇报仍在历史里（监督者看得见自己此前做过什么，而非只剩「摘要 + 最近几条」）。
 	sawHandoff := false
 	for _, msg := range hist {
 		if msg.Role == RoleUser && strings.HasPrefix(msg.Content, handoffTitle) {
 			sawHandoff = true
 		}
 	}
-	if !sawHandoff {
-		t.Errorf("续轮边界应折叠历史为交接提交消息（历史 %d 条未含 %q）", len(hist), handoffTitle)
+	if sawHandoff {
+		t.Errorf("续轮边界不应再折叠历史（默认不整理），但 %d 条历史中出现了交接块 %q",
+			len(hist), handoffTitle)
+	}
+	sawFirstReport := false
+	for _, msg := range hist {
+		if msg.Role == RoleAssistant && strings.Contains(msg.Content, "我已完成自主模式插件的实现") {
+			sawFirstReport = true
+		}
+	}
+	if !sawFirstReport {
+		t.Errorf("续跑历史应保留首轮工作 agent 汇报（监督者上下文连贯），%d 条历史中未找到", len(hist))
 	}
 	// ③ 决策器被调用两次（第二次判定 done 后收尾，不再有第三次）
 	seenLen, serr := vm.RunString(`globalThis.__seen.length`)

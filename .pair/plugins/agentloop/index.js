@@ -1111,9 +1111,15 @@ return {
 
     const log = ctx.logger('agentloop');
 
-    // ★ 会话交接策略注册（2026-09-12 从 Go 外置；宿主两个跨轮边界委托本实现）。
+    // ★ 会话交接策略注册（2026-09-12 从 Go 外置；宿主跨轮边界委托本实现）。
     //   宿主未注册本实现（或本实现抛错）时自动回退 Go 默认实现（handoff.go）——
     //   停用插件即还原原有行为，零风险。
+    //   ★ 2026-09-27 调用时机收敛（用户要求：监督者自身上下文必须连贯）：宿主**只在
+    //   用户输入边界（onUserTurn）**调用交接整理；段边界（onSegment）与自主续轮
+    //   边界（onAutoTurn）默认**停用**（HandoffSegmentEnabled / HandoffAutoTurnEnabled
+    //   默认 false）——续跑整理会让工作 agent 与监督者丢掉自己此前的执行脉络。
+    //   两个回调仍保留注册（能力不删）：显式 PAIR_HANDOFF_SEGMENT=1 /
+    //   PAIR_HANDOFF_AUTO_TURN=1 时宿主会重新委托它们。
     const handoffUtils = ctx.handoff;
     if (ctx.loopFactory && typeof ctx.loopFactory.registerHandoff === 'function') {
       if (handoffUtils) {
@@ -1126,13 +1132,16 @@ return {
             return view ? { view, applied: true } : { applied: false };
           },
           // 段续跑边界（同一条消息内的分段，Run 之间）：同一任务延续 → judge 由宿主置空
+          // ★ 2026-09-27 宿主默认不调用本边界（段边界在同一用户消息内，整理=同任务上下文断裂）
           onSegment: async (args) => {
             const view = hBuildView(handoffUtils, args, hlog);
             return view ? { view, applied: true } : { applied: false };
           },
           // ★ 自主续轮边界（监督续轮 / goal 续轮，2026-09-27）：宿主传 force=true + keep
-          //   ——每轮续跑前把累计历史折叠为「交接提交消息 + 最近 keep 条原文」，
-          //   续轮上下文有界（此前 loop.Run(nil) 每轮携带全量时间线）。
+          //   ——每轮续跑前把累计历史折叠为「交接提交消息 + 最近 keep 条原文」。
+          //   ★ 2026-09-27 当日修正：宿主默认**不再调用**本边界（折叠视图会被 loop.Run
+          //   的 l.History 回写，监督者下一轮只剩「摘要 + keep 条」，自身不连贯）。
+          //   续轮改为携带完整连续历史；显式 PAIR_HANDOFF_AUTO_TURN=1 时才委托本实现。
           onAutoTurn: async (args) => {
             const view = hBuildView(handoffUtils, args, hlog, {
               force: args.force !== false,
@@ -1141,7 +1150,7 @@ return {
             return view ? { view, applied: true } : { applied: false };
           },
         });
-        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界 / 自主续轮强制折叠；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
+        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界 / 自主续轮；★ 宿主默认只在用户输入边界调用，段边界与自主续轮默认停用；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
       } else {
         log.warn('ctx.handoff 能力不可用（宿主版本过旧？）——跳过会话交接注册，宿主走 Go 默认实现');
       }

@@ -88,6 +88,8 @@ func TestHandoffJS_SegmentView(t *testing.T) {
 	if !gojaOk() {
 		t.Skip("goja 不可用")
 	}
+	// ★ 2026-09-27 段边界默认停用（HandoffSegmentEnabled）→ 显式开启验证 JS 委托链路本身
+	t.Setenv("PAIR_HANDOFF_SEGMENT", "1")
 	regFakeJSHandoff(t, "",
 		`(function(args){
 			if (args.judge !== null) throw new Error('段边界 judge 必须为 null');
@@ -99,6 +101,32 @@ func TestHandoffJS_SegmentView(t *testing.T) {
 	view, ok, _ := HandoffSegmentView(context.Background(), loop, store, "conv_seg", "继续")
 	if !ok || len(view) != 1 || view[0].Content != "段边界视图" {
 		t.Fatalf("段边界应委托 JS 实现: ok=%v view=%+v", ok, view)
+	}
+}
+
+// TestHandoffSegment_DefaultDisabled 段边界默认**停用**（2026-09-27 用户要求：
+// 只在用户发消息时才整理历史）。段边界属于**同一条用户消息内**的自动续段，整理会让
+// 工作 agent 丢掉上一段的执行细节（同一任务执行到一半忽然「失忆」，上下文断裂）。
+func TestHandoffSegment_DefaultDisabled(t *testing.T) {
+	t.Setenv("PAIR_HANDOFF_SEGMENT", "") // 生产默认：不设即停用
+	t.Setenv("PAIR_HANDOFF", "")
+	t.Setenv("PAIR_HANDOFF_JS", "0")
+	t.Setenv("PAIR_HANDOFF_TRIGGER_TOKENS", "100") // 即便达常规阈值也不由段边界整理
+
+	store := NewMessageStore(t.TempDir())
+	loop := &Loop{History: handoffHist(120, "segoff"), MaxContextTokens: 0}
+
+	if view, ok, _ := HandoffSegmentView(context.Background(), loop, store, "conv_seg_off", "继续"); ok || view != nil {
+		t.Fatalf("默认应停用段边界整理（上下文连贯优先），实际 ok=%v len=%d", ok, len(view))
+	}
+	// nil Loop 保护（不 panic）
+	if _, ok, _ := HandoffSegmentView(context.Background(), nil, store, "conv_seg_nil", "继续"); ok {
+		t.Fatal("nil Loop 不应启用交接")
+	}
+	// 能力保留：显式开启后仍可整理（按需回退/实验）
+	t.Setenv("PAIR_HANDOFF_SEGMENT", "1")
+	if view, ok, _ := HandoffSegmentView(context.Background(), loop, store, "conv_seg_on", "继续"); !ok || len(view) == 0 {
+		t.Fatal("显式 PAIR_HANDOFF_SEGMENT=1 应恢复段边界整理能力")
 	}
 }
 
@@ -274,6 +302,7 @@ func TestHandoffJS_SegmentReuseKeepsPrefixStable(t *testing.T) {
 	if !gojaOk() {
 		t.Skip("goja 不可用")
 	}
+	t.Setenv("PAIR_HANDOFF_SEGMENT", "1") // ★ 2026-09-27 段边界默认停用 → 显式开启
 	loadRealAgentloop(t)
 	if CurrentJSHandoff() == nil {
 		t.Fatal("agentloop 插件应注册 JS 交接实现")
