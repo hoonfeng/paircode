@@ -16,9 +16,34 @@ package agent
 // 宿主在以上两处调用注册实现；返回 view 即启用（宿主负责替换喂 LLM 的历史视图，
 // **落盘不动**）。未注册 → Go 默认实现。
 //
+// ★ 2026-09-30 时机策略同样外置（用户要求：是否/何时整理必须是插件可变的）：
+//
+//	「调用位置在宿主」是物理约束（插件没有对应 hook 点自主发起），但**决策权**不该
+//	跟着内置——registerHandoff 新增可选 policy 回调：宿主在三个边界**调用整理之前**
+//	先问它「这次要不要整理、用什么参数」。优先级：
+//	  插件 policy  >  环境变量（PAIR_HANDOFF_SEGMENT / PAIR_HANDOFF_AUTO_TURN）  >  内置默认
+//	policy 返回 null / undefined / 无 enabled 字段 = **未表态** → 退回环境变量与内置
+//	默认（未注册 policy 的老插件行为逐字不变）。PAIR_HANDOFF=0 为运维总闸，优先生效。
+//
 // 能力面（注入 JS 的 args）：
 //
-//	args = {
+//	policy(args) 的 args（**轻量**：只带元信息 + 历史尾部，不做全量历史 JSON 往返——
+//	策略判断无须全文，而每轮续跑都做一次全量序列化的代价不可接受）=
+//	{
+//	  kind: 'userTurn' | 'segment' | 'autoTurn',
+//	  convID, workspaceRoot, task, maxContextTokens,
+//	  historyMsgs, historyTokens,                  // 历史规模（条数 / 估算 token）
+//	  historyTail: [ 最近 8 条原文（内容截断 300 rune）],
+//	  defaultEnabled,                              // 宿主兜底默认（可原样回传表达「沿用默认」）
+//	  defaults: { userTurn, segment, autoTurn },   // 三边界在当前环境变量下的取值
+//	  keepDefault                                  // 自动续轮的默认保留段深度
+//	}
+//
+//	policy 返回 = { enabled: bool, force?: bool, keep?: number, reason?: string }
+//	              （enabled 缺失即视为未表态；keep 仅 autoTurn 生效）
+//
+//	整理调用（onUserTurn / onSegment / onAutoTurn）的 args =
+//	{
 //	  kind: 'userTurn' | 'segment' | 'autoTurn',
 //	  convID, workspaceRoot, task, maxContextTokens,
 //	  history: [ {role, content, toolCalls?, toolCallId?, name?} ],   // 完整历史（JSON 往返）
@@ -52,6 +77,7 @@ import (
 // jsHandoffImpl 一个已注册的 JS 会话交接实现。
 type jsHandoffImpl struct {
 	id         string
+	policy     goja.Callable // async (args) → {enabled, force?, keep?, reason?}（时机策略，可选）
 	onUserTurn goja.Callable // async (args) → {view, applied?, notice?}
 	onSegment  goja.Callable // async (args) → {view, applied?, notice?}
 	onAutoTurn goja.Callable // async (args) → {view, applied?, notice?}
@@ -109,7 +135,7 @@ func handoffJSEnabled() bool {
 	return true
 }
 
-// ── 注册入口：ctx.loopFactory.registerHandoff({id?, onUserTurn?, onSegment?}) ──
+// ── 注册入口：ctx.loopFactory.registerHandoff({id?, policy?, onUserTurn?, onSegment?, onAutoTurn?}) ──
 
 // attachHandoffRegister 在 ctx.loopFactory 对象上挂 registerHandoff 方法
 // （jsplugin.go 的 buildContextObject 里 loopFactoryObj 创建后调用）。
@@ -118,7 +144,7 @@ func (p *jsPluginAdapter) attachHandoffRegister(loopFactoryObj *goja.Object) {
 	loopFactoryObj.Set("registerHandoff", func(call goja.FunctionCall) goja.Value {
 		arg := call.Argument(0)
 		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
-			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 需要 {id?, onUserTurn?, onSegment?}"))
+			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 需要 {id?, policy?, onUserTurn?, onSegment?, onAutoTurn?}"))
 		}
 		obj := arg.ToObject(vm)
 		id := obj.Get("id").String()
@@ -142,20 +168,156 @@ func (p *jsPluginAdapter) attachHandoffRegister(loopFactoryObj *goja.Object) {
 		if fn, ok := goja.AssertFunction(obj.Get("onAutoTurn")); ok {
 			impl.onAutoTurn = fn
 		}
-		if impl.onUserTurn == nil && impl.onSegment == nil && impl.onAutoTurn == nil {
-			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 至少需要 onUserTurn / onSegment / onAutoTurn 之一"))
+		if fn, ok := goja.AssertFunction(obj.Get("policy")); ok {
+			impl.policy = fn
+		}
+		if impl.policy == nil && impl.onUserTurn == nil && impl.onSegment == nil && impl.onAutoTurn == nil {
+			panic(vm.NewTypeError("ctx.loopFactory.registerHandoff: 至少需要 policy / onUserTurn / onSegment / onAutoTurn 之一"))
 		}
 		restore := RegisterJSHandoff(impl)
 		p.addCleanup(restore)
 		p.def.addDiag(fmt.Sprintf(
-			"注册 JS 会话交接实现 %q（userTurn=%v segment=%v autoTurn=%v；卸载自动还原 Go 默认实现）",
-			id, impl.onUserTurn != nil, impl.onSegment != nil, impl.onAutoTurn != nil))
+			"注册 JS 会话交接实现 %q（policy=%v userTurn=%v segment=%v autoTurn=%v；卸载自动还原 Go 默认实现）",
+			id, impl.policy != nil, impl.onUserTurn != nil, impl.onSegment != nil, impl.onAutoTurn != nil))
 		log.Printf("[js-plugin:%s] registerHandoff: 已注册 JS 会话交接实现 %q（会话交接策略委托 JS）", p.def.id, id)
 		return vm.ToValue(map[string]any{"id": id, "ok": true})
 	})
 }
 
-// ── 调用：宿主两个边界 ──
+// ── 时机策略：宿主在整理之前询问「这次要不要整理、用什么参数」──
+
+// handoffPolicyTailMsgs / handoffPolicyTailRunes 策略询问携带的历史尾部规模。
+// 轻量：策略判断无须全文，避免每轮续跑都付一次全量历史的 JSON 往返代价。
+const (
+	handoffPolicyTailMsgs  = 8
+	handoffPolicyTailRunes = 300
+)
+
+// HandoffPolicyArgs 询问插件时机策略的输入（轻量：元信息 + 历史规模 + 历史尾部）。
+type HandoffPolicyArgs struct {
+	Kind             string // handoffKindUserTurn / handoffKindSegment / handoffKindAutoTurn
+	ConvID           string
+	WorkspaceRoot    string
+	Task             string
+	MaxContextTokens int
+	History          []Message
+	DefaultEnabled   bool // 宿主兜底默认（环境变量视角），供插件「沿用默认」
+}
+
+// HandoffDecision 插件对「本边界是否整理」的表态。
+type HandoffDecision struct {
+	Enabled bool
+	Force   bool   // 仅 autoTurn 有意义：跳过触发阈值强制折叠
+	Keep    int    // 视图保留段深度（0 = 用宿主默认）
+	Reason  string // 日志/排障用
+}
+
+// HasPolicy 是否注册了时机策略回调。
+// 未注册 → 宿主完全按环境变量与内置默认决策（老插件零行为变化）。
+func (h *jsHandoffImpl) HasPolicy() bool { return h != nil && h.policy != nil }
+
+// HasUserTurn / HasSegment / HasAutoTurn 是否注册了对应边界的整理实现。
+// 只注册 policy（纯时机策略插件）时三个都为 false → 整理交回 Go 默认实现，
+// 宿主不打「委托失败」日志（那不是错误，是插件的合法形态）。
+func (h *jsHandoffImpl) HasUserTurn() bool { return h != nil && h.onUserTurn != nil }
+func (h *jsHandoffImpl) HasSegment() bool  { return h != nil && h.onSegment != nil }
+func (h *jsHandoffImpl) HasAutoTurn() bool { return h != nil && h.onAutoTurn != nil }
+
+// Policy 询问插件时机策略。stated=false 表示插件未表态
+// （null / undefined / 无 enabled 字段）→ 宿主退回环境变量与内置默认。
+func (h *jsHandoffImpl) Policy(a HandoffPolicyArgs) (dec HandoffDecision, stated bool, err error) {
+	if h == nil || h.policy == nil {
+		return HandoffDecision{}, false, fmt.Errorf("未注册 policy")
+	}
+	run := func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("JS 时机策略 panic: %v", r)
+			}
+		}()
+		args := h.policyArgsObject(a)
+		v, cerr := h.policy(goja.Undefined(), args)
+		if cerr != nil {
+			err = cerr
+			return
+		}
+		av, aerr := awaitJSValue(h.vm, v) // async 函数 → 同步等待（微任务 drain）
+		if aerr != nil {
+			err = aerr
+			return
+		}
+		dec, stated = parseJSHandoffPolicy(h.vm, av)
+	}
+	// goja 非并发安全：与 invoke 同规则持 VM 锁（续跑来自任意 goroutine）。
+	if h.plugin != nil {
+		h.plugin.withLock(run)
+	} else {
+		run()
+	}
+	if err != nil {
+		return HandoffDecision{}, false, fmt.Errorf("JS 时机策略(%s) 失败: %w", a.Kind, err)
+	}
+	return dec, stated, nil
+}
+
+// policyArgsObject 构造策略询问参数（轻量：元信息 + 历史规模 + 尾部截断副本）。
+func (h *jsHandoffImpl) policyArgsObject(a HandoffPolicyArgs) *goja.Object {
+	tail := a.History
+	if len(tail) > handoffPolicyTailMsgs {
+		tail = tail[len(tail)-handoffPolicyTailMsgs:]
+	}
+	trimmed := make([]Message, 0, len(tail))
+	for _, m := range tail {
+		c := m
+		c.Content = truncateRunes(c.Content, handoffPolicyTailRunes)
+		trimmed = append(trimmed, c)
+	}
+	return handoffArgsObject(h.vm, map[string]any{
+		"kind":             a.Kind,
+		"convID":           a.ConvID,
+		"workspaceRoot":    a.WorkspaceRoot,
+		"task":             a.Task,
+		"maxContextTokens": a.MaxContextTokens,
+		"historyMsgs":      len(a.History),
+		"historyTokens":    estimateTokens(a.History),
+		"historyTail":      trimmed,
+		"defaultEnabled":   a.DefaultEnabled,
+		"defaults": map[string]any{
+			handoffKindUserTurn: HandoffEnabled(),
+			handoffKindSegment:  HandoffSegmentEnabled(),
+			handoffKindAutoTurn: HandoffAutoTurnEnabled(),
+		},
+		"keepDefault": handoffAutoTurnKeep(),
+	})
+}
+
+// parseJSHandoffPolicy 解析策略返回值 {enabled, force?, keep?, reason?}。
+// stated=false = 未表态（null / undefined / 无 enabled 字段）→ 宿主退回默认。
+func parseJSHandoffPolicy(vm *goja.Runtime, ret goja.Value) (HandoffDecision, bool) {
+	if ret == nil || goja.IsUndefined(ret) || goja.IsNull(ret) {
+		return HandoffDecision{}, false
+	}
+	obj := ret.ToObject(vm)
+	ev := obj.Get("enabled")
+	if ev == nil || goja.IsUndefined(ev) || goja.IsNull(ev) {
+		return HandoffDecision{}, false
+	}
+	dec := HandoffDecision{Enabled: ev.ToBoolean()}
+	if fv := obj.Get("force"); fv != nil && !goja.IsUndefined(fv) && !goja.IsNull(fv) {
+		dec.Force = fv.ToBoolean()
+	}
+	if kv := obj.Get("keep"); kv != nil && !goja.IsUndefined(kv) && !goja.IsNull(kv) {
+		if n := int(kv.ToInteger()); n > 0 {
+			dec.Keep = n
+		}
+	}
+	if rv := obj.Get("reason"); rv != nil && !goja.IsUndefined(rv) && !goja.IsNull(rv) {
+		dec.Reason = rv.String()
+	}
+	return dec, true
+}
+
+// ── 调用：宿主三个边界 ──
 
 // UserTurnView 用户输入边界（新提交对话 / 点继续执行）调用 JS 交接实现。
 // 返回 (view, applied, notice)；applied=false 时调用方保持原逻辑

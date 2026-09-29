@@ -45,6 +45,11 @@ package agent
 //   属保护性压缩而非策略性整理。需要旧的「续跑上下文有界」行为时可显式开启：
 //   PAIR_HANDOFF_SEGMENT=1（段边界）/ PAIR_HANDOFF_AUTO_TURN=1（自主续轮）。
 //
+//   ★ 2026-09-30 上述默认**不再是宿主内置策略，而是「插件未表态时的兜底」**：三个
+//   边界的「是否整理」统一走 handoffDecisionFor——插件 registerHandoff.policy 的表态
+//   优先于环境变量与内置默认（时机策略插件可变；环境变量只在插件未表态时生效），
+//   PAIR_HANDOFF=0 仍是运维总闸。宿主保留「调用位置」与兜底默认（见 jshandoff.go）。
+//
 // 边界与安全性：
 //   - 原文不删除：交接只替换「喂 LLM 的历史视图」；落盘/展示仍为完整时间线
 //     （视图文本以 handoffTitle 开头，落盘锚点/真实任务轮次统计自动跳过，
@@ -859,13 +864,73 @@ func buildLoopHandoffView(runCtx context.Context, l *Loop, store ConversationSto
 //     不会切断轮内 append-only 的前缀。
 //   一次 Run 的 step 之间**不做任何整理**（见 compress.go maybeCompact：段内只追加）。
 
+// 时机策略询问的边界标识（registerHandoff.policy 的 args.kind）。
+const (
+	handoffKindUserTurn = "userTurn"
+	handoffKindSegment  = "segment"
+	handoffKindAutoTurn = "autoTurn"
+)
+
+// askJShandoffPolicy 询问插件时机策略（2026-09-30）。
+// 未注册 policy / 执行失败 → ok=false，宿主退回环境变量与内置默认。
+func askJShandoffPolicy(kind, convID, workspaceRoot, task string, history []Message,
+	maxContextTokens int, defEnabled bool) (HandoffDecision, bool) {
+	impl := CurrentJSHandoff()
+	if impl == nil || !impl.HasPolicy() {
+		return HandoffDecision{}, false
+	}
+	dec, ok, err := impl.Policy(HandoffPolicyArgs{
+		Kind:             kind,
+		ConvID:           convID,
+		WorkspaceRoot:    workspaceRoot,
+		Task:             task,
+		MaxContextTokens: maxContextTokens,
+		History:          history,
+		DefaultEnabled:   defEnabled,
+	})
+	if err != nil {
+		log.Printf("[handoff] JS 时机策略（%s）失败，回退宿主默认: %v", kind, err)
+		return HandoffDecision{}, false
+	}
+	return dec, ok
+}
+
+// handoffDecisionFor 「这次是否整理」的最终决策（**决策权在插件**，宿主只兜底）：
+//
+//	PAIR_HANDOFF=0（运维总闸） > 插件 policy > 环境变量 > 内置默认
+//
+// kind 取 handoffKind* 常量；envDefault 是该边界在环境变量视角下的默认值
+// （userTurn=true / segment=false / autoTurn=false）。返回 (enabled, dec)：
+// enabled=false 时调用方保持原行为（携带完整连续历史，不整理）；dec 仅在插件
+// 表态时有效（可携带 force / keep）。
+func handoffDecisionFor(kind, convID, workspaceRoot, task string, history []Message,
+	maxContextTokens int, envDefault bool) (bool, HandoffDecision) {
+	if !HandoffEnabled() {
+		return false, HandoffDecision{} // 运维总闸：任何一侧都不得整理
+	}
+	if dec, ok := askJShandoffPolicy(kind, convID, workspaceRoot, task, history,
+		maxContextTokens, envDefault); ok {
+		if dec.Reason != "" {
+			log.Printf("[handoff] 边界 %s 时机策略（插件）：整理=%v 理由=%s", kind, dec.Enabled, dec.Reason)
+		}
+		return dec.Enabled, dec
+	}
+	return envDefault, HandoffDecision{}
+}
+
 // HandoffUserTurnView 用户输入边界（新提交对话 / 点继续执行）的整理视图：
 // JS 实现（插件 registerHandoff.onUserTurn）优先；未注册或执行失败 → 回退 Go 默认。
 // 返回 (view, applied, notice)；applied=false 时调用方保持原逻辑
 // （原样历史或按 token 压力精简）。notice 非空时由调用方透传给用户。
 func HandoffUserTurnView(ctx context.Context, prov, judge Provider, store ConversationStore,
 	convID, workspaceRoot string, history []Message, task string, maxContextTokens int) ([]Message, bool, string) {
-	if impl := CurrentJSHandoff(); impl != nil {
+	// ★ 2026-09-30 时机策略（插件可变）：插件 policy 判定「本次不整理」时直接返回，
+	//   不再走 Go 默认实现（运维总闸 PAIR_HANDOFF=0 也在此短路）。
+	if enabled, _ := handoffDecisionFor(handoffKindUserTurn, convID, workspaceRoot, task,
+		history, maxContextTokens, true); !enabled {
+		return nil, false, ""
+	}
+	if impl := CurrentJSHandoff(); impl != nil && impl.HasUserTurn() {
 		view, ok, notice, err := impl.UserTurnView(convID, workspaceRoot, history, task,
 			maxContextTokens, prov, judge, store)
 		if err != nil {
@@ -887,10 +952,17 @@ func HandoffSegmentView(runCtx context.Context, l *Loop, store ConversationStore
 	// ★ 2026-09-27 默认不整理：段边界在同一条用户消息内（工具预算耗尽后自动续段），
 	//   整理会让工作 agent 丢掉上一段的执行细节 → 同任务内上下文断裂。开启见
 	//   HandoffSegmentEnabled（PAIR_HANDOFF_SEGMENT=1）。
-	if l == nil || !HandoffSegmentEnabled() {
+	//   ★ 2026-09-30 该默认**由插件可覆写**：registerHandoff.policy 表态优先于环境变量
+	//   （插件返回 {enabled:true} 即整理）；未注册 policy 时行为与从前逐字一致。
+	if l == nil {
 		return nil, false, ""
 	}
-	if impl := CurrentJSHandoff(); impl != nil {
+	enabled, _ := handoffDecisionFor(handoffKindSegment, convID, l.WorkspaceRoot, task,
+		l.History, l.MaxContextTokens, HandoffSegmentEnabled())
+	if !enabled {
+		return nil, false, ""
+	}
+	if impl := CurrentJSHandoff(); impl != nil && impl.HasSegment() {
 		var prov Provider
 		if l.Compressor != nil {
 			prov = l.Compressor
@@ -931,7 +1003,15 @@ func HandoffSegmentView(runCtx context.Context, l *Loop, store ConversationStore
 //
 // 返回 (view, applied, notice)；applied=false 时调用方传 nil 给 loop.Run（原行为）。
 func HandoffAutoTurnView(ctx context.Context, l *Loop, store ConversationStore, convID, task string) ([]Message, bool, string) {
-	if l == nil || !HandoffAutoTurnEnabled() {
+	if l == nil {
+		return nil, false, ""
+	}
+	// ★ 2026-09-30 时机策略（插件可变）：插件 policy 表态优先于 PAIR_HANDOFF_AUTO_TURN；
+	//   未表态则用环境变量默认（停用，理由见 HandoffAutoTurnEnabled）。插件可用 keep
+	//   覆写保留段深度（0/缺省 = 宿主 handoffAutoTurnKeep）。
+	enabled, pdec := handoffDecisionFor(handoffKindAutoTurn, convID, l.WorkspaceRoot, task,
+		l.History, l.MaxContextTokens, HandoffAutoTurnEnabled())
+	if !enabled {
 		return nil, false, ""
 	}
 	var prov Provider
@@ -941,7 +1021,10 @@ func HandoffAutoTurnView(ctx context.Context, l *Loop, store ConversationStore, 
 		prov = l.getProvider()
 	}
 	keep := handoffAutoTurnKeep()
-	if impl := CurrentJSHandoff(); impl != nil {
+	if pdec.Keep > 0 {
+		keep = pdec.Keep
+	}
+	if impl := CurrentJSHandoff(); impl != nil && impl.HasAutoTurn() {
 		view, ok, notice, err := impl.AutoTurnView(convID, l.WorkspaceRoot, l.History, task,
 			l.MaxContextTokens, prov, store, keep)
 		if err != nil {

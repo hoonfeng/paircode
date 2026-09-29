@@ -403,6 +403,17 @@ return {
         { name: 'reviewMode', label: '审核模式', type: 'select', default: '', options: ['', 'auto', 'manual', 'off'], hint: '空=不覆盖（auto=AI审核/manual=手动审批/off=放行）' },
         { name: 'reviewBlacklist', label: '审核黑名单', type: 'text', default: '', hint: '逗号分隔工具名（命中需审核）' },
         { name: 'reviewWhitelist', label: '审核白名单', type: 'text', default: '', hint: '逗号分隔工具名（命中跳过审核，黑名单优先）' },
+        // ★ 2026-09-30 交接时机（会话交接·提交消息）——此前「只在用户发消息时整理」的
+        //   开关只存在于宿主环境变量（PAIR_HANDOFF_SEGMENT / PAIR_HANDOFF_AUTO_TURN），
+        //   现由本插件 registerHandoff.policy 表态：配置即生效，且优先于环境变量。
+        { name: 'handoffSegment', label: '段边界整理历史', type: 'checkbox', default: false,
+          hint: '同一用户消息内的自动续段前，把历史整理为「会话交接·提交消息」。默认关闭：开启会让工作 agent 丢掉上一段的执行细节（同任务内上下文断裂）' },
+        { name: 'handoffUserTurn', label: '用户消息整理历史', type: 'checkbox', default: true,
+          hint: '每次用户发消息（新提交对话 / 点继续执行）时按阈值整理历史。取消勾选 = 该边界完全不整理（保留逐字历史）' },
+        { name: 'handoffAutoTurn', label: '自主续轮整理历史', type: 'checkbox', default: false,
+          hint: '监督续轮 / goal 续轮前整理历史。默认关闭：开启会让监督者看不到自己此前的核查脉络（自身上下文不连贯）' },
+        { name: 'handoffAutoTurnKeep', label: '续轮保留原文条数', type: 'number', default: 0,
+          hint: '仅「自主续轮整理历史」开启时有效：交接视图保留最近多少条原文；0 = 宿主默认 6' },
         { name: 'autoIterateOnRejection', label: '拒绝后自动迭代', type: 'checkbox', binding: 'autoIterateOnRejection' },
         { name: 'ignoreDirs', label: '忽略目录', type: 'tags', binding: 'ignoreDirs',
           hint: '逗号分隔（node_modules, dist, .git…）' },
@@ -1120,28 +1131,68 @@ return {
     //   默认 false）——续跑整理会让工作 agent 与监督者丢掉自己此前的执行脉络。
     //   两个回调仍保留注册（能力不删）：显式 PAIR_HANDOFF_SEGMENT=1 /
     //   PAIR_HANDOFF_AUTO_TURN=1 时宿主会重新委托它们。
+    //   ★ 2026-09-30 时机策略同样外置（用户要求：是否/何时整理必须插件可变）：此前
+    //   「默认停用」是宿主内置策略、只能靠环境变量改；现在宿主在三个边界**调用整理
+    //   之前**先问本插件的 policy 回调，插件表态优先于环境变量与宿主内置默认
+    //   （环境变量只在插件未表态时生效）。当前表态 = 沿用「只在用户发消息时整理」，
+    //   但可在设置面板逐边界开关（Agent → 交接时机）。
     const handoffUtils = ctx.handoff;
     if (ctx.loopFactory && typeof ctx.loopFactory.registerHandoff === 'function') {
       if (handoffUtils) {
         const hlog = (m) => log.info(m);
+        // 交接时机配置（实时读：设置保存后立即生效——与装配参数同规则）。
+        const handoffCfg = () => (ctx.getSettings && ctx.getSettings('agentloop')) || {};
         ctx.loopFactory.registerHandoff({
           id: 'agentloop',
+          // ★ 时机策略（2026-09-30）：宿主在三个边界调用整理**之前**调用本回调，
+          //   决定「这次要不要整理、用什么参数」。返回 {enabled:false} = 不整理；
+          //   {enabled:true, force?, keep?} = 整理并按其参数执行；返回 null / 无 enabled
+          //   字段 = 未表态（交回宿主的环境变量与内置默认）。
+          //   args 为轻量元信息（kind / historyMsgs / historyTokens / historyTail /
+          //   defaults / keepDefault），**不含全量历史**——策略判断无须全文。
+          //   ★ 三态表达：显式 true/false = 插件表态（优先于宿主环境变量）；未配置
+          //   （返回 null）= 不表态 → 交回宿主（环境变量 PAIR_HANDOFF_SEGMENT /
+          //   PAIR_HANDOFF_AUTO_TURN 与内置默认继续生效，排障开关不被吞掉）。
+          policy: async (args) => {
+            const cfg = handoffCfg();
+            const flag = (v) => (v === true ? true : (v === false ? false : null));
+            if (args.kind === 'userTurn') {
+              return flag(cfg.handoffUserTurn) === false
+                ? { enabled: false, reason: '设置面板已关闭用户消息边界的交接整理' }
+                : null; // 默认整理处：交回宿主（含 PAIR_HANDOFF 总闸与阈值判定）
+            }
+            if (args.kind === 'segment') {
+              const v = flag(cfg.handoffSegment);
+              if (v === null) return null; // 未配置 → 宿主环境变量 / 内置默认（停用）
+              return v
+                ? { enabled: true, reason: '设置面板已开启段边界整理' }
+                : { enabled: false, reason: '设置面板已关闭段边界整理' };
+            }
+            if (args.kind === 'autoTurn') {
+              const v = flag(cfg.handoffAutoTurn);
+              if (v === null) return null; // 未配置 → 宿主环境变量 / 内置默认（停用）
+              if (!v) return { enabled: false, reason: '设置面板已关闭自主续轮整理' };
+              const k = Number(cfg.handoffAutoTurnKeep);
+              return { enabled: true, force: true, keep: k > 0 ? k : args.keepDefault };
+            }
+            return null; // 未知边界 → 交回宿主默认
+          },
           // 用户输入边界（新提交对话 / 点继续执行）：任务关系可能变化 → 带判官复检
           onUserTurn: async (args) => {
             const view = hBuildView(handoffUtils, args, hlog);
             return view ? { view, applied: true } : { applied: false };
           },
           // 段续跑边界（同一条消息内的分段，Run 之间）：同一任务延续 → judge 由宿主置空
-          // ★ 2026-09-27 宿主默认不调用本边界（段边界在同一用户消息内，整理=同任务上下文断裂）
+          // ★ 是否调用本回调由上方 policy 决定（默认不整理：段边界在同一用户消息内）
           onSegment: async (args) => {
             const view = hBuildView(handoffUtils, args, hlog);
             return view ? { view, applied: true } : { applied: false };
           },
           // ★ 自主续轮边界（监督续轮 / goal 续轮，2026-09-27）：宿主传 force=true + keep
           //   ——每轮续跑前把累计历史折叠为「交接提交消息 + 最近 keep 条原文」。
-          //   ★ 2026-09-27 当日修正：宿主默认**不再调用**本边界（折叠视图会被 loop.Run
-          //   的 l.History 回写，监督者下一轮只剩「摘要 + keep 条」，自身不连贯）。
-          //   续轮改为携带完整连续历史；显式 PAIR_HANDOFF_AUTO_TURN=1 时才委托本实现。
+          //   ★ 是否调用本回调由上方 policy 决定（默认不整理：折叠视图会被 loop.Run
+          //   的 l.History 回写，监督者下一轮只剩「摘要 + keep 条」，自身不连贯）；
+          //   开启时续轮改为携带完整连续历史之外的折叠视图，由 policy 的 keep 控制深度。
           onAutoTurn: async (args) => {
             const view = hBuildView(handoffUtils, args, hlog, {
               force: args.force !== false,
@@ -1150,7 +1201,7 @@ return {
             return view ? { view, applied: true } : { applied: false };
           },
         });
-        log.info('已注册会话交接实现（registerHandoff：用户输入 / 段边界 / 自主续轮；★ 宿主默认只在用户输入边界调用，段边界与自主续轮默认停用；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
+        log.info('已注册会话交接实现（registerHandoff：policy 时机策略 + 用户输入 / 段边界 / 自主续轮整理；★ 时机由本插件 policy 表态，当前默认只在用户输入边界整理——设置面板「Agent → 交接时机」可逐边界开关；只整理喂 LLM 的历史视图，落盘只追加，轮内 step 之间不整理）');
       } else {
         log.warn('ctx.handoff 能力不可用（宿主版本过旧？）——跳过会话交接注册，宿主走 Go 默认实现');
       }
