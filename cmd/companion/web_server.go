@@ -2589,10 +2589,12 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	//   若全局激活配置未展开完整（如配置未指定模型），会误报「未配置 API key」。
 	//   （用户实测：会话切换模型成功 + 装配日志 preset 有值 → 仍被同步校验拦截）
 	if ok, missing := agent.ConfiguredProviderForConv(req.ConvID, req.WorkspaceRoot); !ok {
-		hint := "未配置 API key。请在设置面板中配置 API Key 和模型。"
+		hint := "未配置 API key。请在「设置 → AI」中添加并应用 AI 配置（服务商 + API Key）。"
 		switch missing {
 		case "模型为空":
-			hint = "模型未配置：当前配置未指定模型。请在对话面板选择模型，或在「设置 → AI」中为配置指定模型后再发送。"
+			// ★ 2026-10-07 与会话级模型语义对齐（同 handler/stub.go）：模型按会话选择，
+			//   AI 配置不再含模型字段——缺模型时提示「本会话未选择」，不再指向设置面板里不存在的字段。
+			hint = "模型未配置：本会话尚未选择模型。请在对话面板的「选择模型…」中选好模型后发送。"
 		case "API Key 为空":
 			hint = "API Key 未配置：请在「设置 → AI」中为当前配置填写 API Key。"
 		case "API 地址为空":

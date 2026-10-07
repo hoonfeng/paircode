@@ -18,6 +18,7 @@ import (
 // ★ 2026-09-03 决策迁插件后，展开决策在 agentloop 装配器实现，Go 单测以
 //
 //	等价装配器验证「ForConv 正确注入装配上下文（Preset/Conv*）」的链路契约。
+// ★ 2026-10-07 模型只认会话级：配置展开不再带模型（复刻语义与 agentloop 装配器同步）。
 type testProviderAssembler struct{}
 
 func (testProviderAssembler) Apply(cur ProviderParams) ProviderParams {
@@ -27,7 +28,8 @@ func (testProviderAssembler) Apply(cur ProviderParams) ProviderParams {
 		presetName = cur.Preset
 	}
 	pres := core.GetPreset(presetName)
-	valid := pres.Provider != "" || pres.ExecuteModel != ""
+	// ★ 2026-10-07 配置有效性只看连接信息：模型字段（executeModel）已退出配置体系
+	valid := pres.Provider != ""
 	if valid {
 		if pres.Provider != "" {
 			cur.Provider = pres.Provider
@@ -38,9 +40,7 @@ func (testProviderAssembler) Apply(cur ProviderParams) ProviderParams {
 		if pres.APIKey != "" {
 			cur.APIKey = pres.APIKey
 		}
-		if pres.ExecuteModel != "" {
-			cur.Model = pres.ExecuteModel
-		}
+		// 模型不展开：唯一来源 = 下方 ② 的会话选定（cur.ConvModel）
 	}
 	// ② 会话级覆盖（会话选定 服务商/模型 > 展开结果）
 	if cur.ConvProvider != "" {
@@ -180,7 +180,8 @@ func TestConvAssembly_ByPresetWithGlobal(t *testing.T) {
 	}
 }
 
-// TestConvAssembly_NoConv 会话未设模型 → 与全局完全一致（激活预设展开）。
+// TestConvAssembly_NoConv 会话未设模型 → 展开全局激活配置的**连接信息**（服务商/Key/地址）。
+// ★ 2026-10-07 模型为空：模型只认会话级选择，配置里的 executeModel 不再兜底。
 func TestConvAssembly_NoConv(t *testing.T) {
 	installTestAssembler(t)
 	seedConvTestPresets(t)
@@ -188,8 +189,32 @@ func TestConvAssembly_NoConv(t *testing.T) {
 		return "", "", ""
 	})
 	p := ResolveProviderParamsForConv("conv-z", "")
-	if p.Provider != "deepseek" || p.APIKey != "DKEY" || p.Model != "d-model" {
-		t.Fatalf("未设会话模型应回落全局激活预设：got provider=%s key=%s model=%s", p.Provider, p.APIKey, p.Model)
+	if p.Provider != "deepseek" || p.APIKey != "DKEY" {
+		t.Fatalf("未设会话模型应展开全局激活配置的连接信息：got provider=%s key=%s", p.Provider, p.APIKey)
+	}
+	if p.Model != "" {
+		t.Fatalf("模型只认会话级：配置里的模型不得兜底，got model=%q", p.Model)
+	}
+}
+
+// TestConvAssembly_ConfigModelNotUsed 回归（★ 2026-10-07）：配置里的模型（旧字段
+// executeModel）永不作为模型来源——会话没选就是空，选了就用会话值。
+func TestConvAssembly_ConfigModelNotUsed(t *testing.T) {
+	installTestAssembler(t)
+	seedConvTestPresets(t)
+	// ① 会话未选模型（激活配置带 executeModel="d-model"）→ 结果模型必须为空
+	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
+		return "", "", ""
+	})
+	if p := ResolveProviderParamsForConv("conv-cfg-1", ""); p.Model != "" {
+		t.Fatalf("配置里的模型不得兜底：got model=%q", p.Model)
+	}
+	// ② 会话显式选了模型（与配置里的值不同）→ 会话值生效
+	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
+		return "deepseek", "conv-chosen-model", "激活预设"
+	})
+	if p := ResolveProviderParamsForConv("conv-cfg-2", ""); p.Model != "conv-chosen-model" {
+		t.Fatalf("会话选定模型必须生效：got model=%q", p.Model)
 	}
 }
 

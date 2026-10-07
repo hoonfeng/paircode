@@ -1272,9 +1272,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	ctxObj.Set("providerFactory", providerFactoryObj)
 
 	// ── ctx.aiPresets：AI 配置预设数据面（★ 2026-09-03 决策迁插件）──
-	// aiPresets.get(name) → 单条预设（{provider,baseURL,apiKey,executeModel,planModel,
-	//   reviewModel,temperature,thinkingMode,maxTokens,contextMaxTokens,protocol}；
-	//   不存在/无效 → null）
+	// aiPresets.get(name) → 单条预设（{provider,baseURL,apiKey,temperature,thinkingMode,
+	//   maxTokens,contextMaxTokens,protocol}；不存在/无效 → null）
+	//   ★ 2026-10-07 模型只认会话级：配置里的模型字段（executeModel/planModel/reviewModel）
+	//     已退出配置体系（json 里可能仍有旧值，但不再作为装配的模型来源）。
 	// aiPresets.list() → 全部预设映射 {name: preset}
 	// 装配器（providerFactory 注册的装配函数）经此读 ai-presets.json 表做整套展开决策；
 	// Go 内核不再读 preset 业务字段（数据面查表暴露给插件，决策在插件）。
@@ -1282,7 +1283,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	aiPresetsObj.Set("get", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()
 		p := core.GetPreset(name)
-		if p.Provider == "" && p.ExecuteModel == "" && p.BaseURL == "" && p.APIKey == "" {
+		// ★ 2026-10-07 有效性只看连接信息（provider/baseURL/apiKey）；模型字段不再参与判定。
+		if p.Provider == "" && p.BaseURL == "" && p.APIKey == "" {
 			return goja.Null()
 		}
 		b, _ := json.Marshal(p)

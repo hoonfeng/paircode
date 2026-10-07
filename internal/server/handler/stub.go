@@ -45,10 +45,12 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	// ★ 2026-09-04 会话感知判定（与 web_server handleChatSend 同修复，见 ConfiguredProviderForConv）
 	if ok, missing := agent.ConfiguredProviderForConv(req.ConvID, req.WorkspaceRoot); !ok {
-		hint := "未配置 API key。请在设置面板中配置 API Key 和模型。"
+		hint := "未配置 API key。请在「设置 → AI」中添加并应用 AI 配置（服务商 + API Key）。"
 		switch missing {
 		case "模型为空":
-			hint = "模型未配置：当前配置未指定模型。请在对话面板选择模型，或在「设置 → AI」中为配置指定模型后再发送。"
+			// ★ 2026-10-07 文案与会话级模型语义对齐：模型按会话选择（AI 配置里已无模型字段），
+			//   故缺模型时提示「本会话未选择」而非「当前配置未指定模型」（后者会把用户引到设置面板）。
+			hint = "模型未配置：本会话尚未选择模型。请在对话面板的「选择模型…」中选好模型后发送。"
 		case "API Key 为空":
 			hint = "API Key 未配置：请在「设置 → AI」中为当前配置填写 API Key。"
 		case "API 地址为空":
@@ -546,7 +548,8 @@ func HandleAiPresets(w http.ResponseWriter, r *http.Request) {
 			}
 			// 未传 preset 时抓取当前 settings 快照
 			p := req.Preset
-			if p.Provider == "" && p.ExecuteModel == "" && p.BaseURL == "" && p.APIKey == "" {
+			// ★ 2026-10-07 模型只认会话级：配置有效性不再看模型字段（executeModel 已退出体系）。
+			if p.Provider == "" && p.BaseURL == "" && p.APIKey == "" {
 				p = core.AiPresetFromSettings()
 			}
 			core.GetAiPresets()
@@ -562,7 +565,8 @@ func HandleAiPresets(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			p := core.GetPreset(req.Name)
-			if p.Provider == "" && p.ExecuteModel == "" {
+			// ★ 2026-10-07 同上：预设存在性只看服务商（配置里已无模型字段语义）。
+			if p.Provider == "" {
 				jsonErr(w, "预设不存在: "+req.Name)
 				return
 			}

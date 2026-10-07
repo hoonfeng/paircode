@@ -199,12 +199,11 @@ func EnsureAiPresets() {
 func AiPresetFromSettings() AiPreset {
 	cur := GetPreset(Settings.Preset)
 	return AiPreset{
-		Provider:         cur.Provider,
-		BaseURL:          cur.BaseURL,
-		APIKey:           cur.APIKey,
-		ExecuteModel:     cur.ExecuteModel,
-		PlanModel:        cur.ExecuteModel,
-		ReviewModel:      cur.ExecuteModel,
+		Provider: cur.Provider,
+		BaseURL:  cur.BaseURL,
+		APIKey:   cur.APIKey,
+		// ★ 2026-10-07 模型只认会话级：快照不再携带模型字段（配置里的模型已退出体系，
+		//   仅旧 json 残留值可被读出，不参与任何装配/判定）。
 		Protocol:         cur.Protocol,
 		Temperature:      cur.Temperature,
 		ThinkingMode:     cur.ThinkingMode,

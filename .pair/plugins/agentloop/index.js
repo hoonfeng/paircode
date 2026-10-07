@@ -514,12 +514,16 @@ return {
       // ── ① 配置整套展开（会话配置 > 全局激活；配置不存在/无效 → 跳过）──
       const presetName = current.convPreset || current.preset || '';
       const pres = presetName ? (ctx.aiPresets.get(presetName) || null) : null;
-      const presValid = !!(pres && (pres.provider || pres.executeModel));
+      // ★ 2026-10-07 模型只认会话级：配置（ai-presets.json）里的模型不再参与装配——
+      //   此前 ① 段会把 pres.executeModel 展开成 over.model 当兜底，新装配置没有该字段
+      //   时看似「配置未指定模型」，与「模型按会话选择」的语义冲突（用户明确要求取消兜底）。
+      //   配置是否有效只看「有没有服务商」（模型字段已退出配置体系，仅旧 json 残留）。
+      const presValid = !!(pres && pres.provider);
       if (presValid) {
         if (pres.provider) over.provider = pres.provider;
         if (pres.baseURL) over.baseURL = pres.baseURL;
         if (pres.apiKey) over.apiKey = pres.apiKey;
-        if (pres.executeModel) over.model = pres.executeModel;
+        // 模型：不再从配置展开（唯一来源 = ② 会话选定模型 convModel）
         if (pres.temperature !== undefined && pres.temperature !== null && pres.temperature !== '') {
           const t = parseFloat(pres.temperature);
           if (!isNaN(t) && t >= 0) over.temperature = t;

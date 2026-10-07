@@ -75,6 +75,8 @@ func MigrateLegacyConnectionToPreset() {
 	if p.APIKey == "" && apiKey != "" {
 		p.APIKey, filled = apiKey, true
 	}
+	// ★ 2026-10-07 模型只认会话级：此处仍把顶层遗留模型搬进配置（历史数据完整搬运），
+	//   但该字段已不参与任何装配/判定（装配器不读、快照不写）——纯粹的旧值存档。
 	if p.ExecuteModel == "" && model != "" {
 		p.ExecuteModel, filled = model, true
 	}

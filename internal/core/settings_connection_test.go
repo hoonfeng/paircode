@@ -159,11 +159,13 @@ func TestAiPresetFromSettingsUsesActivePreset(t *testing.T) {
 	Settings.MaxTokens = 999999
 
 	p := AiPresetFromSettings()
-	if p.Provider != "p1" || p.APIKey != "K1" || p.ExecuteModel != "m1" || p.Protocol != "anthropic-messages" {
+	if p.Provider != "p1" || p.APIKey != "K1" || p.Protocol != "anthropic-messages" {
 		t.Errorf("快照应取激活配置的连接信息，得到 %+v", p)
 	}
-	if p.PlanModel != "m1" || p.ReviewModel != "m1" {
-		t.Errorf("统一模型：plan/review 应跟随执行模型，得到 plan=%q review=%q", p.PlanModel, p.ReviewModel)
+	// ★ 2026-10-07 模型只认会话级：快照不再携带任何模型字段（否则「保存配置」会把模型
+	//   又写回 ai-presets.json，重新形成「配置级模型」这一隐形兜底）。
+	if p.ExecuteModel != "" || p.PlanModel != "" || p.ReviewModel != "" {
+		t.Errorf("快照不得携带模型字段，得到 exec=%q plan=%q review=%q", p.ExecuteModel, p.PlanModel, p.ReviewModel)
 	}
 	if p.Temperature != "0.7" || p.ThinkingMode != "low" || p.MaxTokens != 4096 {
 		t.Errorf("快照的生成参数应取激活配置（不得取顶部旧字段），得到 %+v", p)

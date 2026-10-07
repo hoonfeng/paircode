@@ -495,6 +495,11 @@ const LAST_MODEL_KEY = 'paircode.lastPickedModel'
 const modelData = ref(null)          // /api/models + presets 快照
 const composerProvider = ref('')     // 当前会话生效的服务商
 const composerModel = ref('')        // 下拉值：'preset::<配置名>::<模型>'（配置分组）或旧编码 'provider::model'
+// ★ 2026-10-07 修复「新安装选好模型后发送仍报『模型未配置』」（缺陷 1/2）：
+//   尚无会话时下拉选择只写 localStorage，此前没有「建会话后补写」的补偿
+//   （对比工具集的 pendingConvToolset，见 sendMessage）→ 会话元数据始终没有模型，
+//   而后端判定依据就是会话元数据（AI 配置不含模型字段）→ 报「当前配置未指定模型」。
+const pendingConvModel = ref(null)   // 无会话时暂存的模型选择 {provider, model, preset} | null
 // ★ 2026-09-25 对齐设计稿 th69：模型胶囊文案 = 当前会话真实模型名（不硬编码；取不到则隐藏胶囊）
 const convModelName = computed(() => {
   try { return (parseModelValue(composerModel.value) || {}).model || '' } catch (e) { return '' }
@@ -585,7 +590,10 @@ function defaultProviderModel() {
   const presets = md.presets || null // 激活配置（携带 Key），仅解析服务商/模型
   const pres = (presets && s.preset && presets[s.preset]) || null
   let prov = (pres && pres.provider) || ''
-  let model = (pres && pres.executeModel) || ''
+  // ★ 2026-10-07 模型不取配置字段（ai-presets.json 的 executeModel 已退出体系，用户明确
+  //   「模型只用会话级，不要兜底」）：仅在下方按「配置分组/服务商模型列表」给出展现值，
+  //   该值一旦生效即写入会话元数据（会话级选择），后端判定也只看会话元数据。
+  let model = ''
   // 回落：当前配置分组中取首项（模型取该服务商 models 列表首个）
   const items = composerItems.value
   if (!prov && items[0]) prov = items[0].provider
@@ -657,15 +665,30 @@ async function syncComposerModelFromConv() {
     } catch {}
   }
   if (!prov && !model) {
-    // 会话未设模型：新会话（无消息）继承上次选择并写入会话，老会话只显示默认不写
+    // 会话未设模型：解析出一个确定的默认（新会话 → 上次选择；其余 → 激活配置/服务商首个模型），
+    // 并**写入会话元数据**（显示即生效）。
+    // ★ 2026-10-07 修复「新安装选好模型后发送仍报『模型未配置』」（缺陷 1/2）：
+    //   此前非新会话分支只把默认值填进下拉**显示**、不落盘 → 界面上明明显示着模型，
+    //   会话元数据却是空（模型在 AI 配置里没有字段：设计上「模型按会话选」），
+    //   发送时后端 ConfiguredProviderForConv 按会话元数据判定 → 报「当前配置未指定模型」。
+    //   现改为「显示什么就落盘什么」：前端下拉的取值 = 本会话生效模型，杜绝显示/判定漂移。
     const last = readLastPicked()
     const msgCount = (state.messages && state.messages.length) || 0
-    if (convId && last.provider && last.model && msgCount === 0) {
-      prov = last.provider; model = last.model; preset = last.preset || ''
-      try { await api.setConvModel(convId, prov, model, preset, state.workspaceRoot || '') } catch {}
+    let picked = null
+    if (msgCount === 0 && last.provider && last.model) {
+      picked = { provider: last.provider, model: last.model, preset: last.preset || '' }
     } else {
       const d = defaultProviderModel()
-      prov = d.provider; model = d.model
+      if (d.provider && d.model) picked = { provider: d.provider, model: d.model, preset: presetNameOf(d.provider, d.model) }
+    }
+    if (picked) {
+      prov = picked.provider; model = picked.model; preset = picked.preset
+      // 落盘：无会话（新对话尚未创建）→ 交给 pendingConvModel，首条消息建会话后写入
+      if (convId) {
+        try { await api.setConvModel(convId, prov, model, preset, state.workspaceRoot || '') } catch {}
+      } else {
+        pendingConvModel.value = { provider: prov, model, preset }
+      }
     }
   }
   composerProvider.value = prov
@@ -817,7 +840,14 @@ async function onCmpModelChange() {
   const convId = state.currentConvId
   composerProvider.value = provider
   writeLastPicked(provider, model, preset)
-  if (!convId) return   // 尚无会话：记住选择，新建会话时写入
+  if (!convId) {
+    // 尚无会话：记住选择 + 暂存，首条消息建会话后写入（见 sendMessage）
+    // ★ 2026-10-07 修复「新安装选好模型后发送仍报『模型未配置』」（缺陷 2/2）：
+    //   此前这里直接 return，注释虽写「新建会话时写入」但 sendMessage 并无该补偿
+    //   → 无会话阶段的选择永远不落盘，发送即被后端判定为「未选择模型」。
+    pendingConvModel.value = { provider, model, preset: preset || '' }
+    return
+  }
   try {
     await api.setConvModel(convId, provider, model, preset, state.workspaceRoot || '')
     window.$toast && window.$toast('本对话已切换为 ' + provider + ' / ' + model, 'success')
@@ -1765,11 +1795,16 @@ const sendMessage = async () => {
   // ★ 确保 convId 存在（在创建用户消息前完成，避免 await 间隙状态变化）
   if (!state.currentConvId) {
     try {
-      const conv = await api.apiPost('/conversations', { title: '新对话' })
+      // ★ 2026-10-07：补 workspaceRoot（与 newConversation 一致）——缺省时后端按「当前根」
+      //   落库，工作区根与前端不一致的场合会写进另一个 store（后续按 workspaceRoot 读写即失配）。
+      const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
       state.currentConvId = conv.id
       state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
       resetConvCtxStats(conv.id)
-    } catch {}
+    } catch (e) {
+      console.warn('[RP] 新建对话失败（发送中止）', e)
+      window.$toast && window.$toast('创建对话失败：' + (e && e.message ? e.message : e) + '（请确认已打开工作区后重试）', 'error')
+    }
   }
   const convId = state.currentConvId
   if (!convId) { state.chatLoading = false; state.agentRunning = false; return }
@@ -1786,6 +1821,21 @@ const sendMessage = async () => {
       convToolsetIsDefault.value = false
       console.log('[RP] 新对话写入暂存工具集: %s', want)
     } catch (e) { console.warn('[toolset] 新对话写入工具集失败', e) }
+  }
+
+  // ★ 2026-10-07 修复「新安装选好模型后发送仍报『模型未配置』」（缺陷 2/2）：
+  //   补写「无会话时暂存的模型选择」（必须在 chatStart 之前落盘——后端按会话元数据
+  //   判定模型，见 ConfiguredProviderForConv）。同 pendingConvToolset：先同步取出到局部再
+  //   await，避免 currentConvId 的 watch 清理与 await 竞态把暂存丢掉。
+  if (pendingConvModel.value) {
+    const pm = pendingConvModel.value
+    pendingConvModel.value = null
+    try {
+      await api.setConvModel(convId, pm.provider, pm.model, pm.preset || '', state.workspaceRoot || '')
+      composerProvider.value = pm.provider
+      composerModel.value = pm.preset ? ('preset::' + pm.preset + '::' + pm.model) : modelValueOf(pm.provider, pm.model)
+      console.log('[RP] 新对话写入暂存模型: %s / %s（配置 %s）', pm.provider, pm.model, pm.preset || '—')
+    } catch (e) { console.warn('[model] 新对话写入暂存模型失败', e) }
   }
 
   // ── ★ 先创建 runtime（在 push 任何消息之前），防止 processStatus 竞态创建兜底占位 ──
@@ -2654,6 +2704,7 @@ watch(() => state.settings && state.settings.preset, () => {
 // ★ 2026-09-04 工具集（通用集合）会话级：切换会话时同步实际生效集合；列表惰性加载
 watch(() => state.currentConvId, () => {
   pendingConvToolset.value = ''   // 切换会话：丢弃上一个「尚未创建」对话的暂存选择
+  pendingConvModel.value = null   // 同上：模型暂存随会话切换作废（新会话由 syncComposerModelFromConv 落盘）
   syncConvToolsetFromConv()
 })
 watch(() => state.workspaceRoot, () => { loadToolsetItems().then(() => syncConvToolsetFromConv()) })
