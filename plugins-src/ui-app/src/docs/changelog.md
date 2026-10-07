@@ -4,6 +4,41 @@
 
 ---
 
+## 1.6.15 — 2026-10-07
+
+> 本版把「模型」的唯一来源钉死在**会话级**：AI 配置（`ai-presets.json`）里的模型字段不再作为
+> 装配兜底。起因是新装环境在对话面板选好模型后发送仍报「模型未配置：当前配置未指定模型」——
+> 装配器把配置里的 `executeModel` 展开成模型来源，而新配置并没有这个字段；前端下拉的默认值
+> 同样取自该字段，且「尚无会话」与「老会话」两种情形只显示、不落盘：界面上明明有模型，会话
+> 元数据却是空，后端按会话元数据判定即报错。现在「下拉显示什么就落盘什么」，配置只负责连接
+> 信息（服务商 / BaseURL / API Key）。
+
+### 修复
+
+- **模型只认会话级，配置里的模型字段退出装配** —— 装配器（agentloop）① 段不再
+  `over.model = pres.executeModel`，配置有效性判定 `presValid` 只看 `pres.provider`；
+  宿主侧同步：AI 配置接口的有效性判定（`internal/server/handler/stub.go` 的 `HandleAiPresets`）
+  去掉 `ExecuteModel` 条件，缺模型提示改为「本会话尚未选择模型。请在对话面板的『选择模型…』中
+  选好模型后发送。」（`cmd/companion/web_server.go` 与 `internal/server/handler/stub.go`
+  两处一致），不再把用户引向设置面板里已不存在的「为配置指定模型」。
+- **配置快照不再携带模型字段** —— `core.AiPresetFromSettings()` 不再把 `cur.ExecuteModel`
+  填入 `ExecuteModel / PlanModel / ReviewModel`：保存 AI 配置时不会再把全局模型写回
+  `ai-presets.json`，会话选择只留在会话元数据里（`internal/core/ai_presets.go`）。
+- **前端下拉「显示即落盘」** —— 对话面板模型下拉的默认值不再读配置里的 `executeModel`
+  （`defaultProviderModel()`）；解析出的取值一律写入会话元数据：有会话直接 `setConvModel`，
+  **尚无会话**时暂存 `pendingConvModel`，由首条消息建会话后补写；新建对话补上
+  `workspaceRoot`，避免与工作区根不一致而写进另一个 store
+  （`plugins-src/ui-app/src/components/RightPanel.vue`）。此前 `onCmpModelChange` 在无会话时
+  直接 `return`、`syncComposerModelFromConv` 在老会话分支只填下拉不落盘，正是「界面显示有模型、
+  后端判定无模型」这一漂移的来源。
+
+### 兼容说明
+
+- 历史 `ai-presets.json` 里的 `executeModel` / `planModel` / `reviewModel` 字段**原样保留**
+  （启动迁移仍会搬运旧值，但该字段不参与任何装配与判定），无需手工清理。
+- `/api/settings` 与 AI 配置接口的读取/保存均不再以模型字段判断配置有效性——配置「有效」的
+  标准只有一条：服务商 + API Key（+ API 地址）齐备。
+
 ## 1.6.14 — 2026-09-30
 
 > 本版把「是否 / 何时整理会话历史」的决策权从内核交给插件——整理**算法**此前已外置，整理
