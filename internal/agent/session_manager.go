@@ -182,6 +182,15 @@ type Session struct {
 	//   故登记于此，由 mergeLateAnswers 并入每次覆盖写的内容（见其注释）。
 	lateMu      sync.Mutex
 	lateAnswers []Message
+
+	// ★ 2026-10-16 自主模式改为「运行中可变」的会话级原子标志。
+	//   原实现把自主模式当 Run 启动快照（LoopOpts.Autonomous）参与续轮判断：
+	//   用户在 agent 正跑着时打开开关，只写了全局 settings，对当前这轮无效 ——
+	//   UI 立刻显示「开」，但工作 agent 自然结束时仍按旧快照 false 收尾
+	//   （用户反馈：「明明开关是开的，agent 跑完一轮就停，不进入监督续轮」）。
+	//   现落在此标志上：runSession 续轮循环**每次读它**，SetAutonomous 可随时改，
+	//   开关一变当前运行立即生效（关 → 本轮自然结束后不再唤醒决策器）。
+	autonomousOn atomic.Bool
 }
 
 // SessionManager 并行会话架构核心：管理多个并行 Session。
@@ -881,7 +890,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
 					"question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
 					"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。" +
-					"多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
+					"多问题：questions:[{id, question, options?, multi_select?, with_input?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -890,16 +899,17 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 						"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项列表（当 askType 为 single/multi/single-with-input 时必须提供，至少 2 个，例如 [\"方案A\",\"方案B\"]；text 时可省略）"},
 						"questions": map[string]any{
 							"type":        "array",
-							"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?}",
+							"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?, with_input?}",
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应）"},
+									"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应；可省略，缺省自动补 q1/q2…）"},
 									"question":     map[string]any{"type": "string", "description": "问题文本"},
 									"options":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项（选择类问题）"},
 									"multi_select": map[string]any{"type": "boolean", "description": "是否多选（默认 false 单选）"},
+									"with_input":   map[string]any{"type": "boolean", "description": "是否允许在选项之外自定义输入（默认 false；等价单问题的 single-with-input）"},
 								},
-								"required": []string{"id", "question"},
+								"required": []string{"question"},
 							},
 						},
 					},
@@ -1069,6 +1079,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		if opts.Autonomous {
 			loop.Autonomous = true
 		}
+		// ★ 2026-10-16：自主模式由会话级原子标志承载（运行中可被 SetAutonomous 改）；
+		//   初值 = 本次启动参数（前端发送时带的 autonomous）。
+		sess.autonomousOn.Store(opts.Autonomous)
 		msgs, err = loop.Run(runCtx, task, nil)
 		sess.History = msgs
 
@@ -1162,11 +1175,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			//   判定 done / 未生效 → 收尾。轮数上限与用户停止为硬保护。
 			// ★ 2026-09-21 诊断：打印判定要素（排查「监督未触发 / 会话卡在决策器」）——
 			//   自主模式下每次自然结束都记一行，运维可据此确认监督分支是否进入。
-			if opts.Autonomous {
+			if sess.autonomousOn.Load() {
 				log.Printf("[session] 自主模式判定 conv=%s err=%v available=%v turnReason=%q superviseNo=%d limit=%d",
 					convID, err, AutopilotAvailable(), loop.LastTurnReason, superviseNo, superviseLimit)
 			}
-			if opts.Autonomous && err == nil && AutopilotAvailable() &&
+			if sess.autonomousOn.Load() && err == nil && AutopilotAvailable() &&
 				(loop.LastTurnReason == TurnCompleted || loop.LastTurnReason == TurnContentLoop) {
 				superviseNo++
 				if superviseLimit > 0 && superviseNo > superviseLimit {
@@ -1379,7 +1392,33 @@ func (m *SessionManager) Stop(convID string) {
 	}
 	sess.stopped = true
 	sess.Running = false
+	// ★ 2026-10-16：停止即关会话级自主模式 —— 否则续轮判断读到的仍是 true，
+	//   与「已停止」语义冲突（停止后立刻又进入监督续轮判断）。用户下次发送时
+	//   再由前端/会话元数据重新设定。
+	sess.autonomousOn.Store(false)
 	sess.Cancel()
+}
+
+// SetAutonomous 运行中实时开关某会话的自主模式（★ 2026-10-16）。
+//
+// 返回 false 表示该会话当前没有运行中的 Session（调用方只需落盘会话级状态，
+// 无需实时生效——下次发送时自然带上）。
+//
+// 为何需要：自主模式此前只作为「发送请求的一次性参数」生效，运行中切换无效，
+// 用户看到开关已开、agent 却按旧值收尾（不再唤醒监督者）→ 表现为「开关不稳定」。
+//
+// 注意：只改 atomic 标志，**不改 Loop.Autonomous** —— 后者在 loop.Run 内被读
+// （时间预算检查，见 loop.go），运行中写它会与正在执行的循环构成数据竞争
+// （go test -race 可复现）。续轮判定已改为读本标志，语义完整。
+func (m *SessionManager) SetAutonomous(convID string, on bool) bool {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok || sess == nil {
+		return false
+	}
+	sess.autonomousOn.Store(on)
+	return true
 }
 
 // Compact 请求压缩上下文。

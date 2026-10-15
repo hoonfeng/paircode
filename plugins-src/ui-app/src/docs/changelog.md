@@ -4,6 +4,119 @@
 
 ---
 
+## 未发布 — 2026-10-16
+
+> 修复「自主模式开关不可靠」与「agent 工作期 UI 不更新」两组问题：自主模式开关与显示
+> 不同源导致**点不动**；新建会话列表要刷新才出现；点停止后停止按钮**回弹**（仍显示运行中）。
+
+### 变更
+
+- **自主模式改为会话级权威** —— 宿主侧自主模式过去是 Run 启动快照（`opts.Autonomous`），
+  运行中改开关不影响当前轮；全局 `settings.autonomous` 在多窗口/多标签间互相覆盖。
+  现改为会话级：`internal/agent/session_manager.go` 用原子标志 `autonomousOn` 承载，
+  `runSession` 续轮循环**每次读取**该标志（`SetAutonomous(convID, on)` 可随时改，运行中即时生效）；
+  `internal/agent/message_store.go` 新增 `SetConvAutonomous` / `ConvAutonomous`（会话元数据持久化），
+  `internal/agent/store.go` 补接口声明；`cmd/companion/web_server.go` 在开关切换与发送路径
+  接线会话权威值（只提交本字段的窄请求 + `convId`，不再整包提交本地 settings 快照）。
+
+### 修复
+
+- **自主模式开关「点不动」** —— `RightPanel.vue` 的 `toggleAuto` 用 `state.settings[field]`
+  当旧值，而按钮显示的是**会话级**值；两者不一致时点击算出的新值是错的（实测：全局
+  `autonomous=true` / 会话 `false` → 点击后 `newVal=false`，界面毫无变化，用户以为开关坏了）。
+  改为按字段取权威面（autonomous = 会话级 ref；autoCollapse = 全局设置），并停止向全局
+  settings 回写 autonomous（避免「本地已开、全局仍关」的假象）；保存失败时只回滚本字段权威面
+  （原实现回滚 `state.settings[field]` 会连带污染全局值）。
+- **点发送按钮无任何请求（前端 TDZ 崩溃）** —— `sendMessage` 中「清除用户停止标记」被写在
+  `const convId` 声明**之前**，压缩后触发 `ReferenceError: Cannot access 's' before
+  initialization`（暂时性死区），整个发送流程中断（CDP 探针实测：按钮未禁用、点击后无请求）。
+  已移到声明之后，并在源码注释中标注该位置约束。
+- **点停止后仍显示运行中（停止按钮回弹）** —— 停止是**异步取消**：后端在途的 status 帧仍把
+  该会话报成 running → `processStatus` 置 `loadingByConv=true` → `switchConv` 按
+  `chatLoading = loadingByConv[id]` 恢复 → 停止按钮又出现。新增 `userStoppedConvs` 标记
+  （`agent-events.js`）：`stopChat` 打标记、`processStatus` 跳过该会话的运行中回流、
+  `processAgentDone`（真正结束）与 `sendMessage`（重新发送）清除标记。
+- **新建会话要刷新才出现在列表** —— wb-ui 内嵌引擎对数组**原地变动**（`unshift`）不可靠触发
+  依赖收集；`RightPanel.vue` / `Sidebar.vue` / `UiTitlebar.vue` 三处新建统一改为整体替换数组
+  （`state.conversations = [新, ...旧]`），新会话即时出现。
+
+### 配套（验证）
+
+- 新增 `scripts/cdp-probe-conv-ui.js`：**行为级**探针（在真实页面内驱动真实导出函数，不发消息、
+  不调 LLM、不写会话消息）—— B1 新建会话列表立即出现、B2a 对照（无标记时回流经 `switchConv`
+  恢复 `chatLoading`，证明回弹链条本身有效、排除断言恒真）、B2b 已停止会话忽略回流、B2c 结束后清除标记。
+- `scripts/cdp-probe-autonomous.js`：修正输入路径（真实输入框是 contenteditable 的 `.chat-input`，
+  不是 `textarea`；此前写入无效 → 发不出请求）、断言改为会话级语义（A1/A2b + 新增 A6 全局不被污染）、
+  启用 `Network.setCacheDisabled`（区域包 URL 无内容 hash，避免对旧产物做断言）、
+  补充未捕获错误的行列号与堆栈捕获。
+
+## 未发布 — 2026-10-15
+
+> 修复「ask_user 前端不支持多选与其他形态」：模型按工具 schema 生成的是 **snake_case**
+> 参数（`questions:[{id, question, options, multi_select, with_input}]`），而卡片与历史接口
+> 用 **camelCase**（`multiSelect` / `withInput`）。实时路径此前把 `args.questions` 原样塞进
+> segment，卡片读 `q.multiSelect` 恒为 `undefined` → 多选问题被渲染成单选圆点；漏填 `id`
+> 时前端多个问题共用 `undefined` 键（输入串扰），提交的 `answers.id` 为空还会被后端
+> `validateAskAnswers` 拒绝（回答直接丢失）。
+
+### 新增
+
+- **tool-design 结构自省工具 `design_schema`** —— 新增只读工具，一次给出本插件的**全部结构事实**：
+  节点类型字段全表、令牌 8 组与可直接引用的默认名、图标白名单、布局引擎语义、D1–D11 判据、规模上限、
+  交互词汇表（link/emit/toggle）与 4 个可照抄节点树范式。此前这些只散落在实现里，agent 只能猜字段名与
+  图标名（猜错即 D2 悬空引用 / D7 不在白名单 FAIL）→ 设计稿退化成 frame+text+button 堆叠。内容**从真源
+  派生**（类数/令牌组/图标表取自 `NODE_TYPES` / `TOKEN_GROUPS` / `ICONS`），并修正描述里两处事实错误
+  （`$spacing.*` → 真源组名 `space`；节点类数写错）。
+- **设计稿表达力扩容：`progress` / `avatar` / `chart` 三类节点（14 → 17 类）** —— 进度条（`value` +
+  `tone`，产物带 `role="progressbar"` 与 `aria-valuenow`）、圆形头像（中文取首字/拉丁取首字母，直径
+  `size`，自宽不被拉伸）、内联 SVG 图表（`bar` / `line` / `donut`，确定性输出、无脚本无外链）。
+  四类产物同步：预览 HTML、HTML/Vue/React 三目标代码生成（React 侧 SVG 属性走驼峰转换，避免非法
+  `stroke-width`）、结构树摘要、字段与令牌表。
+
+### 变更
+
+- **创作域插件收窄为 design 一域** —— `tool-art` / `tool-model` / `tool-music` / `tool-rig` /
+  `tool-voice` 五包从 `plugins-dist/` 删除并停发（判定为失败创作域），`tool-design` 保留并增强。
+  同步摘除 `toolPluginModes` 模式表对应行、`packager.json` exclude 陈旧条目与两个插件审计脚本的
+  默认包清单，并在发布脚本中登记下架说明（供 registry 孤儿包 deprecate 使用）。
+
+### 修复
+
+- **实时路径 questions 归一化** —— `agent-events.js` 新增 `normalizeAskQuestions` /
+  `normalizeAskOptions`，`processAgentEvent`（实时流）与 `applyLiveSnapshot`（断线补偿重放）
+  两处统一走该口径：`multi_select → multiSelect`、`with_input → withInput`、缺 `id` 兜底
+  `q{原始下标+1}`、`question` 为空项丢弃、选项过滤非字符串与空串。
+- **多问题卡片支持「选项 + 或自定义输入」** —— `AskUserCard.vue` 多问题项按 `withInput`
+  （兼容 `with_input`）在选项下方渲染「或自定义输入」输入行，提交时自定义文本优先（与单问题
+  `single-with-input` 同语义）；多选判定 `isQMulti` 同时兼容 `multiSelect` / `multi_select`。
+- **问题键兜底，杜绝串扰与提交被拒** —— 卡片内部键、`answeredTextFor` 关联、提交 `answers.id`
+  统一走 `multiKey(q, qi) = q.id || 'q'+(qi+1)`，与后端 `parseSegmentQuestions` 同规则；
+  已答/失效卡片上的选项不再可点。
+
+### 配套（宿主侧）
+
+- `internal/agent/message_store.go`：`SegmentQuestion` 增 `withInput`；新增
+  `parseSegmentQuestions`（`parseAskArgsV2` 与宿主执行器 `askQuestionsFromArgs` 共用），
+  空 `id` 兜底与 `with_input` 解析与前端严格一致，保证 answers 回灌校验不错配。
+- `ask_user` 工具 schema（插件 `tool-system` 与宿主会话级/路由版两处）补 `with_input` 字段，
+  `questions[].required` 收敛为 `["question"]`（`id` 可省略、自动补），描述同步更新。
+
+### 验证
+
+- `node scripts/ask-user-events-check.mjs`（新增自检脚本，10 项断言全 PASS）。
+- `go test ./internal/agent/ -run 'AskUser|MessageStore|Segments|Ask'` PASS。
+- 浏览器实测（独立测试实例 9096）：多问题卡片多选框勾选态、`with_input` 的「或自定义输入」、
+  单问题 `multi` / `single-with-input`、历史回显、未答态可交互，全部渲染正确且无控制台报错。
+- **设计插件增强**：`node scripts/tool-design-schema-check.mjs` 9/9、
+  `scripts/tool-design-t5-types-check.mjs` 9/9、`scripts/tool-design-t6-agent-surface-check.mjs` 5/5
+  —— 三脚本以与 goja 相同的「函数体」语义 Node 直载插件源码，端到端覆盖建工程 → 校验 → 导出预览 →
+  三目标代码生成，不依赖运行进程热加载。
+- **创作域下架**：`go build ./internal/... ./cmd/...` 通过、`go test ./internal/agent/ -count=1` PASS
+  （含 `toolPluginModes` 模式表守卫）、`node scripts/verify-dist-isolation.mjs` PASS（独立发布插件 1 个：
+  tool-design、基线插件 32 个）。
+
+---
+
 ## 1.6.15 — 2026-10-07
 
 > 本版把「模型」的唯一来源钉死在**会话级**：AI 配置（`ai-presets.json`）里的模型字段不再作为

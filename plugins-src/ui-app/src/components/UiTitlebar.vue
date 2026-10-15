@@ -145,7 +145,12 @@ async function newConversation() {
   try {
     const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
     if (!conv || !conv.id) return
-    state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    // ★ 2026-10-16 同 Sidebar.onNewConv：整体替换数组（原地 unshift 在 wb-ui 引擎下
+    //   不可靠 → 列表要刷新才显示新会话）。
+    state.conversations = [
+      { id: conv.id, title: conv.title || '新对话', msgCount: 0, autonomous: false, createdAt: conv.createdAt, updatedAt: conv.updatedAt },
+      ...state.conversations,
+    ]
     if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
     state.currentConvId = conv.id
   } catch (e) { window.$toast && window.$toast('新建会话失败：' + (e && e.message ? e.message : e), 'error') }

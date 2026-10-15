@@ -36,6 +36,47 @@ export function normalizeAskType(raw) {
   return 'text'
 }
 
+// normalizeAskOptions 归一化 ask_user 的选项列表：只保留非空字符串项。
+// ★ 2026-10-15：此前实时路径直接透传 args.options 原始数组，模型给出非字符串项
+//   （数字/对象）或空串时，卡片会渲染出空选项 / "[object Object]"。
+export function normalizeAskOptions(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(o => (typeof o === 'string' ? o : (o == null ? '' : String(o))))
+    .filter(o => o.trim() !== '')
+}
+
+// normalizeAskQuestions 归一化 ask_user 的多问题数组（questions）。
+// ★ 2026-10-15 修复「前端 ask_user 不支持多选」：
+//   模型按工具 schema 生成的是 snake_case 的 {id, question, options, multi_select}，
+//   而历史接口（Go SegmentQuestion）与卡片渲染统一用 camelCase 的 multiSelect ——
+//   实时路径此前把 args.questions **原样**塞进 segment，AskUserCard 读 q.multiSelect
+//   恒为 undefined → 多选问题被渲染成单选圆点（用户报告「不支持多选」）。
+//   此处统一口径（与后端 message_store.go parseSegmentQuestions 严格一致）：
+//     id          → 字符串；缺省用 q{序号}（序号取原始数组下标 +1）
+//     question    → trim 后字符串；为空则丢弃该项（两端同规则）
+//     options     → 归一化后的字符串数组
+//     multiSelect ← multiSelect | multi_select
+//     withInput   ← withInput | with_input（「选项 + 或自定义输入」）
+export function normalizeAskQuestions(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  raw.forEach((it, i) => {
+    if (!it || typeof it !== 'object') return
+    const question = String(it.question == null ? '' : it.question).trim()
+    if (!question) return
+    const id = String(it.id == null ? '' : it.id).trim() || ('q' + (i + 1))
+    out.push({
+      id,
+      question,
+      options: normalizeAskOptions(it.options),
+      multiSelect: it.multiSelect === true || it.multi_select === true,
+      withInput: it.withInput === true || it.with_input === true,
+    })
+  })
+  return out
+}
+
 function pushSegment(segs, type, initial) {
   const last = segs[segs.length - 1]
   if (last && last.type === type) return last
@@ -87,6 +128,15 @@ export function setGlobalCtx(ctx) {
 // 事件后（增量），与 HTTP 历史无缝拼接。
 const wsPendingByConv = new Map()    // convId → { snapshot: null|data, events: [], firstAt }
 const historyLoadedConvs = new Set() // 已完成历史加载的会话（刷新后防反复门控）
+
+// ★ 2026-10-16 用户主动停止的会话（修「点停止后仍显示运行中、停止按钮不消失」）：
+//   停止是**异步取消** —— 后端在途的 status 帧/事件仍可能把该会话报成 running，
+//   processStatus 于是把 agentRunningByConv/loadingByConv 重新置 true，停止按钮
+//   （显示条件 = state.chatLoading，见 RightPanel.vue:337-338）又冒了出来。
+//   语义：用户点停止后，在该会话真正结束（done/error）或用户重新发送之前，
+//   忽略这类「重新置为运行中」的回流。写入方 = RightPanel.stopChat，
+//   清除方 = processAgentDone / RightPanel.sendMessage。
+export const userStoppedConvs = new Set()
 
 // ★ 2026-09-12 修复「执行中前端突然不再输出 agent 内容」：门控必须有兜底。
 //   原实现只在 historyLoadedConvs 未置位时无期限积压事件，而 markHistoryLoaded 仅由
@@ -237,8 +287,9 @@ function applyLiveSnapshot(convId, msg, rt, snap) {
             const args = typeof ev.args === 'string' ? JSON.parse(ev.args) : ev.args
             question = args.question || '（无问题内容）'
             askType = normalizeAskType(args.askType || args.type || 'text')
-            if (Array.isArray(args.options)) options = args.options
-            if (Array.isArray(args.questions)) questions = args.questions
+            options = normalizeAskOptions(args.options)
+            // ★ 2026-10-15：questions 归一化（multi_select → multiSelect、id 兜底）
+            questions = normalizeAskQuestions(args.questions)
           } catch {}
           // ★ 2026-09-25：answers 一并还原（多问题 JSON 解析），供卡片回显当时的选择
           const parsed = parseAskResult(ev.content)
@@ -426,13 +477,9 @@ export function processAgentEvent(convId, data) {
         const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args
         question = args.question || '（无问题内容）'
         askType = normalizeAskType(args.askType || args.type || 'text') // 容错：变体统一归一化
-        if (Array.isArray(args.options)) {
-          options = args.options
-        }
-        // ★ Round3 ⑤：多问题数组
-        if (Array.isArray(args.questions)) {
-          questions = args.questions
-        }
+        options = normalizeAskOptions(args.options)
+        // ★ Round3 ⑤：多问题数组（★ 2026-10-15 归一化：multi_select → multiSelect、id 兜底）
+        questions = normalizeAskQuestions(args.questions)
       } catch {}
       const seg = {
         type: 'ask_user', question, askType, options, questions,
@@ -772,6 +819,8 @@ export function processAgentDone(convId, data) {
     state.messages = msgs
   }
   if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
+  // ★ 该会话已真正结束 → 用户停止标记功成身退（不影响下次运行）
+  userStoppedConvs.delete(convId)
   delete runtimes[convId]
 }
 
@@ -858,6 +907,8 @@ export function processStatus(payload) {
   // 标记仍在运行的（只设置状态标记，不创建占位也不创建 runtime）
   // ★ 占位和 runtime 由 switchConv（加载完历史后）或 processAgentEvent（首次收到事件时）负责创建
   for (const convId of runningSet) {
+    // ★ 用户已停止：忽略后端在途的「仍在运行」回流（见 userStoppedConvs 注释）
+    if (userStoppedConvs.has(convId)) continue
     state.agentRunningByConv[convId] = true
     state.loadingByConv[convId] = true
     // ★ 运行统计：后端报告运行中 → 无未结束的计时则开始计时

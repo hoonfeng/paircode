@@ -869,6 +869,13 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		//   中摘除——会话内切换只写本会话元数据（持久化）+ 实时更新当前 Loop，
 		//   不污染全局默认（此前写全局导致其他会话默认被改、重启丢失选择）。
 		convReviewMode := ""
+		// ★ 2026-10-16 会话级自主模式：带 convId 的提交只作用本会话
+		//   （写会话元数据 + 运行中即时生效），**不再写全局 settings** ——
+		//   原实现写全局：① 运行中切换对当前这轮无效（Loop 用启动快照收尾），
+		//   ② 多窗口/多标签各持本地 settings 副本、互相覆盖 → 用户感知「开关不稳定」
+		//   （实测证据：日志里同一会话连续多次发送携带的 autonomous 与界面开关不一致）。
+		convAutonomous := false
+		convAutonomousSet := false
 		if convId != "" {
 			if rawVal, ok := rawMap["reviewMode"]; ok {
 				var newVal string
@@ -876,6 +883,14 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 					convReviewMode = newVal
 				}
 				delete(rawMap, "reviewMode")
+			}
+			if rawVal, ok := rawMap["autonomous"]; ok {
+				var on bool
+				if json.Unmarshal(rawVal, &on) == nil {
+					convAutonomous = on
+					convAutonomousSet = true
+				}
+				delete(rawMap, "autonomous")
 			}
 		}
 
@@ -944,6 +959,21 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			agentMgr.SetReviewMode(convId, convReviewMode)
+		}
+		// ★ 2026-10-16 会话级自主模式：持久化到会话元数据 + 运行中即时生效。
+		//   即时生效是关键修复：此前开关只在「下一条消息」的参数里生效，
+		//   用户运行时打开开关，当前这轮仍按旧值收尾（跑完一轮就停）。
+		if convId != "" && convAutonomousSet {
+			if store := agentMgr.StoreFor(reqRoot); store != nil {
+				if err := store.SetConvAutonomous(convId, convAutonomous); err != nil {
+					log.Printf("[settings] 会话自主模式持久化失败 conv=%s: %v", convId, err)
+				}
+			}
+			if agentMgr.SetAutonomous(convId, convAutonomous) {
+				log.Printf("[settings] 会话自主模式已实时切换 conv=%s on=%v", convId, convAutonomous)
+			} else {
+				log.Printf("[settings] 会话自主模式已记录（会话未在运行，下次发送生效）conv=%s on=%v", convId, convAutonomous)
+			}
 		}
 		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致）
 		if _, ok := rawMap["workspaceFolders"]; ok && core.Settings.WorkspaceFolders != nil {
@@ -2661,6 +2691,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	//   快速校验（消息空/未配置 Provider/用户消息落盘失败）保持在同步段，失败语义不变。
 	// ★ 2026-09-08 启动链路抽为 launchConvRun：slash 命令激活（/agent-teams 等）需要
 	//   同一套 opts 构建 + 审核解析 + Start，抽公共实现避免两处漂移。
+	// ★ 2026-10-16 会话级自主模式权威化：把本次请求携带的 autonomous 写入会话元数据，
+	//   使「界面开关状态」与「实际运行参数」同源 —— 前端可据会话元数据还原开关
+	//   （切窗口/刷新后一致），后端也以它作为该会话下次运行的默认值。
+	if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
+		if err := store.SetConvAutonomous(req.ConvID, req.Autonomous); err != nil {
+			log.Printf("[chat] 会话自主模式落盘失败 conv=%s: %v", req.ConvID, err)
+		}
+	}
 	s.launchConvRun(req.ConvID, req.WorkspaceRoot, req.Message, req.Autonomous)
 	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }

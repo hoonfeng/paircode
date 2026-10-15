@@ -199,3 +199,46 @@ gou-ide 前端 `plugins-src/ui-app/src/components/AboutModal.vue` 曾有两处�
 | 组件样式 | flex 交叉轴 margin 丢失 | `.conv-footer-pill` x 49 → 57 | 57 | **已修** |
 | 组件样式 | `select` 在 flex 上下文内在宽度塌陷 | 38px → 240px | 240px | **已修** |
 | 事件响应 | 手写 contenteditable 输入丢弃字符 | `inputText` 空 → `"hello"`（len=5） | — | **已修** |
+
+## 待定（下架遗留）：创作域五域前端面板成僵尸代码
+
+**状态：待用户定夺清理范围**（2026-10-15 创作域下架后遗留；已发出范围确认提问，用户未在时限内回复，故**未擅自删除**）。
+
+**背景**：`tool-art` / `tool-model` / `tool-music` / `tool-rig` / `tool-voice` 五包已从 `plugins-dist/`
+删除并停发（创作域收窄为 design 一域），但主壳源码中的面板与构建入口仍在：
+
+- `plugins-src/ui-app/src/components/{Art,Model,Music,Rig,Voice}Panel.vue` —— 面板实现（画布 / WebGL / 音序器）
+- `plugins-src/ui-app/src/ui-main-{art,model,music,rig,voice}.js` —— 构建入口，产物
+  `plugins-dist/tool-*/assets/*-panel.js` 已随包删除
+- 配套辅助：`plugins-src/ui-app/src/model-bridge.js`、`model-parsers.js` 等（与 tool-model 面板成对）
+
+**影响**：面板调用 `ui.invoke('<域插件>', …)` 必然失败（插件已不存在）→ 僵尸代码；构建入口指向已删除的产物目录。
+
+**处置选项（均未执行）**：
+
+1. 一并清理：面板 Vue + 构建入口 + 配套辅助 + 主壳注册点，并重建 UI（`node scripts/build-ui.mjs`）后验证；
+2. 只删构建入口与主壳注册点，`*Panel.vue` 源码留作参考；
+3. 保持现状（本条目即为记录）。
+
+**注意（若执行选项 1/2）**：`scripts/build-ui.mjs` 的 entry 清单必须同步摘除对应入口，否则重建 UI 会产出孤儿产物或直接报错；
+产物目录 `plugins-dist/tool-*/assets/` 已随包删除，属预期。
+
+## 待办：wb-ui 内嵌引擎下「数组原地变动不触发依赖收集」仍是普遍隐患
+
+**状态：部分修复**（2026-10-16 修掉「新建会话要刷新才出现」的三处）。
+
+**现象**：`state.conversations.unshift(...)` / `arr.push(...)` 等**原地变动**在 wb-ui 内嵌引擎
+（goja + 自研渲染）下不可靠触发 Vue 依赖收集 → 「数据已变、界面不变，刷新后才出现」。
+2026-10-16 已把三处新建会话改为整体替换数组（`state.conversations = [新, ...旧]`）：
+`plugins-src/ui-app/src/components/RightPanel.vue`、`Sidebar.vue`、`UiTitlebar.vue`。
+
+**为何难一次改完**：
+
+1. **只在 wb-ui 引擎暴露** —— Chromium/Edge（外部浏览器）下原地变动是生效的，用普通浏览器
+   验证会「看起来正常」，掩盖问题；
+2. **改动面广** —— `state.*` 数组的 unshift/push/splice/索引赋值散布多处，需逐个核对；
+3. **验证成本** —— 每处都需行为级验证（可复用 `scripts/cdp-probe-conv-ui.js` 骨架：
+   页面内驱动真实导出函数 + 断言 DOM/state，参见其 B1 用例）。
+
+**排查建议**：检索 `state\.[A-Za-z]+\.(unshift|push|splice)\(` 与对数组的索引赋值
+`state\.[A-Za-z]+\[[^\]]+\]\s*=`，逐处改为整体替换（`state.x = [...]`）。

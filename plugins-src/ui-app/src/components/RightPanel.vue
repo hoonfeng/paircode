@@ -357,7 +357,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { state, layout, savePersistentState, showSettings } from '../ui-state.js'
 import api from '../api.js'
 import { visibleConversations } from '../conv-filters.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded, fetchRunStats, userStoppedConvs } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import SheetPicker from './SheetPicker.vue'
@@ -1808,6 +1808,12 @@ const sendMessage = async () => {
   }
   const convId = state.currentConvId
   if (!convId) { state.chatLoading = false; state.agentRunning = false; return }
+  // ★ 2026-10-16 重新发送 → 解除「用户已停止」标记（新运行的状态回流应正常生效）。
+  //   ★ 位置很关键：必须放在 convId 声明**之后**。此前它被写在上面「锁定 loading」
+  //   处（convId 尚未声明），压缩后成为 `userStoppedConvs.delete(convId)` → 运行时
+  //   ReferenceError: Cannot access 's' before initialization（TDZ），整个发送
+  //   流程中断 → 点发送按钮不发任何请求（CDP 探针 A3/A4 + A5 实测捕获）。
+  userStoppedConvs.delete(convId)
 
   // ★ 新对话刚建好：补写「无会话时暂存的工具集选择」（发送前完成——后端按会话
   //   元数据收敛工具面，必须在 chatStart 之前落盘）。
@@ -1952,6 +1958,11 @@ const stopChat = async () => {
   const convId = state.currentConvId
   console.log('[RP] stopChat conv=%s runtimeExists=%s', convId, !!getConvRuntime(convId))
   if (!convId) return
+  // ★ 2026-10-16 修「点停止后仍显示运行中（停止按钮不消失）」：停止是异步取消，
+  //   后端在途的状态帧可能把该会话重新报成 running（processStatus 会把
+  //   loadingByConv 置回 true → chatLoading 随之恢复 → 停止按钮又出现）。
+  //   打上用户停止标记，在真正结束（done）或重新发送前忽略这类回流。
+  userStoppedConvs.add(convId)
   try { await api.chatStop(convId) } catch {}
   // ★ 在清理 runtime 前保存 msgKey，用于清理 messagesByConv 中残留的 loading 占位
   const rt = getConvRuntime(convId)
@@ -2183,7 +2194,12 @@ const newConversation = async () => {
   try {
     const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
     state.currentConvId = conv.id
-    state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    // ★ 2026-10-16 同 Sidebar/UiTitlebar：整体替换数组（原地 unshift 在 wb-ui 引擎下
+    //   不可靠 → 列表要刷新才出现新会话）。新会话自主模式默认关。
+    state.conversations = [
+      { id: conv.id, title: conv.title || '新对话', msgCount: 0, autonomous: false, createdAt: conv.createdAt, updatedAt: conv.updatedAt },
+      ...state.conversations,
+    ]
     if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
     state.messages = state.messagesByConv[conv.id]
     state.msgTotalByConv[conv.id] = 0
@@ -2469,13 +2485,47 @@ const switchConv = async (id) => {
 }
 
 const toggleAuto = async (field) => {
-  const oldVal = !!state.settings[field]
+  // ★ 2026-10-16 权威值来源修正（修「自主模式开关点不动」）：自主模式的权威值是
+  //   **会话级**（autonomous ref —— 由 syncAutonomousFromConv 从会话元数据同步，
+  //   后端 PUT 也只写会话元数据）；自动折叠仍是全局设置。
+  //   原实现一律取 state.settings[field]：按钮显示的是会话级值、取值却来自全局，
+  //   两者不一致时点击算出的新值是错的 —— 实测（全局 autonomous=true / 当前会话
+  //   false）点击后 newVal=false，界面毫无变化，用户以为「开关点不动」。
+  const oldVal = field === 'autonomous' ? !!autonomous.value : !!state.settings[field]
   const newVal = !oldVal
-  state.settings[field] = newVal
   // 同步 local ref（浅 watch 不触发，需要手动同步）
-  if (field === 'autonomous') autonomous.value = newVal
-  else if (field === 'autoCollapse') { autoCollapse.value = newVal; localStorage.setItem('autoCollapse', newVal) }
-  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
+  if (field === 'autonomous') {
+    // 不回写 state.settings：后端已改为会话级权威，写本地全局会造成
+    // 「本地已开、其它窗口/全局仍关」的假象（多窗口不一致的老问题）。
+    autonomous.value = newVal
+  } else if (field === 'autoCollapse') {
+    state.settings[field] = newVal
+    autoCollapse.value = newVal
+    localStorage.setItem('autoCollapse', newVal)
+  }
+  // ★ 2026-10-16 会话级自主模式：只提交**本字段**的窄请求。
+  //   原实现对 autonomous 也提交整个 state.settings —— 页面本地快照一旦陈旧，
+  //   就会把其它字段（含 autonomous 自身）覆盖回旧值，是「开关不稳定」的来源之一；
+  //   后端收到 {autonomous: bool} + convId 时走会话级分支（写会话元数据 + 运行中即时生效）。
+  const body = field === 'autonomous' ? { autonomous: newVal } : state.settings
+  try {
+    await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), body)
+    // 会话元数据是开关权威值 → 同步本地列表项，切回该会话/刷新后显示一致
+    if (field === 'autonomous') {
+      const conv = state.conversations.find(c => c.id === state.currentConvId)
+      if (conv) conv.autonomous = newVal
+    }
+  } catch (e) {
+    // 回滚只回滚本字段对应的权威面（autonomous=会话级 ref；autoCollapse=全局设置）
+    if (field === 'autonomous') autonomous.value = oldVal
+    else if (field === 'autoCollapse') { state.settings[field] = oldVal; autoCollapse.value = oldVal }
+    // ★ 2026-10-16 修复「开关静默回滚」：原 catch 分支无任何提示 —— 用户点开开关
+    //   （UI 短暂变为开启态）后保存失败被静默回滚为关，用户仍以为已开启，
+    //   随后发送携带 autonomous=false、自主模式不生效（实测日志：界面称已开、
+    //   请求却带 false）。现明确告知失败原因，避免「以为开着」。
+    window.$toast && window.$toast(
+      (field === 'autonomous' ? '自主模式' : '自动折叠') + '切换保存失败：' + ((e && e.message) || e), 'error')
+  }
 }
 
 const autoNameConv = async (convId, content) => {
@@ -2689,11 +2739,23 @@ watch(() => state.currentConvId, (id, oldId) => {
     if (prev && !now && state.currentConvId) loadAutopilotRounds(state.currentConvId)
   })
 
-watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
+// ★ 2026-10-16 自主模式改为**会话级**读取（会话元数据为权威值）。
+//   原实现读全局 settings.autonomous：多窗口/多标签各持本地副本、互相覆盖，
+//   切会话时开关值也不随会话变化 → 用户看到的值与实际发送值不一致（「开关不稳定」）。
+//   注意：字段缺失（未加载完会话列表）时保持当前值，避免闪断到「关」。
+const syncAutonomousFromConv = () => {
+  const id = state.currentConvId
+  const conv = id ? state.conversations.find(c => c.id === id) : null
+  if (conv && Object.prototype.hasOwnProperty.call(conv, 'autonomous')) {
+    autonomous.value = !!conv.autonomous
+  }
+}
+
+watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; syncAutonomousFromConv(); } }, { immediate: true })
 
 // ★ 2026-08-31 会话级模型：下拉不再跟随全局 settings（切模型只写会话）。
 //   会话切换/新建时按会话元数据同步下拉；服务商配置（Key/模型列表）变化时刷新分组。
-watch(() => state.currentConvId, () => { syncComposerModelFromConv() })
+watch(() => state.currentConvId, () => { syncComposerModelFromConv(); syncAutonomousFromConv() })
 // ★ 2026-09-20：全局默认配置的判据改为「激活配置名」（settings.preset）——
 //   连接字段（provider/executeModel）已退出 settings 顶层（迁入 ai-presets.json 并清空），
 //   监听它们将永不触发（应用另一条配置后下拉不刷新）。

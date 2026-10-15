@@ -28,6 +28,12 @@ type ConversationStore interface {
 	SetConvToolset(convID, toolset string) error
 	// ConvToolset 读取会话级工具集（空=未设置，用 default 集合）。
 	ConvToolset(convID string) string
+	// SetConvAutonomous 设置会话级自主模式（★ 2026-10-16）：会话内开关只作用
+	// 本会话并持久化，不改全局设置；运行中切换由 SessionManager.SetAutonomous
+	// 即时生效（两者由 web 层成对调用，见 handleSettings 的 convId 分支）。
+	SetConvAutonomous(convID string, on bool) error
+	// ConvAutonomous 读取会话级自主模式（false=未开启/未设置）。
+	ConvAutonomous(convID string) bool
 
 	// 消息操作
 	AppendMessage(convID string, msg Message, segments []Segment) error

@@ -22,6 +22,9 @@ type SegmentQuestion struct {
 	Question    string   `json:"question"`              // 问题文本
 	Options     []string `json:"options,omitempty"`     // 选项（single/multi 类）
 	MultiSelect bool     `json:"multiSelect,omitempty"` // 是否多选
+	// ★ 2026-10-15：选项 + 或自定义输入（对应单问题路径的 single-with-input；
+	//   模型侧参数名 with_input，与 multi_select 同为 snake_case）
+	WithInput bool `json:"withInput,omitempty"`
 }
 
 // SegmentAnswer 多问题提问的单条回答（Round3 ⑤）。
@@ -201,6 +204,15 @@ type ConversationMeta struct {
 	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
 	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
 	Interrupted bool `json:"interrupted,omitempty"`
+	// ★ 2026-10-16 会话级自主模式：本会话的自主模式开关权威值。
+	//   此前开关只写全局 settings，且仅在发送请求时作一次性参数生效 ——
+	//   运行中切不动（agent 按旧快照收尾）、多窗口/多标签各持本地副本互相覆盖，
+	//   表现为「开关不稳定、开着却不续轮」（用户反馈）。
+	//   现本字段为权威：发送请求写入、开关切换写入、运行中即时生效
+	//   （SessionManager.SetAutonomous），前端按会话读取 → 切会话/刷新后状态一致。
+	//   ★ 不带 omitempty：前端需据「字段是否存在」判定能否用会话值覆盖本地开关，
+	//   缺省省略会让 false（关）无法与「未加载」区分。
+	Autonomous bool `json:"autonomous"`
 }
 
 // MessageStore 对话消息持久化的唯一权威。
@@ -391,27 +403,9 @@ func parseAskArgsV2(argsRaw string) (question, askType string, options []string,
 	}
 	// 多问题路径：questions: [{id, question, options?, multi_select?}]
 	if qs, ok := raw["questions"].([]any); ok && len(qs) > 0 {
-		for _, it := range qs {
-			m, ok := it.(map[string]any)
-			if !ok {
-				continue
-			}
-			q := SegmentQuestion{}
-			q.ID, _ = m["id"].(string)
-			q.Question, _ = m["question"].(string)
-			q.MultiSelect, _ = m["multi_select"].(bool)
-			if opts, ok := m["options"].([]any); ok {
-				for _, o := range opts {
-					if s, ok := o.(string); ok {
-						q.Options = append(q.Options, s)
-					}
-				}
-			}
-			if q.Question != "" {
-				questions = append(questions, q)
-			}
-		}
-		if len(questions) > 0 {
+		// ★ 2026-10-15：统一走 parseSegmentQuestions（与宿主执行器 askQuestionsFromArgs、
+		//   前端 normalizeAskQuestions 口径一致）
+		if questions = parseSegmentQuestions(qs); len(questions) > 0 {
 			// 多问题：旧单问题字段不再填充（前端按 questions 渲染）
 			return "", "text", nil, questions
 		}
@@ -438,34 +432,65 @@ func parseAskArgsV2(argsRaw string) (question, askType string, options []string,
 	return
 }
 
+// parseSegmentQuestions 将 ask_user 的 questions 原始数组解析为 SegmentQuestion 列表。
+// ★ 2026-10-15 统一口径（三处必须严格一致，否则多问题回答校验/回显会错配）：
+//   - 本函数（宿主执行器校验 + 历史 segment 构造）
+//   - 前端 agent-events.js normalizeAskQuestions（实时卡片渲染）
+//   - 前端 AskUserCard.vue multiKey（提交 answers 的 id 与回显）
+//
+// 规则：
+//   - id 缺失 → 兜底 q{原始下标+1}（模型漏填 id 时校验不再报「回答缺少问题 ID」）
+//   - question trim 后为空 → 丢弃该项（下标仍按原始数组计）
+//   - multi_select / multiSelect 双兼容；with_input / withInput 双兼容
+//   - options 只保留非空字符串项
+func parseSegmentQuestions(raw []any) []SegmentQuestion {
+	var out []SegmentQuestion
+	for i, it := range raw {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		question := strings.TrimSpace(asString(m["question"]))
+		if question == "" {
+			continue
+		}
+		id := strings.TrimSpace(asString(m["id"]))
+		if id == "" {
+			id = fmt.Sprintf("q%d", i+1)
+		}
+		q := SegmentQuestion{ID: id, Question: question}
+		q.MultiSelect = asBool(m["multi_select"]) || asBool(m["multiSelect"])
+		q.WithInput = asBool(m["with_input"]) || asBool(m["withInput"])
+		if opts, ok := m["options"].([]any); ok {
+			for _, o := range opts {
+				if s, ok := o.(string); ok && strings.TrimSpace(s) != "" {
+					q.Options = append(q.Options, s)
+				}
+			}
+		}
+		out = append(out, q)
+	}
+	return out
+}
+
+// asBool 宽松取布尔（JSON 反序列化后可能是 bool / nil / 字符串）。
+func asBool(v any) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	if s, ok := v.(string); ok {
+		return strings.EqualFold(strings.TrimSpace(s), "true")
+	}
+	return false
+}
+
 // askQuestionsFromArgs 从已解析的工具参数取多问题列表（Round3 ⑤；无则 nil）。
 func askQuestionsFromArgs(args map[string]any) []SegmentQuestion {
 	raw, ok := args["questions"].([]any)
 	if !ok || len(raw) == 0 {
 		return nil
 	}
-	var out []SegmentQuestion
-	for _, it := range raw {
-		m, ok := it.(map[string]any)
-		if !ok {
-			continue
-		}
-		q := SegmentQuestion{}
-		q.ID, _ = m["id"].(string)
-		q.Question, _ = m["question"].(string)
-		q.MultiSelect, _ = m["multi_select"].(bool)
-		if opts, ok := m["options"].([]any); ok {
-			for _, o := range opts {
-				if s, ok := o.(string); ok {
-					q.Options = append(q.Options, s)
-				}
-			}
-		}
-		if q.Question != "" {
-			out = append(out, q)
-		}
-	}
-	return out
+	return parseSegmentQuestions(raw)
 }
 
 // validateAskAnswers 校验多问题回答数组（t4 F6）：回答 ID 必须全部属于问题 ID 集合。
@@ -1818,6 +1843,40 @@ func (s *MessageStore) ConvReviewMode(convID string) string {
 		return ""
 	}
 	return meta.ReviewMode
+}
+
+// SetConvAutonomous 设置会话级自主模式（★ 2026-10-16）。
+// 与 SetConvReviewMode/SetConvToolset 同理：只改本会话并持久化，不动全局 settings。
+func (s *MessageStore) SetConvAutonomous(convID string, on bool) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetConvAutonomous: 读取 index 失败: %w", err)
+	}
+	for i := range metas {
+		if metas[i].ID == convID {
+			if metas[i].Autonomous == on {
+				return nil
+			}
+			metas[i].Autonomous = on
+			if err := s.saveIndex(metas); err != nil {
+				return fmt.Errorf("SetConvAutonomous: 写入 index 失败: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("SetConvAutonomous: 会话 %s 不存在", convID)
+}
+
+// ConvAutonomous 读取会话级自主模式（false = 未开启/未设置）。
+func (s *MessageStore) ConvAutonomous(convID string) bool {
+	meta, err := s.GetConversation(convID)
+	if err != nil || meta == nil {
+		return false
+	}
+	return meta.Autonomous
 }
 
 // SetConvToolset 设置会话级工具集（通用集合名；空=清除，回落 default 集合）。

@@ -7,26 +7,21 @@
       <!-- ★ 2026-09-25 对齐设计稿 shell-midnight th61：左栏（264px）默认 = 会话列表
            （标题「会话」/ 分组「今天·更早」/ 条目含消息数）。数据与动作全部走全局
            state + api：切换会话只改 state.currentConvId，由 RightPanel 的 watch
-           负责加载消息与统计（不再复制其 switchConv 逻辑）。 -->
-      <ConvSidebar v-if="state.activeActivity === 'chat'"
-        :conversations="state.conversations"
-        :current-conv-id="state.currentConvId"
-        :loading-by-conv="state.loadingByConv"
-        :ws-token-stats="wsTokenStats"
-        :conv-ctx-stats="convCtxStats"
-        :ctx-max-tokens-val="ctxMaxTokens"
-        :width="sidebarWidth"
-        @new-conversation="onNewConv"
-        @switch-conversation="onSwitchConv"
-        @delete-conversation="onDeleteConv" />
-      <FileExplorer v-else-if="state.activeActivity === 'explorer'" />
-      <SearchPanel v-else-if="state.activeActivity === 'search'" />
+           负责加载消息与统计（不再复制其 switchConv 逻辑）。
+
+           ★ 2026-10-15 卡顿修复：原来是 v-if/v-else-if 链 —— 每次切换左侧视图都
+           **销毁并重建**视图组件（FileExplorer 重挂 ⇒ 整棵文件树重新请求，且
+           state.expandedDirs 的展开态还在而子节点为空 → 表现为「切过来是空树、点不动」；
+           ConvSidebar 也重建列表与监听）。现改为动态组件 + KeepAlive：切走的视图
+           保留实例，配合 fs-cache 的目录缓存 ⇒ 切回瞬时可见、零请求。 -->
       <!-- Git 源代码管理面板：由 git-api 插件加载 bundle 到 window.GitPanel，
-           本组件动态挂载（跨 bundle，不能静态 import） -->
-      <div v-else-if="state.activeActivity === 'source'" ref="gitHost" class="git-host"></div>
-      <!-- 市场面板已迁至主内容区 tab（2026-09）：不再于侧边栏显示 -->
-      <PluginPanel v-else-if="state.activeActivity === 'plugins'" />
-      <div v-else class="sidebar-placeholder">
+           本组件动态挂载（跨 bundle，不能静态 import），非组件故不进 KeepAlive -->
+      <div v-if="state.activeActivity === 'source'" ref="gitHost" class="git-host"></div>
+      <KeepAlive v-else>
+        <component :is="activeView" v-bind="activeViewProps" />
+      </KeepAlive>
+      <!-- 市场/工具集已迁至主内容区 tab（2026-09）：侧栏无对应视图时提示 -->
+      <div v-if="!hasSidebarView && state.activeActivity !== 'source'" class="sidebar-placeholder">
         <span>面板加载中...</span>
       </div>
     </div>
@@ -48,6 +43,38 @@ import ConvSidebar from './ConvSidebar.vue'
 const headerTitle = computed(() => {
   const titles = { chat: '会话', explorer: '文件浏览器', search: '搜索', source: '源代码管理', marketplace: '市场', plugins: '插件' }
   return titles[state.activeActivity] || ''
+})
+
+// ─── 侧栏视图（KeepAlive 缓存：切换不再销毁重建）───
+// 无对应组件的 activity（如已迁走的 marketplace/toolsets）= 空视图，避免 KeepAlive
+// 拿到 null 子节点。
+const SidebarEmpty = { name: 'SidebarEmpty', render: () => null }
+const VIEW_COMPONENTS = {
+  chat: ConvSidebar,
+  explorer: FileExplorer,
+  search: SearchPanel,
+  plugins: PluginPanel,
+}
+const activeView = computed(() => VIEW_COMPONENTS[state.activeActivity] || SidebarEmpty)
+const hasSidebarView = computed(() => !!VIEW_COMPONENTS[state.activeActivity])
+
+// 仅会话视图需要 props（其余视图直接读全局 state）；
+// 非会话视图传空对象，缓存中的 ConvSidebar 落回默认值、切回时由 watch 复原。
+const EMPTY_VIEW_PROPS = {}
+const activeViewProps = computed(() => {
+  if (state.activeActivity !== 'chat') return EMPTY_VIEW_PROPS
+  return {
+    conversations: state.conversations,
+    currentConvId: state.currentConvId,
+    loadingByConv: state.loadingByConv,
+    wsTokenStats: wsTokenStats.value,
+    convCtxStats: convCtxStats.value,
+    ctxMaxTokensVal: ctxMaxTokens.value,
+    width: sidebarWidth.value,
+    onNewConversation: onNewConv,
+    onSwitchConversation: onSwitchConv,
+    onDeleteConversation: onDeleteConv,
+  }
 })
 
 // ─── 会话列表（设计稿 th61）数据/动作：与 RightPanel 同源，避免状态分叉 ───
@@ -73,7 +100,15 @@ async function onNewConv() {
   try {
     const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
     if (!conv || !conv.id) return
-    state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    // ★ 2026-10-16 修复「新建后左侧列表不出现新会话（要刷新才出现）」：
+    //   原用 unshift（数组**原地**插入）——而列表渲染（ConvSidebar）消费的是由
+    //   watch 同步出来的本地副本，wb-ui 引擎对「原地变动」的依赖收集不可靠
+    //   （同类 workaround 见 FileExplorer.vue:143 / ConvSidebar.vue:89 注释）。
+    //   改为**整体替换数组**：两种引擎下都明确触发订阅者 watch → 列表即时更新。
+    state.conversations = [
+      { id: conv.id, title: conv.title || '新对话', msgCount: 0, autonomous: false, createdAt: conv.createdAt, updatedAt: conv.updatedAt },
+      ...state.conversations,
+    ]
     if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
     state.currentConvId = conv.id
   } catch (e) {
