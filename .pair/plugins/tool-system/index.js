@@ -289,7 +289,7 @@ const tools = [
   },
   {
     "name": "ask_user",
-    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题；Round3 ⑤ 前端已支持多问题渲染与 answers 回灌）。调用会阻塞直到用户回答。",
+    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。多问题：questions:[{id, question, options?, multi_select?, with_input?}]（questions 优先，缺省回落单问题；前端按多问题卡片渲染、一次提交 answers 回灌；multi_select 多选、with_input 允许选项外自定义输入）。调用会阻塞直到用户回答。",
     "parameters": {
       "properties": {
         "askType": {
@@ -318,7 +318,7 @@ const tools = [
           "items": {
             "properties": {
               "id": {
-                "description": "问题稳定 id（回答回显用）",
+                "description": "问题稳定 id（回答回显用；可省略，缺省自动补 q1/q2…）",
                 "type": "string"
               },
               "multi_select": {
@@ -335,10 +335,13 @@ const tools = [
               "question": {
                 "description": "问题文本",
                 "type": "string"
+              },
+              "with_input": {
+                "description": "是否允许在选项之外自定义输入（默认 false；等价单问题的 single-with-input）",
+                "type": "boolean"
               }
             },
             "required": [
-              "id",
               "question"
             ],
             "type": "object"

@@ -4,30 +4,33 @@
     <div v-if="stale" class="ask-stale-hint">⚠ 该会话已结束（服务端不存在），回答无法提交；可直接在下方输入框发送新消息继续。</div>
     <!-- ★ Round3 ⑤ 多问题模式：questions 数组渲染列表，一次「提交」回灌 answers -->
     <div v-if="questions && questions.length" class="ask-multi-list">
-      <div v-for="(q, qi) in questions" :key="q.id || qi" class="ask-multi-item">
+      <div v-for="(q, qi) in questions" :key="multiKey(q, qi)" class="ask-multi-item">
         <div class="ask-user-question">{{ qi + 1 }}. {{ q.question }}</div>
-        <!-- 有选项：单选/多选（multi_select 区分） -->
-        <div v-if="q.options && q.options.length" class="ask-user-options">
+        <!-- 有选项：单选/多选（multiSelect 区分；兼容模型侧的 snake_case multi_select） -->
+        <div v-if="hasQOptions(q)" class="ask-user-options">
           <label v-for="opt in q.options" :key="opt"
-                 :class="['ask-option', { selected: isMultiSelected(q, opt) }]"
-                 @click="toggleMultiOption(q, opt)">
-            <span v-if="q.multiSelect" :class="['ask-checkbox', { checked: isMultiSelected(q, opt) }]">
-              <span v-if="isMultiSelected(q, opt)" class="ask-checkmark">✓</span>
+                 :class="['ask-option', { selected: isMultiSelected(q, qi, opt) }]"
+                 @click="toggleMultiOption(q, qi, opt)">
+            <span v-if="isQMulti(q)" :class="['ask-checkbox', { checked: isMultiSelected(q, qi, opt) }]">
+              <span v-if="isMultiSelected(q, qi, opt)" class="ask-checkmark">✓</span>
             </span>
-            <span v-else :class="['ask-radio-circle', { checked: isMultiSelected(q, opt) }]"></span>
+            <span v-else :class="['ask-radio-circle', { checked: isMultiSelected(q, qi, opt) }]"></span>
             <span class="ask-option-text">{{ opt }}</span>
           </label>
         </div>
-        <!-- 无选项：文本输入 -->
-        <div v-else class="ask-user-input-row">
-          <input v-model="multiTexts[q.id]" class="ask-user-input" type="text"
-                 placeholder="输入回答..." @keydown.enter="submitMultiForm" :disabled="answered || stale" />
+        <!-- ★ 2026-10-15：选项 + 或自定义输入（with_input）——与单问题 single-with-input 同语义 -->
+        <div v-if="hasQOptions(q) && isQWithInput(q)" class="ask-user-or-divider"><span>或自定义输入</span></div>
+        <!-- 无选项：文本输入；with_input：选项之外另可自定义输入 -->
+        <div v-if="!hasQOptions(q) || isQWithInput(q)" class="ask-user-input-row">
+          <input v-model="multiTexts[multiKey(q, qi)]" class="ask-user-input" type="text"
+                 :placeholder="hasQOptions(q) ? '输入自定义回答...' : '输入回答...'"
+                 @keydown.enter="submitMultiForm" :disabled="answered || stale" />
         </div>
         <!-- ★ 2026-09-25 历史回显：该问题当时的回答（选择项/自定义文本） -->
-        <div v-if="answeredTextFor(q)" class="ask-answered-line"
-             :class="{ 'ask-answered-failed': isFailedAnswer(answeredTextFor(q)) }">
-          <span class="ask-answered-label">{{ isFailedAnswer(answeredTextFor(q)) ? '未收到回答' : '你的回答' }}</span>
-          <span class="ask-answered-text">{{ answeredTextFor(q) }}</span>
+        <div v-if="answeredTextFor(q, qi)" class="ask-answered-line"
+             :class="{ 'ask-answered-failed': isFailedAnswer(answeredTextFor(q, qi)) }">
+          <span class="ask-answered-label">{{ isFailedAnswer(answeredTextFor(q, qi)) ? '未收到回答' : '你的回答' }}</span>
+          <span class="ask-answered-text">{{ answeredTextFor(q, qi) }}</span>
         </div>
       </div>
       <div class="ask-multi-actions">
@@ -138,35 +141,57 @@ const props = defineProps({
 })
 const emit = defineEmits(['answer'])
 
-// ── 多问题模式（Round3 ⑤） ──
-const multiTexts = ref({})        // qid → 文本输入
-const multiSelections = ref({})   // qid → 已选项数组
-function isMultiSelected(q, opt) {
-  return (multiSelections.value[q.id] || []).includes(opt)
+// ── 多问题模式（Round3 ⑤；★ 2026-10-15 补齐多选 / 选项+自定义 / 键兜底） ──
+// ★ 键兜底规则必须与后端 message_store.go parseSegmentQuestions 一致：无 id 时取
+//   q{原始下标+1}。此前前端用 q.id 直接作用键——模型漏填 id 时全部问题共用
+//   undefined 键（输入串扰），且提交的 answers.id 为空 → 后端 validateAskAnswers
+//   直接报「回答缺少问题 ID」，回答被丢弃。
+const multiKey = (q, qi) => String((q && q.id) || ('q' + (Number(qi) + 1)))
+const hasQOptions = (q) => !!(q && Array.isArray(q.options) && q.options.length > 0)
+// 多选判定：兼容 camelCase（历史接口/归一化后）与 snake_case（模型原始参数）
+const isQMulti = (q) => !!(q && (q.multiSelect === true || q.multi_select === true))
+// 选项 + 自定义输入（with_input）：兼容 camelCase 与 snake_case
+const isQWithInput = (q) => !!(q && (q.withInput === true || q.with_input === true))
+
+const multiTexts = ref({})        // 键 → 文本输入（纯文本回答 / 自定义回答）
+const multiSelections = ref({})   // 键 → 已选项数组
+function isMultiSelected(q, qi, opt) {
+  return (multiSelections.value[multiKey(q, qi)] || []).includes(opt)
 }
-function toggleMultiOption(q, opt) {
-  const list = multiSelections.value[q.id] || []
-  if (q.multiSelect) {
+function toggleMultiOption(q, qi, opt) {
+  if (props.answered || props.stale) return // 已答/失效卡片不可再改选
+  const k = multiKey(q, qi)
+  const list = multiSelections.value[k] || []
+  if (isQMulti(q)) {
     const idx = list.indexOf(opt)
-    multiSelections.value[q.id] = idx >= 0 ? list.filter(o => o !== opt) : [...list, opt]
+    multiSelections.value[k] = idx >= 0 ? list.filter(o => o !== opt) : [...list, opt]
   } else {
-    multiSelections.value[q.id] = [opt]
+    multiSelections.value[k] = [opt]
   }
 }
 const multiFormValid = computed(() => {
   const qs = props.questions || []
-  return qs.length > 0 && qs.every(q => {
-    if (q.options && q.options.length) return (multiSelections.value[q.id] || []).length > 0
-    return !!((multiTexts.value[q.id] || '').trim())
+  return qs.length > 0 && qs.every((q, qi) => {
+    const k = multiKey(q, qi)
+    const txt = (multiTexts.value[k] || '').trim()
+    if (hasQOptions(q)) return !!txt || (multiSelections.value[k] || []).length > 0
+    return !!txt
   })
 })
 function submitMultiForm() {
+  if (props.answered || props.stale) return
   const qs = props.questions || []
-  const answers = qs.map(q => {
+  const answers = qs.map((q, qi) => {
+    const k = multiKey(q, qi)
     let answer = ''
-    if (q.options && q.options.length) answer = (multiSelections.value[q.id] || []).join(', ')
-    else answer = (multiTexts.value[q.id] || '').trim()
-    return { id: q.id, answer }
+    if (hasQOptions(q)) {
+      // ★ with_input：自定义输入优先（与单问题 submitCustom 同语义）
+      const txt = (multiTexts.value[k] || '').trim()
+      answer = txt || (multiSelections.value[k] || []).join(', ')
+    } else {
+      answer = (multiTexts.value[k] || '').trim()
+    }
+    return { id: k, answer }
   })
   emit('answer', { callId: props.callId, answers })
 }
@@ -239,9 +264,13 @@ const splitAnswer = (s) => String(s || '').split(',').map(x => x.trim()).filter(
 // 答案：展示为「未收到回答」，且不参与选项高亮/输入框回填。
 const isFailedAnswer = (s) => /^Error:|^error:|等待用户回答超时/.test(String(s || '').trim())
 
-// answeredTextFor 多问题模式：取该问题当时的答案文本（按 question id 关联）。
-function answeredTextFor(q) {
-  const hit = (props.answers || []).find(a => a && a.id === (q && q.id))
+// answeredTextFor 多问题模式：取该问题当时的答案文本（按 question id 关联；
+// 无 id 的问题按 multiKey 兜底规则匹配后端 answers 的同名 id）。
+function answeredTextFor(q, qi) {
+  const list = props.answers || []
+  if (!list.length) return ''
+  const id = multiKey(q, qi)
+  const hit = list.find(a => a && String(a.id || '') === id)
   return hit ? String(hit.answer || '').trim() : ''
 }
 
@@ -255,17 +284,18 @@ function restoreFromAnswer() {
   if (qs.length > 0) {
     const sel = { ...multiSelections.value }
     const txt = { ...multiTexts.value }
-    for (const q of qs) {
-      const ans = answeredTextFor(q)
-      if (!ans || isFailedAnswer(ans)) continue
-      if (q.options && q.options.length) {
+    qs.forEach((q, qi) => {
+      const k = multiKey(q, qi)
+      const ans = answeredTextFor(q, qi)
+      if (!ans || isFailedAnswer(ans)) return
+      if (hasQOptions(q)) {
         const matched = splitAnswer(ans).filter(p => q.options.includes(p))
-        sel[q.id] = matched
-        if (matched.length === 0) txt[q.id] = ans // 选项外文本（模型自定义/历史手输）
-      } else if (!txt[q.id]) {
-        txt[q.id] = ans
+        sel[k] = matched
+        if (matched.length === 0) txt[k] = ans // 选项外文本（模型自定义/历史手输）
+      } else if (!txt[k]) {
+        txt[k] = ans
       }
-    }
+    })
     multiSelections.value = sel
     multiTexts.value = txt
     return

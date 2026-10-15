@@ -1,5 +1,5 @@
 {
-  "version": "1.6.15",
+  "version": "1.6.16",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -133,15 +133,7 @@
         "src": ".pair/plugins",
         "dst": ".pair/plugins",
         "optional": true,
-        "recursive": true,
-        "exclude": [
-          "tool-art",
-          "tool-design",
-          "tool-model",
-          "tool-music",
-          "tool-rig",
-          "tool-voice"
-        ]
+        "recursive": true
       },
       {
         "src": "plugins-src/ui-app",

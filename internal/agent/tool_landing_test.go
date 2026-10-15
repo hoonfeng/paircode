@@ -60,38 +60,16 @@ var toolPluginModes = map[string]string{
 	// ★ 2026-09-11 场景创造（创造模式）：/创造 按需激活；scenario_scan/scenario_create
 	//   execute → ctx.hostTool（宿主 internal/agent/scenario_tools.go）。
 	"tool-scenario": "hostTool",
-	// ★ 2026-09 L1（人声插件试点）：nodeBridge = Node 桥轨插件（package.json 声明了
-	//   运行期 npm 依赖，如 @audio/*）——由 bridge.js 装载，工具只进桥注册表，
-	//   不进 goja 轨工具面，故本矩阵不适用（其装载由 node_bridge_*_test.go 覆盖）。
-	"tool-voice": "nodeBridge",
-	// ★ 2026-09 L2（音乐插件）：native = 全 JS 原生实现。tool-music 的 5 个工具
-	//   （project/edit/import/export/verify）全部在 goja 沙箱内用 ctx.fs 完成，
-	//   SMF/ABC/MusicXML/SVG 均为自实现（MIDI 二进制走 readFileBase64/writeFileBase64），
-	//   不经 ctx.hostTool / ctx.binary。
-	"tool-music": "native",
-	// ★ 2026-09 L2（矢量画板插件）：native = 全 JS 原生实现。tool-art 的 5 个工具
-	//   （project/edit/import/export/verify）全部在 goja 沙箱内用 ctx.fs 完成：
-	//   SVG 生成/解析、矩阵变换、包围盒与 WCAG 对比度均为自实现，
-	//   不经 ctx.hostTool / ctx.binary（PNG 光栅化不在沙箱内，由面板浏览器侧完成）。
-	"tool-art": "native",
+	// ★ 2026-10-15 创作域插件下架（用户决策）：tool-art / tool-model / tool-music /
+	//   tool-rig / tool-voice 五包已从 plugins-dist/ 删除（判定为失败创作域），模式表
+	//   同步摘除对应行（扫描按目录进行，表里留行会变成陈旧条目）。历史执行模式：
+	//   voice=nodeBridge（@audio/* 依赖经 bridge.js 装载），其余四包=native（全 JS 自实现）。
 	// ★ 2026-09 L2（UI 设计插件）：native = 全 JS 原生实现。tool-design 的 5 个工具
 	//   （tokens/project/edit/export/verify）全部在 goja 沙箱内用 ctx.fs 完成：
 	//   令牌与界面工程双文本真相源、确定性 flex 布局引擎、HTML/CSS/mermaid 生成、
-	//   9 项判据（含 WCAG 对比度、4px 网格、字号阶梯、触达区、图标白名单）均为自实现，
+	//   11 项判据（D1-D11，含 WCAG 对比度、4px 网格、字号阶梯、触达区、图标白名单）均为自实现，
 	//   不经 ctx.hostTool / ctx.binary。
 	"tool-design": "native",
-	// ★ 2026-09 L2（2D 角色插件）：native = 全 JS 原生实现。tool-rig 的 5 个工具
-	//   （model/import/edit/export/verify）全走 ctx.fs —— 沙箱无 Buffer，PSD 二进制经
-	//   ctx.fs.readFileBase64 + 自研 base64 解码；PSD 结构解析、命名约定自动绑定、
-	//   canvas 渲染器（预览 HTML 内联）与 9 项判据均为自研，零 npm 依赖，
-	//   不经 ctx.hostTool / ctx.binary。
-	"tool-rig": "native",
-	// ★ 2026-09 L2（3D/CAD 插件）：native = 全 JS 原生实现。tool-model 的 5 个工具
-	//   （doc/add/edit/export/verify）全走 ctx.fs —— 表达式求值器、三角网格内核、
-	//   BSP 实体布尔、IEEE754/base64 自研编码（binary STL / GLB 经 ctx.fs.writeFileBase64）、
-	//   glTF 2.0 导出（z-up→y-up 转换）、WebGL 预览（预览 HTML 内联渲染器）与 9 项判据
-	//   均为自研，零 npm 依赖，不经 ctx.hostTool / ctx.binary。
-	"tool-model": "native",
 }
 
 // toolHarnessAliases 混合型插件的 JS 原生实现工具（不在内嵌内核，断言跳过）：

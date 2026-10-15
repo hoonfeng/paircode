@@ -119,10 +119,25 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { state, layout } from '../ui-state.js'
 import api from '../api.js'
 import { visibleConversations } from '../conv-filters.js'
+// ★ 2026-10-15 卡顿修复：目录列表共享缓存（切视图/组件重挂不再重新请求）
+import { invalidateAllDirs } from '../fs-cache.js'
+// ⚠️ 跨 bundle 取共享核心：**必须运行时直读 window**，不能 `import { … }`。
+//   实测（2026-10-15，scripts/cdp-probe-core-assign.js）：区域包 bundle 里的
+//   `import { consumeTreeDirty } from '../app-actions.js'` 被 rollup/globals 编译成
+//   对 core 对象的**模块绑定快照**，其属性集在构建/求值期固定 —— 运行时
+//   window.__PAIRCODE_CORE.actions.consumeTreeDirty 明明是 function，闭包内的绑定却
+//   报「is not a function」（新增导出不进入已有快照）。既有导出（switchActivity /
+//   loadWsList 等）无此问题，故只在**新增跨 bundle 能力**时踩到。
+function pullTreeDirty() {
+  try {
+    const a = (typeof window !== 'undefined' && window.__PAIRCODE_CORE && window.__PAIRCODE_CORE.actions) || null
+    return !!(a && typeof a.consumeTreeDirty === 'function' && a.consumeTreeDirty())
+  } catch (e) { return false }
+}
 import FileTreeItem from './FileTreeItem.vue'
 
 // ★ desktop(goja) workaround：渲染 effect 对整体赋值数组的 set 不收集依赖（v-for/v-if 不更新）。
@@ -169,6 +184,8 @@ async function switchToWorkspace(ws) {
   // 对话消息已由后端持久化，前端不再缓存到 localStorage
   saveCurrentConversations()
   try {
+    // ★ 换工作区 = 整套目录缓存作废（两工作区可能有重叠路径，留着会显示旧内容）
+    invalidateAllDirs()
     const folders = ws.folders || []
     const res = await api.apiPost('/workspace', {
       action: 'switch', root: ws.path,
@@ -546,6 +563,12 @@ async function loadFileContent(path) {
 onMounted(() => {
   window.addEventListener('refresh-tree', refreshAll)
   window.addEventListener('refresh-workspace', refreshCurrentWs)
+})
+// ★ 2026-10-15：本视图被 KeepAlive 缓存后，「切走再切回」不再重建组件，也就不会
+//   重新读目录；而切走期间的周期刷新按门控被跳过（app-actions.isFileTreeVisible）→
+//   这里在激活时按 dirty 标记补刷一次，保证切回来看到的是最新目录树。
+onActivated(() => {
+  if (pullTreeDirty()) refreshAll()
 })
 onUnmounted(() => {
   window.removeEventListener('refresh-tree', refreshAll)

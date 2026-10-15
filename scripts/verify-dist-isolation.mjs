@@ -14,6 +14,11 @@
 //   ③ packager.json exclude 中的条目都真实存在（无陈旧条目，防删插件后漏改）；
 //   ④ plugins-dist 目录形态合法（目录 + package.json）。
 //
+// ★ 2026-10-16：设计插件（tool-design）**转正为基线插件**（随 IDE 发布包出厂）——
+//   真源从 plugins-dist/ 迁回 .pair/plugins/，packager.json 的 exclude 同步清空。
+//   故本护栏当前期望「独立发布插件 0 个」（plugins-dist/ 为空目录）；脚本继续保留，
+//   用于防御今后新增的独立发布插件被误打进 IDE 发布包。
+//
 // 运行：node scripts/verify-dist-isolation.mjs   （cwd 任意，路径以脚本位置推导）
 // ═══════════════════════════════════════════════════════════════
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'

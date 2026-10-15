@@ -1,5 +1,10 @@
 # 创作域支持方案（图像设计 / 绘制 / UI 设计 / 建模 / 音乐 / Live2D）
 
+> **2026-10-15 状态更新（下架）**：本文是总方案草案。落地并评审后，六个创作域**收窄为 design 一域**：
+> `tool-art` / `tool-model` / `tool-music` / `tool-rig` / `tool-voice` 五包已从 `plugins-dist/`
+> 删除并停发（判定为失败创作域），仅保留 `tool-design`（已扩容 progress / avatar / chart 三类节点）。
+> 下文各域方案保留为历史设计记录。
+
 > 文档状态：**方案与契约草案**（plan + contract）——供实现、验收、评审三路共用。
 > 事实基线：2026-09 通过 GitHub / npm registry / 上游 README 实检索（非记忆推测），来源见 §7。
 > 目标读者：框架层（插件运行时 / 工具面）+ 域插件实现者。

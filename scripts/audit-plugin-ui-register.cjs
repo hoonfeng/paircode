@@ -22,7 +22,8 @@ const fs = require('fs')
 const path = require('path')
 
 const ROOT = path.resolve(__dirname, '..')
-const DEFAULT_PKGS = ['tool-art', 'tool-design', 'tool-model', 'tool-music', 'tool-rig', 'tool-voice']
+// ★ 2026-10-15：创作域五包（art / model / music / rig / voice）已下架，默认只审 tool-design
+const DEFAULT_PKGS = ['tool-design']
 // 期望 view id 形如 '<域>-view'（域短名 = 包名剥 tool- 前缀）
 const VIEW_ID_RE = /^(art|design|model|music|rig|voice)-view$/
 

@@ -131,7 +131,7 @@ func archiveSessionTools() {
 		Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
 			"question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
 			"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。" +
-			"多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
+			"多问题：questions:[{id, question, options?, multi_select?, with_input?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -140,16 +140,17 @@ func archiveSessionTools() {
 				"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
 				"questions": map[string]any{
 					"type":        "array",
-					"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?}",
+					"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?, with_input?}",
 					"items": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应）"},
+							"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应；可省略，缺省自动补 q1/q2…）"},
 							"question":     map[string]any{"type": "string", "description": "问题文本"},
 							"options":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项（选择类问题）"},
 							"multi_select": map[string]any{"type": "boolean", "description": "是否多选（默认 false 单选）"},
+							"with_input":   map[string]any{"type": "boolean", "description": "是否允许在选项之外自定义输入（默认 false；等价单问题的 single-with-input）"},
 						},
-						"required": []string{"id", "question"},
+						"required": []string{"question"},
 					},
 				},
 			},

@@ -30,7 +30,8 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO = path.resolve(__dirname, '..');
-const DEFAULT_PKGS = ['tool-art', 'tool-design', 'tool-model', 'tool-music', 'tool-rig', 'tool-voice'];
+// ★ 2026-10-15：创作域五包（art / model / music / rig / voice）已下架，默认只审 tool-design
+const DEFAULT_PKGS = ['tool-design'];
 
 const argv = process.argv.slice(2);
 const brief = argv.includes('--brief');

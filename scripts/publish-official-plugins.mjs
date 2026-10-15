@@ -262,6 +262,13 @@ const ORPHAN_HINTS = {
   'ui-music': '已并入 @paircode/tool-music（UI 与工具同包，2026-09-17）',
   'ui-rig': '已并入 @paircode/tool-rig（UI 与工具同包，2026-09-17）',
   'ui-voice': '已并入 @paircode/tool-voice（UI 与工具同包，2026-09-17）',
+  // ★ 2026-10-15 创作域下架（用户决策）：五域（art / model / music / rig / voice）判定为失败
+  //   创作域，本地 plugins-dist/ 已删除并停发（仅保留 design 域）；registry 上仍存包 → 走孤儿 deprecate。
+  'tool-art': '已下架（2026-10-15）：创作域收窄为 design，美术域停发',
+  'tool-model': '已下架（2026-10-15）：创作域收窄为 design，3D/CAD 域停发',
+  'tool-music': '已下架（2026-10-15）：创作域收窄为 design，音乐域停发',
+  'tool-rig': '已下架（2026-10-15）：创作域收窄为 design，2D 角色域停发',
+  'tool-voice': '已下架（2026-10-15）：创作域收窄为 design，人声域停发',
 }
 
 // registry 上全部官方包（keywords:paircode 全集；search 索引可能滞后于新发布，

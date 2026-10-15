@@ -274,6 +274,18 @@ export function handleKeydown(e) {
 let _lastRefreshTime = 0
 const MIN_TREE_REFRESH_INTERVAL = 3000
 let _savedTreeScrollTop = 0
+// ★ 2026-10-15：文件树视图不可见期间攒下的刷新需求（切回视图时补刷一次）
+let _treeDirty = false
+
+export function markTreeDirty() { _treeDirty = true }
+export function consumeTreeDirty() { const d = _treeDirty; _treeDirty = false; return d }
+
+// 文件树是否「正被看着」：侧栏显示 + 当前就是文件树视图 + 页面可见。
+// 三者任一不成立时，周期刷新不对目录发请求（只标记 dirty，切回时补一次）。
+export function isFileTreeVisible() {
+  return !!state.sidebarVisible && state.activeActivity === 'explorer' &&
+    typeof document !== 'undefined' && document.visibilityState === 'visible'
+}
 
 function refreshTree() {
   const now = Date.now()
@@ -283,30 +295,34 @@ function refreshTree() {
   const scrollEl = document.querySelector('.project-section')
   if (scrollEl) _savedTreeScrollTop = scrollEl.scrollTop
 
+  // ★ 编辑器不可见（主区停在对话/市场/工具集 tab）时不重读磁盘文件：原来每 3~5s
+  //   无条件重读**所有**打开文件（每个一份 /fs/read + 全文归一化），大文件下是稳定的
+  //   主线程负担；编辑器既然没显示，读到的新内容也不会被看到。
+  const editorVisible = !!(state.panels && state.panels.editorOpen)
   for (const path of Object.keys(state.fileContents)) {
-    if (state.openFiles.includes(path)) {
-      if (!state.fileDirty[path]) {
-        api.apiGet('/fs/read', { path }).then(data => {
-          const normalized = (data.content || '').replace(/\r\n/g, '\n')
-          state.fileContents[path] = normalized
-          state.fileSavedContent[path] = normalized
-          state.fileDirty[path] = false
-        }).catch(() => {})
-      }
-    } else {
+    // 不在打开列表中的缓存一律清理（原逻辑 else 分支）
+    if (!editorVisible || !state.openFiles.includes(path)) {
       delete state.fileContents[path]
       delete state.fileSavedContent[path]
       delete state.fileDirty[path]
+      continue
+    }
+    if (!state.fileDirty[path]) {
+      api.apiGet('/fs/read', { path }).then(data => {
+        const normalized = (data.content || '').replace(/\r\n/g, '\n')
+        state.fileContents[path] = normalized
+        state.fileSavedContent[path] = normalized
+        state.fileDirty[path] = false
+      }).catch(() => {})
     }
   }
-  loadFileTree().then(() => {
-    if (_savedTreeScrollTop > 0) {
-      nextTick(() => {
-        const c = document.querySelector('.project-section')
-        if (c) c.scrollTop = _savedTreeScrollTop
-      })
-    }
-  })
+
+  // ★ 2026-10-15：原此处调 loadFileTree() → 它写的 state.fileTree 全项目**没有任何
+  //   读取者**（只有 ui-state 的初始化与 MenuBar/本文件的清空），却每轮对每个工作区
+  //   文件夹各发一次 /fs/list —— 纯浪费。文件树刷新已由 refresh-tree 事件链承担：
+  //   FileExplorer.refreshAll（/health 同步工作区）→ dispatch refresh-tree →
+  //   FileTreeItem.onRefreshTree（按已展开目录 force 重取）。
+  //   滚动位置恢复同样由 FileExplorer.refreshAll 的 _savedTreeScrollTop 负责。
 }
 
 // ─── 全局初始化/清理（壳 ShellApp onMounted/onUnmounted 调用）───
@@ -372,12 +388,15 @@ export function initAppGlobals() {
   }
   for (const [ev, fn] of Object.entries(handlers)) window.addEventListener(ev, fn)
 
-  // 定时轮询文件树（仅页面可见时）
+  // 定时轮询文件树（仅页面可见时，且只在「正看着文件树」时真的发请求）
   refreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      _lastRefreshTime = 0
-      window.dispatchEvent(new CustomEvent('refresh-tree'))
-    }
+    if (document.visibilityState !== 'visible') return
+    // ★ 2026-10-15：非文件树视图（会话/搜索/Git…）只标记 dirty，不再每 5s 对
+    //   每个已展开目录重发 /fs/list —— 既是无谓请求，也是切视图时的手感负担。
+    //   切回文件树视图时由 FileExplorer 的 onActivated 补刷一次。
+    if (!isFileTreeVisible()) { markTreeDirty(); return }
+    _lastRefreshTime = 0
+    window.dispatchEvent(new CustomEvent('refresh-tree'))
   }, 5000)
 
   cleanupFns = [
@@ -433,4 +452,6 @@ export default {
   loadWsList, saveWsList, checkNotifications, switchWorkspace,
   loadConversationsForWorkspace, switchActivity, loadFileTree,
   handleKeydown, initAppGlobals, cleanupAppGlobals, desktopPrefetch,
+  // ★ 2026-10-15 文件树刷新门控（区域包经 __PAIRCODE_CORE.actions 消费）
+  markTreeDirty, consumeTreeDirty, isFileTreeVisible,
 }

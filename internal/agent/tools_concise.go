@@ -60,7 +60,7 @@ var conciseToolDescriptions = map[string]string{
 	"toolset_remove": "删工具集（scope 指定作用域；builtin 不可删）。",
 
 	// ── 其他 ──
-	"ask_user": "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填（或 questions 数组多问题），askType 定 text/single/multi/single-with-input；多问题传 questions:[{id,question,options?,multi_select?}]。",
+	"ask_user": "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填（或 questions 数组多问题），askType 定 text/single/multi/single-with-input；多问题传 questions:[{id,question,options?,multi_select?,with_input?}]（multi_select 多选、with_input 允许选项外自定义输入）。",
 }
 
 // ApplyConciseToolDescriptions 精简工具描述：深拷贝并替换 description 为文言文精简版。

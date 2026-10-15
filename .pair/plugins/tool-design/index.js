@@ -22,7 +22,10 @@ var TOKEN_GROUPS = ['color', 'space', 'radius', 'fontSize', 'fontWeight', 'lineH
 
 // 容器类型（参与 flex 排布）与叶子类型（内容自撑尺寸）
 var CONTAINER_TYPES = ['frame', 'row', 'col', 'card', 'list'];
-var LEAF_TYPES = ['text', 'button', 'input', 'badge', 'icon', 'image', 'divider', 'spacer', 'checkbox'];
+// ★ 2026-10-15 扩容：新增 progress（进度条）/ avatar（头像）/ chart（图表）三类业务型叶子 ——
+//   此前只有 text/button/badge 等基础件，agent 想表达「数据与状态」只能靠文字堆，设计稿
+//   因此看起来像静态标记拼接。三类均为**确定性渲染**（无随机、无外链、无脚本），且配色走令牌。
+var LEAF_TYPES = ['text', 'button', 'input', 'badge', 'icon', 'image', 'divider', 'spacer', 'checkbox', 'progress', 'avatar', 'chart'];
 var NODE_TYPES = CONTAINER_TYPES.concat(LEAF_TYPES);
 
 // 可交互叶子（触达区判据 D6 适用）：button / input / checkbox / 可点 icon
@@ -66,6 +69,41 @@ var ICONS = {
   copy: 'M8.5 8.5h11V20h-11zM4.5 4.5h11v4M4.5 4.5V16h4',
   link: 'M9.5 14.5 14.5 9.5M8 12 5.5 14.5a4 4 0 005.5 5.5L13.5 17M10.5 7 13 4.5a4 4 0 015.5 5.5L16 12',
   more: 'M6 12h.01M12 12h.01M18 12h.01',
+  // ★ 2026-10-15 扩容：方向 / 状态 / 数据 / 设备 常用形态（同样 stroke 风格，viewBox 0 0 24 24）
+  'arrow-left': 'M19.5 12H4.5M10.5 5.5 4 12l6.5 6.5',
+  'arrow-right': 'M4.5 12h15M13.5 5.5 20 12l-6.5 6.5',
+  'arrow-up': 'M12 19.5v-15M5.5 10.5 12 4l6.5 6.5',
+  'arrow-down': 'M12 4.5v15M5.5 13.5 12 20l6.5-6.5',
+  'chevron-left': 'M14.5 5.5 8 12l6.5 6.5',
+  'chevron-up': 'M5.5 14.5 12 8l6.5 6.5',
+  'bar-chart': 'M5 20V10.5M10 20V4.5M15 20v-6M20 20V8',
+  'trending-up': 'M4 16.5 9.5 11l3.5 3.5L20 7.5M20 7.5h-5M20 7.5v5',
+  calendar: 'M4.5 6.5h15v13h-15zM8 4v4M16 4v4M4.5 10.5h15',
+  filter: 'M4 6.5h16l-6.5 7.5V20l-3-1.5v-4.5z',
+  table: 'M4.5 5.5h15v13h-15zM4.5 10h15M4.5 14.5h15M10 5.5v13',
+  tag: 'M4.5 4.5h7l8 8-7 7-8-8zM8.5 9.5h.01',
+  flag: 'M6 3.5v17M6 4.5h11l-2.5 3.5L17 11.5H6',
+  bookmark: 'M7 4.5h10v15l-5-3.5-5 3.5z',
+  share: 'M15.5 8 8.5 11.5M15.5 16 8.5 12.5M18 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5M6 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5M18 19.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5',
+  send: 'M4.5 12 20 4.5l-7.5 15-2-6z',
+  layers: 'M12 3.5 3.5 8l8.5 4.5L20.5 8zM3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5',
+  'panel-left': 'M3.5 5.5h17v13h-17zM9.5 5.5v13',
+  'plus-circle': 'M12 20a8 8 0 100-16 8 8 0 000 16M12 8.5v7M8.5 12h7',
+  'check-circle': 'M12 20a8 8 0 100-16 8 8 0 000 16M8.5 12.5l2.5 2.5 4.5-5.5',
+  'alert-circle': 'M12 20a8 8 0 100-16 8 8 0 000 16M12 7.5v5M12 15.5v.01',
+  monitor: 'M4 5.5h16v11H4zM9.5 20h5M12 16.5V20',
+  phone: 'M9 3.5h6v17H9zM11 17.5h2',
+  server: 'M4.5 5.5h15v5h-15zM4.5 13.5h15v5h-15zM8 8h.01M8 16h.01',
+  code: 'M9 8 4.5 12 9 16M15 8l4.5 4-4.5 4',
+  terminal: 'M4.5 5.5h15v13h-15zM7.5 10l2.5 2.5-2.5 2.5M12.5 15h4',
+  package: 'M12 3.5l8 4.5v9l-8 4.5-8-4.5v-9zM4 8l8 4.5L20 8M12 12.5V21',
+  'credit-card': 'M3.5 6.5h17v11h-17zM3.5 10.5h17M7 14.5h3',
+  shield: 'M12 3.5 19 6v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V6z',
+  zap: 'M13 3 5.5 13.5H11L10.5 21 18 10.5H12.5z',
+  volume: 'M11 5.5 6.5 9H3.5v6h3L11 18.5zM14.5 9.5a4 4 0 010 5M17 7.5a7 7 0 010 9',
+  mic: 'M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3M6.5 11.5a5.5 5.5 0 0011 0M12 17v3',
+  camera: 'M4.5 7.5h3l1.5-2h6l1.5 2h3v11h-15zM12 16.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7',
+  'user-plus': 'M12 11.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7M5.5 20c1.2-3 3.9-4.5 6.5-4.5s5.3 1.5 6.5 4.5M18.5 8.5v5M16 11h5',
 };
 
 // CSS 命名色子集（解析用；与 tool-art 同口径，避免全表 148 项膨胀）
@@ -340,6 +378,7 @@ function nodeDefaultPad(node) {
   var t = node.type;
   if (t === 'card') return '$space.lg';
   if (t === 'button' || t === 'input' || t === 'badge' || t === 'list' || t === 'checkbox') return '$space.sm';
+  if (t === 'progress' || t === 'chart' || t === 'avatar') return '$space.none';
   return '$space.none';
 }
 
@@ -414,6 +453,22 @@ function measureLeaf(node, availW, tokens, problems, screenId) {
       h: Math.round((bs * 1.4 + bpy * 2) * 1000) / 1000,
       fontSize: bs,
     };
+  }
+  // ── 扩容类型（2026-10-15）：progress / avatar / chart ──
+  if (node.type === 'progress') {
+    var ph = resolveSize(p.h !== undefined ? p.h : 8, tokens);
+    if (ph === 'BADREF') { badRef('h'); ph = 8; }
+    return { w: availW, h: ph === 'fill' ? 8 : ph };
+  }
+  if (node.type === 'avatar') {
+    var asz = resolveSize(p.size !== undefined ? p.size : 40, tokens);
+    if (asz === 'BADREF') { badRef('size'); asz = 40; }
+    return { w: asz === 'fill' ? 40 : asz, h: asz === 'fill' ? 40 : asz };
+  }
+  if (node.type === 'chart') {
+    var clh = resolveSize(p.h !== undefined ? p.h : 120, tokens);
+    if (clh === 'BADREF') { badRef('h'); clh = 120; }
+    return { w: availW, h: clh === 'fill' ? 120 : clh };
   }
   if (node.type === 'icon') {
     var isz = resolveSize(p.size !== undefined ? p.size : 20, tokens);
@@ -718,6 +773,10 @@ function nodeTreeLines(node, tokens, depth, out, maxDepth) {
   if (node.type === 'badge') extra.push(str(p.label, ''));
   if (node.type === 'icon') extra.push(str(p.name, ''));
   if (node.type === 'input') extra.push(str(p.label, '') || str(p.placeholder, ''));
+  // ★ 2026-10-15 扩容类型：结构树摘要也带上关键字段（否则 design_project show 看不出内容）
+  if (node.type === 'avatar') extra.push(avatarInitial(p.name));
+  if (node.type === 'progress') extra.push(fmtNum(num(p.value, 60)) + '%');
+  if (node.type === 'chart') extra.push(str(p.kind, 'bar') + '(' + ((p.data && p.data.length) || 0) + ' 点)');
   var size = [];
   if (p.w !== undefined) size.push('w=' + p.w);
   if (p.h !== undefined) size.push('h=' + p.h);
@@ -1289,13 +1348,16 @@ var NODE_FIELDS = {
   divider: ['h', 'color'],
   spacer: ['h'],
   checkbox: ['label', 'checked', 'w', 'h'],
+  progress: ['value', 'tone', 'w', 'h', 'radius'],
+  avatar: ['name', 'size', 'tone'],
+  chart: ['kind', 'data', 'color', 'w', 'h'],
 };
 
 // ── 内容字段（组件参数化的提升对象）─────────────────────────
 // 每种类型「用户可见文案」所在的字段：抽成组件后这些字段提升为 props（不传则用设计原值兜底）。
 // input 是特例：填了 value 用 value，否则用 placeholder（设计稿里常只填 placeholder）。
 var CONTENT_FIELDS = {
-  text: 'text', button: 'label', badge: 'label', checkbox: 'label', image: 'alt',
+  text: 'text', button: 'label', badge: 'label', checkbox: 'label', image: 'alt', avatar: 'name',
 };
 function contentField(node) {
   var t = String(node.type);
@@ -1378,10 +1440,12 @@ function actionHref(target) {
   return target;
 }
 // link 只对"可点元素"有意义：input/checkbox/divider/spacer 没有链接语义（校验器会报错）
-var LINKABLE_TYPES = ['frame', 'row', 'col', 'card', 'list', 'text', 'button', 'badge', 'icon', 'image'];
+// ★ 2026-10-15：chart/avatar 也可作为跳转触达面（卡片式入口常见）；progress 是纯状态展示，不参与
+var LINKABLE_TYPES = ['frame', 'row', 'col', 'card', 'list', 'text', 'button', 'badge', 'icon', 'image', 'chart', 'avatar'];
 // 自宽叶子：宽度由内容决定的元素。放进 col 容器时 CSS flex 默认 align-items: stretch 会把它们拉到满宽
 //   （实测：near 组件里的 badge 渲染成一条贯穿整行的色带 —— 与设计预览的绝对定位不一致）→ 显式按内容宽。
-var SELF_WIDTH_TYPES = { badge: 1, button: 1, icon: 1, checkbox: 1 };
+// ★ 2026-10-15：avatar 直径由 size 决定，属自宽件（放进 col 不被拉满宽）
+var SELF_WIDTH_TYPES = { badge: 1, button: 1, icon: 1, checkbox: 1, avatar: 1 };
 // optsWithDir：给子树带上父容器方向（只读副本，不改共享 opts 的其它字段）
 function optsWithDir(opts, dir) {
   if (!opts) return null;
@@ -1530,6 +1594,80 @@ function iconSvg(name, size, color, tokens, strokeWidth) {
     '<path d="' + d + '"/></svg>';
 }
 
+// ── 扩容类型辅助（2026-10-15）：avatar 首字 / chart 确定性 SVG ──
+// avatarInitial：中文取首字、拉丁取首字母大写（无名字给 '?' 而不是空白）
+function avatarInitial(name) {
+  var s = str(name, '').trim();
+  if (!s) return '?';
+  return s.charAt(0).toUpperCase();
+}
+// chartSvg：bar / line / donut 三种形态的**确定性**内联 SVG —— 无随机、无外链、无脚本，
+//   两次渲染位级一致（D9）；数据缺省给一组固定样例，配色一律走令牌（p.color 可覆盖）。
+function chartSvg(kind, data, box, tokens, p) {
+  var src = (data && data.length) ? data : [4, 7, 5, 9, 6, 3];
+  var vals = [];
+  for (var i = 0; i < src.length; i++) { var v = num(src[i], 0); vals.push(v > 0 ? v : 0); }
+  var maxV = 0;
+  for (var j = 0; j < vals.length; j++) { if (vals[j] > maxV) maxV = vals[j]; }
+  if (maxV <= 0) maxV = 1;
+  var w = num(box.w, 200), h = num(box.h, 120);
+  var ink = cssColor(p.color !== undefined ? p.color : '$color.accent', tokens, '#2563EB');
+  var soft = cssColor('$color.surface-2', tokens, '#F3F4F6');
+  var head = '<svg width="' + fmtNum(w) + '" height="' + fmtNum(h) + '" viewBox="0 0 ' + fmtNum(w) + ' ' + fmtNum(h) + '" fill="none">';
+  var out = [];
+  if (kind === 'donut') {
+    var r = Math.max(6, Math.min(w, h) / 2 - 8);
+    var cx = w / 2, cy = h / 2, C = 2 * Math.PI * r;
+    var total = 0;
+    for (var k0 = 0; k0 < vals.length; k0++) total += vals[k0];
+    if (total <= 0) total = 1;
+    out.push('<circle cx="' + fmtNum(cx) + '" cy="' + fmtNum(cy) + '" r="' + fmtNum(r) + '" fill="none" stroke="' + soft + '" stroke-width="12"/>');
+    var acc = 0;
+    for (var k1 = 0; k1 < vals.length; k1++) {
+      var frac = vals[k1] / total;
+      out.push('<circle cx="' + fmtNum(cx) + '" cy="' + fmtNum(cy) + '" r="' + fmtNum(r) + '" fill="none" stroke="' + ink +
+        '" stroke-width="12" stroke-dasharray="' + fmtNum(C * frac) + ' ' + fmtNum(C) +
+        '" stroke-dashoffset="' + fmtNum(-C * acc) + '" transform="rotate(-90 ' + fmtNum(cx) + ' ' + fmtNum(cy) + ')"/>');
+      acc += frac;
+    }
+    return head + out.join('') + '</svg>';
+  }
+  if (kind === 'line') {
+    var n = vals.length;
+    var stepX = n > 1 ? (w - 8) / (n - 1) : 0;
+    var pts = [];
+    for (var m = 0; m < n; m++) {
+      var px = 4 + stepX * m;
+      var py = h - 6 - (h - 16) * (vals[m] / maxV);
+      pts.push(fmtNum(px) + ',' + fmtNum(py));
+    }
+    out.push('<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + ink + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+    return head + out.join('') + '</svg>';
+  }
+  // bar（默认）：等分槽位 + 柱高按最大值归一化
+  var cnt = vals.length || 1;
+  var slot = w / cnt;
+  var barW = Math.max(3, slot * 0.55);
+  for (var q = 0; q < vals.length; q++) {
+    var bh = Math.max(2, (h - 10) * (vals[q] / maxV));
+    var bx = slot * q + (slot - barW) / 2;
+    out.push('<rect x="' + fmtNum(bx) + '" y="' + fmtNum(h - 4 - bh) + '" width="' + fmtNum(barW) + '" height="' + fmtNum(bh) + '" rx="2" fill="' + ink + '"/>');
+  }
+  return head + out.join('') + '</svg>';
+}
+
+// svgJsxSafe：内联 SVG 的连字符属性名 → JSX 驼峰（React 不接受 stroke-width 这类写法）
+function svgJsxSafe(svg) {
+  return String(svg)
+    .replace(/stroke-width=/g, 'strokeWidth=')
+    .replace(/stroke-dasharray=/g, 'strokeDasharray=')
+    .replace(/stroke-dashoffset=/g, 'strokeDashoffset=')
+    .replace(/stroke-linejoin=/g, 'strokeLinejoin=')
+    .replace(/stroke-linecap=/g, 'strokeLinecap=')
+    .replace(/fill-opacity=/g, 'fillOpacity=')
+    .replace(/text-anchor=/g, 'textAnchor=');
+}
+
 function renderNodeHtml(node, boxes, tokens, out, inheritedBg) {
   var b = boxes[node.id];
   if (!b) return;
@@ -1549,6 +1687,14 @@ function renderNodeHtml(node, boxes, tokens, out, inheritedBg) {
   if (p.shadow !== undefined && p.shadow !== 'none') style += 'box-shadow:' + cssShadow(p.shadow, tokens, 'none') + ';';
 
   var inner = '';
+  // 进度条语义（无障碍 + 可断言）：与 codegen 侧一致，预览产物也带 role/aria
+  var aria = '';
+  if (node.type === 'progress') {
+    var pva = num(p.value, 60);
+    if (pva < 0) pva = 0;
+    if (pva > 100) pva = 100;
+    aria = ' role="progressbar" aria-valuenow="' + fmtNum(pva) + '"';
+  }
   if (node.type === 'text') {
     var fs = num(b.metrics ? b.metrics.fontSize : 14, 14);
     var fw = num(b.metrics ? b.metrics.weight : 400, 400);
@@ -1580,6 +1726,25 @@ function renderNodeHtml(node, boxes, tokens, out, inheritedBg) {
     style += 'font-size:' + fmtNum(num(b.metrics ? b.metrics.fontSize : 11, 11)) + 'px;font-weight:500;';
     style += 'display:flex;align-items:center;justify-content:center;white-space:nowrap;';
     inner = escHtml(str(p.label, ''));
+  } else if (node.type === 'progress') {
+    // 进度条：轨道 + 填充（value 0-100，配色按 tone 取令牌；无脚本、纯 CSS 尺寸）
+    var pv = num(p.value, 60);
+    if (pv < 0) pv = 0;
+    if (pv > 100) pv = 100;
+    var ptone = badgeColors(p.tone !== undefined ? p.tone : 'info', tokens);
+    style += 'background:' + cssColor('$color.surface-2', tokens, '#F3F4F6') + ';border-radius:999px;overflow:hidden;';
+    inner = '<span style="display:block;height:100%;width:' + fmtNum(pv) + '%;background:' + ptone.fg + ';"></span>';
+  } else if (node.type === 'avatar') {
+    // 头像：圆形底色 + 首字（size 决定直径与字号；中文取首字，拉丁取首字母）
+    var atone = badgeColors(p.tone !== undefined ? p.tone : 'info', tokens);
+    style += 'border-radius:999px;background:' + atone.bg + ';color:' + atone.fg + ';';
+    style += 'display:flex;align-items:center;justify-content:center;font-weight:600;';
+    style += 'font-size:' + fmtNum(Math.max(10, Math.round(num(b.w, 40) * 0.42))) + 'px;';
+    inner = escHtml(avatarInitial(p.name));
+  } else if (node.type === 'chart') {
+    // 图表：bar（默认）/ line / donut，内联 SVG（确定性）
+    style += 'display:flex;align-items:flex-start;overflow:hidden;';
+    inner = chartSvg(str(p.kind, 'bar'), p.data, b, tokens, p);
   } else if (node.type === 'icon') {
     var icol = cssColor(p.color !== undefined ? p.color : '$color.fg', tokens, '#111827');
     var isz = num(b.w, 20);
@@ -1601,7 +1766,7 @@ function renderNodeHtml(node, boxes, tokens, out, inheritedBg) {
   } else {
     // 容器：仅背景/边框/圆角
   }
-  out.push('<div class="nd"' + ((pa && pa.verb !== 'invalid') ? (' data-action="' + pa.verb + '"') : '') +
+  out.push('<div class="nd"' + ((pa && pa.verb !== 'invalid') ? (' data-action="' + pa.verb + '"') : '') + aria +
     ' style="' + style + '">' + inner + '</div>');
   var kids = node.children || [];
   for (var i = 0; i < kids.length; i++) renderNodeHtml(kids[i], boxes, tokens, out, effBg);
@@ -2624,6 +2789,7 @@ function buildCodeTree(node, tokens, out, opts) {
   var attrs = [];
   var text = '';
   var svg = null;
+  var chartSvgText = '';
   var selfClose = false;
   var tag = 'div';
   // 组件参数化 / 插槽：只有**组件产物**构建时传 opts.comp（屏幕侧是使用方，保持字面量）
@@ -2744,6 +2910,55 @@ function buildCodeTree(node, tokens, out, opts) {
     if (ph) attrs.push(['placeholder', ph]);
     if (str(p.value, '')) attrs.push(['value', str(p.value, '')]);
     if (argBoolish(p.disabled)) { decls.push('opacity: 0.5'); attrs.push(['disabled', true]); }
+  } else if (t === 'progress') {
+    // 进度条：轨道 div + 填充 span（填充规则走 extra → html/vue/react 三目标共用一份 CSS）
+    tag = 'div';
+    var pvw = resolveSize(p.w, tokens);
+    var pvh = resolveSize(p.h !== undefined ? p.h : 8, tokens);
+    var pv = num(p.value, 60);
+    if (pv < 0) pv = 0;
+    if (pv > 100) pv = 100;
+    var pto = toneVars(p.tone !== undefined ? p.tone : 'info');
+    decls.push('width: ' + (wCss || ((typeof pvw === 'number') ? (fmtNum(pvw) + 'px') : '100%')));
+    decls.push('height: ' + (hCss || (fmtNum(typeof pvh === 'number' ? pvh : 8) + 'px')));
+    decls.push('background: var(--color-surface-2)');
+    decls.push('border-radius: var(--radius-full)');
+    decls.push('overflow: hidden');
+    extra.push({ sel: '.' + cls + ' > span', decls: ['display: block', 'height: 100%', 'border-radius: inherit',
+      'width: ' + fmtNum(pv) + '%', 'background: ' + pto.fg] });
+    attrs.push(['role', 'progressbar']);
+    attrs.push(['aria-valuenow', fmtNum(pv)]);
+  } else if (t === 'avatar') {
+    // 头像：圆形底 + 首字（中文取首字、拉丁取首字母，由 avatarInitial 统一）
+    tag = 'div';
+    var avsz = resolveSize(p.size !== undefined ? p.size : 40, tokens);
+    if (typeof avsz !== 'number') avsz = 40;
+    var ato = toneVars(p.tone !== undefined ? p.tone : 'info');
+    decls.push('width: ' + fmtNum(avsz) + 'px');
+    decls.push('height: ' + fmtNum(avsz) + 'px');
+    decls.push('border-radius: var(--radius-full)');
+    decls.push('background: ' + ato.bg);
+    decls.push('color: ' + ato.fg);
+    decls.push('display: inline-flex');
+    decls.push('align-items: center');
+    decls.push('justify-content: center');
+    decls.push('flex: none');
+    decls.push('font-weight: 600');
+    decls.push('font-size: ' + fmtNum(Math.max(10, Math.round(avsz * 0.42))) + 'px');
+    text = avatarInitial(p.name);
+  } else if (t === 'chart') {
+    // 图表：内联 SVG（bar/line/donut 三形态，确定性输出）——不走 svg 机制（那个是 24×24 单路径图标）
+    tag = 'div';
+    var cwR = resolveSize(p.w !== undefined ? p.w : 200, tokens);
+    var chR = resolveSize(p.h !== undefined ? p.h : 120, tokens);
+    var cw = (typeof cwR === 'number') ? cwR : 200;
+    var chh = (typeof chR === 'number') ? chR : 120;
+    decls.push('width: ' + (wCss || (fmtNum(cw) + 'px')));
+    decls.push('height: ' + (hCss || (fmtNum(chh) + 'px')));
+    decls.push('display: flex');
+    decls.push('align-items: flex-start');
+    decls.push('overflow: hidden');
+    chartSvgText = chartSvg(str(p.kind, 'bar'), p.data, { w: cw, h: chh }, tokens, p);
   } else if (t === 'checkbox') {
     tag = 'label';
     decls.push('display: inline-flex');
@@ -2862,7 +3077,7 @@ function buildCodeTree(node, tokens, out, opts) {
     }
   }
   return {
-    id: node.id, type: t, tag: tag, cls: cls, attrs: attrs, text: text, svg: svg,
+    id: node.id, type: t, tag: tag, cls: cls, attrs: attrs, text: text, svg: svg, chartSvg: chartSvgText,
     selfClose: selfClose, children: kids, decls: decls, extra: extra,
     checked: p.checked === true, textProp: textProp, slot: isSlot,
     slotName: isSlot ? treeSlotName(node, opts) : '',
@@ -3090,6 +3305,22 @@ function renderTreeMarkup(tree, depth, lines, selfCloseStr) {
     lines.push(ind + '</' + tag + '>');
     return;
   }
+  if (tree.type === 'progress') {
+    // 进度条：轨道 + 填充 span（填充宽度由 CSS 规则 .cls > span 决定）
+    lines.push(ind + '<' + tag + attr + '>');
+    lines.push(ind + '  <span></span>');
+    lines.push(ind + '</' + tag + '>');
+    return;
+  }
+  if (tree.type === 'avatar') {
+    var avTxt = tree.textProp ? ('{{ ' + tree.textProp + ' }}') : escHtml(tree.text);
+    lines.push(ind + '<' + tag + attr + '>' + avTxt + '</' + tag + '>');
+    return;
+  }
+  if (tree.chartSvg) {
+    lines.push(ind + '<' + tag + attr + '>' + tree.chartSvg + '</' + tag + '>');
+    return;
+  }
   if (tree.svg) {
     lines.push(ind + '<' + tag + attr + '>' + svgMarkup(tree.svg, false) + '</' + tag + '>');
     return;
@@ -3170,6 +3401,21 @@ function renderTreeJsx(tree, depth, lines) {
     if (tree.textProp) lines.push(ind + '  <span>{' + tree.textProp + '}</span>');
     else if (tree.text) lines.push(ind + '  <span>' + jsxText(tree.text) + '</span>');
     lines.push(ind + '</' + tag + '>');
+    return;
+  }
+  if (tree.type === 'progress') {
+    lines.push(ind + '<' + tag + attr + '>');
+    lines.push(ind + '  <span></span>');
+    lines.push(ind + '</' + tag + '>');
+    return;
+  }
+  if (tree.type === 'avatar') {
+    var avTxtJ = tree.textProp ? ('{' + tree.textProp + '}') : jsxText(tree.text);
+    lines.push(ind + '<' + tag + attr + '>' + avTxtJ + '</' + tag + '>');
+    return;
+  }
+  if (tree.chartSvg) {
+    lines.push(ind + '<' + tag + attr + '>' + svgJsxSafe(tree.chartSvg) + '</' + tag + '>');
     return;
   }
   if (tree.svg) {
@@ -4977,8 +5223,321 @@ function designVerify(args, exec, ctx) {
   return verifyText(res, path, reportPath);
 }
 
+// ── 结构自省（design_schema，只读）──────────────────────────────
+// 起因（2026-10-15）：agent 不知道本插件的具体结构 —— 17 类节点（容器 5 + 叶子 12）的字段全表、图标白名单、
+//   布局语义、D1-D11 判据、规模上限散落在实现各处，工具描述只能写概要，于是 agent 只能猜
+//   字段名与图标名（猜错即 D2 悬空引用 / D7 图标不在白名单 直接 FAIL），设计稿于是退化成
+//   「frame + text + button」的静态堆叠。本工具把这些事实集中为**可查询清单**：内容尽量由
+//   真源派生（NODE_TYPES / TOKEN_GROUPS / ICONS / LIMIT_* / ACTION_VERBS / LINKABLE_TYPES /
+//   TEMPLATES），改实现即同步，不会与校验器/渲染器漂移。
+var SCHEMA_TOPICS = ['all', 'nodes', 'tokens', 'icons', 'layout', 'verify', 'limits', 'interactions', 'templates', 'examples'];
+
+// 节点字段全表（事实来源：measureLeaf 的默认值 / layoutNode 的容器字段 / renderNodeHtml 的渲染字段）
+var SCHEMA_NODES = [
+  { type: 'frame', role: '容器', fields: 'pad gap w h bg border radius shadow justify align action',
+    note: '纵向堆叠；默认撑满可用宽度；默认 pad=$space.none' },
+  { type: 'col', role: '容器', fields: '同 frame',
+    note: '纵向堆叠（与 frame 同实现，语义名不同）' },
+  { type: 'row', role: '容器', fields: '同 frame',
+    note: '横向排布；未写 w 时宽度=内容宽（★ 不会自动撑满）' },
+  { type: 'card', role: '容器', fields: '同 frame',
+    note: '卡片；默认 pad=$space.lg；常配 bg/border/radius/shadow' },
+  { type: 'list', role: '容器', fields: '同 frame',
+    note: '列表容器；默认 pad=$space.sm' },
+  { type: 'text', role: '叶子',
+    fields: 'text size($fontSize.md) weight($fontWeight.normal) leading($lineHeight.normal) color($color.fg) align(left|center|right) w(auto|fill|数值) maxLines',
+    note: '宽度按 字号×行高 估算换行（CJK 按全宽）；maxLines>0 时截断计行' },
+  { type: 'button', role: '叶子',
+    fields: 'label variant(primary|secondary|ghost|danger) size($fontSize.md) padX($space.lg) padY($space.sm) w h full(boolean) radius(6px) disabled(boolean)',
+    note: 'full=true 或 w=fill → 撑满一行；auto 宽 = 文本宽 + padX×2' },
+  { type: 'input', role: '叶子',
+    fields: 'value placeholder label h(36) w(fill)',
+    note: '显示内容优先 value，其次 placeholder；自带边框与底色' },
+  { type: 'checkbox', role: '叶子',
+    fields: 'label checked(boolean) h($fontSize.lg) w',
+    note: 'checked=true 为勾选态；action=toggle 表示可切换（唯一允许 toggle 的类型）' },
+  { type: 'badge', role: '叶子',
+    fields: 'label tone(neutral|info|success|warning|danger) size($fontSize.xs) padX($space.sm) padY($space.xs)',
+    note: '胶囊标签；自宽（由内容撑开）' },
+  { type: 'icon', role: '叶子',
+    fields: 'name(白名单，见 topic=icons) size(20) color($color.fg)',
+    note: '内联 SVG；禁止 emoji / 文字符号充当图标（D7）' },
+  { type: 'image', role: '叶子',
+    fields: 'alt w(fill) h(默认120) ratio(宽高比)',
+    note: '占位图（灰底 + alt 文本）；ratio>0 时按宽算高' },
+  { type: 'divider', role: '叶子',
+    fields: 'h(1) color($color.border)',
+    note: '分隔线；默认撑满可用宽度' },
+  { type: 'spacer', role: '叶子',
+    fields: 'h($space.md)',
+    note: '纯占位间隔（不可交互、不可链接）' },
+  { type: 'progress', role: '叶子',
+    fields: 'value(0-100，默认 60) tone(neutral|info|success|warning|danger，默认 info) h(8) w(fill) radius',
+    note: '进度条；轨道 + 填充（填充宽 = value%）；role=progressbar 与 aria-valuenow 自动生成' },
+  { type: 'avatar', role: '叶子',
+    fields: 'name size(40) tone(默认 info)',
+    note: '圆形头像；取 name 首字（中文）/首字母（拉丁），字号 = size×0.42；自宽（不被拉伸）' },
+  { type: 'chart', role: '叶子',
+    fields: 'kind(bar|line|donut，默认 bar) data(数值数组) color($color.accent) w(200) h(120)',
+    note: '内联 SVG 图表（确定性、无脚本）；data 缺省时用内置样例序列' },
+];
+
+var SCHEMA_EXAMPLES = [
+  {
+    title: '移动端任务卡（card + row + icon + col(text) + badge + button）',
+    json: '{"type":"card","pad":"$space.lg","bg":"$color.bg","border":"$color.border","radius":"$radius.lg","shadow":"$shadow.sm","children":[' +
+      '{"type":"row","justify":"between","align":"center","children":[' +
+      '{"type":"row","gap":"$space.sm","align":"center","children":[' +
+      '{"type":"icon","name":"check","size":18,"color":"$color.accent"},' +
+      '{"type":"text","text":"今日待办","size":"$fontSize.lg","weight":"$fontWeight.semibold","color":"$color.fg"}]},' +
+      '{"type":"badge","label":"3 项","tone":"info"}]},' +
+      '{"type":"text","text":"把设计工程拆成可验收的步骤","size":"$fontSize.sm","color":"$color.muted"},' +
+      '{"type":"button","label":"开始","variant":"primary","full":true,"action":"emit:start"}]}',
+  },
+  {
+    title: '表单（input × 2 + checkbox + 主次按钮）',
+    json: '{"type":"col","gap":"$space.md","children":[' +
+      '{"type":"text","text":"新建账号","size":"$fontSize.xl","weight":"$fontWeight.semibold"},' +
+      '{"type":"input","placeholder":"邮箱","h":40},' +
+      '{"type":"input","placeholder":"密码","h":40},' +
+      '{"type":"checkbox","label":"我已阅读并同意服务条款","checked":true,"action":"toggle"},' +
+      '{"type":"row","gap":"$space.sm","children":[' +
+      '{"type":"button","label":"取消","variant":"secondary"},' +
+      '{"type":"button","label":"创建","variant":"primary"}]}]}',
+  },
+  {
+    title: '列表（list + 行内左右分栏 + 状态徽章 + 分隔线）',
+    json: '{"type":"list","gap":"$space.none","children":[' +
+      '{"type":"row","justify":"between","align":"center","pad":"$space.md","children":[' +
+      '{"type":"col","gap":"$space.xs","children":[' +
+      '{"type":"text","text":"接口联调","size":"$fontSize.md","color":"$color.fg"},' +
+      '{"type":"text","text":"10:30 更新","size":"$fontSize.xs","color":"$color.subtle"}]},' +
+      '{"type":"badge","label":"进行中","tone":"warning"}]},' +
+      '{"type":"divider"},' +
+      '{"type":"row","justify":"between","align":"center","pad":"$space.md","children":[' +
+      '{"type":"text","text":"回归测试","size":"$fontSize.md","color":"$color.fg"},' +
+      '{"type":"badge","label":"已完成","tone":"success"}]}]}',
+  },
+  {
+    title: '顶部导航 + 内容 + 底部操作（屏幕骨架）',
+    json: '{"type":"col","gap":"$space.none","children":[' +
+      '{"type":"row","pad":"$space.md","justify":"between","align":"center","bg":"$color.surface","border":"$color.border","children":[' +
+      '{"type":"row","gap":"$space.sm","align":"center","children":[' +
+      '{"type":"icon","name":"chevron-right","color":"$color.muted"},' +
+      '{"type":"text","text":"详情","size":"$fontSize.lg","weight":"$fontWeight.semibold"}]},' +
+      '{"type":"icon","name":"more","color":"$color.muted"}]},' +
+      '{"type":"col","pad":"$space.lg","gap":"$space.md","children":[' +
+      '{"type":"image","alt":"截图","h":160,"radius":"$radius.md"},' +
+      '{"type":"text","text":"内容区：任意容器与叶子组合","size":"$fontSize.md","color":"$color.fg"}]},' +
+      '{"type":"spacer","h":"$space.md"},' +
+      '{"type":"button","label":"提交","variant":"primary","full":true,"action":"link:#done"}]}',
+  },
+];
+
+function schemaNodeTable() {
+  var L = [];
+  L.push('| 类型 | 角色 | 字段（默认值） | 说明 |');
+  L.push('|---|---|---|---|');
+  for (var i = 0; i < SCHEMA_NODES.length; i++) {
+    var n = SCHEMA_NODES[i];
+    L.push('| ' + n.type + ' | ' + n.role + ' | ' + n.fields + ' | ' + n.note + ' |');
+  }
+  return L.join('\n');
+}
+
+function schemaTokensText() {
+  var t = defaultTokens();
+  var L = [];
+  L.push('## 令牌（真相源 ①：design.tokens.json）');
+  L.push('');
+  L.push('引用语法 `$<组>.<名>`（节点里写裸色值/裸字号会被 D2/D5 判 FAIL）；');
+  L.push('组名恰好 ' + TOKEN_GROUPS.length + ' 组：' + TOKEN_GROUPS.join(' / ') + '。');
+  L.push('');
+  L.push('| 组 | 值类型 | 默认名（可直接引用） |');
+  L.push('|---|---|---|');
+  for (var i = 0; i < TOKEN_GROUPS.length; i++) {
+    var g = TOKEN_GROUPS[i];
+    var keys = Object.keys(t[g] || {});
+    var kind = (g === 'color') ? '颜色' : (g === 'shadow' ? '阴影串' : (g === 'font' ? '字体族' : '数字'));
+    L.push('| ' + g + ' | ' + kind + ' | ' + keys.join(', ') + ' |');
+  }
+  return L.join('\n');
+}
+
+function schemaIconsText() {
+  var names = Object.keys(ICONS);
+  var L = [];
+  L.push('## 图标白名单（' + names.length + ' 个，icon.name 只能取这些）');
+  L.push('');
+  L.push(names.join('  '));
+  L.push('');
+  L.push('★ 禁止 emoji / 文字符号当图标（D7 FAIL）；需要别的图形时用 image 占位或换语义。');
+  return L.join('\n');
+}
+
+function schemaLayoutText() {
+  var L = [];
+  L.push('## 布局引擎（确定性 flex 堆叠模型；校验与 HTML 渲染共用同一份盒子 → 截图即所见）');
+  L.push('');
+  L.push('1. 容器：主方向由类型定（row=横向，frame/col/card/list=纵向）；子节点沿主轴依次排布，间距 gap（默认 $space.sm）；内缩 pad。');
+  L.push('2. 尺寸：w 默认 fill（撑满可用宽）、h 默认 auto（= 内容高）；row 未写 w 时宽度=内容宽，不会自动撑满 —— 要满宽请写 w:"fill"。');
+  L.push('3. 交叉轴：col 里"撑满型"子节点（容器/divider/input/image/spacer）默认拉到满宽；row 里不拉伸（保持内容宽，如 badge/button/icon）。');
+  L.push('4. 对齐：justify（主轴 center|end|between|around）+ align（交叉轴 center|end|start）—— 显式声明才生效，未声明保持旧默认（贴左/贴顶）。');
+  L.push('5. 叶子尺寸：由内容估算（text 按 字号×行高 折行、CJK 按全宽；button/badge = 文本 + padding；input 默认 h=36）。');
+  L.push('6. 数值可写引用（$space.md）或数字（16，单位 px）；间距必须是 4px 倍数（D4）。');
+  L.push('7. 溢出：内容超出容器可用高/宽 → D8 FAIL（与预览同源，报告说没溢出就不会压字）。');
+  L.push('8. 深度上限 ' + LIMIT_DEPTH + ' 层；屏幕尺寸上限 ' + LIMIT_DIM + 'px。');
+  return L.join('\n');
+}
+
+function schemaVerifyText() {
+  var L = [];
+  L.push('## 自检判据（design_verify；任一 FAIL = 设计与设计系统不一致，应视为构建失败）');
+  L.push('');
+  L.push('| 判据 | 抓什么 |');
+  L.push('|---|---|');
+  L.push('| D1 | 结构与必填：屏幕/节点 id 唯一、类型合法、容器与叶子约束、深度与规模上限 |');
+  L.push('| D2 | 令牌引用有效：悬空引用（$color.nope）、组名错用（把颜色令牌当宽度） |');
+  L.push('| D3 | 文本对比度：正文 4.5:1、大字 3:1（按钮/徽章按其实际配色算） |');
+  L.push('| D4 | 间距落在 4px 网格 |');
+  L.push('| D5 | 字号来自令牌阶梯（禁止裸字号） |');
+  L.push('| D6 | 触达区尺寸（移动 ≤480px 屏要 44px、桌面 32px） |');
+  L.push('| D7 | 图标白名单 + 无 emoji/符号图标 |');
+  L.push('| D8 | 布局无溢出/越界（与 HTML 渲染同一份盒子） |');
+  L.push('| D9 | 产物确定且自包含（两次渲染位级一致、无 script/on*/javascript:/外链） |');
+  L.push('| D10 | 交互声明合法（props.action 受控词汇表；link:#屏幕 必须真实存在；toggle 仅 checkbox） |');
+  L.push('| D11 | 导航与交互一致（flow 导航图 ↔ 节点 action=link:#屏幕） |');
+  return L.join('\n');
+}
+
+function schemaLimitsText() {
+  var L = [];
+  L.push('## 规模与数值上限');
+  L.push('');
+  L.push('- 屏幕数 ≤ ' + LIMIT_SCREENS + '；单工程节点总数 ≤ ' + LIMIT_NODES + '；节点树深度 ≤ ' + LIMIT_DEPTH);
+  L.push('- 屏幕尺寸（宽/高）≤ ' + LIMIT_DIM + 'px；间距网格 ' + GRID_BASE + 'px 倍数');
+  L.push('- 触达区下限：移动 ' + TOUCH_MIN_MOBILE + 'px（屏宽 ≤ ' + TOUCH_MOBILE_MAX_W + 'px）/ 桌面 ' + TOUCH_MIN_DESKTOP + 'px');
+  L.push('- 模板：' + Object.keys(TEMPLATES).join(' / ') + '（mobile=移动端任务卡；panel=插件面板式）');
+  return L.join('\n');
+}
+
+function schemaActionsText() {
+  var L = [];
+  L.push('## 交互声明（props.action：只声明意图，不携带脚本 —— 产物里禁止 JS）');
+  L.push('');
+  L.push('| 写法 | 语义 | 产物 |');
+  L.push('|---|---|---|');
+  L.push('| link:<目标> | 跳转 | HTML 出真链接 / 屏幕间跳转（#屏幕id → ./<屏幕>.html） |');
+  L.push('| emit:<事件名> | 交给宿主处理 | Vue emit（defineEmits）/ React 回调 on<Name> / HTML data-action |');
+  L.push('| toggle | 切换 | 仅 checkbox 允许（原生交互，不产代码） |');
+  L.push('');
+  L.push('link 目标允许：https:// http:// mailto: tel: /站内路径 #屏幕id；可链接类型：' + LINKABLE_TYPES.join('/'));
+  return L.join('\n');
+}
+
+function schemaTemplatesText() {
+  var L = [];
+  L.push('## 屏幕模板（design_project mode=create screens=[{…,template:"mobile"}]）');
+  L.push('');
+  L.push('| 模板 | 用途 | 生成内容 |');
+  L.push('|---|---|---|');
+  L.push('| mobile | 移动端任务卡 | 360×640 屏 + 标题/副标题/任务卡/主按钮骨架（节点 id 带屏幕前缀） |');
+  L.push('| panel | 插件面板式 | 面板宽屏 + 头部/工具行/内容区骨架 |');
+  L.push('| none | 空屏 | 只有屏幕根容器（自己用 design_add 搭） |');
+  L.push('');
+  L.push('★ 套完模板后用 design_project mode=show 看清生成的节点 id，再用 design_edit node.set 改文案/样式 —— 不要凭空猜 id。');
+  return L.join('\n');
+}
+
+function schemaExamplesText() {
+  var L = [];
+  L.push('## 可直接照抄的节点树片段（design_add nodes=[…] 或 design_project root=…）');
+  L.push('');
+  L.push('要点：容器给 pad/gap 与 justify/align；叶子样式一律写 token 引用；');
+  L.push('按钮用 variant、徽章用 tone、图标用白名单 name —— 这样才不会被 D2/D5/D7 判 FAIL。');
+  for (var i = 0; i < SCHEMA_EXAMPLES.length; i++) {
+    L.push('');
+    L.push('### ' + (i + 1) + '. ' + SCHEMA_EXAMPLES[i].title);
+    L.push('```json');
+    L.push(SCHEMA_EXAMPLES[i].json);
+    L.push('```');
+  }
+  return L.join('\n');
+}
+
+function schemaSection(topic) {
+  if (topic === 'nodes') return '# 节点全表（' + NODE_TYPES.length + ' 类：容器 ' + CONTAINER_TYPES.length + ' + 叶子 ' + LEAF_TYPES.length + '）\n\n' +
+    '界面工程结构：工程 → 屏幕（screen：id/name/width/height/background）→ 节点树（node：id/type/props/children）。\n\n' + schemaNodeTable();
+  if (topic === 'tokens') return schemaTokensText();
+  if (topic === 'icons') return schemaIconsText();
+  if (topic === 'layout') return schemaLayoutText();
+  if (topic === 'verify') return schemaVerifyText();
+  if (topic === 'limits') return schemaLimitsText();
+  if (topic === 'interactions') return schemaActionsText();
+  if (topic === 'templates') return schemaTemplatesText();
+  if (topic === 'examples') return schemaExamplesText();
+  return '';
+}
+
+function designSchema(args, exec, ctx) {
+  var topic = argStr(args, 'topic', 'all').toLowerCase();
+  if (SCHEMA_TOPICS.indexOf(topic) < 0) {
+    return '未知 topic: ' + topic + '（可用：' + SCHEMA_TOPICS.join(' / ') + '）';
+  }
+  if (topic !== 'all') return schemaSection(topic);
+  var L = [];
+  L.push('# tool-design 结构全表（' + SCHEMA + '）—— 生成设计稿前先读这一份');
+  L.push('');
+  L.push('分节：' + SCHEMA_TOPICS.slice(1).join(' / ') + '（topic=<名> 只看一节）');
+  L.push('');
+  L.push('## 节点类型（' + NODE_TYPES.length + ' 类）');
+  L.push('');
+  L.push('容器：' + CONTAINER_TYPES.join(' / ') + '（参与排布，可嵌套）');
+  L.push('叶子：' + LEAF_TYPES.join(' / ') + '（由内容估尺寸）');
+  L.push('');
+  L.push(schemaNodeTable());
+  L.push('');
+  L.push('## 令牌引用（"$组.名"）');
+  L.push('组：' + TOKEN_GROUPS.join(' / ') + '；常用：$color.fg|$color.muted|$color.bg|$color.surface|$color.border|$color.accent、$space.xs|sm|md|lg|xl、$radius.md|lg|full、$fontSize.xs|sm|md|lg|xl、$fontWeight.normal|medium|semibold');
+  L.push('');
+  L.push('## 图标（' + Object.keys(ICONS).length + ' 个白名单）');
+  L.push(Object.keys(ICONS).join('  '));
+  L.push('');
+  L.push('## 布局要点');
+  L.push('- row 横向 / col·frame·card·list 纵向；gap 默认 $space.sm、pad 默认按类型（card=lg、list/表单控件=sm、其它=none）');
+  L.push('- w 默认 fill（撑满）、h 默认 auto；**row 未写 w 时按内容宽**，要满宽写 w:"fill"');
+  L.push('- justify（主轴）/ align（交叉轴）要显式声明才生效；col 里容器类子节点默认拉满宽');
+  L.push('- 间距 4px 倍数（D4）；字号/颜色/圆角/阴影都必须引用令牌（D2/D5）');
+  L.push('- 溢出会 D8 FAIL，且预览与报告同源（说没溢出就不会压字）');
+  L.push('');
+  L.push('## 交互（props.action）');
+  L.push('link:<目标>（https:// http:// mailto: tel: /路径 #屏幕id）/ emit:<事件名> / toggle（仅 checkbox）；可链接类型：' + LINKABLE_TYPES.join('/'));
+  L.push('');
+  L.push('## 上限');
+  L.push('屏幕 ≤ ' + LIMIT_SCREENS + '、节点 ≤ ' + LIMIT_NODES + '、深度 ≤ ' + LIMIT_DEPTH + '、尺寸 ≤ ' + LIMIT_DIM + 'px；模板：' + Object.keys(TEMPLATES).join('/'));
+  L.push('');
+  L.push('## 判据（design_verify）');
+  L.push('D1 结构 / D2 令牌引用 / D3 对比度 / D4 间距网格 / D5 字号阶梯 / D6 触达区 / D7 图标白名单 / D8 布局溢出 / D9 产物确定自包含 / D10 交互合法 / D11 导航一致');
+  L.push('');
+  L.push('想看细节或可直接照抄的节点树：topic=examples（4 个范式） / nodes / tokens / icons / layout / verify / limits / interactions / templates');
+  return L.join('\n');
+}
+
 // ── 工具声明 ──────────────────────────────────────────────
 var TOOL_DEFS = [
+  {
+    name: 'design_schema',
+    description: '结构自省（只读）：一次拿到本插件的**全部结构事实** —— 17 类节点（容器 5 + 叶子 12）及其字段全表（含默认值）、令牌组与可直接引用的默认令牌名、图标白名单（icon.name 只能取这些）、布局引擎语义（row/col 主方向、fill/auto 尺寸、justify/align、交叉轴拉伸、4px 网格）、D1-D11 判据清单、规模上限、交互词汇表（link/emit/toggle），以及 4 个**可直接照抄的节点树范式**（任务卡 / 表单 / 列表 / 页面骨架）。生成设计稿前先调一次，可避免「猜字段名 → D2 悬空引用」「猜图标名 → D7 白名单」这类返工。',
+    usageGuide: 'topic=all（默认，全表速览）｜nodes 节点字段全表｜tokens 令牌与引用语法｜icons 图标白名单｜layout 布局语义｜verify 判据｜limits 上限｜interactions 交互词汇｜templates 屏幕模板｜examples 照抄范式。典型用法：开工先 topic=all，搭复杂屏前 topic=examples。',
+    category: '创作',
+    readOnly: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: '可选：all（默认）| nodes | tokens | icons | layout | verify | limits | interactions | templates | examples' },
+      },
+    },
+  },
   {
     name: 'design_tokens',
     description: '设计令牌（真相源 ①）的创建/查看/更新：颜色、间距、圆角、字号、字重、行高、阴影、字体族全部集中于此，语义命名（bg/fg/border/accent/muted…）。默认值取自公开标准（Tailwind 色板 + 4px 间距网格），不是随机生成的"AI 味"配色。界面节点只能引用令牌（$color.bg / $space.md）；校验器 D2 会抓悬空引用与语义错用（例如把颜色令牌当宽度）。更新时校验：颜色必须可解析、间距必须是 4px 倍数、数值组必须为非负数字。',
@@ -4997,7 +5556,7 @@ var TOOL_DEFS = [
   },
   {
     name: 'design_project',
-    description: '界面工程（真相源 ②）的创建/查看/更新：屏幕（screen，含尺寸与背景）+ 节点树（node）。节点 13 类：容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox。节点样式一律引用令牌。内置模板 mobile（移动端任务卡）与 panel（插件面板式），可快速产出可看的设计。',
+    description: '界面工程（真相源 ②）的创建/查看/更新：屏幕（screen，含尺寸与背景）+ 节点树（node）。节点 17 类：容器 frame/row/col/card/list（5），叶子 text/button/input/badge/icon/image/divider/spacer/checkbox/progress/avatar/chart（12）。节点样式一律引用令牌。内置模板 mobile（移动端任务卡）与 panel（插件面板式），可快速产出可看的设计。★ 各类节点的字段全表、图标白名单与照抄范式见 design_schema（topic=nodes / icons / examples）。',
     usageGuide: '首次：design_project mode=create title=任务应用 screens=[{"id":"home","name":"首页","width":360,"height":640,"template":"mobile"}]（令牌文件不存在会自动创建）；也可不带 template 而直接给 root 节点树一次把整屏搭好（{"id":"home","root":{"type":"col","children":[…]}}）。之后用 design_add 批量加节点、design_edit 改节点，design_verify 校验，design_export format=html 出预览。',
     category: '创作',
     parameters: {
@@ -5016,7 +5575,7 @@ var TOOL_DEFS = [
   {
     name: 'design_add',
     description: '批量新增节点到界面工程（一次调用任意多个，事务式）。nodes=[{type:"text",text:"…",color:"$color.muted"},{type:"button",label:"…"}] —— 每项与 design_edit 的 node.add 同构（容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox；字段可平铺或写 props）。落点用 screen（默认第一屏）+ parent（默认屏幕根）+ index（可选，多节点时按序依次插入）。全部校验通过才落盘一次，任一项失败整批不写入（工程保持原样）。',
-    usageGuide: '一次把一屏搭出来：design_add screen=home parent=n6 nodes=[{"type":"text","text":"标题","color":"$color.fg","size":"$fontSize.lg"},{"type":"button","label":"开始","variant":"primary"}]。样式一律引用令牌（$color.* / $spacing.* / $fontSize.*）—— 写死颜色会被 design_verify 判失败。新增后改属性用 design_edit（node.set / node.text），出预览用 design_export。',
+    usageGuide: '一次把一屏搭出来：design_add screen=home parent=n6 nodes=[{"type":"text","text":"标题","color":"$color.fg","size":"$fontSize.lg"},{"type":"button","label":"开始","variant":"primary"}]。样式一律引用令牌（$color.* / $space.* / $fontSize.* / $radius.* / $shadow.*）—— 写死颜色会被 design_verify 判失败。字段名与取值请对照 design_schema（topic=nodes 全表、topic=examples 照抄范式）。新增后改属性用 design_edit（node.set / node.text），出预览用 design_export。',
     category: '创作',
     parameters: {
       type: 'object',
@@ -5109,6 +5668,7 @@ var TOOL_DEFS = [
 ];
 
 var IMPLS = {
+  design_schema: designSchema,
   design_tokens: designTokens,
   design_project: designProject,
   design_add: designAdd,

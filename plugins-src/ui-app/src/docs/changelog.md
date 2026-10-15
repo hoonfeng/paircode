@@ -4,10 +4,12 @@
 
 ---
 
-## 未发布 — 2026-10-16
+## 1.6.16 — 2026-10-16
 
 > 修复「自主模式开关不可靠」与「agent 工作期 UI 不更新」两组问题：自主模式开关与显示
 > 不同源导致**点不动**；新建会话列表要刷新才出现；点停止后停止按钮**回弹**（仍显示运行中）。
+> 本版同时把**设计插件（`tool-design`）转正为基线插件**：随 IDE 安装包出厂（开箱即有
+> 「设计」面板与其全部设计工具），并**继续**作为市场插件在 npm 单独发版。
 
 ### 变更
 
@@ -18,6 +20,15 @@
   `internal/agent/message_store.go` 新增 `SetConvAutonomous` / `ConvAutonomous`（会话元数据持久化），
   `internal/agent/store.go` 补接口声明；`cmd/companion/web_server.go` 在开关切换与发送路径
   接线会话权威值（只提交本字段的窄请求 + `convId`，不再整包提交本地 settings 快照）。
+- **设计插件转正为基线插件（随 IDE 发布包出厂）** —— 此前 `tool-design` 真源在
+  `plugins-dist/`（独立发布插件：`packager.json` 的 `.pair/plugins` 拷贝项显式
+  `exclude: ["tool-design"]`，并由 `scripts/verify-dist-isolation.mjs` 护栏保证不进包），
+  安装版用户须自行从市场安装才有「设计」面板。现真源经 `git mv` 迁回
+  `.pair/plugins/tool-design/`，`packager.json` 的 exclude 同步清空，`dsh.ui.build.outDir`
+  改为 `.pair/plugins/tool-design/assets`（`scripts/build-ui.mjs` 按 manifest 发现并构建，
+  产物随包出厂）；三个设计自检脚本（`tool-design-schema-check.mjs` /
+  `tool-design-t5-types-check.mjs` / `tool-design-t6-agent-surface-check.mjs`）的直载路径
+  同步指向新真源。插件版本 `0.3.3 → 0.3.4`（npm 渠道继续单独发版）。
 
 ### 修复
 
@@ -50,7 +61,7 @@
   启用 `Network.setCacheDisabled`（区域包 URL 无内容 hash，避免对旧产物做断言）、
   补充未捕获错误的行列号与堆栈捕获。
 
-## 未发布 — 2026-10-15
+### 同版批次（2026-10-15）：ask_user 多问题卡片与实时归一化
 
 > 修复「ask_user 前端不支持多选与其他形态」：模型按工具 schema 生成的是 **snake_case**
 > 参数（`questions:[{id, question, options, multi_select, with_input}]`），而卡片与历史接口
@@ -59,7 +70,7 @@
 > 时前端多个问题共用 `undefined` 键（输入串扰），提交的 `answers.id` 为空还会被后端
 > `validateAskAnswers` 拒绝（回答直接丢失）。
 
-### 新增
+#### 新增
 
 - **tool-design 结构自省工具 `design_schema`** —— 新增只读工具，一次给出本插件的**全部结构事实**：
   节点类型字段全表、令牌 8 组与可直接引用的默认名、图标白名单、布局引擎语义、D1–D11 判据、规模上限、
@@ -73,14 +84,14 @@
   四类产物同步：预览 HTML、HTML/Vue/React 三目标代码生成（React 侧 SVG 属性走驼峰转换，避免非法
   `stroke-width`）、结构树摘要、字段与令牌表。
 
-### 变更
+#### 变更
 
 - **创作域插件收窄为 design 一域** —— `tool-art` / `tool-model` / `tool-music` / `tool-rig` /
   `tool-voice` 五包从 `plugins-dist/` 删除并停发（判定为失败创作域），`tool-design` 保留并增强。
   同步摘除 `toolPluginModes` 模式表对应行、`packager.json` exclude 陈旧条目与两个插件审计脚本的
   默认包清单，并在发布脚本中登记下架说明（供 registry 孤儿包 deprecate 使用）。
 
-### 修复
+#### 修复
 
 - **实时路径 questions 归一化** —— `agent-events.js` 新增 `normalizeAskQuestions` /
   `normalizeAskOptions`，`processAgentEvent`（实时流）与 `applyLiveSnapshot`（断线补偿重放）
@@ -93,7 +104,7 @@
   统一走 `multiKey(q, qi) = q.id || 'q'+(qi+1)`，与后端 `parseSegmentQuestions` 同规则；
   已答/失效卡片上的选项不再可点。
 
-### 配套（宿主侧）
+#### 配套（宿主侧）
 
 - `internal/agent/message_store.go`：`SegmentQuestion` 增 `withInput`；新增
   `parseSegmentQuestions`（`parseAskArgsV2` 与宿主执行器 `askQuestionsFromArgs` 共用），
@@ -101,7 +112,7 @@
 - `ask_user` 工具 schema（插件 `tool-system` 与宿主会话级/路由版两处）补 `with_input` 字段，
   `questions[].required` 收敛为 `["question"]`（`id` 可省略、自动补），描述同步更新。
 
-### 验证
+#### 验证
 
 - `node scripts/ask-user-events-check.mjs`（新增自检脚本，10 项断言全 PASS）。
 - `go test ./internal/agent/ -run 'AskUser|MessageStore|Segments|Ask'` PASS。

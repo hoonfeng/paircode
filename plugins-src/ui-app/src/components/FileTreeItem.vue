@@ -39,6 +39,8 @@
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { state, layout } from '../ui-state.js'
 import api from '../api.js'
+// ★ 2026-10-15：目录列表改走共享缓存（切视图/组件重挂即命中，不再重建即空树）
+import { cachedDir, listDir, invalidateDirDeep } from '../fs-cache.js'
 import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'
 
@@ -69,8 +71,10 @@ const fullPath = childFullPath
 const expanded = ref(
   state.expandedDirs[fullPath.value] ?? (props.defaultExpanded && props.item.isDir)
 )
-const children = ref(props.item.children || [])
-const loaded = ref(props.item.loaded || false)
+// ★ 缓存优先于 props.item.children：props 来自启动时的 state.fileTree 快照，
+//   缓存是最近一次真实读取；两者都无才视为「未加载」（loaded=false → 点击时请求）。
+const children = ref(cachedDir(fullPath.value) || props.item.children || [])
+const loaded = ref(cachedDir(fullPath.value) !== null || props.item.loaded || false)
 const dragOver = ref(false)
 
 // ── 重命名状态 ──
@@ -82,11 +86,12 @@ const renameInputRef = ref(null)
 const contextMenuRef = ref(null)
 
 // ── 自动展开（props.defaultExpanded=true 时自动加载子目录）──
-if (props.defaultExpanded && props.item.isDir && !props.item.children) {
-  api.apiGet('/fs/list', { path: fullPath.value }).then(entries => {
-    children.value = entries || []
+// ★ 缓存命中则免请求（listDir 内部：TTL 内复用 + 同路径并发去重）
+if (props.defaultExpanded && props.item.isDir && !props.item.children && cachedDir(fullPath.value) === null) {
+  listDir(fullPath.value).then(entries => {
+    children.value = entries
     loaded.value = true
-  }).catch(() => {})
+  })
 }
 
 const parentDir = computed(() => {
@@ -128,11 +133,9 @@ const handleClick = async (e) => {
     expanded.value = !expanded.value
     state.expandedDirs[fullPath.value] = expanded.value
     if (expanded.value && !loaded.value) {
-      try {
-        const entries = await api.apiGet('/fs/list', { path: fullPath.value })
-        children.value = entries || []
-        loaded.value = true
-      } catch {}
+      const entries = await listDir(fullPath.value)
+      children.value = entries
+      loaded.value = true
     }
     return
   }
@@ -500,12 +503,15 @@ async function addToChat(path, name, isDir) {
   else state.rightPanelVisible = true
 }
 
-// ── 刷新子节点 ──
+// ── 刷新子节点（本节点内的新建/重命名/删除之后）──
+// ★ 原实现用 props.parentPath 取列表却写进**本节点** children：既多发一次无用请求，
+//   又把父目录条目塞进本节点（未展开时被随后的 refresh-tree 事件掩盖，展开即错乱）。
+//   现按本节点路径强制重取；同时让父目录缓存失效（本节点增删后父目录条目也变了）。
 async function reloadChildren() {
-  try {
-    const entries = await api.apiGet('/fs/list', { path: props.parentPath })
-    children.value = entries || []
-  } catch {}
+  invalidateDirDeep(props.parentPath)
+  const entries = await listDir(fullPath.value, { force: true })
+  children.value = entries
+  loaded.value = true
   window.dispatchEvent(new CustomEvent('refresh-tree'))
 }
 
@@ -599,15 +605,18 @@ const onDrop = async (e) => {
 
 // ── 监听 refresh-tree：已展开的目录自动重新加载子节点 ──
 function onRefreshTree() {
-  if (expanded.value && props.item.isDir) {
-    // 展开状态下保存当前展开标记
-    state.expandedDirs[fullPath.value] = true
-    loaded.value = false
-    api.apiGet('/fs/list', { path: fullPath.value }).then(entries => {
-      children.value = entries || []
-      loaded.value = true
-    }).catch(() => {})
-  }
+  if (!(expanded.value && props.item.isDir)) return
+  // ★ 侧栏未显示 / 当前不在文件树视图 → 跳过：此前每 5s 对**每个**展开目录各发一次
+  //   /fs/list（展开十几层即十几次并发），切到会话或工作区视图时也照发不误。
+  //   切回文件树视图时由 FileExplorer 的 activated 兜底补刷一次（见 consumeTreeDirty）。
+  if (!state.sidebarVisible || state.activeActivity !== 'explorer') return
+  // 展开状态下保存当前展开标记
+  state.expandedDirs[fullPath.value] = true
+  loaded.value = false
+  listDir(fullPath.value, { force: true }).then(entries => {
+    children.value = entries
+    loaded.value = true
+  })
 }
 onMounted(() => {
   window.addEventListener('refresh-tree', onRefreshTree)

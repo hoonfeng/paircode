@@ -1,5 +1,9 @@
 # 创作域落地计划（插件独立发布 + npm 市场同步）
 
+> **2026-10-15 状态更新（下架）**：六域已收窄为 design 一域 —— `tool-art` / `tool-model` /
+> `tool-music` / `tool-rig` / `tool-voice` 五包从 `plugins-dist/` 删除并停发，仅保留 `tool-design`。
+> 本文的落地流程、双源机制（`.pair/plugins` 基线 + `plugins-dist` 独立发布）与发布链结论对其余插件仍然适用。
+
 > 日期：2026-09-12　前置：`docs/creative-domain-plan.md`（总方案）、`docs/voice-creation-plan.md`（人声子域详规）
 > 本文只回答三件事：**(1) Go 层要不要动；(2) 插件怎么拆出来独立发布；(3) npm 滞后怎么收口。**
 > 所有数字均为本文撰写时的实测值（附录 A 给出可复跑命令）。
@@ -781,19 +785,22 @@ CDP 的 `Page.captureScreenshot({captureBeyondViewport:true})` 在 `--headless=n
 
 - **双文本真相源**：① `design.tokens.json`（颜色/间距/圆角/字号/字重/行高/阴影/字体族，
   语义命名，默认值取自 Tailwind 公开标准值 + 4px 网格）；② `design.project.json`
-  （屏幕 → 节点树，13 类节点：容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox）。
+  （屏幕 → 节点树，17 类节点：容器 frame/row/col/card/list，叶子 text/button/input/badge/icon/image/divider/spacer/checkbox
+  / progress / avatar / chart）。
   节点样式**一律引用令牌**（`$color.bg` / `$space.md`），禁止散落裸值。
 - **确定性布局引擎**（goja 内自实现 flex 堆叠模型）：容器 w 默认撑满、h 默认内容高；
   row/col 主轴排布 + gap + pad；叶子按内容估算（文本用确定性字宽模型估宽换行）。
   ★ **导出 HTML 用同一份布局盒子做绝对定位** → 「校验通过」与「截图所见」严格同源。
 - **产物全为文本**：自包含 HTML 预览（无脚本、无外链、可截图）/ CSS 自定义属性（`--color-accent` 等，
   可直接交付前端）/ mermaid 图（本插件只**生成 mermaid 文本**，渲染交给宿主 —— 零依赖）。
-- **9 项判据**：D1 结构与必填（id 唯一、类型合法、容器叶子约束、深度/规模上限）｜
+- **11 项判据**：D1 结构与必填（id 唯一、类型合法、容器叶子约束、深度/规模上限）｜
   D2 令牌引用有效（无悬空 + **语义组匹配**：抓"颜色令牌当宽度用"+ 尺寸可解析）｜
   D3 文本对比度（WCAG AA：正文 4.5 / 大字 3.0；按钮与徽章按 variant/tone 实际配色）｜
   D4 间距落在 4px 网格｜D5 字号必须来自 `$fontSize.*`（禁裸字号）｜
   D6 触达区（屏宽 ≤480px 要 44px，否则 32px）｜D7 图标白名单 + **无 emoji/符号图标**（技能 emoji-icons）｜
-  D8 布局无溢出/越界（与预览渲染同源）｜D9 产物确定且自包含（两次渲染位级一致、无 script/on*/javascript:/外链）。
+  D8 布局无溢出/越界（与预览渲染同源）｜D9 产物确定且自包含（两次渲染位级一致、无 script/on*/javascript:/外链）｜
+  D10 交互声明合法（props.action 受控词汇表；link:#屏幕 必须真实存在；toggle 仅 checkbox）｜
+  D11 导航与交互一致（flow 导航图 ↔ 节点 action=link:#屏幕）。
 - **事务语义**：`design_edit` 一次 ops 批量应用，**任一 op 抛错则整个批次不落盘**（全有或全无），
   避免"改了一半"的工程留在磁盘上。
 - **能力边界如实标注**：布局引擎只实现堆叠 + 交叉轴拉伸（**未实现 justify/grow**，"底部固定栏"需显式留白）；
