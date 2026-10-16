@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "go-backend-feature",
+  "title": "Go 后端功能开发",
+  "version": 1,
+  "projectTypes": ["go"],
+  "taskTypes": ["feature", "refactor", "bugfix"],
+  "appliesTo": { "types": ["go"], "signals": ["go.mod", "go.work"] },
+  "stages": [
+    {
+      "id": "recon",
+      "title": "调研与定位",
+      "goal": "搞清代码结构与调用链，确定改动面",
+      "tasks": ["搜索关键符号", "读关键文件", "列出受影响文件清单"],
+      "gates": [
+        { "id": "g-recon-1", "kind": "check", "text": "已列出受影响文件清单（含调用方）", "required": true, "blocking": true },
+        { "id": "g-recon-2", "kind": "check", "text": "已确认调用链与影响面结论" }
+      ]
+    },
+    {
+      "id": "impl",
+      "title": "实施修改",
+      "goal": "按方案完成代码改动",
+      "tasks": ["按方案改代码", "保持既有风格与最小改动"],
+      "gates": [
+        { "id": "g-impl-1", "kind": "check", "text": "改动已完成且与方案一致", "required": true }
+      ]
+    },
+    {
+      "id": "build",
+      "title": "编译",
+      "goal": "编译通过，无新增告警",
+      "tasks": ["go build ./...", "go vet ./..."],
+      "gates": [
+        { "id": "g-build-1", "kind": "command", "text": "go build ./... 通过", "cmd": "go build ./...", "required": true, "blocking": true, "onFail": "advise" }
+      ]
+    },
+    {
+      "id": "test",
+      "title": "测试",
+      "goal": "受影响包的测试通过",
+      "tasks": ["跑受影响包测试", "补必要用例"],
+      "gates": [
+        { "id": "g-test-1", "kind": "command", "text": "go test ./... 通过", "cmd": "go test ./...", "required": true, "blocking": true, "onFail": "rollback" }
+      ]
+    },
+    {
+      "id": "deliver",
+      "title": "交付",
+      "goal": "汇总变更与验证证据",
+      "tasks": ["汇总改动文件", "记录验证命令与结果"],
+      "gates": [
+        { "id": "g-deliver-1", "kind": "approval", "text": "用户确认交付", "required": true, "blocking": true }
+      ]
+    }
+  ],
+  "board": { "kind": "kanban", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
+  "library": { "author": "paircode", "tags": ["go", "backend", "feature"] }
+}

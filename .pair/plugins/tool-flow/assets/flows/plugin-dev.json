@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "plugin-dev",
+  "title": "插件开发（本 IDE 自举）",
+  "version": 1,
+  "projectTypes": ["plugin"],
+  "taskTypes": ["feature", "plugin"],
+  "appliesTo": { "types": ["plugin"], "signals": [".pair/plugins/", "plugins-dist/", "plugins-src/"] },
+  "stages": [
+    {
+      "id": "contract",
+      "title": "契约确认",
+      "goal": "先 cordis(op=services) 查签名、读现成范例，禁止臆测 API",
+      "tasks": ["查 ctx 服务签名", "读同类插件范例", "列数据落点"],
+      "gates": [
+        { "id": "g-contract-1", "kind": "check", "text": "所需 ctx 能力与精确签名已确认（含 inject 白名单核对）", "required": true, "blocking": true }
+      ]
+    },
+    {
+      "id": "host",
+      "title": "实现 host 半",
+      "goal": "工具/接口/钩子/提示注入落地",
+      "tasks": ["写 index.js", "注册工具与接口"],
+      "gates": [
+        { "id": "g-host-1", "kind": "check", "text": "host 半完成且 apply 无异常", "required": true }
+      ]
+    },
+    {
+      "id": "client",
+      "title": "实现 client 半",
+      "goal": "看板/面板 UI 落地（文本走 textContent）",
+      "tasks": ["写 client.js", "接数据接口"],
+      "gates": [
+        { "id": "g-client-1", "kind": "check", "text": "client 半完成且未用 innerHTML 渲染模型产出" }
+      ]
+    },
+    {
+      "id": "load",
+      "title": "装载验证",
+      "goal": "隔离实例实测：插件不 waiting、能力真的可用",
+      "tasks": ["独立目录+非默认端口启动", "探针/接口实测", "落证据"],
+      "gates": [
+        { "id": "g-load-1", "kind": "command", "text": "隔离实例启动并实测通过", "cmd": "echo 隔离实例实测（见证据文件）", "required": true, "blocking": true, "onFail": "rollback" }
+      ]
+    },
+    {
+      "id": "wrap",
+      "title": "收尾",
+      "goal": "同步镜像、更新文档与记忆，清理临时产物",
+      "tasks": ["同步 bin/.pair/plugins", "更新 SKILL/知识库", "清理探针残留"],
+      "gates": [
+        { "id": "g-wrap-1", "kind": "check", "text": "文档已更新且临时残留已清理", "required": true }
+      ]
+    }
+  ],
+  "board": { "kind": "kanban", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
+  "library": { "author": "paircode", "tags": ["plugin", "self-hosted"] }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "tool-flow",
+  "purpose": "工程流程与看板（工具面 flow_* + 只读接口 /api/flow/* + 看板视图 + 门禁/审批/证据留档）：三层流程库（预设 / 全局 flowlib / 项目）、项目绑定矩阵、目录 bundle 导出导入；agent 每轮经 systemPrompt 变量感知当前阶段",
+  "version": "1.0.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "generic",
+  "title": "通用任务",
+  "version": 1,
+  "projectTypes": ["any"],
+  "taskTypes": ["any"],
+  "appliesTo": { "types": ["any"], "signals": [] },
+  "stages": [
+    {
+      "id": "understand",
+      "title": "理解任务",
+      "goal": "明确目标与验收标准",
+      "tasks": ["复述目标", "列验收标准"],
+      "gates": [
+        { "id": "g-understand-1", "kind": "check", "text": "目标与验收标准已明确", "required": true }
+      ]
+    },
+    {
+      "id": "plan",
+      "title": "方案",
+      "goal": "确定做法与影响面",
+      "tasks": ["定方案", "列影响面"],
+      "gates": [
+        { "id": "g-plan-1", "kind": "check", "text": "方案与影响面已确认", "required": true }
+      ]
+    },
+    {
+      "id": "execute",
+      "title": "执行",
+      "goal": "按方案推进",
+      "tasks": ["执行", "记录改动"],
+      "gates": [
+        { "id": "g-execute-1", "kind": "check", "text": "执行完成", "required": true }
+      ]
+    },
+    {
+      "id": "verify",
+      "title": "验证",
+      "goal": "以实际证据确认结果",
+      "tasks": ["跑验证", "落证据"],
+      "gates": [
+        { "id": "g-verify-1", "kind": "check", "text": "验证已完成且有证据", "required": true, "blocking": true },
+        { "id": "g-verify-2", "kind": "approval", "text": "用户确认结果" }
+      ]
+    }
+  ],
+  "board": { "kind": "checklist", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
+  "library": { "author": "paircode", "tags": ["generic"] }
+}

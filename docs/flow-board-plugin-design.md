@@ -277,7 +277,26 @@ L0 数据层（磁盘，声明式 JSON）
 - `ctx.hooks.register('Stop', fn)`：会话收尾时当前阶段存在 `required && blocking` 门禁未过 → 返回
   `{block:true, feedback:'未过门禁 g-ver-1：go test ./... 未通过（证据见 .pair/flow-runs/evidence/…）'}`，把 agent 拉回流程继续。
 - `ctx.hooks.register('PreToolUse', fn)`：未过前置门禁时拦破坏性操作（`rm`、批量覆写、`git reset` 等），返回 `{block:true, feedback}`。
-- 强度可配（`ctx.registerSettings`）：`off`（仅展示）/ `warn`（反馈不拦截）/ `enforce`（拦截，默认按 D1 取 enforce）。
+- 强度可配（`ctx.registerSettings`）：`off`（**只记录**：不拦截、不注入提示，证据与看板展示照常留档）/
+  `warn`（注入提示但**不**拦截）/ `enforce`（拦截破坏性操作 + 注入未过门禁，默认按 D1 取 enforce）。
+
+> ★ **定案：`Stop` 硬拦在当前核心不可实现（2026-10-16 实测，正式写入设计）**
+>
+> 核心 `internal/hook/hook.go` 的 `IsBlocking` **只**对 `PreToolUse` / `UserPromptSubmit` 返回 true；
+> `Stop` 钩子即便返回 `{block:true, feedback}`，核心也不会据此阻止会话收尾（当前 hook 门禁机制不含
+> 「Stop 可阻断」语义）。因此本小节首条「停不下来」的**硬拦**在当前核心下无法实现。
+>
+> **降级影响（诚实标注）**：无法用机制「卡住」收尾，只能软拉回 ——
+> ① 每轮把「当前阶段 + 未过必过门禁 + 下一步动作」注入系统提示（`systemPrompt.variable`）；
+> ② `PreToolUse` 拦破坏性操作（`rm -rf` / `git reset --hard` / 文件删除），enforce 档下生效；
+> ③ 工具与 RPC 返回值带进度摘要，便于 agent 与用户即时看到「还差哪些门禁」。
+> 结论一句话：**阻止破坏性动作可信；阻止「提前收尾」不可信**（只提示，不阻断）。
+>
+> **用户可选两条路**：
+> (a) **改核心**：让 `Stop` 进入可阻断集合（`IsBlocking` 放行 `Stop` + 调用点消费 `block`），需核心发版，
+>     且影响面覆盖所有注册 `Stop` 钩子的消费者（语义变更是破坏性的）；
+> (b) **接受替代**（当前默认，零核心改动）：按上面 ①+②+③ 落地；三档强度（`enforce`/`warn`/`off`）行为
+>     已全部固化为可复现断言（见 §14.20 验证表）。
 
 ### 10.2 审批卡点（kind = `approval`）
 
@@ -324,7 +343,7 @@ run 的 `evidenceDir` 字段指向该目录 → 看板门禁行可直接展开�
 
 ---
 
-## 11. 实施计划（按「重」强度排期 · 状态：**未启动**，D5 决策为「暂不动手实现」）
+## 11. 实施计划（按「重」强度排期 · 状态：**P1–P3 已落地**，见 §14.19；D5 的「暂不动手实现」已于 2026-10-16 解除）
 
 **P0 接线验证（最先做，成本最低、风险最高）**
 1. 非默认端口 + 独立二进制启动，POC 探测 `ctx.hostTool.names()` 是否含 `update_tasks`（§9 路径 B）。
@@ -614,15 +633,22 @@ flow-<id>/
 3. **安装端**：由流程插件自实现（`flow_import` 消费单包 → 落 `scope` 指定库），不改市场核心；
 4. **原生「流程」市场分类**（可选增强）：市场 UI 增加 `kind: flow` 属**插件层改动**（marketplace 插件），不涉及 `internal/` —— 若需要再排期。
 
+> ✅ **落地状态（2026-10-16 监督轮补齐）**：第 1 条「元数据同构」与第 3 条「安装端由流程插件自实现」**已落地** ——
+> `flow_publish` 产出单 JSON 发布包（`kind:"paircode.flow"` + `spec` + `author/tags/repo/version` +
+> `stats` + `checksum`），`flow_import` 以 `file` / `json` 消费发布包（校验 `kind` 与 `checksum`）并回导到指定层，
+> `dryRun:true` 报告冲突（`action` / 现有版本 / 导入版本 / 原因 / 元数据）；`/flow-import` 亦支持发布包文件路径。
+> **仍属后续**：第 2 条「推送外部市场」（走市场插件 / npm / GitHub 通道，需外部发布动作与账号）、
+> 第 4 条「市场 UI 原生 `flow` 分类」（marketplace 插件层改动）。
+
 ## 14.14 实施计划（终版增量，接 §11）
 
-| 阶段 | 内容 |
-|---|---|
-| **P0**（先验证） | ① **安装目录读写 POC**：`<InstallDir>/.pair/flowlib/` 能否经 `ctx.bash` / 宿主执行器**读 + 写**（读不通 → 触发 D11 半自动或退 A）② `update_tasks` 接线（直写 `.pair/tasks/*.json` 优先）③ `GET /api/workspace` 多根消费 + `_binding.json` 多根绑定 |
-| **P1** | `flow_list/show/define/validate` + `flow_start/status/advance` + 看板最小闭环 + **bundle 导出/导入**（含 `dryRun`） |
-| **P2** | `flow_attach/detach/bindings` + **FileExplorer 改造**（§14.12 三改动点）+ 项目×流程矩阵 |
-| **P3** | 三层解析优先级（D3 项目类型默认 + 任务类型覆盖）+ `flow_clone` / `flow_sync` + JSON 热加载 |
-| **P4** | 看板内表单编辑（D4-④）+ 通知（overlay/toast）+ `/flow*` 命令 + 市场发布（D9）|
+| 阶段 | 内容 | 状态（2026-10-16） |
+|---|---|---|
+| **P0**（先验证） | ① **安装目录读写 POC**：`<InstallDir>/.pair/flowlib/` 能否经 `ctx.bash` / 宿主执行器**读 + 写**（读不通 → 触发 D11 半自动或退 A）② `update_tasks` 接线（直写 `.pair/tasks/*.json` 优先）③ `GET /api/workspace` 多根消费 + `_binding.json` 多根绑定 | ✅ §14.15/§14.17（结论：走 `ctx.install`，非 bash） |
+| **P1** | `flow_list/show/define/validate` + `flow_start/status/advance` + 看板最小闭环 + **bundle 导出/导入**（含 `dryRun`） | ✅ 落地（§14.19） |
+| **P2** | `flow_attach/detach/bindings` + **FileExplorer 改造**（§14.12 三改动点）+ 项目×流程矩阵 | ✅ 落地（§14.19） |
+| **P3** | 三层解析优先级（D3 项目类型默认 + 任务类型覆盖）+ `flow_clone` / `flow_sync` + JSON 热加载 | ✅ 落地（热加载以「实时读盘」等价达成） |
+| **P4** | 看板内表单编辑（D4-④）+ 通知（overlay/toast）+ `/flow*` 命令 + 市场发布（D9） | ✅ **全部落地**（字段级表单与 D9 本地发布包见 §14.20；外部市场推送与市场 UI 分类留后续） |
 
 ---
 
@@ -801,3 +827,139 @@ const def = JSON.parse(ctx.install.readFile('.pair/flowlib/' + id + '.json'))
 ```
 
 > 插件必须 `inject: ['install']`；读安装目录**不要**再用 `ctx.bash`。
+
+---
+
+## 14.19 tool-flow 实施记录：P1–P3 落地 + P2/P4 补齐（2026-10-16）
+
+> 触发：用户「流程相关实现都落地了么 没落地继续落地」。本文档是落地判据 —— 逐项对照结果如下，
+> **凡未落地者如实标注**（不粉饰）。
+
+### 14.19.1 落地清单（对照 §11 / §14.14）
+
+| 排期项 | 状态 | 落点 |
+|---|---|---|
+| P1 插件包 `tool-flow` host 半（`flow_list/show/define/validate/start/status/advance` …） | ✅ | `.pair/plugins/tool-flow/index.js`（**17 个工具**，含 `flow_publish`） |
+| P1 `/api/flow/state` 只读接口 | ✅ | `ctx.http.register('GET','/api/flow/state')` |
+| P1 证据留档（`.json` + `.log`） | ✅ | `.pair/flow-runs/evidence/<runId>/<gateId>.{json,log}` |
+| P1 看板最小闭环 | ✅ | `.pair/plugins/tool-flow/client.js`（`registerView('flow-board')`，三页签） |
+| P1 bundle 导出/导入（`dryRun` / `onConflict`） | ✅ | `flow_export` / `flow_import`（`flow.json` + `README.md` + `gates/` + `templates/`） |
+| P2 `flow_attach/detach/bindings` + 项目×流程矩阵 | ✅ | `_binding.json` + 看板「项目 × 流程」页签 |
+| P2 FileExplorer 改造（§14.12 三改动点） | ✅ | `plugins-src/ui-app/src/components/FileExplorer.vue`（列表标签 + 右键三项 + 打开面板） |
+| P3 三层解析优先级 + `flow_clone` / `flow_sync` | ✅ | `project > global > preset`；同步默认不回冲 |
+| P3 JSON 热加载 | ✅（等价） | 每次调用实时读盘、无内存缓存 → 编辑 `.pair/flows/*.json` 后即刻生效，无需重启 |
+| P4 `/flow`、`/flow-board`、`/flow-import` 命令 | ✅ | `ctx.commands.register`（`inject:['commands']`） |
+| P4 通知（阶段变更 / 操作结果） | ✅ | client 半 `window.$toast`，不可用时兜底消息条 |
+| P4 看板内编辑（D4-④） | ✅ | RPC `show/validate/define/clone` + 看板编辑面板（校验 + 乐观锁） |
+| P4 字段级表单编辑（阶段/门禁逐字段） | ✅（2026-10-16 监督轮补齐） | `client.js`「表单 / JSON」双模式（默认表单）+「＋ 新建流程」纯表单入口 + kind 收敛字段；详见 §14.20 |
+| P4 市场发布（D9） | ✅ **本地能力**（推送外部市场留后续） | `flow_publish` 单 JSON 发布包 + `flow_import` 回导 + `dryRun` 冲突报告；详见 §14.20 |
+
+### 14.19.2 数据落点与预设
+
+预设 **8 类 / 38 个门禁**：`go-backend-feature`、`web-frontend-feature`、`python-feature`、`docs-office`、
+`lib-cli`、`plugin-dev`（本 IDE 自举流程）、`debug-troubleshoot`、`generic`。
+
+三层：`preset`（插件包 `assets/flows/`，只读）< `global`（`<InstallDir>/.pair/flowlib/`，`ctx.install`）
+< `project`（`<ws>/.pair/flows/`，`ctx.fs`）；同名上层覆盖，升级不回冲。
+
+### 14.19.3 ★ 实测出的三处「设计—实现」落差（诚实标注）
+
+1. **`Stop` 钩子无法硬拦会话收尾**：核心 `hook.IsBlocking` 只对 `PreToolUse` / `UserPromptSubmit` 返回 true
+   （`internal/hook/hook.go:65`）→ §10.1 的「Stop 拦截未过门禁的收尾」**在当前核心不可实现**（需改核心，
+   超出零改动约束）。落地替代 = `systemPrompt.variable` 每轮注入阶段与未过门禁 + `PreToolUse` 拦破坏性操作
+   + 工具返回文本带进度摘要。**降级影响 + 用户可选（改核心 vs 接受替代）已正式定案写入 §10.1**。
+2. **`section.text` 是静态字符串**（`jsplugin.go:1526`，注册时求值一次）→ 动态注入必须用
+   `ctx.systemPrompt.variable({name, provider})`（组装时求值）。已实现为变量 `paircode_flow_state`。
+3. **系统提示 provider 组装期求值、无会话上下文** → 提示按**项目级**（最近活跃 run）聚合；
+   多会话并行时以显式传 `convId` 的工具调用 / RPC 为准（`FlowRun.convId` 已落盘）。
+
+### 14.19.4 实测证据（三层）
+
+**① 逻辑层**（`.pair/plugins/tool-flow/smoke-test.js`：mock ctx + 真实文件系统 + 真实 bash 执行；
+原 `_verifyflow/mock-run.js` 已迁入插件包随包分发）：**148 项断言全通过**（2026-10-16 监督轮后）——
+三层解析 / 校验 / 启动 / 四类门禁（check·command·artifact·approval）/ 推进 / 证据留档 / 任务同步 /
+乐观锁 / 导出导入 / **发布包（D9）** / 绑定矩阵 / 接口快照 / RPC / 提示注入 / 命令 / 钩子拦截 /
+**三档强度（§10.1）** / 安全边界 / **表单编辑器 UI（D4-④）**。
+期间修出 **2 处真 bug**：`startRun` 判重误用 `||` 导致多会话并行被误拒；门禁**通过**路径未回传 `gate` 记录。
+
+**② 实例层**（独立 InstallDir + 最新源码构建的独立二进制 + 端口 9095 + 工作区 `_verifyflow/ws2`）：
+
+- `GET /api/flow/state` → **HTTP 200 / `ok:true`**（若 `inject:['install']` 不满足，插件会静默 waiting → 404，
+  故 200 本身就是「装载成功」的证据）
+- RPC `flow_action`：`start` / `advance` / `attach` / `show` / `clone` / `define` 全部通过；**乐观锁冲突被正确拒绝**
+- 落盘核验：`flow-runs/run-*.json`、`evidence/g-recon-1.json`、`tasks/*.json`（阶段 1 三条 completed + 阶段 2 两条 pending，均带 `convId`）、`_binding.json`
+- `gitHead` 基线正常记录；非 git 工作区降级为提示（不阻塞）
+
+**③ UI 层**（浏览器 DOM 断言 + 截图）：
+
+- 标签栏出现「流程」tab（`registerView` 生效）；看板渲染进度条/阶段卡片/门禁徽标/证据展开/操作按钮
+  （`.ftb-bar` / `.ftb-stage` / `.ftb-gate` 命中）；编辑器面板渲染（JSON + 校验/保存/取消）
+- **表单编辑器（D4-④，2026-10-16 监督轮补）**：用最小 DOM 桩驱动**真实 `client.js`**
+  （`.pair/plugins/tool-flow/ui-form-test.js`）断言 29 项 —— 默认表单模式 / 纯表单新建 2 阶段 3 门禁并落盘 /
+  增删阶段与门禁、上下移 / kind 收敛与缺字段被拦 / 表单↔JSON 双向切换不丢字段 / preset 只读入口
+- FileExplorer：工作区条目显示流程标签 `go-backend-feature · 2/5 实施修改`（悬浮提示含「1 个必过门禁阻塞」）；
+  右键菜单逐字含「指定流程… / 切换流程… / 查看流程进度」
+
+### 14.19.5 启用方式（部署后）
+
+1. **插件随包分发**：`.pair/plugins/tool-flow/`（已同步 `bin/.pair/plugins/` 安装镜像与发布包）；
+2. **agent 可见性**：在「工具集」面板勾选 `flow_*` 工具，或导入随包提供的
+   `assets/toolset-flow.json`（「工程流程」工具集，含 tool-flow + harness/exec + 内置系统工具）；
+3. **零配置可用**：项目根含 `go.mod` / `package.json` / `.pair/plugins` 等特征时自动识别项目类型并推荐流程；
+   未接入流程不影响正常对话（提示注入仅在已接入或可推荐时出现）。
+
+> ⚠️ 部署注意：本插件 `inject: ['install']` 依赖 **v1.6.17 及以后**的核心（`ctx.install`）。装到更旧的核心上会
+> 静默进入 waiting（无报错、无日志、接口 404）—— 排查时先核对 `/api/system/info` 的 `version`。
+
+> ⚠️ **部署前必做（2026-10-16 踩坑，监督轮补）**：`release/PairCode` 是 packager 的**产物快照**，不随仓库改动自动更新。
+> 改了 `.pair/plugins/`（本次的 tool-flow / ui-sidebar）后**必须重跑完整 `./packager.exe`**（10 步全跑完，含最后的 `package`），
+> 否则 `scripts/overwrite-install.mjs`（默认源 `--src release/PairCode`）装进去的还是旧包 —— 表现为「安装目录 `.pair/plugins/`
+> 里没有 tool-flow、ui-sidebar 是旧版无流程入口」，覆盖安装后流程功能**不会出现**。
+> 就绪自查两行：`ls release/PairCode/.pair/plugins/tool-flow/`（应有 index.js / client.js / assets/flows 8 个预设）
+> 与 `grep -c 未接入流程 release/PairCode/.pair/plugins/ui-sidebar/assets/ui-sidebar.js`（应非 0）。
+
+---
+
+## 14.20 监督轮补齐：D4-④ 表单编辑 / D9 本地发布包 / §10.1 三档定案（2026-10-16）
+
+> 触发：监督者第 1 次监督意见 —— 已定稿的「D4-④ 字段级表单编辑」「D9 市场发布」未落地，
+> 且 §10.1 三档强度缺可复现断言。本轮**只做这三件事**，不重做已达标项（P1–P3、FileExplorer、
+> 命令面 / 通知 / JSON 编辑）。
+
+### 14.20.1 落地内容
+
+| 项 | 落地要点 | 落点 |
+|---|---|---|
+| **D4-④ 表单编辑** | 「表单 / JSON」双模式、**默认表单**；阶段（id / 标题 / 目标 / 任务）+ 上下移 + 增删；门禁（id / kind / 说明 / 必过 / 阻塞）+ 增删；**kind 收敛字段**（`command`→命令 `cmd`、`artifact`→产物路径 `artifact`、`approval`→审批提示语）；本地同规则校验（必填 / 唯一 / kind 相关）→ `flow_validate` → `flow_define`（乐观锁） | `client.js`：`renderForm` / `renderGateForm` / `formErrors` / `setMode` / `currentJson` |
+| **D4-④ 新建入口** | 流程库「＋ 新建流程」→ 空白骨架（1 阶段 1 门禁）→ **纯表单**建到 ≥2 阶段 ≥3 门禁并保存；新建时 id 可编辑，项目层同名冲突前置拦截 | `client.js`：`openEditor(id, {blank:true})` / `editorSave` |
+| **D4-④ 编辑态保护** | `editor.def` 为唯一真相源（未渲染字段如 `board` / `appliesTo` / `onFail` 原样保留）；**编辑态不因 4s 轮询重绘**（`editor.dirty` 标记），避免打断输入 / 丢焦点 | `client.js`：`touchEditor` / `draw()` |
+| **D9 发布包** | `flow_publish`：单 JSON 发布包 `{kind:"paircode.flow", spec, schemaVersion, name/title/version/author/tags/repo/publishedAt, source, stats, flow, checksum}`，元数据形态对齐 `toolset_export`；**发布必须署名**（缺 `author` 拒绝）；发布前必须通过 `flow_validate` | `index.js`：`publishPack` / `sha8` |
+| **D9 回导** | `flow_import` 支持 `file`（发布包或裸 JSON 文件）/ `json`（文本）/ `dir`（目录 bundle）；发布包校验 `kind` 与 `checksum`（不符即拒绝，不猜测降级）；`dryRun` 报告 `action / 现有版本 / 导入版本 / 原因 / 元数据` | `index.js`：`importBundle` / `dryRunText` |
+| **§10.1 三档** | `enforce` = 拦破坏性操作 + 每轮注入未过门禁；`warn` = 注入但不拦；`off` = **只记录**（不拦、不注入；证据与看板照常留档 —— 为此在 `flowPromptText()` 增加 `off` 短路） | `index.js`：`PreToolUse` / `flowPromptText` / settings hint |
+
+### 14.20.2 验证（可复跑）
+
+```bash
+node .pair/plugins/tool-flow/smoke-test.js      # → 148 通过 / 0 失败
+```
+
+| 断言组 | 条数 | 关键输出 |
+|---|---|---|
+| ⑦b 发布包（D9，host 半） | 14 | `已生成发布包：.pair/flow-exports/go-backend-feature.publish.json`；`dryRun（未落盘）：发现 1 处冲突`；`已导入流程 go-backend-feature → global`；checksum 不符 / kind 不符 / 缺 author 均被拒 |
+| ⑧b 三档强度（§10.1） | 8 | `[enforce] 破坏性操作被拦`、`[enforce] 每轮注入未过门禁 + 下一步动作`、`[warn] 不拦破坏性操作`、`[warn] 仍每轮提示未过门禁`、`[off] 不拦破坏性操作`、`[off] 不注入流程提示`、`[off] 门禁结果照常落盘`、`[off] 证据文件仍写入 evidence 目录` |
+| ⑩ 表单编辑器 UI（D4-④） | 29 | `纯表单新建保存成功（落盘项目层 .pair/flows/my-flow.json）`、`落盘内容 = 表单输入（2 阶段 / 3 门禁 / command 带 cmd / artifact 带产物路径）`、`双向切换不丢字段：表单未渲染的 board 仍在 JSON 中`、`preset 层行只读：无「编辑」入口，只有「克隆到项目」` |
+
+**UI 断言的机制（为什么可信）**：`.pair/plugins/tool-flow/ui-form-test.js` 用 ~60 行最小 DOM 桩
+（`createElement` / `textContent` 赋值清空子节点 / `appendChild` / `addEventListener` + 事件派发）
+在 Node 中执行**真实** `client.js`，并通过 `ui.invoke` 调用**真实 host 半** RPC（`flow_action`）、
+`ui.http.get` 调用**真实快照接口**（`GET /api/flow/state`）。因此断言覆盖的是真实渲染与真实保存链路，
+不是另写一份等价逻辑。定位控件一律按「label 文本 / 阶段 id / 行内流程 id」语义查找（不依赖索引），
+避免 DOM 顺序变化造成的假通过。
+
+### 14.20.3 本轮诚实边界
+
+1. **外部市场推送未做**：`flow_publish` 只产出可分享的单 JSON 发布包（本地能力）；推送到 npm / GitHub
+   与市场 UI 的 `kind: flow` 分类属市场插件层改动（§14.13 第 2、4 条），需外部账号与发布动作，留后续。
+2. **`Stop` 硬拦仍不可实现**（核心限制，定案见 §10.1）：当前替代链路为「每轮注入 + PreToolUse 拦截 + 摘要」。
+3. **表单只渲染 流程 / 阶段 / 门禁 三组字段**：`board` / `appliesTo` / `onFail` / `library` 等未渲染字段
+   经 JSON 模式编辑，表单不会抹掉它们（已断言）。

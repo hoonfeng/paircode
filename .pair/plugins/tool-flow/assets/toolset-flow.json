@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "toolset",
+  "toolset": {
+    "name": "工程流程",
+    "description": "工程流程与看板模式——阶段推进 / 门禁（check·command·artifact·approval）/ 证据留档 / 任务真相复用 / 项目绑定矩阵 / 三层流程库管理（tool-flow），叠加常用文件与执行工具",
+    "version": "1.0.0",
+    "createdAt": "2026-10-16T00:00:00+08:00",
+    "builtinsInited": true,
+    "plugins": [
+      {
+        "name": "tool-flow",
+        "purpose": "工程流程与看板：三层流程库（预设/全局 flowlib/项目）+ 阶段门禁（check/command/artifact/approval）+ 证据留档 + 任务真相复用 + 项目绑定矩阵 + 目录 bundle 导出导入；agent 每轮经 systemPrompt 变量感知当前阶段"
+      },
+      {
+        "name": "tool-harness",
+        "purpose": "harness 核心协议工具（read/write/apply_patch/glob/grep/run_code）——文件与工作区工具"
+      },
+      {
+        "name": "tool-exec",
+        "purpose": "会话式命令执行（exec_command/write_stdin/kill_process）——门禁 command 代跑与验证命令"
+      },
+      {
+        "name": "builtin:system",
+        "purpose": "system：极简核心 + 框架宿主工具（任务追踪/提问/进度检查/技能加载等）",
+        "builtin": "system",
+        "tools": [
+          "apply_patch",
+          "ask_user",
+          "exec_command",
+          "glob",
+          "goal",
+          "grep",
+          "load_skill",
+          "progress_checker",
+          "read",
+          "run_code",
+          "update_tasks",
+          "write"
+        ]
+      }
+    ]
+  }
+}

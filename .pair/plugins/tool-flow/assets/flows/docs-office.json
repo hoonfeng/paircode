@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "docs-office",
+  "title": "文档与办公交付",
+  "version": 1,
+  "projectTypes": ["docs"],
+  "taskTypes": ["doc", "report"],
+  "appliesTo": { "types": ["docs"], "signals": ["docs/", "*.docx", "*.xlsx"] },
+  "stages": [
+    {
+      "id": "outline",
+      "title": "提纲",
+      "goal": "确定结构与读者对象",
+      "tasks": ["列提纲", "确认素材来源"],
+      "gates": [
+        { "id": "g-outline-1", "kind": "check", "text": "提纲已确认", "required": true, "blocking": true }
+      ]
+    },
+    {
+      "id": "draft",
+      "title": "撰写",
+      "goal": "按提纲完成正文",
+      "tasks": ["撰写正文", "补图表/数据"],
+      "gates": [
+        { "id": "g-draft-1", "kind": "check", "text": "正文完整覆盖提纲各节", "required": true }
+      ]
+    },
+    {
+      "id": "proof",
+      "title": "校对",
+      "goal": "事实、术语、格式一致",
+      "tasks": ["事实核对", "术语与格式统一"],
+      "gates": [
+        { "id": "g-proof-1", "kind": "check", "text": "已逐节校对（事实无误）", "required": true }
+      ]
+    },
+    {
+      "id": "export",
+      "title": "导出",
+      "goal": "交付指定格式产物",
+      "tasks": ["导出目标格式", "确认产物路径"],
+      "gates": [
+        { "id": "g-export-1", "kind": "artifact", "text": "产物文件已生成", "required": true, "blocking": true },
+        { "id": "g-export-2", "kind": "approval", "text": "用户确认交付", "required": true }
+      ]
+    }
+  ],
+  "board": { "kind": "checklist", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
+  "library": { "author": "paircode", "tags": ["docs", "office"] }
+}

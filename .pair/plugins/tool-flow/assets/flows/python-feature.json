@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "python-feature",
+  "title": "Python 功能开发",
+  "version": 1,
+  "projectTypes": ["python"],
+  "taskTypes": ["feature", "refactor", "bugfix"],
+  "appliesTo": { "types": ["python"], "signals": ["requirements.txt", "pyproject.toml", "setup.py"] },
+  "stages": [
+    {
+      "id": "recon",
+      "title": "调研",
+      "goal": "定位模块与数据流",
+      "tasks": ["读模块结构", "确认依赖与入口"],
+      "gates": [
+        { "id": "g-recon-1", "kind": "check", "text": "已列出受影响模块", "required": true, "blocking": true }
+      ]
+    },
+    {
+      "id": "impl",
+      "title": "实现",
+      "goal": "完成代码改动",
+      "tasks": ["改代码", "保持风格"],
+      "gates": [
+        { "id": "g-impl-1", "kind": "check", "text": "改动完成", "required": true }
+      ]
+    },
+    {
+      "id": "run",
+      "title": "运行验证",
+      "goal": "脚本/服务可运行且输出符合预期",
+      "tasks": ["运行入口", "检查输出"],
+      "gates": [
+        { "id": "g-run-1", "kind": "command", "text": "语法检查通过", "cmd": "python -m compileall -q .", "required": true, "blocking": true, "onFail": "advise" }
+      ]
+    },
+    {
+      "id": "test",
+      "title": "测试",
+      "goal": "相关测试通过",
+      "tasks": ["跑 pytest"],
+      "gates": [
+        { "id": "g-test-1", "kind": "command", "text": "pytest 通过", "cmd": "python -m pytest -q", "required": true, "onFail": "rollback" }
+      ]
+    }
+  ],
+  "board": { "kind": "checklist", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
+  "library": { "author": "paircode", "tags": ["python", "feature"] }
+}

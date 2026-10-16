@@ -128,6 +128,8 @@ _desktop-archive/
 .pair/plugins/marketplace/assets/marketplace-panel.css
 .pair/plugins/ui-*/assets/ui-*.js
 .pair/plugins/ui-*/assets/ui-*.css
+# 插件测试沙箱（smoke-test.js 以 __dirname/.smoke 为落地目录，属可重建产物，禁止出厂/入库）
+.pair/plugins/*/.smoke/
 
 # ── 历史误入库杂物防再犯（2026-09-13 重建清理项：# 调试二进制/测试产物/探针转储）──
 __debug_bin*
