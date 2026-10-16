@@ -20,6 +20,10 @@
         </div>
         <div class="ws-right">
           <span v-if="ws.notify" class="ws-notify" title="有待处理">●</span>
+          <!-- ★ 2026-10-16 流程标签（D8/D10 定稿）：壳内零业务逻辑 —— 不解析流程 JSON、
+               不判断门禁、不写数据文件；只展示插件 API（GET /api/flow/state 的 matrix）
+               给出的结论（当前流程 + 阶段 / 未接入流程）。 -->
+          <span class="ws-flow" :class="{ 'ws-flow-off': !flowOf(ws.path).flowId }" :title="flowTitle(ws.path)">{{ flowLabel(ws.path) }}</span>
           <span v-if="ws.path === state.workspaceRoot" class="ws-badge">当前</span>
         </div>
       </div>
@@ -147,6 +151,46 @@ const wsItems = computed(() => state.wsList)
 import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'
 
+// ── 流程标签数据（D8/D10 定稿）─────────────────────────────────
+// 纪律：壳内零业务逻辑 —— 不解析流程 JSON、不判断门禁、不写数据文件；
+// 数据一律来自插件只读接口 GET /api/flow/state 的 matrix 字段
+// （项目根 → 绑定流程 / 当前阶段 / 必过门禁阻塞数；插件未部署时为 []）。
+const flowMatrix = ref({})
+async function loadFlowMatrix() {
+  try {
+    const res = await api.apiGet('/flow/state')
+    const list = (res && Array.isArray(res.matrix)) ? res.matrix : []
+    const map = {}
+    for (const it of list) { if (it && it.project) map[it.project] = it }
+    flowMatrix.value = map
+  } catch (e) {
+    flowMatrix.value = {}   // 插件未部署 / 接口不可用 → 标签统一显示「未接入流程」
+  }
+}
+function flowOf(p) { return flowMatrix.value[p] || {} }
+function flowLabel(p) {
+  const f = flowOf(p)
+  if (!f.flowId) return '未接入流程'
+  return f.stage ? (f.flowId + ' · ' + f.stage) : f.flowId
+}
+function flowTitle(p) {
+  const f = flowOf(p)
+  if (!f.flowId) return '该项目未绑定流程（右键「指定流程…」接入）'
+  return '流程 ' + f.flowId + (f.stage ? (' · 阶段 ' + f.stage) : '') + (f.blocked ? (' · ' + f.blocked + ' 个必过门禁阻塞') : '')
+}
+// 打开流程看板（插件视图 tab）：壳只触发，业务全在插件（tool-flow client 半）
+function openFlowBoard() {
+  try { layout.openViewTab('tool-flow', 'flow-board') }
+  catch (e) { console.warn('打开流程看板失败:', e) }
+}
+loadFlowMatrix()
+let flowTimer = 0
+onMounted(() => {
+  loadFlowMatrix()
+  flowTimer = window.setInterval(loadFlowMatrix, 30000)
+})
+onUnmounted(() => { if (flowTimer) window.clearInterval(flowTimer); flowTimer = 0 })
+
 // ── 当前工作区的文件夹列表 ──
 // 工作区运行中 agent 计数（从全局 state.runningByWorkspace 读取）
 // 用于在工作区列表显示脉冲点 + 数字，提示该工作区有 agent 正在并行工作
@@ -257,6 +301,11 @@ async function showWsContextMenu(e, ws) {
       { label: '重命名工作区', action: 'rename' },
       { label: '删除工作区', action: 'delete' },
       { separator: true },
+      // ★ 2026-10-16 流程入口（D8/D10）：壳只触发 —— 选流程/绑定/进度全在插件面板完成
+      { label: '指定流程…', action: 'flow-attach' },
+      { label: '切换流程…', action: 'flow-switch' },
+      { label: '查看流程进度', action: 'flow-board' },
+      { separator: true },
       { label: '在终端中打开', icon: 'terminal', action: 'open-terminal' },
       { label: '复制路径', icon: 'copy', action: 'copy-path' },
     ],
@@ -308,6 +357,11 @@ async function showWsContextMenu(e, ws) {
     }
     case 'copy-path':
       navigator.clipboard.writeText(ws.path).catch(() => {})
+      break
+    case 'flow-attach':
+    case 'flow-switch':
+    case 'flow-board':
+      openFlowBoard()
       break
   }
 }
@@ -632,6 +686,13 @@ onUnmounted(() => {
   font-size: 9px; color: var(--color-accent); background: var(--color-accent-bg);
   padding: 1px 6px; border-radius: 3px;
 }
+/* 流程标签（D8/D10）：项目当前流程 + 阶段；未接入时弱化显示 */
+.ws-flow {
+  font-size: 9px; color: var(--color-accent); background: var(--color-accent-bg);
+  padding: 1px 6px; border-radius: 3px; max-width: 132px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-flow-off { color: var(--text-muted); background: transparent; padding: 0 2px; }
 .ws-empty { padding: 16px 10px; text-align: center; color: var(--text-muted); font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .ws-create-btn { background: var(--accent); color: var(--color-accent-fg); border: none; padding: 2px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; }
 

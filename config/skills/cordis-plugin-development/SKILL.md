@@ -285,6 +285,7 @@ Node API（require/setTimeout/fetch/process 等）沙箱中**不可用**，调�
 |---|---|---|
 | cordis(op=run) 报"求值失败/语法错误" | JS/TS 语法或顶层异常 | 修代码 → define append → run；可用 TS 类型注解（内置编译器转译） |
 | 插件进入 waiting | inject 服务未就绪 | 等提供服务方运行；或改用 ctx.get 判 undefined（可选依赖） |
+| **磁盘插件包就位、启动无任何错误，但插件完全不执行**（接口 404 / 无日志 / 工具列表不见） | `inject` 声明的服务在**当前二进制**里未登记 —— 典型是旧构建不含新服务 → 插件登记为 **waiting**；★ waiting 不是错误，故**不报错、不打日志**（2026-10-16 实测：`bin/pair.exe` 停在 v1.5.4，`inject:['install']` 的插件全部静默不执行，`/api/flow/state` 恒 404） | ① 先核对 `GET /api/system/info` 的 `version`；② 用**最新源码构建**的独立二进制复跑（`CGO_ENABLED=1 go build -o <隔离目录>/pair.exe ./cmd/companion`）；③ 新服务必须三处同时登记：inject switch / `hasService`+`availableServices` / `jsNativeGuardServices`（见 §2 install 段告警） |
 | 工具注册报同名冲突 | 工具名被宿主/他人占用 | 换工具名，或先 cordis(op=stop) 占用方 |
 | apply 失败（diag 可见） | 运行期异常（如调用不存在的方法） | cordis(op=inspect) id=xxx 看 diag/lastError 定位阶段 |
 | 插件 stop 后工具还在 | 未走 Unload 回收 | cordis(op=stop) 正确回收；自己注册的全局资源用 ctx.effect 清理 |
