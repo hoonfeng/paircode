@@ -86,15 +86,36 @@ myPlugin.inject = ['fs']
 | ctx.registerClientMethod(method, fn) | host 半方法给浏览器 client 半远程调用（ui.invoke） |
 | ctx.app.{workspaceRoot,root,folders,projectName,installDir,configDir,recentProjects,workspaceFolders} | 宿主信息（动态只读） |
 
-### inject 声明服务（宿主内置 25 个：fs/web/bash/sse/ws/logger/timer/tools/events/store/handoff/app/workspaceRoot/kernel/market/process/mcp/skill/toolset/npm/plugins/agents/llm/http/commands）
+### inject 声明服务（宿主内置 26 个：fs/**install**/web/bash/sse/ws/logger/timer/tools/events/store/handoff/app/workspaceRoot/kernel/market/process/mcp/skill/toolset/npm/plugins/agents/llm/http/commands）
 声明后 ctx.xxx 可用；未声明访问 undefined。精确签名用 `cordis(op=services)` 查，要点：
 
 - fs（工作区受限，越界拦截）/ web（GET，60s 超时 4MB）/ bash（120s 超时；git-bash 非 cmd）/ sse / ws
+- **install**（★ 2026-10-16）：**安装目录数据区**文件服务 —— 读写限 `<InstallDir>/.pair/**`，插件跨工作区共享数据（全局流程库 `flowlib/`、缓存、导出包）的**正规通道**，取代 `ctx.bash` 绝对路径绕行。方法：`root()`（→ `<InstallDir>/.pair`）/ exists / readFile / readFileBase64 / writeFile / writeFileBase64 / appendFile / readdir / list / stat / mkdir / rm / rename（write/append 自动建父目录）；相对路径**相对安装根**（如 `.pair/flowlib/a.json`），越界（`config/`、exe 同级路径、工作区绝对路径）一律抛错，`.pair` 数据区根目录本身不可写/删
 - logger(scope)→{log,info,warn,debug,error} / timer / kernel（内核路由表 install/routes/installed/total）/ market（市场源）
-- process（runBackground/readOutput/kill）/ mcp（list/upsert/remove）/ skill（list/write/remove）
+- process（runBackground/readOutput/kill）/ mcp（list/upsert/remove）/ skill（list/write/remove；★ write/remove 支持 `scope:'global'` → `<InstallDir>/.pair/skills/`，缺省工作区级；remove 兼容 `(name, scope)` 与 `({name, scope})` 两形态）
 - toolset（list/save/remove/install；⚠️ 声明后会**覆盖**默认的 `ctx.toolset.registerTemplate` 形态，二选一）
 - npm（install/uninstall/installed/checkUpdates/update）/ plugins（reloadDisk + console/env/platform/arch/version/cwd/exit/process/btoa/atob）
 - agents（ready/followup：会话唤醒投递）/ commands（slash 命令面，见 ctx.commands）/ llm / http
+
+#### ctx.install 用法样例（跨工作区全局库）
+
+```js
+return {
+  name: 'global-lib-demo',
+  inject: ['install'],                      // ★ 必须声明，否则 ctx.install 为 undefined
+  apply(ctx) {
+    // 写入即自动建父目录：→ <InstallDir>/.pair/flowlib/flow-a.json
+    ctx.install.writeFile('.pair/flowlib/flow-a.json', JSON.stringify({ id: 'a', steps: [] }))
+    const files = ctx.install.readdir('.pair/flowlib')        // ['flow-a.json']
+    const list = ctx.install.list('.pair/flowlib')             // [{name,path,isDir,size,mtime}]
+    const one = JSON.parse(ctx.install.readFile('.pair/flowlib/flow-a.json'))
+    ctx.install.rm('.pair/flowlib/flow-a.json')                // 删文件
+    ctx.install.rm('.pair/flowlib/old', true)                  // 递归删目录
+  },
+}
+```
+
+> ⚠️ **给核心加新服务时**：除 `inject` switch 分支外，必须同步登记「inject 硬依赖校验」白名单（`jsplugin.go` 的 `hasService` / `availableServices`）与原生调用守卫名单（`js_native_guard.go` 的 `jsNativeGuardServices`）——漏登记的第一个会让插件被判**缺服务进 waiting**：apply 根本不执行，且 **waiting 不是错误、不报错不打日志**（2026-10-16 P0 实测踩坑，排查代价极高）。
 
 另有静态服务：app（已无条件注入）、workspaceRoot（ctx.get('workspaceRoot')）、store（会话存储）。
 

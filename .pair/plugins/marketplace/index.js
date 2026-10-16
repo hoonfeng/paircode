@@ -114,12 +114,26 @@ return {
       return out
     }
 
+    // ── 官方插件全集缓存（★ 2026-10-16）──
+    //   全集 = `paircode` ∪ `keywords:paircode`（size=100）合并去重，按当前源缓存 5 分钟：
+    //   缓存内搜索只做本地匹配（秒回、零网络）；源抖动/超时时沿用上次成功结果，
+    //   不会出现「网络一慢就搜不到官方插件」；换源（镜像↔官方）自动失效重拉。
+    const OFFICIAL_TTL = 5 * 60 * 1000
+    let officialCache = { at: 0, base: '', list: [] }
+
     // npm PairCode 插件搜索（★ 官方命名约定精确匹配，2026-08-20 重名唯一化）：
     //   ① @paircode/<name> scope 包（唯一权威）
     //   ② paircode-plugin-<name> 裸名包（须带 paircode 关键词双重校验）
     // 无关包（paircode-terminal 等）被排除。
-    // ★ 2026-08-20 增强：除相关性搜索（q paircode）外，追加 keywords:paircode 官方全集兜底，
+    // ★ 2026-08-20 增强：除相关性搜索（q paircode）外，追加官方全集兜底，
     //   本地 name/desc/keywords 匹配 query——任意词都能搜到官方插件（不受 npm 相关性/索引延迟影响）。
+    // ★ 2026-10-16 修复（用户报「市场必须手输 paircode 才能搜到插件」）：全集兜底原先只发
+    //   `keywords:paircode` 单查询，而**镜像源不支持该语法**（registry.npmmirror.com 实测 0 条，
+    //   官方源 39 条）——默认 useMirror=true 时兜底整体失效，只剩相关性搜索的噪声
+    //   （实测：搜「CAD」首条返回 tool-voice、搜「人声」混入 wechat-bridge），只有手输
+    //   paircode 才拿到官方全集。现改为：**paircode ∪ keywords:paircode 多查询合并**（size=100，
+    //   两源皆可用且响应体可控——size=250 时 npmmirror 响应带全量 versions 会超时/截断）
+    //   + 按源缓存（见 officialCache），本地命中优先输出。
     function searchNpmPlugins(query) {
       const q0 = String(query || '').trim()
       const fetchNpm = (text, size = MAX) => {
@@ -129,6 +143,17 @@ return {
       }
       const norm = (s) => String(s || '').toLowerCase()
       const isOfficial = (low) => low.startsWith('@paircode/') || low.startsWith('paircode-plugin-')
+      // accept：官方包判定（原先 A/B 两段各自重复的过滤逻辑，合并到一处）
+      const accept = (p) => {
+        const low = norm(p.name)
+        if (low === 'cordis' || low === '@cordisjs/core' || low === '@cordisjs/plugin-loader') return false
+        if (!isOfficial(low)) return false
+        if (low.startsWith('paircode-plugin-')) {
+          const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
+          if (!kws.includes('paircode')) return false
+        }
+        return true
+      }
       const localMatch = (p) => {
         if (!q0) return true
         const hay = norm([p.name, p.description || ''].concat(Array.isArray(p.keywords) ? p.keywords : []).join(' '))
@@ -142,33 +167,40 @@ return {
       })
       const out = []
       const seen = new Set()
-      // A：相关性搜索（query + paircode）
-      for (const obj of fetchNpm((q0 ? q0 + ' ' : '') + 'paircode')) {
-        const p = obj.package || {}
-        const low = norm(p.name)
-        if (low === 'cordis' || low === '@cordisjs/core' || low === '@cordisjs/plugin-loader') continue
-        if (!isOfficial(low)) continue
-        if (low.startsWith('paircode-plugin-')) {
-          const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
-          if (!kws.includes('paircode')) continue
-        }
-        if (seen.has(p.name)) continue
+      const pushEntry = (p) => {
+        if (!p || !p.name || seen.has(p.name)) return
+        if (!accept(p)) return
         seen.add(p.name)
         out.push(toEntry(p))
       }
-      // B：官方全集兜底（keywords:paircode，size=100 防截断，本地匹配）——补相关性搜不到的（新包/低分）
-      for (const obj of fetchNpm('keywords:paircode', 100)) {
-        const p = obj.package || {}
-        const low = norm(p.name)
-        if (!isOfficial(low)) continue
-        if (low.startsWith('paircode-plugin-')) {
-          const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
-          if (!kws.includes('paircode')) continue
+      // A：官方全集（多查询合并 + 按源缓存）→ 本地命中（强相关，优先输出）
+      //   缓存命中时零网络请求（搜索秒回）；源抖动/超时时沿用上次成功结果，
+      //   不会出现「网络一慢就搜不到官方插件」。
+      const base = registryBase()
+      const now = Date.now()
+      let pool = officialCache.list
+      if (!officialCache.at || officialCache.base !== base || (now - officialCache.at) >= OFFICIAL_TTL) {
+        const list = []
+        const poolSeen = new Set()
+        for (const text of ['paircode', 'keywords:paircode']) {
+          for (const obj of fetchNpm(text, 100)) {
+            const p = obj.package || {}
+            if (!p.name || poolSeen.has(p.name)) continue
+            poolSeen.add(p.name)
+            list.push(p)
+          }
         }
-        if (seen.has(p.name)) continue
-        if (!localMatch(p)) continue
-        seen.add(p.name)
-        out.push(toEntry(p))
+        if (list.length) { officialCache = { at: now, base, list }; pool = list }
+      }
+      for (const p of pool) { if (localMatch(p)) pushEntry(p) }
+      // B：相关性搜索（query + paircode）——**仅当本地零命中时**才启用：
+      //   本地精确匹配已同时看 name / description / keywords 三个面，有命中还追加相关性结果
+      //   只会掺进 npm 全文索引判定的无关包（实测：搜「CAD」掺 tool-voice、「wechat」掺 tool-voice）。
+      //   本地为空时它仍是有效兜底（避免「关键词搜不到任何东西」）。
+      if (out.length === 0) {
+        for (const obj of fetchNpm((q0 ? q0 + ' ' : '') + 'paircode', 100)) {
+          pushEntry(obj.package || {})
+        }
       }
       return out
     }
@@ -255,8 +287,17 @@ return {
         return '✅ 已安装 MCP 服务器「' + name + '」（' + lv + '）'
       }
       if (kind === 'skill') {
-        ctx.skill.write({ name: id, description: body.description || '', mode: body.activation || 'auto', content: body.content || '' })
-        return '✅ 已安装技能「' + (body.name || id) + '」（工作区级 .pair/skills）'
+        // ★ 2026-10-16：技能安装跟随 scope —— 此前恒写工作区级，用户在市场上
+        //   选「用户级（全局）」装技能也会落进工作区（与上面的 toolset / mcp 两个
+        //   分支不一致）。新核心 ctx.skill.write 支持 scope:'global'
+        //   （<InstallDir>/.pair/skills/）；旧核心忽略该字段 → 退回工作区级（无害）。
+        const skScope = scope === 'project' ? 'project' : 'global'
+        ctx.skill.write({
+          name: id, description: body.description || '', mode: body.activation || 'auto',
+          content: body.content || '', scope: skScope,
+        })
+        const slv = skScope === 'global' ? '用户级（全局，跨工作区）' : '工作区级'
+        return '✅ 已安装技能「' + (body.name || id) + '」（' + slv + '）'
       }
       throw new Error('未知条目类型: ' + kind)
     }
@@ -281,7 +322,13 @@ return {
         ctx.mcp.remove(id, 'project')
         return '已卸载 MCP 服务器 ' + (id2 || id)
       }
-      if (kind === 'skill') return ctx.skill.remove(id)
+      if (kind === 'skill') {
+        // ★ 2026-10-16 配套：技能安装按 scope 可能落在全局或工作区，卸载两处都清。
+        //   用位置参数形态（新旧核心兼容：旧核心忽略第二参 → 等价旧行为）。
+        ctx.skill.remove(id)
+        ctx.skill.remove(id, 'global')
+        return '已卸载技能 ' + id
+      }
       if (kind === 'plugin') {
         // npm 插件：搜索结果 source=npm:<pkg>（cache 兜底：未搜索直接卸载也可）；
         // 或 id 符合 PairCode 命名约定（paircode-plugin-* / @paircode/*）

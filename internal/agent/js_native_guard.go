@@ -78,7 +78,7 @@ func jsForgetNative(vm *goja.Runtime) {
 // （子进程/网络/子 agent/文件 IO/宿主工具执行）的服务全部在列；纯内存注册面
 // （events/store/systemPrompt/prompts/app/toolset 注册等）不包，以保留死循环检测灵敏度。
 var jsNativeGuardServices = []string{
-	"fs", "web", "bash", "tools", "hostTool", "binary", "http", "webServer",
+	"fs", "install", "web", "bash", "tools", "hostTool", "binary", "http", "webServer",
 	"process", "npm", "plugins", "market", "mcp", "skill", "agents", "llm",
 	"kernel", "commands", "sse", "ws",
 }

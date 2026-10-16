@@ -1957,6 +1957,11 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		case "commands":
 			// ★ Round3 ④.2：slash 命令注册面（ctx.commands；卸载自动注销）
 			ctxObj.Set("commands", p.buildCommandsService(pc))
+		case "install":
+			// ★ 2026-10-16 R1：安装目录数据区文件服务（ctx.install）——读写
+			//   <InstallDir>/.pair/**，插件跨工作区共享数据（全局流程库 flowlib/、
+			//   资产缓存等）的正规通道，取代 ctx.bash 绝对路径绕行。
+			ctxObj.Set("install", p.buildInstallService())
 		}
 	}
 
@@ -2424,6 +2429,242 @@ func buildFileTree(dir, base, projRoot string, depth int) ([]map[string]any, err
 		out = append(out, node)
 	}
 	return out, nil
+}
+
+// buildInstallService 安装目录数据区文件服务（ctx.install，★ 2026-10-16 R1）。
+// 读写限定在 <InstallDir>/.pair/** 内 —— 插件跨工作区共享数据（全局流程库
+// flowlib/、资产缓存、导出包等）的正规通道，取代 ctx.bash 绝对路径绕行。
+//
+//	路径语义：相对路径相对**安装根**（与 ctx.fs 相对工作区根一致）——
+//	  '.pair/flowlib/x.json' → <InstallDir>/.pair/flowlib/x.json。
+//	安全边界：白名单只放 <InstallDir>/.pair/**；安装根下的程序本体与 config/
+//	  （配置区）一律拒绝（读写同限），数据区根目录本身不可写/删。
+//	与 ctx.fs 的差异：writeFile/appendFile 自动创建父目录（安装数据区的写入
+//	  以「新建库文件」为主，不做 mkdir 往返）。
+//
+// 方法：root / exists / readFile / readFileBase64 / writeFile / writeFileBase64 /
+// appendFile / readdir / list / stat / mkdir / rm / rename。
+func (p *jsPluginAdapter) buildInstallService() goja.Value {
+	vm := p.vm
+	// dataDir 实时解析数据区根（<InstallDir>/.pair）。InstallDir 由 exe 位置
+	// 推导（core/settings.go），与 ctx.fs 的 svcRoot 一样不做启动期快照。
+	dataDir := func() string { return filepath.Join(core.InstallDir(), ".pair") }
+	resolve := func(path string) (string, error) {
+		raw := strings.TrimSpace(path)
+		if raw == "" {
+			return "", fmt.Errorf("ctx.install: path 不能为空")
+		}
+		base := dataDir()
+		full := raw
+		if !filepath.IsAbs(full) {
+			// 相对路径相对安装根（与 ctx.fs 相对工作区根的语义对齐）。
+			full = filepath.Join(core.InstallDir(), full)
+		}
+		full = filepath.Clean(full)
+		rel, err := filepath.Rel(base, full)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("ctx.install: 路径 %q 超出安装数据区（只允许 %s 内的路径；安装根下程序本体与 config/ 不可访问）", raw, base)
+		}
+		return full, nil
+	}
+	// resolveWritable：同 resolve，另拒绝数据区根目录本身——防 rm(root, true)
+	// 一次清空全部插件包/工具集/技能（越权面已由 resolve 兜住，这里防手滑）。
+	resolveWritable := func(path string) (string, error) {
+		full, err := resolve(path)
+		if err != nil {
+			return "", err
+		}
+		if filepath.Clean(full) == filepath.Clean(dataDir()) {
+			return "", fmt.Errorf("ctx.install: 不允许直接操作安装数据区根目录（%s）", dataDir())
+		}
+		return full, nil
+	}
+	ins := vm.NewObject()
+	// root：数据区根绝对路径（<InstallDir>/.pair）——插件拼路径/展示用。
+	ins.Set("root", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(dataDir())
+	})
+	ins.Set("exists", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			return vm.ToValue(false) // 越界视为不存在（与 ctx.fs 一致）
+		}
+		return vm.ToValue(pathExists(full))
+	})
+	ins.Set("readFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		b, err := os.ReadFile(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(string(b))
+	})
+	ins.Set("readFileBase64", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		b, err := os.ReadFile(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(base64.StdEncoding.EncodeToString(b))
+	})
+	ins.Set("writeFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.WriteFile(full, []byte(call.Argument(1).String()), 0o644); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	ins.Set("writeFileBase64", func(call goja.FunctionCall) goja.Value {
+		full, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(call.Argument(1).String()))
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf("ctx.install: base64 解码失败: %w", err)))
+		}
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.WriteFile(full, raw, 0o644); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	ins.Set("appendFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		f, err := os.OpenFile(full, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if _, err := f.WriteString(call.Argument(1).String()); err != nil {
+			f.Close()
+			panic(vm.NewGoError(err))
+		}
+		f.Close()
+		return goja.Undefined()
+	})
+	// readdir：返回条目名数组（与 ctx.fs.readdir 同形态，最常用）。
+	ins.Set("readdir", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return vm.ToValue(names)
+	})
+	// list：返回条目详情 [{name, path, isDir, size, mtime}]（看板/流程库列表
+	//  需展示信息，避免插件为每个条目再 stat 一次）。path 相对数据区根。
+	ins.Set("list", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		base := dataDir()
+		out := make([]map[string]any, 0, len(entries))
+		for _, e := range entries {
+			node := map[string]any{"name": e.Name(), "isDir": e.IsDir()}
+			if rel, rerr := filepath.Rel(base, filepath.Join(full, e.Name())); rerr == nil {
+				node["path"] = filepath.ToSlash(rel)
+			}
+			if fi, ierr := e.Info(); ierr == nil {
+				node["size"] = fi.Size()
+				node["mtime"] = fi.ModTime().Format(time.RFC3339)
+			}
+			out = append(out, node)
+		}
+		return vm.ToValue(out)
+	})
+	ins.Set("stat", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		fi, err := os.Stat(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(map[string]any{
+			"name":  fi.Name(),
+			"size":  fi.Size(),
+			"isDir": fi.IsDir(),
+			"mtime": fi.ModTime().Format(time.RFC3339),
+		})
+	})
+	ins.Set("mkdir", func(call goja.FunctionCall) goja.Value {
+		full, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if call.Argument(1).ToBoolean() {
+			err = os.MkdirAll(full, 0o755)
+		} else {
+			err = os.Mkdir(full, 0o755)
+		}
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	ins.Set("rm", func(call goja.FunctionCall) goja.Value {
+		full, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if call.Argument(1).ToBoolean() {
+			err = os.RemoveAll(full)
+		} else {
+			err = os.Remove(full)
+		}
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	ins.Set("rename", func(call goja.FunctionCall) goja.Value {
+		from, err := resolveWritable(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		to, err := resolveWritable(call.Argument(1).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.Rename(from, to); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	return vm.ToValue(ins)
 }
 
 // buildWebService HTTP 服务（ctx.web.fetch）：GET 抓取 URL，
@@ -3045,19 +3286,77 @@ func (p *jsPluginAdapter) buildSkillService(pc *PluginContext) goja.Value {
 		}
 		desc, _ := obj["description"].(string)
 		body, _ := obj["content"].(string)
-		if err := WriteSkill(projectDir, Skill{Name: name, Description: desc, Mode: mode, Body: body}); err != nil {
+		// ★ 2026-10-16：支持 scope:'global'（跨工作区，<InstallDir>/.pair/skills/）
+		//   ——对齐 agent 工具 skill_write，此前插件只能装工作区级技能。
+		scope, _ := obj["scope"].(string)
+		dir, label, terr := skillDirForCtxScope(scope, projectDir)
+		if terr != nil {
+			panic(vm.NewGoError(terr))
+		}
+		if err := WriteSkill(dir, Skill{Name: name, Description: desc, Mode: mode, Body: body}); err != nil {
 			panic(vm.NewGoError(err))
 		}
-		return vm.ToValue("已安装技能 " + name + "（工作区级 .pair/skills）")
+		return vm.ToValue("已安装技能 " + name + "（" + label + "）")
 	})
 	s.Set("remove", func(call goja.FunctionCall) goja.Value {
-		name := call.Argument(0).String()
-		if err := DeleteSkill(projectDir, name); err != nil {
+		// 支持 remove(name, scope?) 与 remove({name, scope})（后者与 agent 工具
+		// skill_delete 同形）。
+		a0 := call.Argument(0)
+		name, scope := "", ""
+		if a0 != nil && !goja.IsUndefined(a0) && !goja.IsNull(a0) {
+			if o, ok := a0.Export().(map[string]any); ok {
+				name, _ = o["name"].(string)
+				scope, _ = o["scope"].(string)
+			} else {
+				name = a0.String()
+			}
+		}
+		if scope == "" {
+			scope = call.Argument(1).String()
+		}
+		if name == "" {
+			panic(vm.NewTypeError("ctx.skill.remove: 缺 name"))
+		}
+		dir, label, terr := skillDirForCtxScope(scope, projectDir)
+		if terr != nil {
+			panic(vm.NewGoError(terr))
+		}
+		if err := DeleteSkill(dir, name); err != nil {
 			panic(vm.NewGoError(err))
 		}
-		return vm.ToValue("已删除技能 " + name)
+		return vm.ToValue("已删除技能 " + name + "（" + label + "）")
 	})
 	return vm.ToValue(s)
+}
+
+// skillDirForCtxScope 解析 ctx.skill 的目标目录与层级标签（★ 2026-10-16）。
+// 与 agent 工具 skill_write/skill_delete 的 skillTargetDir 同语义（那里带工具
+// 调用上下文自行解析工作区根，这里接收已解析好的 projectDir），使插件也能安装
+// **全局**技能——此前 ctx.skill.write 只能写工作区级，与工具面 scope=global 不一致。
+// scope：global=全局（SkillGlobalDir，缺失回落 <InstallDir>/.pair/skills/）/
+// system=内置 / 其他=工作区级（projectDir 为空时回落全局目录，不写相对路径）。
+func skillDirForCtxScope(scope, projectDir string) (string, string, error) {
+	switch scope {
+	case "global":
+		dir := SkillGlobalDir
+		if dir == "" {
+			dir = filepath.Join(core.InstallDir(), ".pair", "skills")
+		}
+		return dir, "全局，跨工作区", nil
+	case "system":
+		if SkillSystemDir == "" {
+			return "", "", fmt.Errorf("内置技能目录未初始化（SkillSystemDir 为空）")
+		}
+		return SkillSystemDir, "内置", nil
+	}
+	if projectDir == "" {
+		dir := SkillGlobalDir
+		if dir == "" {
+			dir = filepath.Join(core.InstallDir(), ".pair", "skills")
+		}
+		return dir, "全局（未打开工作区，回落）", nil
+	}
+	return projectDir, "工作区级", nil
 }
 
 // ─── ctx.toolset：工具集固化/装载服务（通用能力）───────────────────
@@ -3590,7 +3889,10 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
+	// ★ 2026-10-16：install（安装目录数据区文件服务）与 fs 同列——inject 声明即
+	//   可用的内置服务；漏登记会让插件被判定「缺服务」进入 waiting（apply 不执行，
+	//   且 waiting 非错误故无日志，极难排查——P0 实测踩到）。
+	case "fs", "install", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
 		return true
 	}
 	// ★ 2026-08-28 多智能体团队：ctx.agents / ctx.llm / ctx.http 属按 inject
@@ -3605,7 +3907,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http", "commands"}
+	names := []string{"fs", "install", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "handoff", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http", "commands"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)
