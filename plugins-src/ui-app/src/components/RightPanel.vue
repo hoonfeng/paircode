@@ -1057,6 +1057,26 @@ function reconcileAttachments() {
   }
 }
 
+// ★ 2026-10-16 修复（用户报「对话框添加附件后：输入的文字看不见、附件也看不清」）：
+//   输入框高度由 inputHeight 内联控制，而它**原先只在拖拽 resizer 时更新**（初始值 40px，
+//   CSS 亦为 height:40px; min-height:40px）→ 内容一旦超过 40px 就被 overflow-y:auto 裁到
+//   可视区外：实测 clientHeight=40 / scrollHeight=76（裁掉 36px）。纯文字单行时内容 ≤40px
+//   所以看不出异常，**一插入附件内联 tag（高 22px + 行高）内容立刻涨到 76px** → 文字被挤出、
+//   附件药丸只剩半截（视觉上「颜色和背景混在一起」），与用户描述完全一致。
+//   此处补「内容自适应高度」：输入 / 附件增删 / 程序化设值后按真实内容高度重算（40..600px）。
+const INPUT_MIN_H = 40
+const INPUT_MAX_H = 600
+function autoGrowInput() {
+  const el = inputRef.value
+  if (!el) return
+  const prev = el.style.height
+  el.style.height = 'auto'   // 临时解除固定高度，让 scrollHeight 反映真实内容高度（测完还原）
+  const need = el.scrollHeight
+  el.style.height = prev
+  const h = Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, need))
+  if (h !== inputHeight.value) inputHeight.value = h
+}
+
 // syncInput DOM → inputText（输入后/发送前调用；顺带清理孤立 <br> 保证 :empty placeholder 生效）
 function syncInput() {
   const el = inputRef.value
@@ -1066,6 +1086,7 @@ function syncInput() {
   }
   inputText.value = serializeInput()
   reconcileAttachments()
+  autoGrowInput()
 }
 
 // onInput 输入事件：同步 inputText + 附件对账 + slash 菜单刷新（Round3 ④.2）
@@ -1083,6 +1104,7 @@ function setInputText(text) {
   inputText.value = text
   reconcileAttachments()
   refreshSlashMenu()
+  autoGrowInput()
 }
 
 // insertTextAtCursor 光标处插入纯文本（多行 → <br> 分段；无焦点追加末尾）
