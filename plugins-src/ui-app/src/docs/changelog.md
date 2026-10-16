@@ -4,6 +4,57 @@
 
 ---
 
+## 1.6.17 — 2026-10-16
+
+> 本版为**插件数据面补完**：新增 `ctx.install` 安装目录数据区文件服务（插件读写「跨工作区共享
+> 数据」的正规通道，取代 `ctx.bash` 绝对路径绕行），`ctx.skill` 补齐 `scope` 能力，并修复市场
+> 「技能」安装不跟随 scope 选择的问题。另修复对话框插入附件后输入框不撑高、文字与附件药丸被裁切。
+
+### 新增
+
+- **`ctx.install` 安装目录数据区文件服务** —— 插件此前要读写「跨工作区共享数据」（如全局流程库）
+  只能借 `ctx.bash` 绝对路径绕行（越过工作区边界，违背能力面设计）。现新增宿主服务 `install`
+  （`internal/agent/jsplugin.go` 的 `buildInstallService`，13 个方法：`root` / `exists` / `readFile` /
+  `readFileBase64` / `writeFile` / `writeFileBase64` / `appendFile` / `readdir` / `list` / `stat` /
+  `mkdir` / `rm` / `rename`）：根 = `<InstallDir>/`，**白名单仅 `.pair/**`**（读写同限），相对路径相对
+  安装根（与 `ctx.fs` 相对工作区根同语义）；`writeFile` / `appendFile` **自动建父目录**；`list` 返回
+  `{name,path,isDir,size,mtime}`。越界（`config/`、程序本体、exe 同级路径、工作区绝对路径）一律抛错，
+  `.pair` 数据区根目录本身不可写 / 删。插件须 `inject: ['install']`，并同步登记
+  `internal/agent/js_native_guard.go` 的原生调用守卫名单。
+- **`ctx.skill.write/remove` 支持 `scope`** —— 对齐 agent 工具 `skill_write`：`scope:'global'` 写
+  `<InstallDir>/.pair/skills/`（跨工作区），缺省工作区级；`remove` 兼容 `(name, scope)` 与
+  `({name, scope})` 两种调用形态。
+
+### 修复
+
+- **市场「技能」安装不跟随 scope**（`.pair/plugins/marketplace/index.js`）—— 此前无论用户选「用户级」
+  还是「工作区级」，技能一律落到工作区 `.pair/skills/`，提示文案也恒为「工作区级」。现按 scope 分别落
+  `<InstallDir>/.pair/skills/<name>/SKILL.md` 与工作区级，卸载覆盖两处。
+- **对话框插入附件后输入框不撑高**（`plugins-src/ui-app/src/components/RightPanel.vue`）—— 输入框高度
+  由 `inputHeight` 内联控制，而它原先**只在拖拽 resizer 时更新**（初始 40px，CSS 亦为 `height:40px`），
+  内容一旦超过 40px 就被 `overflow-y:auto` 裁到可视区外（实测 `clientHeight=40 / scrollHeight=76`，
+  裁掉 36px）。纯文字单行时内容 ≤40px 看不出异常，**一插入附件内联 tag（高 22px + 行高）内容立刻涨到
+  76px** → 文字被挤出、附件药丸只剩半截（视觉上「颜色和背景混在一起」）。现补「内容自适应高度」：
+  输入 / 附件增删 / 程序化设值后按真实内容高度重算（40..600px）。
+
+### 文档
+
+- `docs/flow-board-plugin-design.md`：新增 §14.18 R1 实施记录（改动清单、`ctx.install` API 契约、
+  隔离实例实测证据、`hasService` 漏登记导致插件静默进 waiting 的坑、flowlib 接口约定）。
+- 技能 `cordis-plugin-development`（工作区版 / 内置版同步）：ctx 能力全表 25 → **26 个服务**，
+  补 `ctx.install` 用法样例与「核心新增 ctx 服务必须三处同时登记」的纪律。
+
+### 验证
+
+- 隔离实例实测（独立二进制 + 独立 InstallDir + 端口 9095，宿主 9090 全程未动）：服务注入与 13 方法
+  齐全；写读往返 / 父目录自动创建 / base64 / append / rename / rm（含 `rm('.pair', true)` 专项保护）
+  全项通过；**安全边界 6 项全部被拒**（写 `config/`、写安装根、读 exe、写工作区绝对路径、`readdir('.')` 等）。
+- 市场端到端（真插件、真 HTTP 接口）：`scope:'user'` → 「用户级（全局，跨工作区）」且落盘
+  `<InstallDir>/.pair/skills/…/SKILL.md`；`scope:'project'` → 「工作区级」；卸载两处均清。
+- `go build`（CGO=1）+ `go vet` 通过；发布包三平台交叉编译产物 sha256 与 GitHub Release 资产 digest 逐字一致。
+
+---
+
 ## 1.6.16 — 2026-10-16
 
 > 修复「自主模式开关不可靠」与「agent 工作期 UI 不更新」两组问题：自主模式开关与显示
