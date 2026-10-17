@@ -17,7 +17,7 @@
 //
 // 用法：
 //   node scripts/verify-package-contents.mjs              # 校验 packager.json 版本的三包
-//   node scripts/verify-package-contents.mjs --version 1.6.19
+//   node scripts/verify-package-contents.mjs --version 1.6.20
 //   node scripts/verify-package-contents.mjs release/a.zip release/b.zip
 // ═══════════════════════════════════════════════════════════════
 import fs from 'node:fs'

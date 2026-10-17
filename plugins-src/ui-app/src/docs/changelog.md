@@ -4,6 +4,51 @@
 
 ---
 
+## 1.6.20 — 2026-10-17
+
+> 本版聚焦**网络工具与 LLM 接入的可配置性**：搜索/抓取改为按「AI 配置实例」解析，
+> 插件里不再出现任何服务商名、内置域名或密钥；API 地址在保存期归一化、请求期自动补 `/v1`，
+> 报错直接给出端点与正确写法。同时把工程流程收窄为「仅任务看板可用」——会话里不再出现
+> `flow_*` 工具、`/flow*` 命令与流程状态提示。
+
+### 新增
+
+- **搜索/抓取按 API 实例解析**（`tool-web`）—— 设置 →「网络工具」选择一条 AI 配置实例
+  （或留空跟随「当前激活配置」），`baseURL` / `apiKey` / 端点路径全部实时读取；搜索与抓取
+  结果首行标注「API 实例：<名>」，失败时同时报「API 错误 + 回退错误」，不再被回退错误掩盖真实原因。
+- **端点可配** —— `searchPath` / `fetchPath` 可改（默认 `/v1/tools/search`、`/v1/tools/fetch`），
+  拼接自动去重 `/v1`；`baseURL` 剥掉 `/chat/completions` 等后缀。设置里另有「API 地址覆盖 /
+  API Key 覆盖」字段，可临时切换而不动 AI 配置本身。
+- **设置项下拉复用 `presets`** —— `SettingField.optionsSource='presets'` 直接列出命名 AI 配置实例，
+  首项「（跟随当前激活配置）」为空值；其他插件要「选 AI 配置实例」可复用，无需新增后端接口。
+- **运行期可观测** —— 搜索/抓取输出首行标注实际使用的 API 实例，一眼看出是否走了回退通道。
+
+### 修复
+
+- **API 地址易错写法全链路纠正** —— 保存期归一化（补协议头、去尾斜杠、完整端点收敛为基础地址）
+  并返回 `warnings` 由前端提示（不静默改数据）；请求期纯域名自动补 `/v1`
+  （`https://api.deepseek.com` → `…/v1/chat/completions`，已带路径或完整端点保持原语义）；
+  4xx（404/405/400）报错附「当前请求端点 + 正确写法」，401/403 附「Key 与地址需同一服务商」。
+- **旧字段兼容** —— `deepseekApiKey` / `deepseekBaseURL` / `deepseekSearch` 仍被识别，
+  老用户升级不会被静默关闭搜索。
+- **`TestToolLandingMatrix` 恢复全绿** —— 补 `tool-flow: native` 模式登记。
+
+### 变更
+
+- **工程流程收窄为仅任务看板可用**（`tool-flow`，`CONVERSATION_FACING=false`）—— 会话侧不再注册
+  19 个 `flow_*` 工具、不再提供 `/flow` `/flow-board` `/flow-import` 命令、不再注入流程状态提示、
+  不再挂 PreToolUse/Stop 门禁钩子；任务看板侧（`taskboard_*` 10 个工具、`flow-board` 视图、
+  `flow_action` / `taskboard_action` RPC、流程库快照）完全保留。代码保留开关，改回 `true`
+  重启实例即可恢复会话侧能力。
+
+### 工程
+
+- **验证脚本** —— `scripts/cdp-verify-toolweb-settings.js`（设置页「网络工具」下拉 CDP 验证）。
+- **测试** —— `internal/agent`（`TestResolveEndpointURL`）、`internal/core`
+  （`TestNormalizeProviderBaseURL`）、`internal/server/handler` 全绿。
+
+---
+
 ## 1.6.19 — 2026-10-17
 
 > 本版为**发布工程修复**：v1.6.18 的三平台 zip 混入了插件测试夹具
