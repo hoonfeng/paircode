@@ -1320,3 +1320,81 @@ nb.appendChild(nh)     // ✓ 修复：head 归入 node-body
    smoke-test ⑧c 段 13 条断言覆盖「建卡绑流程 → 启动 → 工具推进 → DoD ✓ 标 flow → 待验收」全链路。
 3. **agent 侧建卡质量待观察**：`flow_task` 工具注册与 RPC 链路已验证，agent 在真实任务中拆卡的质量属模型行为。
 4. **浏览器缓存**：`client.js` 由宿主启动时读入并前端加载，改版后需**硬刷新（Ctrl+Shift+R）**才能看到新看板。
+
+## 14.24 看板驱动 agent：UI 现代化 + 执行 / 认领 / 定时（2026-10-17）
+
+### 14.24.1 用户诉求
+1. 看板 UI 不够现代化；
+2. 卡上缺「执行 / 认领 / 定时」能力；
+3. 描述与「执行提示词」没有对应关系，且是单行输入框（占满宽度）；
+4. 子项/任务都靠手动管理，与「用任务看板驱动 agent 工作」的设计不符；
+5. 任务提出后应能结合监督者（autopilot）多会话自动驱动完整任务，并在看板看到拆解与报告。
+
+### 14.24.2 数据模型扩展（`.pair/taskboard/tasks.json`，向后兼容）
+| 字段 | 语义 |
+|---|---|
+| `prompt` | 执行提示词（与 `description` 一一对应；两者都进入执行任务书） |
+| `schedule` | `{enabled, mode:'interval'|'daily'|'at', everyMinutes, atTime, atISO, nextAt, lastAt, lastError}` |
+| `runState` | `{running, startedAt, startedBy, lastEndAt, lastError, sessionId, runCount}` |
+| `subtasks` | agent 开工时 `taskboard_plan` 写入的执行拆解 `[{id,text,status,by,at}]` |
+| `claimedByKind` | `user` / `agent`（认领者类型，配合 `claimedBy`） |
+| `execConvId` | 最近一次执行的工作会话（定时执行复用） |
+
+旧卡读取时这些字段缺省为 `null/0`，`tbNormSchedule` / `tbExecState` 在首次写入时补齐——**不迁移、不破坏旧数据**。
+
+### 14.24.3 执行链路（卡片驱动 agent 的唯一入口）
+`tbExecute(id, {convId})`：
+1. 校验状态（done/archived/canceled 不可执行；`runState.running` 防重入）；
+2. 待办/待规划 → `tbClaim` 认领为「进行中」，记录 `claimedBy/claimedByKind`；
+3. 组装任务书 `tbExecTaskText`：标题 + 描述 + 执行提示词 + DoD 清单 + 流程骨架 + **看板协议**
+   （开工先 `taskboard_plan`、过程 `taskboard_comment`、收尾 `taskboard_report`、不得自行移到 done）；
+4. **投递通道优先级**：
+   - `ctx.agents.followup(convId, 任务书)` —— 向已存在会话投递输入（空闲即起一轮，忙则排队），
+     与用户手动发消息同一条链路；工作 agent 每轮自然结束时 **autopilot 监督者**接管裁决，
+     形成「一张卡 = 一个被监督的多轮任务」；
+   - 兜底 `ctx.subagent.run(spec)`（独立回合，同步；放 `ctx.timer.timeout` 回调避免阻塞 RPC）；
+   - 都不可用时返回**明确错误**（如「没有可用的执行会话」），不静默成功；
+5. 落盘 `runState`（running / sessionId / runCount），工作 agent 的 `taskboard_report` 收尾
+   （running=false + 转「待验收」），30 分钟未回填由定时扫描标记超时恢复。
+
+★ **接线坑（本轮实测）**：`ctx.agents` / `ctx.timer` 是**按 `inject` 声明挂载**的静态服务，
+未声明时 `ctx.agents` 为 `undefined` → 执行永远走兜底并报「没有可用的会话运行环境」。
+修复：`inject` 补 `agents` / `timer`（见 index.js 头部）。
+
+### 14.24.4 定时执行
+- `tbScheduleScan` 由 `ctx.timer.interval(…, 60000)` 驱动（插件卸载自动清理）：
+  `schedule.enabled && nextAt <= now && !runState.running` → `tbExecute`；
+- `nextAt` 计算：`interval`=now+N 分钟；`daily`=下一个 HH:MM；`at`=一次性时间点（触发后自动关闭）；
+- 每次设置 schedule 都从「现在」重算 `nextAt`（避免沿用过期值）；扫描失败写 `schedule.lastError`，
+  一次性任务失败也不反复重试（防止 60s 打爆）。
+
+### 14.24.5 UI 重做（`client.js`）
+- **现代化视觉**：列容器圆角/状态点/计数胶囊；卡片圆角 + hover 抬升 + 紧急度左色条 + 描述两行摘要 +
+  拆解/DoD 进度条；沿用壳的设计 token（`--bg-*`/`--text-*`/`--border-*`）与既有语义色，不引入新配色；
+- **建卡表单**：标题 + **描述（textarea 多行）** + **执行提示词（textarea 多行）** 一一对应，
+  提供「用描述生成」（`tbPromptFromDesc`）；紧急度 / 流程 / 定时；
+- **详情面板**：执行条（认领 / 释放认领 / 执行 / 执行状态 / 监督回合）、定时条（开关 + 模式 + 间隔/时间 +
+  下次时间）、任务内容双栏多行（失焦自动保存）、执行拆解（点击推进状态）、DoD、状态机、评论、
+  执行记录（报告摘要）+ 监督回合摘要（`/api/autopilot/rounds?convId=`）；
+- **卡片徽标**：认领人 / 执行中 / 定时下次时间 / 拆解 x/y / DoD x/y / 已执行时间；
+- 搜索框覆盖标题 + 描述 + 执行提示词。
+
+### 14.24.6 agent 工具面（19 flow_* + 10 taskboard_* = 29）
+新增：`taskboard_plan`（写执行拆解）、`taskboard_execute`（派发执行）、`taskboard_schedule`（设/取消定时）；
+`taskboard_claim` / `taskboard_report` / `taskboard_check` 保持不变。
+
+### 14.24.7 验证证据（隔离实例 9096，不碰 9090）
+| 层 | 手段 | 结果 |
+|---|---|---|
+| 单元/集成 | `node smoke-test.js`（含 ui-form-test） | **228 通过 / 0 失败**（新增 ⑧d 段：建卡双字段、认领/释放、拆解、执行派发 followup、报告收尾、定时 nextAt） |
+| 真实 UI | CDP 9224 → 9096 | 五列 + 4 卡；详情 2 个多行 textarea（描述 rows=4 / 提示词 rows=5）+ 认领/执行/定时 + 拆解 |
+| 交互 | CDP 点击 | 认领 → `in_progress` + `claimedByKind=user`；定时保存 → `nextAt` 更新 |
+| **闭环** | 点「执行」 | `runState.running=true`、`sessionId` 记录 → agent 自动 `taskboard_plan` 写 5 条拆解并逐条完成 → `taskboard_report` 交报告 → 卡转 `in_review`、`running=false`、`executions=1` |
+| 截图 | `screenshots/board-9096-03-detail-drive.png`、`board-9096-04-board-modern.png`、`board-9096-05-agent-closed-loop.png` | 详情/看板/闭环 |
+
+### 14.24.8 诚实边界
+1. 「多轮监督」依赖 **autopilot 自主模式开启**（插件装载即注册决策器；未开启时执行仍为单轮任务）；
+2. 执行需要可用的工作会话（`convId`）；无会话时明确报错并在 `runState.lastError` 留痕，不静默成功；
+3. 定时执行复用卡上 `execConvId`；从未执行过的卡会记 `schedule.lastError` 提示先手动执行一次；
+4. 演示数据（演示卡 A–D）位于工作区 `.pair/taskboard/tasks.json`，9090/9096 共用同一数据根；
+   清理方式：卡片详情「删除」→ 回收站。

@@ -90,6 +90,13 @@ const settingsRegistry = { }
 const rpcs = {}
 const logs = []
 let settingsStore = { gateStrength: 'enforce', autoRecommend: true, trackModifiedFiles: true }
+// 执行能力桩（看板驱动 agent：followup 投递 / subagent 兜底 / 定时器）
+const followups = []
+const timers = { timeouts: [], intervals: [] }
+const timerSvc = {
+  timeout: (fn) => { timers.timeouts.push(fn); fn(); return () => { } },
+  interval: (fn) => { timers.intervals.push(fn); return () => { } },
+}
 
 const ctx = {
   logger: () => ({ log: () => { }, info: (m) => logs.push(m), warn: (m) => logs.push('WARN ' + m), debug: () => { }, error: (m) => logs.push('ERR ' + m) }),
@@ -106,6 +113,15 @@ const ctx = {
   setSettings: (k, o) => { settingsStore = o || {} },
   registerClientMethod: (m, fn) => { rpcs[m] = fn },
   emit: () => { },
+  get: (name) => (name === 'timer' ? timerSvc : undefined),
+  agents: {
+    ready: () => true,
+    followup: (convId, text) => { followups.push({ convId: convId, text: text }); return { ok: true, queued: false, convId: convId } },
+  },
+  subagent: {
+    available: () => true,
+    run: () => ({ content: 'stub 执行完成', ended: 'completed', steps: 1, toolCalls: 0 }),
+  },
   bash: {
     exec: (cmd, cwd, timeout) => {
       try {
@@ -125,7 +141,7 @@ console.log('=== 装载 tool-flow ===')
 console.log('  name=' + def.name + ' inject=[' + def.inject.join(',') + ']')
 check('插件对象形态正确', def && def.name === 'tool-flow' && typeof def.apply === 'function')
 def.apply(ctx, {})
-check('工具注册数量 = 26（19 个 flow_* + 7 个 taskboard_*）', Object.keys(registered).length === 26, Object.keys(registered).join(','))
+check('工具注册数量 = 29（19 个 flow_* + 10 个 taskboard_*）', Object.keys(registered).length === 29, Object.keys(registered).join(','))
 check('只读接口已注册', !!httpRoutes['GET /api/flow/state'], Object.keys(httpRoutes).join(','))
 check('RPC flow_action 已注册', typeof rpcs['flow_action'] === 'function')
 check('命令面已注册（flow/flow-board/flow-import）', !!commands.flow && !!commands['flow-board'] && !!commands['flow-import'])
@@ -540,6 +556,72 @@ r = T('taskboard_create').execute({ title: '未绑流程的卡' })
 const plainCardId = (r.task && r.task.id) || ''
 const srPlain = rpcs['taskboard_action']({ op: 'startFlow', id: plainCardId })
 check('[绑定] 未绑流程的卡 startFlow → 可读错误', srPlain.ok === false && /未绑定流程/.test(srPlain.error), JSON.stringify(srPlain))
+
+console.log('\n=== ⑧d 看板驱动 agent（认领 / 执行 / 定时 / 拆解）===')
+// 建卡：描述与执行提示词一一对应（都进入执行任务书）
+r = T('taskboard_create').execute({ title: '驱动链路卡', description: '描述 A：要做什么', prompt: '提示词 B：怎么干' })
+const drvId = (r.task && r.task.id) || ''
+check('[驱动] 建卡保存描述与执行提示词（一一对应字段）',
+  !!r.task && r.task.description === '描述 A：要做什么' && r.task.prompt === '提示词 B：怎么干',
+  JSON.stringify({ d: r.task && r.task.description, p: r.task && r.task.prompt }))
+check('[驱动] 新卡默认：schedule 关闭 / runState 未运行 / subtasks 空',
+  !!r.task && r.task.schedule && r.task.schedule.enabled === false &&
+  r.task.runState && r.task.runState.running === false &&
+  Array.isArray(r.task.subtasks) && r.task.subtasks.length === 0,
+  JSON.stringify({ s: r.task && r.task.schedule, rs: r.task && r.task.runState }))
+
+// 认领（人）→ 进行中且记录认领者；释放 → 回待办
+let rc = rpcs['taskboard_action']({ op: 'claim', id: drvId, convId: 'conv_drv' })
+check('[驱动] 人认领 → 进行中且记录认领者',
+  rc.ok === true && rc.task.status === 'in_progress' && rc.task.claimedByKind === 'user',
+  JSON.stringify(rc.task && { st: rc.task.status, by: rc.task.claimedBy, kind: rc.task.claimedByKind }))
+rc = rpcs['taskboard_action']({ op: 'release', id: drvId })
+check('[驱动] 释放认领 → 回待办且清空认领者',
+  rc.ok === true && rc.task.status === 'todo' && !rc.task.claimedBy,
+  JSON.stringify(rc.task && { st: rc.task.status, by: rc.task.claimedBy }))
+
+// 拆解（agent 开工时写）
+r = T('taskboard_plan').execute({ id: drvId, subtasks: ['第一步：取证', '第二步：实现'] })
+check('[驱动] taskboard_plan 写入执行拆解（2 条）',
+  /2 条/.test(txt(r)) && (r.task.subtasks || []).length === 2, txt(r).slice(0, 120))
+
+// 执行 → 向工作会话投递任务书（followup），runState.running
+const beforeFollow = followups.length
+r = T('taskboard_execute').execute({ id: drvId, convId: 'conv_drv' })
+const lastFollow = followups[followups.length - 1] || {}
+check('[驱动] 执行 → 向工作会话投递任务书（ctx.agents.followup）',
+  followups.length === beforeFollow + 1 && lastFollow.convId === 'conv_drv' && /任务看板/.test(String(lastFollow.text || '')),
+  JSON.stringify(lastFollow).slice(0, 200))
+check('[驱动] 任务书逐字包含描述与执行提示词（一一对应进入执行）',
+  /描述 A：要做什么/.test(String(lastFollow.text || '')) && /提示词 B：怎么干/.test(String(lastFollow.text || '')) &&
+  /taskboard_plan/.test(String(lastFollow.text || '')),
+  String(lastFollow.text || '').slice(0, 260))
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowD = (snapB.tasks || []).filter((t) => t.id === drvId)[0]
+check('[驱动] 执行后卡为进行中 + runState.running=true + 记住执行会话',
+  !!rowD && rowD.status === 'in_progress' && rowD.runState.running === true && rowD.execConvId === 'conv_drv',
+  JSON.stringify(rowD && { st: rowD.status, rs: rowD.runState, conv: rowD.execConvId }))
+
+// 交报告 → 待验收 + 执行态收尾
+r = T('taskboard_report').execute({ id: drvId, summary: '做完了', outcome: 'succeeded' })
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowD = (snapB.tasks || []).filter((t) => t.id === drvId)[0]
+check('[驱动] 交报告 → 待验收且执行态收尾（running=false）',
+  !!rowD && rowD.status === 'in_review' && rowD.runState.running === false && !!rowD.runState.lastEndAt,
+  JSON.stringify(rowD && { st: rowD.status, rs: rowD.runState }))
+
+// 定时：设置 → nextAt 计算；关闭 → 清空
+rc = rpcs['taskboard_action']({ op: 'schedule', id: drvId, schedule: { enabled: true, mode: 'interval', everyMinutes: 30 } })
+check('[驱动] 设置定时 → enabled 且 nextAt 已计算',
+  rc.ok === true && rc.task.schedule.enabled === true && !!rc.task.schedule.nextAt,
+  JSON.stringify(rc.task && rc.task.schedule))
+rc = rpcs['taskboard_action']({ op: 'schedule', id: drvId, schedule: { enabled: false, mode: 'interval', everyMinutes: 30 } })
+check('[驱动] 关闭定时 → nextAt 清空',
+  rc.ok === true && rc.task.schedule.enabled === false && !rc.task.schedule.nextAt,
+  JSON.stringify(rc.task && rc.task.schedule))
+
+// 清理
+rpcs['taskboard_action']({ op: 'trash', id: drvId })
 
 console.log('\n=== ⑨ 安全边界（mock 与真实同语义）===')
 let boundaryOK = false

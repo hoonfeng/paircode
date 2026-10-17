@@ -31,7 +31,7 @@
 return {
   name: 'tool-flow',
   purpose: '工程流程与看板：三层流程库（预设/全局/项目）+ 阶段门禁（check/command/artifact/approval）+ 证据留档 + 任务真相复用 + 项目绑定矩阵 + bundle 导出导入',
-  inject: ['fs', 'install', 'logger', 'commands', 'http', 'bash'],
+  inject: ['fs', 'install', 'logger', 'commands', 'http', 'bash', 'agents', 'timer'],
   apply(ctx, config) {
 
     // ── ① 日志与常量 ─────────────────────────────────────────────
@@ -217,6 +217,64 @@ return {
       }
       return out
     }
+    // ── ②c 卡片驱动执行：定时（schedule）/ 子项（subtasks）/ 执行态（runState）──
+    // schedule 语义：interval=每 N 分钟；daily=每天 HH:MM；at=一次性时间点。
+    // nextAt 由插件计算（磁盘上是真相），定时器只做「到点就执行」的扫描。
+    function tbNextAt(sch, from) {
+      var base = from ? new Date(from) : new Date()
+      if (!(base instanceof Date) || isNaN(base.getTime())) base = new Date()
+      if (sch.mode === 'interval') {
+        return new Date(base.getTime() + sch.everyMinutes * 60000).toISOString()
+      }
+      if (sch.mode === 'daily') {
+        var m = String(sch.atTime || '09:00').match(/^(\d{1,2}):(\d{2})$/)
+        var h = m ? Math.max(0, Math.min(23, parseInt(m[1], 10))) : 9
+        var mi = m ? Math.max(0, Math.min(59, parseInt(m[2], 10))) : 0
+        var d = new Date(base.getTime())
+        d.setHours(h, mi, 0, 0)
+        if (d.getTime() <= base.getTime()) d.setDate(d.getDate() + 1)
+        return d.toISOString()
+      }
+      var at = sch.atISO ? new Date(sch.atISO) : null
+      if (at && !isNaN(at.getTime())) return at.toISOString()
+      return ''
+    }
+    function tbNormSchedule(raw) {
+      var s = (raw && typeof raw === 'object') ? raw : {}
+      var mode = ['interval', 'daily', 'at'].indexOf(String(s.mode || '')) >= 0 ? String(s.mode) : 'interval'
+      var out = {
+        enabled: !!s.enabled,
+        mode: mode,
+        everyMinutes: isNum(s.everyMinutes) ? Math.max(1, Math.min(10080, Math.floor(s.everyMinutes))) : 60,
+        atTime: /^\d{1,2}:\d{2}$/.test(String(s.atTime || '')) ? String(s.atTime) : '09:00',
+        atISO: String(s.atISO || ''),
+        nextAt: String(s.nextAt || ''),
+        lastAt: String(s.lastAt || '')
+      }
+      if (!out.enabled) { out.nextAt = ''; return out }
+      var nx = out.nextAt ? new Date(out.nextAt) : null
+      if (!nx || isNaN(nx.getTime()) || nx.getTime() <= Date.now() - 60000) out.nextAt = tbNextAt(out)
+      return out
+    }
+    /** agent 拆解的子项（由执行回合写入，只做展示与进度；人可在详情里勾选推进）。 */
+    function tbNormSubtasks(raw) {
+      var a = Array.isArray(raw) ? raw : []
+      var out = []
+      for (var i = 0; i < a.length && out.length < 50; i++) {
+        var s = a[i]
+        if (!s) continue
+        var text = String(typeof s === 'string' ? s : (s.text || s.title || '')).trim()
+        if (!text) continue
+        var st = String((s && s.status) || 'pending')
+        if (SUB_STATUS.indexOf(st) < 0) st = 'pending'
+        out.push({
+          id: String((s && s.id) || ('s-' + i + '-' + Math.random().toString(36).slice(2, 5))),
+          text: text, status: st,
+          by: String((s && s.by) || ''), at: String((s && s.at) || '')
+        })
+      }
+      return out
+    }
     function tbCreate(o) {
       var a = (o && typeof o === 'object') ? o : {}
       var title = String(a.title || a.subject || '').trim()
@@ -232,7 +290,11 @@ return {
         blocked: !!a.blocked,
         flowId: String(a.flowId || ''), flowScope: '', flowVersion: 0, runId: '',
         checklist: [], comments: [], executions: [],
-        claimedBy: '', claimedAt: '', version: 1,
+        claimedBy: '', claimedAt: '', claimedByKind: '',
+        schedule: tbNormSchedule(a.schedule),
+        runState: { running: false, startedAt: '', startedBy: '', lastEndAt: '', lastError: '', runCount: 0 },
+        subtasks: tbNormSubtasks(a.subtasks),
+        version: 1,
         createdAt: nowIso(), updatedAt: nowIso(),
         createdBy: tbActor(a.by), updatedBy: tbActor(a.by), trashedAt: ''
       }
@@ -254,6 +316,12 @@ return {
       if (p.title !== undefined && String(p.title).trim()) t.title = String(p.title).trim()
       if (typeof p.description === 'string') t.description = p.description
       if (typeof p.prompt === 'string') t.prompt = p.prompt
+      if (p.schedule !== undefined) {
+        t.schedule = tbNormSchedule(p.schedule)
+        // 每次设置都从「现在」重算下次执行时间（避免沿用过期 nextAt）
+        t.schedule.nextAt = t.schedule.enabled ? tbNextAt(t.schedule) : ''
+      }
+      if (Array.isArray(p.subtasks)) t.subtasks = tbNormSubtasks(p.subtasks)
       if (TB_URGENCY.indexOf(String(p.urgency || '')) >= 0) t.urgency = String(p.urgency)
       if (typeof p.blocked === 'boolean') t.blocked = p.blocked
       if (typeof p.flowId === 'string' && p.flowId !== t.flowId) {
@@ -291,14 +359,49 @@ return {
       }
       var from = t.status
       t.status = s
-      if (s === 'in_progress') { t.claimedBy = String(a.sessionId || by.sessionId || ''); t.claimedAt = nowIso() }
-      if (from === 'in_progress') { t.claimedBy = ''; t.claimedAt = '' }   // 离开进行中即释放认领（照参考）
+      if (s === 'in_progress') {
+        t.claimedBy = String(a.sessionId || by.sessionId || '')
+        t.claimedAt = nowIso()
+        t.claimedByKind = String(a.claimKind || by.kind || '')
+      }
+      if (from === 'in_progress') {
+        t.claimedBy = ''; t.claimedAt = ''; t.claimedByKind = ''            // 离开进行中即释放认领（照参考）
+        if (t.runState && t.runState.running) { t.runState.running = false; t.runState.lastEndAt = nowIso() }
+      }
       t.version = (isNum(t.version) ? t.version : 1) + 1
       t.updatedAt = nowIso()
       t.updatedBy = by
       if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
       tbMirror(t)
       return { ok: true, task: t, from: from, revision: l.revision }
+    }
+    /**
+     * 认领：待办/待规划 → 进行中，并记认领者。
+     * 语义（卡片驱动 agent）：人点「认领」= 自己接手；agent 经 taskboard_claim 认领 = 会话持有。
+     * 被他人持有时不可抢；「进行中」再认领视为幂等成功（同一认领者）。
+     */
+    function tbClaim(id, by, convId) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (t.status === 'in_progress') {
+        if (t.claimedBy && convId && t.claimedBy !== String(convId)) {
+          return { ok: false, error: '任务 ' + t.id + ' 已被 ' + t.claimedBy + ' 认领，不能抢' }
+        }
+        return { ok: true, task: t, unchanged: true, revision: l.revision }
+      }
+      if (t.status !== 'todo' && t.status !== 'backlog') {
+        return { ok: false, error: '只有「待办 / 待规划」的任务可以认领（当前「' + tbLabel(t.status) + '」）' }
+      }
+      return tbMove(id, 'in_progress', { by: by, sessionId: String(convId || ''), claimKind: tbActor(by).kind })
+    }
+    /** 释放认领：进行中 → 待办，并清空认领者（tbMove 已处理）。 */
+    function tbRelease(id, by) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (t.status !== 'in_progress') return { ok: false, error: '任务不在「进行中」，无需释放' }
+      return tbMove(id, 'todo', { by: by })
     }
     function tbComment(id, text, by) {
       var l = tbLoad()
@@ -308,6 +411,24 @@ return {
       if (!s) return { ok: false, error: '评论内容不能为空' }
       if (!Array.isArray(t.comments)) t.comments = []
       t.comments.push({ id: 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), text: s, at: nowIso(), by: tbActor(by) })
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t }
+    }
+    /** 写入执行拆解（agent 开工时 plan 出的子项；看板详情按进度展示）。 */
+    function tbPlan(id, subtasks, by) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var list = tbNormSubtasks(subtasks)
+      if (!list.length) return { ok: false, error: '拆解不能为空：subtasks 需为非空字符串数组' }
+      var who = tbActor(by)
+      for (var i = 0; i < list.length; i++) {
+        list[i].by = who.kind
+        if (!list[i].at) list[i].at = nowIso()
+      }
+      t.subtasks = list
       t.updatedAt = nowIso()
       if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
       tbMirror(t)
@@ -344,6 +465,10 @@ return {
         summary: String(a.summary || ''), files: Array.isArray(a.files) ? a.files : [], risks: String(a.risks || '')
       })
       if (t.executions.length > 20) t.executions = t.executions.slice(-20)
+      var rs = tbExecState(t)
+      rs.running = false
+      rs.lastEndAt = nowIso()
+      rs.lastError = String(a.outcome || 'succeeded') === 'failed' ? String(a.risks || '执行失败') : ''
       var moved = false
       if (t.status === 'in_progress') { t.status = 'in_review'; moved = true }
       t.updatedAt = nowIso()
@@ -406,6 +531,192 @@ return {
         if (tbSave(l)) tbMirror(t)
       }
       return { ok: true, task: t, changed: changed }
+    }
+    // ── ②d 卡片驱动 agent：执行 / 定时 / 拆解（2026-10-17 用户诉求）──
+    // 通道：ctx.agents.followup(convId, 任务书) → 工作会话起一轮 →
+    //   工作 agent 自然结束时 autopilot 监督者接管裁决（continue 继续 / done 收尾），
+    //   形成「一张卡 = 一个被监督的任务」的多轮闭环；
+    //   工作 agent 通过 taskboard_plan / taskboard_check / taskboard_report 把拆解、进度、报告回填看板。
+    // 兜底：ctx.subagent.run（独立回合，同步；放 timer 回调避免阻塞 RPC）。
+    function tbExecState(t) {
+      if (!t.runState || typeof t.runState !== 'object') {
+        t.runState = { running: false, startedAt: '', startedBy: '', lastEndAt: '', lastError: '', sessionId: '', runCount: 0 }
+      }
+      if (!isNum(t.runState.runCount)) t.runState.runCount = 0
+      return t.runState
+    }
+    /** 任务书：描述 + 执行提示词 + DoD + 看板协议（执行 agent 按此干活并回填）。 */
+    function tbExecTaskText(t) {
+      var lines = []
+      lines.push('你现在在执行「任务看板」上的一张任务卡：' + t.id + ' 「' + String(t.title || '') + '」。')
+      lines.push('请直接动手完成，不要只给建议。')
+      lines.push('')
+      if (String(t.description || '').trim()) {
+        lines.push('## 任务描述')
+        lines.push(String(t.description))
+        lines.push('')
+      }
+      if (String(t.prompt || '').trim()) {
+        lines.push('## 执行提示词（必须遵守）')
+        lines.push(String(t.prompt))
+        lines.push('')
+      }
+      var cl = Array.isArray(t.checklist) ? t.checklist : []
+      if (cl.length) {
+        lines.push('## 验收清单（DoD）')
+        for (var i = 0; i < cl.length; i++) {
+          lines.push('- [' + (cl[i].checked ? 'x' : ' ') + '] ' + cl[i].id + ' · ' + String(cl[i].text || ''))
+        }
+        lines.push('')
+        lines.push('每完成一项，调用 taskboard_check 勾选并附证据（note）；不要一次性全勾。')
+        lines.push('')
+      }
+      lines.push('## 看板协议（必须遵守）')
+      lines.push('1. 开工前调用 taskboard_plan(id="' + t.id + '", subtasks=["...","..."]) 写下执行拆解（3-8 条）。')
+      lines.push('2. 过程中用 taskboard_comment 记录关键进展或卡点；子项状态随进展更新。')
+      lines.push('3. 结束时调用 taskboard_report(id="' + t.id + '", summary="...", files=[...], risks="...") 交报告，任务会自动转「待验收」。')
+      lines.push('4. 不要用 taskboard_move 把任务移到 done —— 验收只能由人做。')
+      if (t.flowId) {
+        var fp = t.flowProgress || null
+        lines.push('')
+        lines.push('## 流程骨架')
+        lines.push('流程 ' + t.flowId + (fp && fp.label ? '（当前阶段：' + fp.label + '）' : '') + '；门禁即上面的 DoD，按顺序推进。')
+      }
+      return lines.join('\n')
+    }
+    /**
+     * 执行一张卡：认领 → 投递任务书到工作会话 → 记 runState（running）。
+     * 多会话：convId 指定目标；未指定时用卡上 execConvId（上次执行会话）；仍无 → 明确报错。
+     * 完成由工作 agent 的 taskboard_report 回填（running=false + 转待验收）。
+     */
+    function tbExecute(id, opts) {
+      var a = (opts && typeof opts === 'object') ? opts : {}
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (t.status === 'done' || t.status === 'archived' || t.status === 'canceled') {
+        return { ok: false, error: '任务已结束（' + tbLabel(t.status) + '），不能执行' }
+      }
+      var rs = tbExecState(t)
+      if (rs.running) return { ok: false, error: '任务正在执行中（开始于 ' + rs.startedAt + '）' }
+      var convId = String(a.convId || t.execConvId || rs.sessionId || '')
+      if (!convId) {
+        return { ok: false, error: '没有可用的执行会话：请先在对话中打开一个会话，或在卡片执行条里指定会话' }
+      }
+      if (t.status === 'todo' || t.status === 'backlog') {
+        var cr = tbClaim(id, tbActor(a.by || 'user'), convId)
+        if (!cr.ok) return cr
+      }
+      var text = tbExecTaskText(t)
+      var via = 'followup'
+      var queued = false
+      var err = ''
+      try {
+        var ag = ctx.agents
+        var okAg = !!(ag && typeof ag.followup === 'function')
+        if (okAg && typeof ag.ready === 'function') { try { okAg = !!ag.ready() } catch (e) { okAg = false } }
+        if (okAg) {
+          var rr = ag.followup(convId, text)
+          queued = !!(rr && rr.queued)
+        } else {
+          via = 'subagent'
+          var sub = ctx.subagent
+          if (!sub || typeof sub.run !== 'function') throw new Error('执行能力不可用：ctx.agents / ctx.subagent 均未提供')
+          if (typeof sub.available === 'function' && !sub.available()) throw new Error('没有可用的会话运行环境（请先打开对话）')
+          var tm = ctx.timer || (typeof ctx.get === 'function' ? ctx.get('timer') : null)
+          if (!tm || typeof tm.timeout !== 'function') throw new Error('定时器不可用，无法后台执行')
+          tm.timeout(function () {
+            var res = null
+            try {
+              res = sub.run({
+                name: 'taskboard-exec',
+                system: '你是「任务看板」上的执行 agent：按卡片完成任务，先 plan 再执行，过程中用看板工具回填进度与证据。中文思考、中文回复。',
+                task: text, tools: null, stepBudget: 60, toolCallBudget: 80, timeoutMs: 900000, convId: convId
+              })
+            } catch (e) { res = { error: String((e && e.message) || e), ended: 'error' } }
+            var execOk = !!(res && !res.error && res.ended !== 'error')
+            tbReport(id, {
+              summary: String((res && res.content) || '(无输出)').slice(0, 2000),
+              outcome: execOk ? 'succeeded' : 'failed',
+              risks: execOk ? '' : String((res && res.error) || '执行失败'),
+              by: { kind: 'agent', sessionId: convId, name: 'taskboard-exec' }
+            })
+            var l2 = tbLoad(); var t2 = tbFind(l2, id)
+            if (t2) {
+              var rs2 = tbExecState(t2)
+              rs2.running = false; rs2.lastEndAt = nowIso(); rs2.lastError = execOk ? '' : String((res && res.error) || '')
+              t2.updatedAt = nowIso()
+              if (tbSave(l2)) tbMirror(t2)
+            }
+          }, 10)
+        }
+      } catch (e) {
+        err = String((e && e.message) || e)
+      }
+      var l3 = tbLoad()
+      var t3 = tbFind(l3, id)
+      if (!t3) return { ok: false, error: '任务库读取失败' }
+      var rs3 = tbExecState(t3)
+      rs3.running = !err
+      rs3.startedAt = nowIso()
+      rs3.startedBy = String(a.by || 'user')
+      rs3.sessionId = convId
+      rs3.lastError = err
+      if (!err) rs3.runCount = (isNum(rs3.runCount) ? rs3.runCount : 0) + 1
+      t3.execConvId = convId
+      t3.updatedAt = nowIso()
+      if (tbSave(l3)) tbMirror(t3)
+      if (err) return { ok: false, error: err, task: t3 }
+      return { ok: true, dispatched: true, via: via, queued: queued, convId: convId, task: t3 }
+    }
+    /**
+     * 定时调度扫描（插件内 60s 一次）：
+     *   · schedule 到点 → tbExecute（用卡上 execConvId；没有则记 lastError，不反复重试打爆）
+     *   · running 超 30 分钟无 report → 标记超时恢复，避免永久卡在「执行中」
+     */
+    function tbScheduleScan() {
+      var l = tbLoad()
+      var now = Date.now()
+      var due = []
+      for (var i = 0; i < l.tasks.length; i++) {
+        var t = l.tasks[i]
+        if (t.trashedAt) continue
+        var mt = t.runState
+        if (mt && mt.running) {
+          var st = new Date(String(mt.startedAt || '')).getTime()
+          if (isFinite(st) && now - st > 30 * 60000) {
+            mt.running = false
+            mt.lastEndAt = nowIso()
+            mt.lastError = '执行超时（30 分钟未收到 taskboard_report）'
+            t.updatedAt = nowIso()
+            tbMirror(t)
+          }
+        }
+        var sch = t.schedule
+        if (!sch || !sch.enabled || !sch.nextAt) continue
+        if (t.runState && t.runState.running) continue
+        var nx = new Date(String(sch.nextAt)).getTime()
+        if (!isFinite(nx) || nx > now) continue
+        due.push(t.id)
+      }
+      if (due.length) tbSave(l)
+      for (var d = 0; d < due.length; d++) {
+        var r = tbExecute(due[d], { by: 'agent' })
+        var l2 = tbLoad()
+        var t2 = tbFind(l2, due[d])
+        if (!t2 || !t2.schedule) continue
+        t2.schedule.lastAt = nowIso()
+        t2.schedule.lastError = r.ok ? '' : String(r.error || '')
+        if (t2.schedule.mode === 'at') {
+          t2.schedule.enabled = false
+          t2.schedule.nextAt = ''
+        } else {
+          t2.schedule.nextAt = tbNextAt(t2.schedule)
+        }
+        t2.updatedAt = nowIso()
+        if (tbSave(l2)) tbMirror(t2)
+      }
+      return { ok: true, due: due.length }
     }
     /** 任务看板状态快照（client 半渲染用；带流程阶段进度）。 */
     function tbSnapshot(q) {
@@ -2290,6 +2601,77 @@ return {
           if (!r.ok) return { text: r.error, error: r.error }
           return { text: '已评论任务 ' + r.task.id, task: r.task }
         }
+      },
+      {
+        name: 'taskboard_plan',
+        description: '把任务拆解成执行子项（开工时写，执行中可更新状态）。看板详情会按子项进度展示。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            subtasks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  text: { type: 'string', description: '子项内容' },
+                  status: { type: 'string', description: 'pending/in_progress/completed/blocked/cancelled' }
+                }
+              },
+              description: '子项列表（3-8 条，字符串或 {text,status}）'
+            }
+          },
+          required: ['id', 'subtasks']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbPlan(String(a.id || ''), a.subtasks, { kind: 'agent' })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已写入执行拆解：' + (r.task.subtasks || []).length + ' 条', task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_execute',
+        description: '执行一张任务卡：把任务书投递到工作会话，由 agent 按卡片描述/执行提示词/DoD 执行（有监督者时自动多轮驱动）。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            convId: { type: 'string', description: '可选：执行会话 id（缺省用卡上记录的会话）' }
+          },
+          required: ['id']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbExecute(String(a.id || ''), { by: 'agent', convId: String(a.convId || '') })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已派发执行：' + r.task.id + ' → 会话 ' + r.convId + (r.queued ? '（排队）' : ''), task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_schedule',
+        description: '给任务设/取消定时执行：interval=每 N 分钟；daily=每天 HH:MM；at=一次性时间点。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            enabled: { type: 'boolean', description: 'true 启用 / false 取消' },
+            mode: { type: 'string', description: 'interval / daily / at' },
+            everyMinutes: { type: 'number', description: 'interval 模式的间隔分钟数' },
+            atTime: { type: 'string', description: 'daily 模式的时间 HH:MM' },
+            atISO: { type: 'string', description: 'at 模式的一次性 ISO 时间' }
+          },
+          required: ['id', 'enabled']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbUpdate(String(a.id || ''), {
+            schedule: { enabled: a.enabled !== false, mode: a.mode, everyMinutes: a.everyMinutes, atTime: a.atTime, atISO: a.atISO }
+          }, { kind: 'agent' })
+          if (!r.ok) return { text: r.error, error: r.error }
+          var s = r.task.schedule || {}
+          return { text: '定时已更新：' + (s.enabled ? ('下次 ' + s.nextAt) : '已关闭'), task: r.task }
+        }
       }
     ]
     for (var tbI = 0; tbI < TB_TOOLS.length; tbI++) {
@@ -2317,6 +2699,20 @@ return {
       })
     } catch (e) { logWarn('接口注册失败 /api/taskboard/state: ' + e) }
 
+    // 定时调度器：每 60s 扫描 schedule 到期任务（插件卸载时宿主自动清理）
+    try {
+      var tbTimer = null
+      try { tbTimer = ctx.timer || (typeof ctx.get === 'function' ? ctx.get('timer') : null) } catch (e) { tbTimer = null }
+      if (tbTimer && typeof tbTimer.interval === 'function') {
+        tbTimer.interval(function () {
+          try { tbScheduleScan() } catch (e) { logWarn('定时扫描失败: ' + e) }
+        }, 60000)
+        logInfo('任务看板定时调度器已启动（60s 扫描 schedule）')
+      } else {
+        logWarn('任务看板定时调度器未启动：ctx.get("timer") 不可用')
+      }
+    } catch (e) { logWarn('定时调度器启动失败: ' + e) }
+
     try {
       ctx.registerClientMethod('taskboard_action', function (args) {
         var a = (args && typeof args === 'object') ? args : {}
@@ -2331,6 +2727,11 @@ return {
         }
         if (op === 'update') return tbUpdate(String(a.id || ''), a.patch || a, { by: byUser })
         if (op === 'move') return tbMove(String(a.id || ''), String(a.to || ''), { by: byUser, sessionId: a.convId })
+        if (op === 'claim') return tbClaim(String(a.id || ''), byUser, String(a.convId || ''))
+        if (op === 'release') return tbRelease(String(a.id || ''), byUser)
+        if (op === 'execute') return tbExecute(String(a.id || ''), { by: 'user', convId: String(a.convId || '') })
+        if (op === 'schedule') return tbUpdate(String(a.id || ''), { schedule: a.schedule || a.patch || a }, { by: byUser })
+        if (op === 'plan') return tbPlan(String(a.id || ''), a.subtasks, byUser)
         if (op === 'comment') return tbComment(String(a.id || ''), a.text, byUser)
         if (op === 'check') return tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, byUser)
         if (op === 'trash') return tbTrash(String(a.id || ''), byUser)

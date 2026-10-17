@@ -280,9 +280,14 @@ module.exports = async function runUiFormTest(check, env) {
   check('[UI-看板] 有「＋ 新建任务」入口（人建卡）', !!tbNewBtn)
   if (tbNewBtn) tbNewBtn.dispatch('click')
   await flush(8)
-  const titleIn = fieldInput(host, '标题')
+  // 新版建卡表单：标题是裸 input（placeholder 标明语义），描述/执行提示词是 textarea
+  const titleIn = nodes(host, (n) => n.tagName === 'INPUT' && /一句话任务名/.test(String(n.placeholder || '')))[0] || null
   check('[UI-看板] 建卡表单有「标题」输入框', !!titleIn)
   if (titleIn) setVal(titleIn, '看板断言：写一个测试任务')
+  const draftTas = nodes(host, (n) => n.tagName === 'TEXTAREA')
+  check('[UI-看板] 建卡表单：描述与执行提示词是多行编辑框（textarea, rows>=3）',
+    draftTas.length >= 2 && draftTas.every((t) => Number(t.rows || 0) >= 3),
+    'textareas=' + draftTas.length + ' rows=' + draftTas.map((t) => String(t.rows)).join(','))
   const createBtn = btnOf(host, '创建任务')
   if (createBtn) createBtn.dispatch('click')
   await flush(16)
@@ -344,6 +349,12 @@ module.exports = async function runUiFormTest(check, env) {
   check('[UI-看板] 点卡片 → 展开详情（状态机迁移按钮 + 评论入口）',
     !!byClass(host, 'ftb-detail')[0] && !!btnOf(host, '移到「待验收」') && !!btnOf(host, '评论'),
     'detail=' + byClass(host, 'ftb-detail').length)
+  const detailTas = nodes(host, (n) => n.tagName === 'TEXTAREA')
+  check('[UI-看板] 详情含执行/认领/定时入口 + 描述与执行提示词多行编辑',
+    !!btnOf(host, '执行') && (!!btnOf(host, '释放认领') || !!btnOf(host, '认领')) &&
+    detailTas.length >= 2 && nodes(host, (n) => n.tagName === 'SELECT').length >= 1,
+    'exec=' + !!btnOf(host, '执行') + ' claim=' + (!!btnOf(host, '释放认领') || !!btnOf(host, '认领')) +
+    ' textareas=' + detailTas.length + ' selects=' + nodes(host, (n) => n.tagName === 'SELECT').length)
 
   // 协议闸：agent 不能移到 done（host 工具层强制）；人能移到待验收
   const agentTry = env.tool ? await env.tool('taskboard_move', { id: made && made.id, to: 'done' }) : null
