@@ -4,6 +4,33 @@
 
 ---
 
+## 1.6.19 — 2026-10-17
+
+> 本版为**发布工程修复**：v1.6.18 的三平台 zip 混入了插件测试夹具
+> （每包 98 个 `.pair/plugins/tool-flow/.smoke/**`，含 26 个嵌套 `.git` 与 23 个任务快照），
+> 本版从打包器与两道守门彻底修复，并重出三平台发布包。
+
+### 修复
+
+- **发布包不再混入插件测试夹具（`.smoke` 及嵌套 `.git`）** —— `scripts/packager/main.go`
+  的递归拷贝新增硬编码忽略集（`distIgnoredNames`），**任意层级**跳过 `.smoke` / `.git` /
+  `node_modules`，不再依赖 `packager.json` 的 `exclude`（后者只做相对 `src` 的前缀匹配，
+  过滤不到 `tool-flow/.smoke` 这类嵌套路径）。修复前 v1.6.18 三平台包各含 98 个
+  `.smoke` 条目（26 个嵌套 `.git`、23 个任务快照）；修复后三包相关计数均为 0。
+- **更正 1.6.18 的表述** —— 1.6.18 实际只让 `.smoke` 不进 `bin/.pair/plugins` 安装镜像
+  （`scripts/sync-plugins-to-bin.mjs`），而发布包的打包源是 `.pair/plugins`，因此三平台
+  发布包仍混入了夹具；上一版 changelog 的表述不准确，特此更正。
+
+### 工程
+
+- **输入侧守门** —— `scripts/verify-release.mjs` 新增插件源禁入校验：`.pair/plugins`
+  任意层级出现 `.smoke` / `.git` / `node_modules` 即 fail（不再只校验文件存在性）。
+- **产物侧守门** —— 新增 `scripts/verify-package-contents.mjs`（Node 直读 zip 中央目录，
+  跨平台无外部依赖），在 packager pipeline 的 `package` 之后断言三平台 zip 内
+  `.smoke/`、`.git/`、`node_modules/`、`.pair/tasks/` 计数为 0，发现即 fail。
+
+---
+
 ## 1.6.18 — 2026-10-17
 
 > 本版为**工程流程与任务看板**：新增 `tool-flow` 插件（流程库 / 阶段门禁 / DoD / 任务看板），
@@ -36,8 +63,10 @@
 
 ### 工程
 
-- **`.smoke` 测试夹具目录不进安装镜像**（`scripts/sync-plugins-to-bin.mjs`）—— 插件自测夹具
-  （含独立 `.git` / 运行时锁 / 任务快照）不再混入 `bin/.pair/plugins` 安装镜像。
+- **`.smoke` 测试夹具目录不进 `bin/.pair/plugins` 安装镜像**（`scripts/sync-plugins-to-bin.mjs`）——
+  插件自测夹具（含独立 `.git` / 运行时锁 / 任务快照）不再混入 bin 镜像。
+  **更正：本版仅覆盖 bin 镜像；发布包打包源是 `.pair/plugins`，三平台 zip 仍混入了夹具，
+  已由 1.6.19 修复。**
 - **新增验证脚本**：`scripts/e2e-flow-taskboard-9096.js`（流程 × 看板多场景端到端，含清理）、
   `scripts/cdp-verify-flow-canvas.js`（流程库画布全链路）、`scripts/cdp-verify-sidebar-switch.js`、
   `scripts/cdp-shot-taskboard-9096.js`、`scripts/cdp-probe-taskboard-input.js`。

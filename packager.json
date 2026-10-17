@@ -1,5 +1,5 @@
 {
-  "version": "1.6.18",
+  "version": "1.6.19",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -57,6 +57,10 @@
     {
       "name": "package",
       "type": "package"
+    },
+    {
+      "name": "verify-package-contents",
+      "command": "node scripts/verify-package-contents.mjs"
     }
   ],
   "dist": {

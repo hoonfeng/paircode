@@ -400,6 +400,24 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 	return nil
 }
 
+// distIgnoredNames 打包硬编码忽略集——任意层级生效。
+//
+// 为什么不只靠 DistEntry.Exclude：exclude 只做「相对 Src 的前缀匹配」
+// （见下方 copyDistEntry），无法命中 tool-flow/.smoke 这类嵌套路径；
+// packager.json 里给 .pair/plugins 加 exclude 也过滤不到，历史事故：
+// v1.6.18 三平台包各混入 98 个 tool-flow/.smoke/**（含 26 个嵌套 .git
+// 与任务快照）。故在遍历层硬编码，与配置无关、对所有 dist.include 生效。
+//
+//	.smoke       插件测试夹具（smoke-test.js 以 __dirname/.smoke 落地，
+//	             内含嵌套 .git、.pair/tasks 测试快照与运行时锁）
+//	.git         VCS 元数据（插件目录内不应出现）
+//	node_modules 依赖目录/junction
+var distIgnoredNames = map[string]bool{
+	".smoke":       true,
+	".git":         true,
+	"node_modules": true,
+}
+
 // copyDistEntry 按 DistEntry 配置复制单个资源（递归目录 / 单文件）。
 func copyDistEntry(srcPath, dstPath string, entry DistEntry) error {
 	if entry.Recursive {
@@ -410,8 +428,9 @@ func copyDistEntry(srcPath, dstPath string, entry DistEntry) error {
 				}
 				return nil
 			}
-			// ★ 任意层级 node_modules（依赖目录/junction）一律不打包
-			if info.Name() == "node_modules" {
+			// ★ 硬编码忽略集：任意层级跳过 .smoke/.git/node_modules
+			//   （不依赖 packager.json 的 Src 前缀 exclude）
+			if distIgnoredNames[info.Name()] {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}
@@ -440,6 +459,10 @@ func copyDistEntry(srcPath, dstPath string, entry DistEntry) error {
 			}
 			return copyFile(target, path)
 		})
+	}
+	// 单文件入口同样受忽略集约束（防止配置误指向夹具文件）
+	if distIgnoredNames[filepath.Base(srcPath)] {
+		return nil
 	}
 	os.MkdirAll(filepath.Dir(dstPath), 0755)
 	return copyFile(dstPath, srcPath)

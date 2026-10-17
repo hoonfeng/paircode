@@ -155,3 +155,6 @@ _probe_*
 /design-export/
 /design.project.json
 /design.verify.json
+
+# 演示媒体（视频/封面/字幕源）：体积大且非源码，仅作 Release 附件与本地归档，不入库
+video/

@@ -11,6 +11,9 @@
 //      可选项缺失列出提示
 //   2. 插件基座：.pair/plugins 每个插件含 index.js + package.json；
 //      含 dsh.ui.build 的 UI 区域插件产物（outDir/fileName.js）存在
+//   2.5 禁入守卫：.pair/plugins 任意层级不得出现 .smoke/.git/node_modules
+//      （插件测试夹具 smoke-test.js 以 __dirname/.smoke 落地，内含嵌套 .git
+//       与 .pair/tasks 测试快照；v1.6.18 曾因此混入三平台发布包）
 //   3. 前端：.pair/assets/runtime/web/index.html 存在且引用 assets/*.js；
 //      cmd/companion/web-ui/dist（//go:embed 兜底）index.html 存在
 //   4. JS 运行时基座：bridge_node.js / cordis.bundle.js 存在且非空
@@ -81,6 +84,46 @@ if (!fs.existsSync(pluginsDir)) {
     }
   }
   ok(`插件基座检查完成（${pluginCount} 个插件）`)
+}
+
+// ── 2.5) 插件源禁入守卫（.smoke/.git/node_modules）────────────
+// 发布源 .pair/plugins 必须是干净素材：测试夹具、VCS 元数据、依赖目录
+// 任何一层出现都直接 fail。打包器的硬编码忽略集（scripts/packager/main.go
+// distIgnoredNames）是第二道防线，这里守住源头。
+const FORBIDDEN_SEGMENTS = ['.smoke', '.git', 'node_modules']
+const forbiddenHits = []
+const countFilesUnder = (p) => {
+  let n = 0
+  const st = fs.statSync(p)
+  if (!st.isDirectory()) return 1
+  for (const e of fs.readdirSync(p, { withFileTypes: true })) {
+    n += countFilesUnder(path.join(p, e.name))
+  }
+  return n
+}
+const scanForbidden = (dir, rel) => {
+  let ents
+  try { ents = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+  for (const ent of ents) {
+    const r = rel ? `${rel}/${ent.name}` : ent.name
+    if (FORBIDDEN_SEGMENTS.includes(ent.name)) {
+      let files = 0
+      try { files = countFilesUnder(path.join(dir, ent.name)) } catch { /* 忽略统计失败 */ }
+      forbiddenHits.push({ rel: `.pair/plugins/${r}`, files })
+      continue // 命中目录不再深入（避免逐文件刷屏）
+    }
+    if (ent.isDirectory()) scanForbidden(path.join(dir, ent.name), r)
+  }
+}
+if (fs.existsSync(pluginsDir)) {
+  scanForbidden(pluginsDir, '')
+  if (forbiddenHits.length > 0) {
+    for (const h of forbiddenHits) {
+      bad(`插件源含禁入路径: ${h.rel}（${h.files} 个文件）——请清理后再打包`)
+    }
+  } else {
+    ok(`插件源禁入检查通过（无 ${FORBIDDEN_SEGMENTS.join(' / ')}）`)
+  }
 }
 
 // ── 3) 前端壳（外置 + embed 兜底）─────────────────────────────
