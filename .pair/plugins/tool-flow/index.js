@@ -50,6 +50,11 @@ return {
     var I_PRESET = '.pair/plugins/tool-flow/assets/flows'
     var SCHEMA = 1
     var GATE_KINDS = ['check', 'command', 'artifact', 'approval']
+    // ★ 2026-10-17 使用面收窄（用户决策）：流程只在「任务看板」里使用。
+    //   会话侧（agent 工具面 flow_* / 斜杠命令 /flow* / 每轮提示注入 / 门禁钩子）全部关闭；
+    //   看板侧（flow-board 视图 + flow_action / taskboard_action RPC + taskboard_* 工具）保持不变。
+    //   恢复会话侧能力只需把本开关改成 true（代码保留不删，便于回滚与将来按场景开启）。
+    var CONVERSATION_FACING = false
     var BOARD_KINDS = ['kanban', 'checklist', 'timeline', 'swimlane']
     var SCOPES = ['project', 'global', 'preset']                 // 解析优先级
     // 子任务状态（阶段内可细化的最小执行单元；cancelled 不计入进度口径）
@@ -2484,10 +2489,13 @@ return {
         return s
       } catch (e) { return '' }
     }
-    try {
-      ctx.systemPrompt.section({ name: 'flow', order: 95, text: '{{paircode_flow_state}}', alwaysVisible: true })
-      ctx.systemPrompt.variable({ name: 'paircode_flow_state', provider: function () { return flowPromptText() } })
-    } catch (e) { logWarn('systemPrompt 注册失败: ' + e) }
+    // ★ 2026-10-17 使用面收窄：会话侧不再注入流程状态（流程只在任务看板里使用）。
+    if (CONVERSATION_FACING) {
+      try {
+        ctx.systemPrompt.section({ name: 'flow', order: 95, text: '{{paircode_flow_state}}', alwaysVisible: true })
+        ctx.systemPrompt.variable({ name: 'paircode_flow_state', provider: function () { return flowPromptText() } })
+      } catch (e) { logWarn('systemPrompt 注册失败: ' + e) }
+    }
 
     // ── ⑪ 工具面（§14.5）────────────────────────────────────────
     var TOOLS = [
@@ -2971,17 +2979,23 @@ return {
         },
       },
     ]
-    for (var ti = 0; ti < TOOLS.length; ti++) {
-      (function (t) {
-        try {
-          ctx.tools.register({
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters,
-            execute: function (args) { return t.execute(args || {}) },
-          })
-        } catch (e) { logWarn('工具注册失败 ' + t.name + ': ' + e) }
-      })(TOOLS[ti])
+    // ★ 2026-10-17 使用面收窄：flow_* 工具不再注册进 agent 工具面（流程只在任务看板里使用）。
+    //   看板的所有写操作走 ui.invoke → flow_action / taskboard_action RPC，不依赖这里的注册。
+    if (CONVERSATION_FACING) {
+      for (var ti = 0; ti < TOOLS.length; ti++) {
+        (function (t) {
+          try {
+            ctx.tools.register({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+              execute: function (args) { return t.execute(args || {}) },
+            })
+          } catch (e) { logWarn('工具注册失败 ' + t.name + ': ' + e) }
+        })(TOOLS[ti])
+      }
+    } else {
+      logInfo('会话侧流程工具已关闭（仅任务看板可用）：未注册 ' + TOOLS.length + ' 个 flow_* 工具')
     }
 
     // ── ⑫b 任务看板：接口 / agent 工具 / 写 RPC（照参考重建）──────────
@@ -3584,8 +3598,10 @@ return {
       if (/^(delete|rm_file|remove_file)$/.test(n)) return '文件删除'
       return ''
     }
-    try {
-      ctx.hooks.register('PreToolUse', function (payload) {
+    // ★ 2026-10-17 使用面收窄：门禁钩子只服务于会话内进程推进，随会话侧一起关闭。
+    if (CONVERSATION_FACING) {
+      try {
+        ctx.hooks.register('PreToolUse', function (payload) {
         try {
           if (gateStrength() !== 'enforce') return null
           var p = payload || {}
@@ -3637,13 +3653,16 @@ return {
           }
         } catch (e) { }
         return null
-      })
-    } catch (e) { logWarn('hooks 注册失败: ' + e) }
+        })
+      } catch (e) { logWarn('hooks 注册失败: ' + e) }
+    }
 
     // ── ⑮ 命令面（§14.6-②）──────────────────────────────────────
-    try {
-      ctx.commands.register({
-        name: 'flow',
+    // ★ 2026-10-17 使用面收窄：/flow、/flow-board、/flow-import 不再注册（流程只在任务看板里使用）。
+    if (CONVERSATION_FACING) {
+      try {
+        ctx.commands.register({
+          name: 'flow',
         description: '工程流程：查看进度 / 列出流程库 / 推进阶段（用法：/flow [status|list|advance|bind <flowId>]）',
         handler: function (argsStr) {
           var argv = String(argsStr || '').trim().split(/\s+/).filter(function (x) { return !!x })
@@ -3685,19 +3704,22 @@ return {
       ctx.commands.register({
         name: 'flow-import',
         description: '导入流程包或目录 bundle（用法：/flow-import <目录|发布包.json> [project|global]）',
-        handler: function (argsStr) {
-          var argv = String(argsStr || '').trim().split(/\s+/).filter(function (x) { return !!x })
-          if (!argv.length) return '用法：/flow-import <目录 bundle 路径|发布包 .json> [project|global]'
-          var src = argv[0]
-          var opts = { scope: argv[1] || 'project', onConflict: 'skip' }
-          if (/\.json$/i.test(src)) opts.file = src
-          else opts.dir = src
-          var r = importBundle(opts)
-          if (!r.ok) return '导入失败：' + r.error
-          return r.text
-        },
-      })
-    } catch (e) { logWarn('commands 注册失败: ' + e) }
+          handler: function (argsStr) {
+            var argv = String(argsStr || '').trim().split(/\s+/).filter(function (x) { return !!x })
+            if (!argv.length) return '用法：/flow-import <目录 bundle 路径|发布包 .json> [project|global]'
+            var src = argv[0]
+            var opts = { scope: argv[1] || 'project', onConflict: 'skip' }
+            if (/\.json$/i.test(src)) opts.file = src
+            else opts.dir = src
+            var r = importBundle(opts)
+            if (!r.ok) return '导入失败：' + r.error
+            return r.text
+          },
+        })
+      } catch (e) { logWarn('commands 注册失败: ' + e) }
+    } else {
+      logInfo('会话侧流程命令已关闭（仅任务看板可用）：未注册 /flow、/flow-board、/flow-import')
+    }
 
     // ── ⑯ 装载摘要（诊断用）─────────────────────────────────────
     logInfo('装载完成：预设 ' + presetIds().length + ' · 全局 ' + libIds().length + ' · 项目 ' + projectIds().length +
