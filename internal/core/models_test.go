@@ -39,6 +39,38 @@ func TestGetProviderProtocols(t *testing.T) {
 	}
 }
 
+// TestNormalizeProviderBaseURL 服务商/API 实例地址归一化（★ 2026-10-17 新用户易错修复）。
+// 语义：只做无歧义修正（空白/协议头/尾斜杠/完整端点收敛为基础地址），不改路径含义。
+func TestNormalizeProviderBaseURL(t *testing.T) {
+	cases := []struct {
+		in       string
+		want     string
+		wantNote bool
+	}{
+		// in, want, 是否应产生说明
+		{"https://api.deepseek.com/v1", "https://api.deepseek.com/v1", false},
+		{"https://api.deepseek.com/v1/", "https://api.deepseek.com/v1", true},
+		{"  https://api.deepseek.com/v1  ", "https://api.deepseek.com/v1", true},
+		{"https://api.deepseek.com/v1/chat/completions", "https://api.deepseek.com/v1", true},
+		{"https://api.deepseek.com/chat/completions/", "https://api.deepseek.com", true},
+		{"api.deepseek.com", "https://api.deepseek.com", true},
+		{"api.deepseek.com/v1", "https://api.deepseek.com/v1", true},
+		{"127.0.0.1:8080", "http://127.0.0.1:8080", true},
+		{"http://localhost:8080/v1", "http://localhost:8080/v1", false},
+		{"https://api.anthropic.com/v1/messages", "https://api.anthropic.com/v1", true},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		got, note := NormalizeProviderBaseURL(c.in)
+		if got != c.want {
+			t.Errorf("NormalizeProviderBaseURL(%q) = %q，期望 %q", c.in, got, c.want)
+		}
+		if (note != "") != c.wantNote {
+			t.Errorf("NormalizeProviderBaseURL(%q) 说明 = %q，期望有说明=%v", c.in, note, c.wantNote)
+		}
+	}
+}
+
 // TestLoadModelListFallback 无配置文件 → 内置默认含 anthropic 原生协议。
 func TestLoadModelListFallback(t *testing.T) {
 	// 当前测试 cwd 无 config/ → useDefaultModels 兜底

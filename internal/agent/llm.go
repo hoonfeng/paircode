@@ -457,7 +457,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 
 		// 401/403 → 认证错误，不重试
 		if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-			err := fmt.Errorf("LLM HTTP %d (认证失败): %s", statusCode, bodyStr)
+			err := fmt.Errorf("LLM HTTP %d (认证失败): %s（当前端点 %s；请确认 API Key 与 API 地址属于同一服务商，且地址形如 https://host/v1）", statusCode, bodyStr, url)
 			log.Printf("[llm] %s 认证失败（不重试）: %v", p.Model, err)
 			return Message{}, err
 		}
@@ -471,7 +471,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		}
 
 		// 其他 4xx → 客户端错误，不重试
-		err = fmt.Errorf("LLM HTTP %d: %s", statusCode, bodyStr)
+		err = fmt.Errorf("LLM HTTP %d: %s%s", statusCode, bodyStr, endpointAddrHint(statusCode, url))
 		log.Printf("[llm] %s HTTP %d（客户端错误，不重试）: %s", p.Model, statusCode, bodyStr)
 		emitBridgeEvent("agent/request-error", map[string]any{"model": p.Model, "error": err.Error()})
 		return Message{}, err
@@ -480,6 +480,21 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 	log.Printf("[llm] %s 请求失败（已达最大重试次数 %d）: %v", p.Model, maxRetries, lastErr)
 	emitBridgeEvent("agent/request-error", map[string]any{"model": p.Model, "error": lastErr.Error()})
 	return Message{}, fmt.Errorf("LLM 请求失败（已达最大重试次数 %d）: %w", maxRetries, lastErr)
+}
+
+// endpointAddrHint 给「API 地址填错」这一类客户端错误补充可操作的提示（★ 2026-10-17）。
+//
+// 背景：新用户配置 API 地址时最常见的三种错法——① 只填域名漏 /v1（旧实现拼成
+// https://host/chat/completions → 404）；② 填成网页控制台地址；③ 地址与 Key 服务商不配套。
+// 这些错误的响应体往往只有一句 {"error":{"message":"Not Found"}}，不告诉用户错在哪，
+// 因此把「当前实际请求端点 + 常见正确写法」直接拼进错误，让用户一眼能对照修正。
+func endpointAddrHint(statusCode int, url string) string {
+	switch statusCode {
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusBadRequest:
+		return fmt.Sprintf("（当前请求端点 %s；404/405/400 多为 API 地址写法问题——OpenAI 兼容服务通常填 https://host/v1（只填域名也支持，会自动补 /v1），"+
+			"不要在地址里写 /chat/completions 之外的网页控制台路径）", url)
+	}
+	return ""
 }
 
 // sseResp 是 SSE 每帧的解析目标（OpenAI 流式 chunk 结构）。

@@ -439,12 +439,24 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "providers 不能为空")
 			return
 		}
+		// ★ 2026-10-17 新用户易错修复：保存时归一化 API 地址（补协议头/去尾斜杠/完整端点收敛
+		//   为基础地址），并把纠正结果回显给用户——静默改数据会让用户以为「我填的就是生效的」。
+		//   路径层的 /v1 补全在请求期由 ResolveEndpointURL 按协议处理（纯域名自动补 /v1）。
+		warnings := []string{}
+		for name, e := range req.Providers {
+			norm, note := core.NormalizeProviderBaseURL(e.BaseURL)
+			if note != "" {
+				e.BaseURL = norm
+				req.Providers[name] = e
+				warnings = append(warnings, "服务商「"+name+"」："+note)
+			}
+		}
 		core.SetModelList(req.Providers)
 		if err := core.SaveModelList(); err != nil {
 			jsonErr(w, "保存失败: "+err.Error())
 			return
 		}
-		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Providers)})
+		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Providers), "warnings": warnings})
 		return
 	}
 	providers := core.GetProviders()

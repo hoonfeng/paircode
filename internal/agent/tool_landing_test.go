@@ -60,6 +60,10 @@ var toolPluginModes = map[string]string{
 	// ★ 2026-09-11 场景创造（创造模式）：/创造 按需激活；scenario_scan/scenario_create
 	//   execute → ctx.hostTool（宿主 internal/agent/scenario_tools.go）。
 	"tool-scenario": "hostTool",
+	// ★ 2026-10-17 补齐（tool-flow 于 2026-10-17 落地时未同步本表，导致矩阵测试报
+	//   「未知模式表」）：工程流程插件，全部工具（flow_*/flow_task 等）在 goja 沙箱内用
+	//   ctx.fs 读写 <ws>/.pair/flows/*.json，不用 ctx.binary / ctx.hostTool / ctx.kernel。
+	"tool-flow": "native",
 	// ★ 2026-10-15 创作域插件下架（用户决策）：tool-art / tool-model / tool-music /
 	//   tool-rig / tool-voice 五包已从 plugins-dist/ 删除（判定为失败创作域），模式表
 	//   同步摘除对应行（扫描按目录进行，表里留行会变成陈旧条目）。历史执行模式：

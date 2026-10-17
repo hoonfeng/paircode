@@ -318,6 +318,63 @@ func SetModelList(list ModelListMap) {
 	ModelList = list
 }
 
+// NormalizeProviderBaseURL 归一化「服务商 / API 实例」的 API 地址（★ 2026-10-17）。
+//
+// 背景：新用户配置 API 地址最容易踩的四个坑（设置面板无任何纠正，填错后只看到 401/404）：
+//  1. 漏协议头（api.deepseek.com）→ 请求直接失败；
+//  2. 尾部斜杠（https://x/v1/）→ 拼出 //chat/completions 的畸形端点；
+//  3. 填成完整端点（https://x/v1/chat/completions）→ 配置语义是「基础地址」，
+//     后续切协议（responses/messages）会残留旧后缀；
+//  4. 前后空格（从文档复制粘贴）→ 地址不可用。
+//
+// 本函数只做**无歧义**修正（不动路径含义），返回 (归一化值, 说明)。
+// 说明非空 = 确实改过，调用方应把它回显给用户（"已自动纠正"），让纠正可见而不是静默改数据。
+// 路径段的 /v1 补全不在这里做——它在请求期由 agent.ResolveEndpointURL 按协议处理
+// （纯域名补 /v1、已带路径保持原样），避免保存时猜错用户的自定义网关前缀。
+func NormalizeProviderBaseURL(raw string) (string, string) {
+	orig := raw
+	s := strings.TrimSpace(raw)
+	notes := []string{}
+	if s != orig && strings.TrimSpace(orig) != "" {
+		notes = append(notes, "去掉了首尾空白")
+	}
+	if s == "" {
+		return "", ""
+	}
+	// 1) 漏协议头：localhost/回环地址按 http，其余按 https（业界默认）。
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		scheme := "https://"
+		host := s
+		if i := strings.IndexAny(host, "/"); i >= 0 {
+			host = host[:i]
+		}
+		host = strings.Split(host, ":")[0]
+		if host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host == "::1" {
+			scheme = "http://"
+		}
+		s = scheme + s
+		notes = append(notes, "补全了协议头 "+scheme)
+	}
+	// 2) 尾部斜杠（可能多个）。
+	trimmed := strings.TrimRight(s, "/")
+	if trimmed != s {
+		s = trimmed
+		notes = append(notes, "去掉了尾部斜杠")
+	}
+	// 3) 完整端点 → 基础地址（语义收敛：后缀交给 ResolveEndpointURL 按协议拼）。
+	for _, suf := range []string{"/chat/completions", "/completions", "/responses", "/messages"} {
+		if strings.HasSuffix(s, suf) {
+			s = strings.TrimRight(strings.TrimSuffix(s, suf), "/")
+			notes = append(notes, "把完整端点收敛为基础地址（去掉 "+suf+"，请求时按协议自动拼接）")
+			break
+		}
+	}
+	if len(notes) == 0 {
+		return s, ""
+	}
+	return s, "API 地址已自动规范化（" + strings.Join(notes, "；") + "）"
+}
+
 // AddProvider 添加新服务商（含 API 地址和模型列表）
 func AddProvider(name, baseURL string, models []string) error {
 	if ModelList == nil {

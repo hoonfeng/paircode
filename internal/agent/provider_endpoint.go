@@ -27,6 +27,11 @@ const DefaultProtocol = ProtocolOpenAICompletions
 //   - base 已含目标协议路径后缀（旧「完整端点」配置）→ 原样使用（去尾斜杠）
 //   - base 含其他协议路径后缀（如 /chat/completions 而 protocol=responses）→ 剥掉后重拼
 //   - base 为纯域名 → 按协议拼标准路径
+//   - base 为纯域名（无任何路径段）+ openai-completions → 自动补 /v1（★ 2026-10-17）
+//     新用户最常踩的坑：只填 https://api.deepseek.com（漏 /v1），旧实现拼出
+//     https://api.deepseek.com/chat/completions → 404。OpenAI 兼容生态的默认基线
+//     路径几乎都是 /v1，纯域名时补 /v1 才能「填域名就可用」；已带路径（/v1、/api/v1、
+//     /openai）时保持原样不猜——自定义网关的非标准前缀仍然原样拼接。
 //
 // ⚠️ 响应协议切换端点形态不同，配置中的 base 应只含基础路径（如 /v1）。
 func ResolveEndpointURL(baseURL, protocol string) string {
@@ -49,8 +54,22 @@ func ResolveEndpointURL(baseURL, protocol string) string {
 		if strings.HasSuffix(b, "/chat/completions") {
 			return b
 		}
-		return stripLLMEndpointSuffixes(b) + "/chat/completions"
+		b = stripLLMEndpointSuffixes(b)
+		if isOriginOnly(b) {
+			return b + "/v1/chat/completions"
+		}
+		return b + "/chat/completions"
 	}
+}
+
+// isOriginOnly 判断 base 是否只有 origin（协议 + 主机 + 可选端口，无任何路径段）。
+// 用于「纯域名自动补 /v1」的判定：含路径（/v1、/api、/openai…）一律不猜，保持原样。
+func isOriginOnly(b string) bool {
+	s := b
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	return !strings.Contains(s, "/")
 }
 
 // stripLLMEndpointSuffixes 剥掉已知的协议路径后缀（多协议互切时清洗旧形态）。

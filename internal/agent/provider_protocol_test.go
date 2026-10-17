@@ -23,6 +23,14 @@ func TestResolveEndpointURL(t *testing.T) {
 		{"https://api.deepseek.com/v1/", "openai-completions", "https://api.deepseek.com/v1/chat/completions"},
 		// 旧完整端点配置 → 原样使用
 		{"https://api.deepseek.com/v1/chat/completions", "openai-completions", "https://api.deepseek.com/v1/chat/completions"},
+		// ★ 2026-10-17 纯域名（新用户最常见的漏 /v1 写法）→ 自动补 /v1（OpenAI 兼容基线路径）
+		{"https://api.deepseek.com", "openai-completions", "https://api.deepseek.com/v1/chat/completions"},
+		{"https://api.deepseek.com/", "", "https://api.deepseek.com/v1/chat/completions"},
+		{"https://api.openai.com", "openai-completions", "https://api.openai.com/v1/chat/completions"},
+		{"http://127.0.0.1:8080", "openai-completions", "http://127.0.0.1:8080/v1/chat/completions"},
+		// 已带路径（含自定义前缀）→ 不猜，保持「路径 + /chat/completions」
+		{"https://gateway.example.com/openai", "openai-completions", "https://gateway.example.com/openai/chat/completions"},
+		{"https://gateway.example.com/api/v1", "openai-completions", "https://gateway.example.com/api/v1/chat/completions"},
 		// responses 协议
 		{"https://api.openai.com/v1", "openai-responses", "https://api.openai.com/v1/responses"},
 		{"https://api.openai.com", "openai-responses", "https://api.openai.com/v1/responses"},
