@@ -4,6 +4,52 @@
 
 ---
 
+## 1.6.18 — 2026-10-17
+
+> 本版为**工程流程与任务看板**：新增 `tool-flow` 插件（流程库 / 阶段门禁 / DoD / 任务看板），
+> 并让「待规划」列真正可执行——agent 先做真实规划（调研 → 拆解 → 待确认问题），多轮迭代定稿后
+> 才进入待办。看板支持手动驱动与全流程自动两种模式。
+
+### 新增
+
+- **`tool-flow` 工程流程与看板插件**（`.pair/plugins/tool-flow/`）—— 三层流程库（内置预设 → 工作区
+  流程 → 可写画布）、阶段化执行（复现 → 定位 → 修复 → 回归）、三类门禁（`check` / `artifact` /
+  `approval`）、DoD 清单与验收，能力面 `flow_action` / `taskboard_action` 双入口。
+- **任务看板五列**（待规划 / 待办 / 进行中 / 待验收 / 已完成）—— 卡片支持流程绑定、DoD 回填、
+  执行提示词、子任务进度；流程绑定后卡片的阶段与 DoD 自动从流程模板带入。
+- **「待规划」列可执行化** —— 新增 `taskboard_plan` 工具与规划阶段机（`''` → `drafting` →
+  `review` → `final`）：agent 在 backlog 卡上先调研再产出可执行拆解（`subtasks`）、待确认问题
+  （`questions`）、风险（`risks`）与方案概要（`summary`）；每轮修订自动记为新版本（`rounds`），
+  用户「规划讨论」意见逐条进入下一轮任务书；`final:true` 定稿后卡片进入待办，拆解成为执行骨架。
+  派发只走 `followup` 真实通道，失败统一记入 `plan.dispatch` 并返回 `ok:false`（不伪造成功）。
+- **看板驱动模式** —— 手动执行（`taskboard_execute` 按需派发）与全流程自动（60 s 扫描自动派发 +
+  可选自动验收）两种模式，自动派发受执行槽位与「一会话一实例」约束。
+- **FileExplorer 流程标签与右键流程入口** —— 工作区条目的流程状态取自 `/flow/state`，前端壳零业务逻辑。
+- **安装脚本用户资产保护** —— 安装 / 覆盖安装不破坏用户已有资产。
+
+### 修复
+
+- **看板编辑不丢字** —— 详情编辑在输入过程中不再重建 DOM / 丢失焦点；多行描述与执行提示词可正常保存。
+- **看板真双栏布局 + 定时兜底** —— 新建卡也能在到点后自动派发（此前只在既有卡上生效）。
+- **拖回「待规划」触发重规划** —— 已有规划历史的卡把 `plan.stage` 退回 `drafting`，历史版本与
+  `finalAt` / `acceptedAt` 保留为审计痕迹，不抹除。
+
+### 工程
+
+- **`.smoke` 测试夹具目录不进安装镜像**（`scripts/sync-plugins-to-bin.mjs`）—— 插件自测夹具
+  （含独立 `.git` / 运行时锁 / 任务快照）不再混入 `bin/.pair/plugins` 安装镜像。
+- **新增验证脚本**：`scripts/e2e-flow-taskboard-9096.js`（流程 × 看板多场景端到端，含清理）、
+  `scripts/cdp-verify-flow-canvas.js`（流程库画布全链路）、`scripts/cdp-verify-sidebar-switch.js`、
+  `scripts/cdp-shot-taskboard-9096.js`、`scripts/cdp-probe-taskboard-input.js`。
+- **新增工具脚本**：`scripts/install-plugin.mjs`（命令行安装 npm 插件，市场超时的替代路径）、
+  `scripts/sse-mcp-probe.js` / `scripts/sse-mcp-repl.js`（MCP SSE 探测与常驻客户端）、
+  `scripts/bili-cdp.js`（CDP 驱动 B 站投稿页）。
+- **文档**：`docs/taskboard-video-storyboard.md`（看板介绍片分镜）、
+  `docs/e2e-flow-taskboard-9096-report.md`（端到端报告）、
+  `docs/audit-redundancy-unimplemented-2026-10-17.md`（冗余/未实现审计）等。
+
+---
+
 ## 1.6.17 — 2026-10-16
 
 > 本版为**插件数据面补完**：新增 `ctx.install` 安装目录数据区文件服务（插件读写「跨工作区共享
