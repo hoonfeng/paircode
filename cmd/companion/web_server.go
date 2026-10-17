@@ -994,7 +994,7 @@ func (s *webServer) handleSysInfo(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{
 		"hostname":  host,
 		"cwd":       cwd,
-		"os":        "windows",
+		"os":        runtime.GOOS,
 		"goos":      runtime.GOOS,
 		"goarch":    runtime.GOARCH,
 		"goversion": runtime.Version(),
@@ -1094,8 +1094,14 @@ func (s *webServer) handleExec(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 平台 shell：Windows 用 cmd /C，Linux/macOS 用 sh -c。
+	// 2026-10 之前这里写死 cmd.exe —— 非 Windows 上 /api/system/exec 必然失败。
 	cmdName := "cmd.exe"
 	args := []string{"/C", req.Command}
+	if runtime.GOOS != "windows" {
+		cmdName = "sh"
+		args = []string{"-c", req.Command}
+	}
 
 	cmd := exec.CommandContext(r.Context(), cmdName, args...)
 	cmd.Dir = currDir

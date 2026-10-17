@@ -16,9 +16,7 @@
       <!-- Shell 类型选择 -->
       <div class="term-shell-select" title="选择终端类型">
         <select v-model="defaultShell" @change="saveShellPreference">
-          <option value="cmd">cmd</option>
-          <option value="powershell">PowerShell</option>
-          <option value="gitbash">Git Bash</option>
+          <option v-for="s in shells" :key="s.name" :value="s.name">{{ s.name }}</option>
         </select>
       </div>
       <span class="term-tabs-filler"></span>
@@ -121,10 +119,73 @@ function fitWithRetry(term, remaining) {
   } catch (e) {}
 }
 
-// ── Shell 类型选择（持久化到 localStorage） ──
-const defaultShell = ref(localStorage.getItem('term-default-shell') || 'cmd')
+// ── Shell 类型选择（本机探测 + 持久化到 localStorage） ──
+// ★ 2026-10：以前选项写死 cmd/PowerShell/Git Bash，Linux/macOS 上后端根本
+//   不存在这些名字 → 终端必然报错。现在由 /api/terminal/shells 下发本机
+//   可用解释器（Windows: CMD/PowerShell/Git Bash；Linux/mac: bash/zsh/…），
+//   前端只负责渲染。
+const shells = ref([])
+const defaultShell = ref(localStorage.getItem('term-default-shell') || '')
 function saveShellPreference() {
   localStorage.setItem('term-default-shell', defaultShell.value)
+}
+
+// loadShells 拉取本机可用终端解释器，并校正已保存的首选项
+// （旧版本可能存着 cmd/powershell/gitbash，在 Linux/mac 上需降级到默认项）。
+async function loadShells() {
+  try {
+    const res = await fetch('/api/terminal/shells')
+    const data = await res.json()
+    const list = Array.isArray(data.shells) ? data.shells : []
+    shells.value = list
+    if (!list.length) return
+    const saved = localStorage.getItem('term-default-shell') || ''
+    const match = list.find(s => s.name.toLowerCase() === saved.toLowerCase())
+    if (match) {
+      defaultShell.value = match.name
+    } else {
+      const def = list.find(s => s.default) || list[0]
+      defaultShell.value = def.name
+      localStorage.setItem('term-default-shell', def.name)
+    }
+  } catch (e) {
+    // 拉取失败（离线/旧后端）：保持已保存值，后端会做别名解析
+  }
+}
+
+// shellLabel 终端标签前缀：Windows 沿用 PS/Bash 习惯，其它平台直接用解释器名。
+function shellLabel(s) {
+  switch (s) {
+    case 'powershell':
+    case 'PowerShell': return 'PS'
+    case 'PowerShell 7': return 'PS7'
+    case 'gitbash':
+    case 'Git Bash': return 'Bash'
+    case 'CMD': return 'cmd'
+  }
+  return s || '终端'
+}
+
+// normalizeShellName 把 localStorage/旧版前端的历史标识映射到本机可用 shell。
+// 典型场景：Windows 用的记录（cmd/powershell/gitbash）跟着配置同步到 Linux/mac
+// → 本机没有这些解释器，落后端会直接报「不支持的终端类型」。
+function normalizeShellName(name) {
+  const list = shells.value
+  if (!name) return defaultShell.value || (list[0] && list[0].name) || ''
+  if (!list.length) return name
+  const hit = list.find(s => s.name.toLowerCase() === name.toLowerCase())
+  if (hit) return hit.name
+  const aliases = {
+    cmd: ['CMD'],
+    powershell: ['PowerShell', 'PowerShell 7'],
+    gitbash: ['Git Bash', 'bash'],
+  }
+  for (const cand of (aliases[String(name).toLowerCase()] || [])) {
+    const m = list.find(s => s.name.toLowerCase() === cand.toLowerCase())
+    if (m) return m.name
+  }
+  const def = list.find(s => s.default) || list[0]
+  return def ? def.name : (defaultShell.value || '')
 }
 
 // ── WebSocket 基础 URL ──
@@ -245,7 +306,7 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
       const rows = xtermInstance.rows || 24
       const msg = JSON.stringify({
         type: 'init',
-        shell: termState.shell || 'cmd',
+        shell: termState.shell || defaultShell.value || '',
         cwd: termState.cwd || '',
         cols,
         rows,
@@ -363,10 +424,10 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
 function createTerminal(cwd, shell) {
   termCounter++
   const id = 'term-' + termCounter + '-' + Date.now().toString(36)
-  const s = shell || 'cmd'
+  const s = normalizeShellName(shell || defaultShell.value)
   return reactive({
     id,
-    label: s === 'powershell' ? 'PS ' + termCounter : (s === 'gitbash' ? 'Bash ' + termCounter : '终端 ' + termCounter),
+    label: shellLabel(s) + ' ' + termCounter,
     cwd: cwd || '',
     shell: s,
     status: 'init', // init / connected / ready / error / closed / disconnected
@@ -551,7 +612,7 @@ function loadTerminals() {
         id: 'term-' + termCounter + '-' + Date.now().toString(36),
         label: t.label || '终端 ' + termCounter,
         cwd: t.cwd || '',
-        shell: t.shell || 'cmd',
+        shell: normalizeShellName(t.shell),
         status: 'init',
         xterm: null,
         fitAddon: null,
@@ -603,8 +664,11 @@ function syncTermThemeAfterCreate() {
 }
 
 // ── 生命周期 ──
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("paircode:theme-css-loaded", onThemeCssLoaded)
+  // ★ 先拿到本机可用 shell（Linux/mac 上是 bash/zsh…），再恢复/新建终端：
+  //   否则 createTerminal 会先用空 shell 建出 xterm，init 消息里 shell 为空。
+  await loadShells()
   if (!loadTerminals()) {
     newTerminal()
   }

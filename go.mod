@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/creack/pty v1.1.9
 	github.com/evanw/esbuild v0.28.2
 	github.com/go-rod/rod v0.116.2
 	github.com/goccy/go-yaml v1.19.2
@@ -13,7 +14,9 @@ require (
 	modernc.org/sqlite v1.53.0
 )
 
-require golang.org/x/image v0.45.0 // indirect
+require (
+	golang.org/x/image v0.45.0 // indirect
+)
 
 require (
 	github.com/dlclark/regexp2/v2 v2.5.2

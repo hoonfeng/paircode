@@ -30,10 +30,11 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/hoonfeng/paircode/pkg/executil"
 )
 
 const (
@@ -61,12 +62,10 @@ func detectBash() (bashPath, msysBin string) {
 }
 
 func hideWindow(c *exec.Cmd) {
-	if runtime.GOOS == "windows" {
-		if c.SysProcAttr == nil {
-			c.SysProcAttr = &syscall.SysProcAttr{}
-		}
-		c.SysProcAttr.HideWindow = true
-	}
+	// HideWindow 是跨平台封装（pkg/executil：windows 设 SysProcAttr.HideWindow，
+	// 其他平台空实现）。此处不能直接写 c.SysProcAttr.HideWindow——Windows 专有
+	// 字段在 linux/darwin 编译时会直接报 undefined，运行时 GOOS 判断救不了。
+	executil.HideWindow(c)
 }
 
 // runShellWrapped 复刻 newShellCommand（shell.go）：

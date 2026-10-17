@@ -24,4 +24,5 @@ func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 		agent.ServeGlobalEventStreamWS(w, r, agentMgr)
 	})
 	mux.HandleFunc("/api/terminal/ws", agent.ServeTerminalWS)
+	mux.HandleFunc("/api/terminal/shells", agent.ServeTerminalShells)
 }

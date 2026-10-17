@@ -56,10 +56,27 @@ set CGO_ENABLED=1
 go build -o companion.exe ./cmd/companion
 ./companion.exe
 # 浏览器打开 http://localhost:9090（端口可用 WEB_PORT 环境变量覆盖）
+
+# Linux / macOS
+export CGO_ENABLED=1
+go build -o companion ./cmd/companion
+./companion
+# 浏览器打开 http://localhost:9090
 ```
 
 工作区 = 启动目录（`InitCore` 读取当前目录/配置），`config/` 存放模型与偏好配置，
 `logs/` 落盘运行日志。
+
+### 平台能力说明
+
+| 能力 | Windows | Linux | macOS | 依赖 |
+|---|---|---|---|---|
+| Web IDE / Agent / 插件 | ✅ | ✅ | ✅ | — |
+| 内置终端（PTY） | ✅ ConPTY | ✅ pts（creack/pty） | ✅ pts（creack/pty） | 至少一个 shell（bash/zsh/sh） |
+| 桌面/区域/窗口截图 | ✅ GDI | ✅ 全屏 + 标准库裁剪 | ✅ screencapture | Linux 需 grim / scrot / ImageMagick `import` / gnome-screenshot / spectacle 之一；窗口截图另需 xdotool(X11) |
+| 「在资源管理器中显示」 | ✅ explorer 选中 | ✅ xdg-open | ✅ Finder `open -R` | — |
+| 在线更新 | ✅ .bat 重启脚本 | ✅ sh 重启脚本 | ✅ sh 重启脚本 | 安装目录可写 |
+| 语义搜索（ONNX） | ✅ | ✅ | ✅ | 需对应平台的 onnxruntime 动态库（打包配置已分流） |
 
 ## 架构速览
 

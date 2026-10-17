@@ -38,3 +38,33 @@ jobs:
         run: go test -short -count=1 ./cmd/companion/agent/... ./pkg/... ./internal/...
         env:
           CGO_ENABLED: "0"
+
+  # 跨平台构建门禁（2026-10 新增）：Linux/macOS 支持不能只靠"代码里写了
+  # 平台分支"来保证——必须有 CI 真实构建一次。Windows 上交叉编译发现不了
+  # 「某文件只有 _windows.go、Unix 缺实现」这类问题（例如 pty_unix.go 曾长期
+  # 是返回错误的桩、screenshot 非 Windows 直接报不支持）。
+  cross-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Go build (agent — Linux/macOS)
+        run: go build ./cmd/companion
+        env:
+          CGO_ENABLED: "0"
+
+      - name: Go vet (Linux/macOS)
+        run: go vet ./cmd/companion/... ./internal/... ./pkg/...
+
+      - name: Unit tests (Linux/macOS)
+        run: go test -short -count=1 ./cmd/companion/agent/... ./pkg/... ./internal/...
+        env:
+          CGO_ENABLED: "0"

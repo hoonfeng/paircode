@@ -467,8 +467,19 @@ function openInTerminal(path, isDir) {
 
 // ── 在资源管理器中显示 ──
 function showInExplorer(path) {
-  // Windows: 尝试打开 explorer 选择文件/文件夹
-  const cmd = `explorer /select,"${path}"`
+  // 跨平台：Windows explorer /select；macOS Finder open -R；Linux xdg-open 父目录。
+  // 2026-10 之前写死 explorer /select → Linux/mac 上点「在资源管理器中显示」无反应。
+  const ua = (navigator.userAgent || '').toLowerCase()
+  const quoted = String(path).replace(/"/g, '\\"')
+  let cmd
+  if (ua.includes('win')) {
+    cmd = `explorer /select,"${quoted}"`
+  } else if (ua.includes('mac')) {
+    cmd = `open -R "${quoted}"`
+  } else {
+    const dir = quoted.substring(0, quoted.lastIndexOf('/')) || '/'
+    cmd = `xdg-open "${dir}"`
+  }
   try { api.apiPost('/system/exec', { command: cmd }) } catch {}
 }
 

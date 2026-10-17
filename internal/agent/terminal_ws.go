@@ -5,14 +5,14 @@
 // 提供（agent.ServeTerminalWS），main 只保留一行路由注册。
 //
 // 协议：
-//   客户端发文本帧（JSON 控制消息）：{type:"init", shell:"cmd", cwd:"..."} / {type:"resize", cols:N, rows:N}
+//   客户端发文本帧（JSON 控制消息）：{type:"init", shell:"bash", cwd:"..."} / {type:"resize", cols:N, rows:N}
 //   服务端发文本帧：{type:"ready"} / {type:"error", msg:"..."} / {type:"closed"}
 //   双向二进制帧 = 原始 PTY I/O 字节流（VT 转义序列，xterm.js 渲染）
 //
 // 安全措施：
-//   - shell 白名单（仅 cmd/powershell/gitbash）
+//   - shell 白名单（仅 pty.DetectShells 探测到的本机解释器；兼容历史别名）
 //   - cwd 路径校验（禁止穿越出工作区）
-//   - PTY 关闭时强制终止子进程
+//   - PTY 关闭时强制终止子进程（Windows ConPTY / Unix pts 均支持）
 //   - 并发 PTY 会话数限制（最多 16）
 // ═══════════════════════════════════════════════════════════════
 
@@ -20,6 +20,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -40,14 +41,6 @@ var (
 	activePTYSessions int32 // 原子计数
 	maxPTYSessions    int32 = 16
 )
-
-// ─── Shell 白名单 ──────────────────────────────────────────
-
-var allowedShells = map[string]bool{
-	"cmd":        true,
-	"powershell": true,
-	"gitbash":    true,
-}
 
 // ─── ptySession ────────────────────────────────────────────
 
@@ -125,11 +118,10 @@ func ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt32(&activePTYSessions, 1)
 
 	ps := &ptySession{
-		conn:  conn,
-		cols:  80,
-		rows:  24,
-		shell: "cmd",
-		cwd:   safeCWD(""),
+		conn: conn,
+		cols: 80,
+		rows: 24,
+		cwd:  safeCWD(""),
 	}
 
 	// 等待客户端发送 init 消息（文本帧 JSON），15s 超时防泄漏：
@@ -144,7 +136,11 @@ func ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if opcode == 0x1 {
-		ps.handleInitMessage(payload)
+		if err := ps.handleInitMessage(payload); err != nil {
+			ps.writeText([]byte(`{"type":"error","msg":"` + jsonEscape(err.Error()) + `"}`))
+			ps.close()
+			return
+		}
 	}
 
 	// 启动 PTY
@@ -164,7 +160,8 @@ func ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleInitMessage 解析并校验 init 消息。
-func (ps *ptySession) handleInitMessage(payload []byte) {
+// 返回非 nil 表示客户端指定了本机不存在的 shell（应回错误而不是静默降级）。
+func (ps *ptySession) handleInitMessage(payload []byte) error {
 	var msg struct {
 		Type  string `json:"type"`
 		Shell string `json:"shell"`
@@ -173,12 +170,16 @@ func (ps *ptySession) handleInitMessage(payload []byte) {
 		Rows  int    `json:"rows"`
 	}
 	if err := json.Unmarshal(payload, &msg); err != nil || msg.Type != "init" {
-		return
+		return nil // 非 init / 坏帧：忽略，走默认 shell
 	}
 
-	// shell 白名单校验
-	if msg.Shell != "" && allowedShells[msg.Shell] {
-		ps.shell = msg.Shell
+	// shell 白名单校验：必须是本机探测到的解释器（兼容历史别名）
+	if msg.Shell != "" {
+		sh, err := resolveShell(msg.Shell)
+		if err != nil {
+			return err
+		}
+		ps.shell = sh.Name
 	}
 
 	// cwd 安全校验
@@ -193,6 +194,7 @@ func (ps *ptySession) handleInitMessage(payload []byte) {
 	if msg.Rows > 0 && msg.Rows <= 200 {
 		ps.rows = msg.Rows
 	}
+	return nil
 }
 
 // safeCWD 校验并返回安全工作目录。
@@ -229,9 +231,12 @@ func safeCWD(requested string) string {
 	return requested
 }
 
-// startPTY 创建 ConPTY 会话。
+// startPTY 创建伪终端会话（Windows ConPTY / Unix pts）。
 func (ps *ptySession) startPTY() error {
-	sh := ptyShellFor(ps.shell)
+	sh, err := resolveShell(ps.shell)
+	if err != nil {
+		return err
+	}
 	sess, err := pty.Start(sh, ps.cwd, ps.cols, ps.rows)
 	if err != nil {
 		return err
@@ -352,19 +357,79 @@ func (ps *ptySession) handleTextMessage(payload []byte) {
 
 // ─── Shell 辅助 ──────────────────────────────────────────
 
-func ptyShellFor(code string) pty.Shell {
-	switch code {
-	case "cmd":
-		return pty.ShellByName("CMD")
-	case "powershell":
-		if s := pty.ShellByName("PowerShell"); s.Name == "PowerShell" {
-			return s
+// resolveShell 把客户端 shell 标识解析为本机真实可用的 shell。
+//
+// 标识 = pty.DetectShells 返回的 Name（bash/zsh/fish/sh/CMD/PowerShell/Git Bash…），
+// 同时兼容历史前端写死的三个值（cmd/powershell/gitbash）——旧 localStorage
+// 里可能还存着它们。
+func resolveShell(code string) (pty.Shell, error) {
+	shells := pty.DetectShells()
+	if code == "" {
+		if len(shells) > 0 {
+			return shells[0], nil
 		}
-		return pty.ShellByName("PowerShell 7")
-	case "gitbash":
-		return pty.ShellByName("Git Bash")
+		return pty.DefaultShell(), nil
 	}
-	return pty.DefaultShell()
+	for _, s := range shells {
+		if strings.EqualFold(s.Name, code) {
+			return s, nil
+		}
+	}
+	aliases := map[string][]string{
+		"cmd":        {"CMD"},
+		"powershell": {"PowerShell", "PowerShell 7"},
+		"gitbash":    {"Git Bash"},
+		"bash":       {"bash"},
+		"zsh":        {"zsh"},
+		"fish":       {"fish"},
+		"sh":         {"sh"},
+	}
+	for _, name := range aliases[strings.ToLower(code)] {
+		for _, s := range shells {
+			if strings.EqualFold(s.Name, name) {
+				return s, nil
+			}
+		}
+	}
+	return pty.Shell{}, fmt.Errorf("不支持的终端类型 %q（本机可用：%s）", code, shellNames(shells))
+}
+
+// shellNames 逗号拼接可用 shell 名（错误信息用）。
+func shellNames(shells []pty.Shell) string {
+	names := make([]string, 0, len(shells))
+	for _, s := range shells {
+		names = append(names, s.Name)
+	}
+	if len(names) == 0 {
+		return "无"
+	}
+	return strings.Join(names, ", ")
+}
+
+// ServeTerminalShells 返回本机可用的终端解释器列表。
+//
+// 前端下拉框据此渲染（Linux/macOS 是 bash/zsh/…，Windows 是 CMD/PowerShell/
+// Git Bash），不再写死平台选项——这是 2026-10 之前 Linux/macOS 终端不可用的
+// 直接原因之一（前端只会发 cmd/powershell/gitbash，Unix 端解析不到）。
+func ServeTerminalShells(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	shells := pty.DetectShells()
+	type shellItem struct {
+		Name    string `json:"name"`
+		Path    string `json:"path"`
+		Default bool   `json:"default"`
+	}
+	out := struct {
+		Shells []shellItem `json:"shells"`
+	}{Shells: make([]shellItem, 0, len(shells))}
+	for i, s := range shells {
+		out.Shells = append(out.Shells, shellItem{Name: s.Name, Path: s.Path, Default: i == 0})
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func jsonEscape(s string) string {

@@ -1,23 +1,53 @@
-// ONNX 运行时可用性实证：用与 pair.exe 相同的 cgo 构建配置，
-// 加载 D 侧真实 onnxruntime.dll + bge-small-zh-v1.5 模型并做一次推理。
+//go:build cgo
+
+// ONNX 运行时可用性实证：用与 companion 相同的 cgo 构建配置，
+// 加载本机 onnxruntime 动态库 + bge-small-zh-v1.5 模型并做一次推理。
+//
+// 跨平台：动态库名按 GOOS 选择（windows .dll / darwin .dylib / linux .so），
+// 也可用 ONNX_LIB、ONNX_MODEL 环境变量直接指定绝对路径。
 package main
 
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+// defaultONNXLib 按平台给默认动态库名（安装包内相对 config/onnx/ 布局）。
+func defaultONNXLib() string {
+	switch runtime.GOOS {
+	case "windows":
+		return `config\onnx\onnxruntime.dll`
+	case "darwin":
+		return "config/onnx/libonnxruntime.dylib"
+	default:
+		return "config/onnx/libonnxruntime.so"
+	}
+}
+
 func main() {
-	dll := `D:\PairCode\bin\config\onnx\onnxruntime.dll`
-	model := `D:\PairCode\models\bge-small-zh-v1.5\model.onnx`
+	dll := os.Getenv("ONNX_LIB")
+	if dll == "" {
+		dll = defaultONNXLib()
+	}
+	model := os.Getenv("ONNX_MODEL")
+	if model == "" {
+		model = "models/bge-small-zh-v1.5/model.onnx"
+	}
 
 	if _, err := os.Stat(dll); err != nil {
-		fmt.Println("❌ dll 不存在:", err)
+		fmt.Println("❌ 动态库不存在:", err)
+		fmt.Println("   可用 ONNX_LIB=<绝对路径> 指定（windows: onnxruntime.dll / darwin: libonnxruntime.dylib / linux: libonnxruntime.so）")
 		os.Exit(1)
 	}
-	fmt.Println("dll :", dll, "(已找到)")
+	fmt.Printf("平台: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Println("库  :", dll, "(已找到)")
+	if _, err := os.Stat(model); err != nil {
+		fmt.Println("❌ 模型不存在:", err, "（可用 ONNX_MODEL=<绝对路径> 指定）")
+		os.Exit(1)
+	}
 	fmt.Println("模型:", model, "(已找到)")
 
 	ort.SetSharedLibraryPath(dll)
