@@ -54,9 +54,10 @@
                       <input v-else-if="f.type === 'number'" class="field-input" type="number" v-model.number="form[tab.key][f.name]"
                              :min="f.min" :max="f.max" :step="f.step" />
 
-                      <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） -->
+                      <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表 /
+                           presets=AI 配置（API 实例）列表） -->
                       <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select" @change="onSelectChange(f)">
-                        <option v-for="o in dynamicOptions(tab.key, f)" :key="o" :value="o">{{ o }}</option>
+                        <option v-for="o in dynamicOptions(tab.key, f)" :key="optVal(o)" :value="optVal(o)">{{ optLabel(o) }}</option>
                       </select>
 
                       <!-- theme-gallery（主题画廊：缩略色卡选择）
@@ -194,10 +195,11 @@ function groupFields(fields) {
   return groups
 }
 
-// ─── 动态数据源（schema 属性 optionsSource/linkField 驱动；复用已有 /api/models，无新后端）───
+// ─── 动态数据源（schema 属性 optionsSource/linkField 驱动；复用已有 /api/models、/api/ai-presets）───
 // modelData = { providers:[...], models:{provider:[...]}, providerBaseURLs:{provider:url} }
-// 由插件注册声明字段行为：optionsSource='providers' 服务商列表 / 'models' 按服务商模型列表；
-// linkField='xxx' 选择变化时用 providerBaseURLs 联动填充目标字段（如 provider→baseURL）。
+// 由插件注册声明字段行为：optionsSource='providers' 服务商列表 / 'models' 按服务商模型列表 /
+// 'presets' AI 配置（API 实例）名称列表；linkField='xxx' 选择变化时用 providerBaseURLs 联动填充
+// 目标字段（如 provider→baseURL）。
 const modelData = ref(null)
 let lastProvider = '' // linkField 联动：记录上一个服务商（判断目标字段是否用户自定义）
 async function loadModels() {
@@ -205,13 +207,32 @@ async function loadModels() {
     modelData.value = await api.getModels()
   } catch { modelData.value = null }
 }
+// ★ 2026-10-17 AI 配置（API 实例）名列表：optionsSource='presets' 的数据源。
+//   插件（如 tool-web）需要在设置里「选择用哪套 API 实例」，不该把服务商/地址写死在插件里——
+//   这里把 ai-presets.json 的配置名透出为下拉选项，换实例只改设置、插件代码零改动。
+const presetNames = ref([])
+async function loadAiPresets() {
+  try {
+    const r = await api.getAiPresets()
+    presetNames.value = Object.keys((r && r.presets) || {})
+  } catch { presetNames.value = [] }
+}
+// 选项既支持 ['a','b'] 也支持 [{value,label}]（presets 源首项用空值表示「跟随当前激活配置」）。
+function optVal(o) {
+  if (o && typeof o === 'object') return o.value == null ? '' : String(o.value)
+  return o
+}
+function optLabel(o) {
+  if (o && typeof o === 'object') return o.label || o.value || ''
+  return o
+}
 // 按服务商取模型列表（optionsSource='models' 数据源）
 function modelsFor(provider) {
   if (!provider) return []
   const m = (modelData.value && modelData.value.models) || {}
   return m[provider] || []
 }
-// 通用选项计算：f.optionsSource ∈ 'models' | 'providers' | 缺省（静态 f.options）
+// 通用选项计算：f.optionsSource ∈ 'models' | 'providers' | 'presets' | 缺省（静态 f.options）
 function dynamicOptions(tabKey, f) {
   if (f.optionsSource === 'models') {
     const cur = form[tabKey]?.[f.name]
@@ -227,6 +248,15 @@ function dynamicOptions(tabKey, f) {
       return list
     }
     return f.options || []
+  }
+  if (f.optionsSource === 'presets') {
+    // 首项空值 = 跟随「当前激活的 AI 配置」（默认，零配置可用）；其余为具名实例。
+    // 值不在列表里（配置被删除）时补一项，避免 select 显示空白、用户以为没保存。
+    const out = [{ value: '', label: '（跟随当前激活配置）' }]
+    const cur = form[tabKey]?.[f.name]
+    for (const n of presetNames.value || []) out.push({ value: n, label: n })
+    if (cur && !(presetNames.value || []).includes(cur)) out.push({ value: cur, label: cur + '（不存在）' })
+    return out
   }
   return f.options || []
 }
@@ -428,7 +458,7 @@ const saveSettings = async () => {
 buildForm()
 
 onMounted(async () => {
-  await loadModels()
+  await Promise.all([loadModels(), loadAiPresets()])
   loadSettings()
 })
 </script>

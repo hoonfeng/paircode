@@ -39,10 +39,146 @@ function htmlToText(s) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
-// web_fetch：抓取网页转纯文本（ctx.web.fetch 60s/4MB；20000 截断）
+// ─── 搜索 / 抓取 API 客户端（★ 2026-10-17 API 实例化：不写死服务商与地址）───
+// 设计原则：**插件里不出现任何服务商名、默认域名或密钥**。搜索/抓取走哪套 API 完全由设置决定：
+//   设置 →「网络工具」→「搜索/抓取 API 实例」选一条 AI 配置（ai-presets.json 里的命名实例），
+//   插件按实例名经 ctx.aiPresets 解析 baseURL + apiKey；留空 = 跟随「当前激活配置」。
+// 端点路径也可配（默认 /v1/tools/search、/v1/tools/fetch，DeepSeek 网页搜索/抓取协议的形态）——
+// 换服务商、换网关、换路径只改设置，插件代码零改动。
+// 未配置 Key（或关闭开关）→ 回退 DuckDuckGo / 原生抓取，保证零配置环境下工具不回归。
+const DEFAULT_SEARCH_PATH = '/v1/tools/search'
+const DEFAULT_FETCH_PATH = '/v1/tools/fetch'
+
+// apiSettings 读本插件命名空间配置（registerSettings 写入的 tool-web 段）。
+function apiSettings(ctx) {
+  try {
+    const s = ctx.getSettings ? ctx.getSettings('tool-web') : null
+    return s && typeof s === 'object' ? s : {}
+  } catch (e) { return {} }
+}
+
+// normBase 归一化基础地址：去尾斜杠、剥 LLM 协议端点后缀（/chat/completions 等）。
+// ★ 保留 /v1：搜索路径本身以 /v1 开头，拼接时由 joinAPI 做版本段去重（不会出现 /v1/v1）。
+function normBase(u) {
+  let s = String(u || '').trim()
+  if (!s) return ''
+  if (!/^https?:\/\//i.test(s)) return ''
+  s = s.replace(/\/+$/, '')
+  s = s.replace(/\/chat\/completions$/i, '')
+  s = s.replace(/\/completions$/i, '')
+  s = s.replace(/\/responses$/i, '')
+  s = s.replace(/\/messages$/i, '')
+  return s
+}
+
+// joinAPI 基础地址 + 端点路径，版本段去重（base 以 /v1 结尾且 path 以 /v1/ 开头时只保留一个）。
+function joinAPI(base, path) {
+  let b = normBase(base)
+  let p = String(path || '').trim()
+  if (!p) return ''
+  if (!p.startsWith('/')) p = '/' + p
+  if (!b) return ''
+  const bm = /^(.*)\/v\d+$/i.exec(b)
+  const pm = /^\/v\d+\//i.exec(p)
+  if (bm && pm) {
+    const bver = b.slice(bm[1].length).toLowerCase()
+    const pver = pm[0].slice(0, -1).toLowerCase()
+    if (bver === pver) b = bm[1]
+  }
+  return b + p
+}
+
+// activePresetName 当前激活的 AI 配置名（settings.preset；读不到 = 空）。
+function activePresetName(ctx) {
+  try { return String((ctx.app && ctx.app.settings && ctx.app.settings.preset) || '') } catch (e) { return '' }
+}
+
+// resolveAPI 按设置解析本次调用使用的 API 实例；返回 null = 未配置 Key / 已关闭。
+// 来源优先级（全部实时读取，改设置即时生效）：
+//   ① 设置「搜索/抓取 API 实例」指定的 AI 配置（或留空时的当前激活配置）→ baseURL + apiKey
+//   ② 实例地址为空 → 该实例所属服务商在 models.json 里的地址（ctx.models）
+//   ③ 设置里的「地址 / Key 覆盖」字段（调试或跨服务商复用同一实例时用）
+//   ④ 兼容旧设置字段 deepseekApiKey / deepseekBaseURL / deepseekSearch（老用户升级不被静默关闭）
+// ★ 不再按「服务商名 / baseURL 含某域名」猜测用哪条配置——实例是显式配置的。
+function resolveAPI(ctx) {
+  const st = apiSettings(ctx)
+  if (st.enabled === false || st.deepseekSearch === false) return null
+  const presetName = String(st.apiPreset || '').trim() || activePresetName(ctx)
+  let baseURL = String(st.apiBaseURL || st.deepseekBaseURL || '').trim()
+  let apiKey = String(st.apiKey || st.deepseekApiKey || '').trim()
+  let alias = presetName || '当前激活配置'
+  if (presetName) {
+    let p = null
+    try { p = ctx.aiPresets && typeof ctx.aiPresets.get === 'function' ? ctx.aiPresets.get(presetName) : null } catch (e) { p = null }
+    if (p) {
+      if (!baseURL) baseURL = String(p.baseURL || '').trim()
+      if (!apiKey) apiKey = String(p.apiKey || '').trim()
+      // 实例只填了服务商、没填地址 → 取服务商条目里的默认地址（models.json）
+      if (!baseURL && p.provider && ctx.models && typeof ctx.models.get === 'function') {
+        let m = null
+        try { m = ctx.models.get(String(p.provider)) } catch (e) { m = null }
+        if (m && m.baseURL) baseURL = String(m.baseURL).trim()
+      }
+    }
+  }
+  baseURL = normBase(baseURL)
+  if (!apiKey || !baseURL) return null
+  return {
+    apiKey: apiKey,
+    baseURL: baseURL,
+    searchPath: String(st.searchPath || '').trim() || DEFAULT_SEARCH_PATH,
+    fetchPath: String(st.fetchPath || '').trim() || DEFAULT_FETCH_PATH,
+    alias: alias,
+  }
+}
+
+// apiErrText 把接口失败响应压成一行可读错误（含 HTTP 状态与响应体片段）。
+function apiErrText(what, res) {
+  const status = res && res.status != null ? res.status : '?'
+  const body = String((res && res.text) || '').replace(/\s+/g, ' ').slice(0, 300)
+  return '搜索/抓取 API ' + what + '接口返回 HTTP ' + status + (body ? '：' + body : '')
+}
+
+// apiFetch 调实例的抓取端点（默认 /v1/tools/fetch）：返回页面标题 + Markdown 正文（20000 截断）。
+function apiFetch(ctx, cred, url) {
+  const endpoint = joinAPI(cred.baseURL, cred.fetchPath)
+  const res = ctx.web.post(endpoint, {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + cred.apiKey,
+  }, JSON.stringify({ url: url }))
+  if (!res || !res.ok) throw new Error(apiErrText('网页抓取', res) + '（端点 ' + endpoint + '，实例 ' + cred.alias + '）')
+  const data = JSON.parse(String(res.text || '{}'))
+  const title = String(data.title || '')
+  const content = String(data.content || '')
+  let out = '（抓取 API 实例：' + cred.alias + '）\nURL: ' + url + '\n'
+  if (title) out += '标题：' + title + '\n'
+  out += '\n' + content
+  if (out.length > 20000) out = out.slice(0, 20000) + '\n…（内容已截断）'
+  return out
+}
+
+// web_fetch：优先实例的抓取 API（Markdown 正文），失败/未配置回退原生抓取。
 function webFetch(ctx, args) {
   const url = String(args.url || '').trim()
   if (!/^https?:\/\//i.test(url)) throw new Error('仅支持 http(s) URL：' + url)
+  const cred = resolveAPI(ctx)
+  if (cred) {
+    try {
+      return apiFetch(ctx, cred, url)
+    } catch (e) {
+      const note = '（抓取 API 调用失败，已回退原生抓取：' + String((e && e.message) || e) + '）\n'
+      let res
+      try {
+        res = ctx.web.fetch(url)
+      } catch (e2) {
+        // 回退也失败 → 两条错误都告诉用户（只报原生错误会把「其实是 API 地址/Key 配错」藏起来）
+        throw new Error(String((e && e.message) || e) + '；原生抓取回退也失败：' + String((e2 && e2.message) || e2))
+      }
+      const text = htmlToText(res.text || '')
+      if (text.length > 20000) return note + 'URL: ' + url + '\nHTTP ' + res.status + '\n\n' + text.slice(0, 20000) + '\n…（内容已截断）'
+      return note + 'URL: ' + url + '\nHTTP ' + res.status + '\n\n' + text
+    }
+  }
   const res = ctx.web.fetch(url)
   const text = htmlToText(res.text || '')
   if (text.length > 20000) return 'URL: ' + url + '\nHTTP ' + res.status + '\n\n' + text.slice(0, 20000) + '\n…（内容已截断）'
@@ -91,10 +227,42 @@ function parseDDGResults(body) {
   return out
 }
 
-// web_search：DuckDuckGo（无需 key；限流/改版时返回无结果提示而非崩溃）。
-function webSearch(ctx, args) {
-  const q = String(args.query || '').trim()
-  if (!q) throw new Error('query 不能为空')
+// formatAPIResults 把搜索 API 结果格式化成模型易读的清单（别名=实例名，便于用户判断走的哪套 API）。
+function formatAPIResults(q, results, alias) {
+  let out = '「' + q + '」搜索结果（API 实例：' + alias + '）：\n'
+  results.forEach((r, i) => {
+    out += '\n' + (i + 1) + '. ' + (r.title || '(无标题)') + '\n   ' + (r.url || '')
+    const meta = []
+    if (r.site_name) meta.push('站点：' + r.site_name)
+    if (r.date) meta.push('日期：' + r.date)
+    if (typeof r.rerank_score === 'number') meta.push('相关度：' + r.rerank_score)
+    if (meta.length) out += '\n   ' + meta.join(' · ')
+    const text = String(r.summary || r.snippet || '')
+    if (text) out += '\n   ' + text.slice(0, 800)
+  })
+  return out
+}
+
+// apiSearch 调实例的搜索端点（默认 /v1/tools/search）：query/count/ori_question → 结构化结果列表。
+function apiSearch(ctx, cred, args, q, count) {
+  const body = { query: q, count: count, need_content: false }
+  // ori_question：调用方给了原始意图就透传（文档建议，有助理解搜索意图）
+  const ori = String(args.ori_question || '').trim()
+  if (ori) body.ori_question = ori.slice(0, 128)
+  const endpoint = joinAPI(cred.baseURL, cred.searchPath)
+  const res = ctx.web.post(endpoint, {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + cred.apiKey,
+  }, JSON.stringify(body))
+  if (!res || !res.ok) throw new Error(apiErrText('网页搜索', res) + '（端点 ' + endpoint + '，实例 ' + cred.alias + '）')
+  const data = JSON.parse(String(res.text || '{}'))
+  const results = Array.isArray(data.results) ? data.results : []
+  if (results.length === 0) return '「' + q + '」无搜索结果（API 实例：' + cred.alias + '）。'
+  return formatAPIResults(q, results, cred.alias)
+}
+
+// ddgSearch DuckDuckGo 回退（无需 key；限流/改版时返回无结果提示而非崩溃）。
+function ddgSearch(ctx, q) {
   const resp = ctx.web.fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q))
   const body = String(resp.text || '')
   const results = parseDDGResults(body)
@@ -107,6 +275,29 @@ function webSearch(ctx, args) {
     if (r.snippet) out += '\n   ' + r.snippet
   })
   return out
+}
+
+// web_search：优先实例的搜索 API（默认 /v1/tools/search），失败/未配置回退 DuckDuckGo。
+function webSearch(ctx, args) {
+  const q = String(args.query || '').trim()
+  if (!q) throw new Error('query 不能为空')
+  const n = Number(args.count)
+  const count = n > 0 ? Math.max(1, Math.min(50, Math.floor(n))) : 8
+  const cred = resolveAPI(ctx)
+  if (cred) {
+    try {
+      return apiSearch(ctx, cred, args, q, count)
+    } catch (e) {
+      const note = '（搜索 API 调用失败，已回退 DuckDuckGo：' + String((e && e.message) || e) + '）\n'
+      try {
+        return note + ddgSearch(ctx, q)
+      } catch (e2) {
+        // 回退也失败 → 两条错误都告诉用户（只抛 API 错误会掩盖「网络本身不通」）
+        throw new Error(String((e && e.message) || e) + '；DuckDuckGo 回退也失败：' + String((e2 && e2.message) || e2))
+      }
+    }
+  }
+  return ddgSearch(ctx, q)
 }
 
 // ─── read_image（2026-09-12 自 tool-vision 并入）───
@@ -167,8 +358,8 @@ function screenshotImpl(ctx, args) {
 const tools = [
   {
     name: 'web_fetch',
-    description: '抓取一个 http(s) 网页并返回其纯文本内容（去除 HTML 标签，超长截断）。用于查阅在线文档、API 参考、网页。',
-    usageGuide: '抓取 http(s) 网页并返回纯文本（去 HTML 标签）。用于查阅在线文档、API 参考、网页内容。拿到链接后再用这个读全文。比 bash curl 更方便（自动去标签+编码处理+截断保护）。',
+    description: '抓取一个 http(s) 网页并返回其正文（优先走设置中选定的 API 实例的抓取接口，返回标题 + Markdown 正文；未配置或调用失败时回退原生抓取并去 HTML 标签）。用于查阅在线文档、API 参考、网页。',
+    usageGuide: '抓取 http(s) 网页返回正文。设置「网络工具 → 搜索/抓取 API 实例」选定了实例且配置了 Key 时，优先调用该实例的抓取接口（默认路径 /v1/tools/fetch，Markdown 正文、自动处理反爬/编码）；失败或未配置时回退原生抓取（去标签+20000 字截断）。拿到链接后再用这个读全文。',
     category: '网络',
     readOnly: true,
     parameters: {
@@ -182,14 +373,16 @@ const tools = [
   },
   {
     name: 'web_search',
-    description: '搜索网络，返回前若干条 标题/链接/摘要（已配置 SearXNG 则优先用之，否则 DuckDuckGo）。查文档、报错、库用法、最新信息时用；拿到链接可再用 web_fetch 读全文。',
-    usageGuide: '搜索网络，返回标题/链接/摘要。用于查文档、报错信息、库的用法、最新技术方案。拿到链接后可再用 web_fetch 读全文。比 bash 手动搜索更高效（集成 SearXNG/DuckDuckGo）。',
+    description: '搜索网络，返回前若干条 标题/链接/摘要/站点/日期/相关度（优先走设置中选定的 API 实例的搜索接口，未配置或调用失败时回退 DuckDuckGo）。查文档、报错、库用法、最新信息时用；拿到链接可再用 web_fetch 读全文。',
+    usageGuide: '搜索网络，返回标题/链接/摘要/站点/日期/相关度。设置「网络工具 → 搜索/抓取 API 实例」选定实例且配置了 Key 时，走该实例的搜索接口（默认路径 /v1/tools/search，支持 site:、-site:、引号等语法，count 可选 1~50），否则回退 DuckDuckGo。用于查文档、报错信息、库的用法、最新技术方案；拿到链接后再用 web_fetch 读全文。',
     category: '网络',
     readOnly: true,
     parameters: {
       type: 'object',
       properties: {
         query: { type: 'string', description: '搜索关键词' },
+        count: { type: 'integer', description: '可选：返回条数（1~50，默认 8；仅搜索 API 生效）' },
+        ori_question: { type: 'string', description: '可选：触发搜索的用户原始问题（≤128 字符，帮助理解搜索意图；仅搜索 API 生效）' },
       },
       required: ['query'],
     },
@@ -266,8 +459,67 @@ const tools = [
 return {
   name: 'tool-web',
   inject: ['web', 'fs'], // ★ binary 是 ctx 附属对象（jsplugin.go ctxObj.Set("binary", …)），非宿主服务，不进 inject；fs：read_image 校验用
-  purpose: '网络与视觉工具（web_fetch/web_search JS 原生 + screenshot_desktop/window/area/web_debug 内嵌内核回退 + read_image 看图）——并入 tool-screenshot/tool-web-debug（2026-09）与 tool-vision（2026-09-12）',
+  purpose: '网络与视觉工具（web_fetch/web_search：按设置选定的 API 实例调用搜索/抓取接口 + DuckDuckGo/原生抓取回退；screenshot/web_debug 内嵌内核回退 + read_image 看图）——并入 tool-screenshot/tool-web-debug（2026-09）与 tool-vision（2026-09-12）；2026-10-17 接入搜索/抓取 API 并改为「API 实例可配」（不内置服务商/地址）',
   apply(ctx) {
+    // 插件设置（设置面板「网络工具」页）：搜索/抓取 API 接入参数。
+    // ★ 2026-10-17 API 实例化：不在插件里写死服务商/地址/Key——用户选一条 AI 配置（API 实例），
+    //   插件按实例名经 ctx.aiPresets 解析；留空 = 跟随当前激活配置（见 resolveAPI）。
+    try {
+      if (typeof ctx.registerSettings === 'function') {
+        ctx.registerSettings({
+          key: 'tool-web',
+          title: '网络工具',
+          fields: [
+            {
+              name: 'apiPreset',
+              label: '搜索/抓取 API 实例',
+              type: 'select',
+              optionsSource: 'presets',
+              default: '',
+              hint: '用哪套 AI 配置（API 实例）的地址与 Key 调搜索/抓取接口。留空=跟随「当前激活配置」。本插件不内置任何服务商——换实例只改这里，代码不变',
+            },
+            {
+              name: 'apiBaseURL',
+              label: 'API 地址覆盖（可选）',
+              type: 'text',
+              default: '',
+              hint: '留空=用所选实例的地址；填写则覆盖。只填基础地址（如 https://host/v1），/chat/completions 等后缀会被忽略、版本段与端点路径自动去重',
+            },
+            {
+              name: 'apiKey',
+              label: 'API Key 覆盖（可选）',
+              type: 'password',
+              default: '',
+              hint: '留空=用所选实例的 Key；仅当搜索/抓取接口用的 Key 与实例不同时才填',
+            },
+            {
+              name: 'searchPath',
+              label: '搜索端点路径',
+              type: 'text',
+              default: DEFAULT_SEARCH_PATH,
+              hint: '相对 API 地址的路径，默认 ' + DEFAULT_SEARCH_PATH + '（DeepSeek 网页搜索协议形态）；换服务商/网关时改这里',
+            },
+            {
+              name: 'fetchPath',
+              label: '抓取端点路径',
+              type: 'text',
+              default: DEFAULT_FETCH_PATH,
+              hint: '相对 API 地址的路径，默认 ' + DEFAULT_FETCH_PATH + '（DeepSeek 网页抓取协议形态）',
+            },
+            {
+              name: 'enabled',
+              label: '启用搜索/抓取 API',
+              type: 'checkbox',
+              default: true,
+              hint: '关闭后 web_search 回退 DuckDuckGo、web_fetch 回退原生抓取',
+            },
+          ],
+        })
+      }
+    } catch (e) {
+      // 设置注册失败不阻断工具装载（老宿主没有 registerSettings 时静默跳过）
+      try { ctx.logger && ctx.logger.warn && ctx.logger.warn('tool-web: 设置注册失败：' + String((e && e.message) || e)) } catch (e2) {}
+    }
     for (const t of tools) {
       ctx.tools.register({
         name: t.name,
