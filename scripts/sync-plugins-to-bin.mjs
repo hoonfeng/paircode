@@ -12,6 +12,8 @@
 //
 // 跳过规则（与 MigrateLegacyBinPairData / packager copyDistEntry 对齐）：
 //   - node_modules、.git  目录不镜像
+//   - .smoke 目录不镜像（插件自测夹具：含 .git / 运行时锁 / 任务快照，属测试产物，
+//     不是插件内容；混入安装镜像会污染用户环境 —— 审计 R5，2026-10-17）
 //   - 符号链接 / junction  不镜像（无文件内容，防越界）
 //
 // 运行：node scripts/sync-plugins-to-bin.mjs（cwd=仓库根）
@@ -24,12 +26,12 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const srcRoot = path.join(repoRoot, '.pair')
 const dstRoot = path.join(repoRoot, 'bin', '.pair')
 
-// mirrorDir 递归镜像目录（跳过 node_modules/.git/符号链接），返回拷贝文件数。
+// mirrorDir 递归镜像目录（跳过 node_modules/.git/.smoke/符号链接），返回拷贝文件数。
 function mirrorDir(src, dst) {
   mkdirSync(dst, { recursive: true })
   let files = 0
   for (const ent of readdirSync(src, { withFileTypes: true })) {
-    if (ent.name === 'node_modules' || ent.name === '.git') continue
+    if (ent.name === 'node_modules' || ent.name === '.git' || ent.name === '.smoke') continue
     const s = path.join(src, ent.name)
     const d = path.join(dst, ent.name)
     let lst

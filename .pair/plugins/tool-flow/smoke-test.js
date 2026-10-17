@@ -612,6 +612,50 @@ check('[驱动] 交报告 → 待验收且执行态收尾（running=false）',
   !!rowD && rowD.status === 'in_review' && rowD.runState.running === false && !!rowD.runState.lastEndAt,
   JSON.stringify(rowD && { st: rowD.status, rs: rowD.runState }))
 
+// ── ⑧d-1b 执行失败不留脏状态（先投递、成功后认领；无 subagent 伪兜底）──
+try { fs.rmSync(path.join(WS, '.pair', 'taskboard', '.last-conv.json'), { force: true }) } catch (e) { }
+let subRunCount = 0
+const subOrig = ctx.subagent
+// 桩故意 available()=true：旧实现会在这里「看起来兜底成功」，新实现必须一次都不调用
+ctx.subagent = { available: () => true, run: () => { subRunCount++; return { content: '不应被调用', ended: 'completed' } } }
+r = T('taskboard_create').execute({ title: '执行失败不留脏状态卡', description: '无会话执行验证' })
+const failCardId = (r.task && r.task.id) || ''
+// ① 无会话执行 → ok:false，卡回待办且可再执行
+let rex = rpcs['taskboard_action']({ op: 'execute', id: failCardId })
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowF = (snapB.tasks || []).filter((t) => t.id === failCardId)[0]
+check('[执行] 无会话 → ok:false 且卡在待办（不在进行中）+ lastError 可读',
+  rex.ok === false && rex.dispatched === false && /没有可用的执行会话/.test(String(rex.error || '')) &&
+  !!rowF && rowF.status === 'todo' && rowF.runState.running === false &&
+  /没有可用的执行会话/.test(String(rowF.runState.lastError || '')),
+  JSON.stringify({ ok: rex.ok, d: rex.dispatched, err: rex.error, st: rowF && rowF.status, rs: rowF && rowF.runState }))
+// ② followup 返回 ok:false → 不计成功，卡回待办，lastError 含被拒原因
+const followOrigExec = ctx.agents.followup
+ctx.agents.followup = () => ({ ok: false, error: '会话已关闭' })
+rex = rpcs['taskboard_action']({ op: 'execute', id: failCardId, convId: 'conv_exec_dead' })
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowF = (snapB.tasks || []).filter((t) => t.id === failCardId)[0]
+check('[执行] followup 返回 ok:false → ok:false + 卡回待办 + lastError 含被拒原因',
+  rex.ok === false && rex.dispatched === false && /会话已关闭/.test(String(rex.error || '')) &&
+  !!rowF && rowF.status === 'todo' && rowF.runState.running === false &&
+  /会话已关闭/.test(String(rowF.runState.lastError || '')),
+  JSON.stringify({ ok: rex.ok, d: rex.dispatched, err: rex.error, st: rowF && rowF.status, rs: rowF && rowF.runState }))
+// ③ 失败后同一张卡可再次执行（证明没有卡死）——同时证明全程不走 subagent 兜底
+ctx.agents.followup = followOrigExec
+const followsBeforeRetry = followups.length
+rex = rpcs['taskboard_action']({ op: 'execute', id: failCardId, convId: 'conv_exec_ok' })
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowF = (snapB.tasks || []).filter((t) => t.id === failCardId)[0]
+check('[执行] 失败后可再次执行 → ok:true，卡转进行中且 running=true',
+  rex.ok === true && followups.length === followsBeforeRetry + 1 &&
+  !!rowF && rowF.status === 'in_progress' && rowF.runState.running === true && !rowF.runState.lastError,
+  JSON.stringify({ ok: rex.ok, st: rowF && rowF.status, rs: rowF && rowF.runState }))
+check('[执行] 不再走 subagent 兜底（RPC 路径 subagent.run 调用 0 次）',
+  subRunCount === 0, 'subagent.run=' + subRunCount)
+ctx.subagent = subOrig
+T('taskboard_report').execute({ id: failCardId, summary: '收尾', outcome: 'succeeded' })
+rpcs['taskboard_action']({ op: 'trash', id: failCardId })
+
 // 定时：设置 → nextAt 计算；关闭 → 清空
 rc = rpcs['taskboard_action']({ op: 'schedule', id: drvId, schedule: { enabled: true, mode: 'interval', everyMinutes: 30 } })
 check('[驱动] 设置定时 → enabled 且 nextAt 已计算',
@@ -637,12 +681,13 @@ if (scanFn) scanFn()
 flushTimeouts()
 snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
 let rowS = (snapB.tasks || []).filter((t) => t.id === schedCardId)[0]
-check('[定时] 无会话时到点自动执行（subagent 兜底，runCount=1 / via=subagent）',
-  !!rowS && rowS.runState.runCount === 1 && rowS.runState.via === 'subagent' && rowS.runState.sessionId === 'subagent',
-  JSON.stringify(rowS && { rs: rowS.runState }))
-check('[定时] 到点执行后自动交报告 → 待验收（executions=1、lastError 为空）',
-  !!rowS && rowS.status === 'in_review' && (rowS.executions || []).length === 1 && !rowS.runState.lastError,
-  JSON.stringify(rowS && { st: rowS.status, ex: (rowS.executions || []).length, err: rowS.runState.lastError }))
+check('[定时] 无会话时到点执行 → 不派发、卡回待办、schedule.lastError 可读（无伪兜底）',
+  !!rowS && rowS.status === 'todo' && rowS.runState.running === false &&
+  /没有可用的执行会话/.test(String((rowS.schedule && rowS.schedule.lastError) || '')),
+  JSON.stringify(rowS && { st: rowS.status, rs: rowS.runState, sch: rowS.schedule }))
+check('[定时] 无会话失败不留「进行中没人跑」（executions=0 / runCount=0）',
+  !!rowS && (rowS.executions || []).length === 0 && rowS.runState.runCount === 0,
+  JSON.stringify(rowS && { ex: (rowS.executions || []).length, rs: rowS.runState }))
 
 // ── ⑧d-3 多实例互斥：其它实例持扫描锁（90s 内）→ 本实例跳过，不重复派发 ──
 const lockPath = path.join(WS, '.pair', 'taskboard', '.scheduler.lock')
@@ -727,6 +772,199 @@ rpcs['taskboard_action']({ op: 'trash', id: schedCardId })
 rpcs['taskboard_action']({ op: 'trash', id: lockCardId })
 rpcs['taskboard_action']({ op: 'trash', id: autoCardId })
 rpcs['taskboard_action']({ op: 'trash', id: manualCardId })
+
+// ── ⑧e 「待规划」列可执行化：规划 → 多轮讨论 → 定稿 → 待办 ──
+// 归零看板数据（独立夹具），避免历史卡干扰
+fs.writeFileSync(path.join(WS, '.pair', 'taskboard', 'tasks.json'),
+  JSON.stringify({ version: 1, revision: 0, tasks: [], updatedAt: new Date().toISOString() }))
+rd = rpcs['taskboard_action']({ op: 'driver', patch: { mode: 'manual', autoAccept: false, planAutoAccept: false } })
+check('[规划] 驱动配置含 planAutoAccept（默认关闭）', rd.ok === true && !!rd.driver && rd.driver.planAutoAccept === false, JSON.stringify(rd))
+
+// 建一张「待规划」卡
+r = T('taskboard_create').execute({ title: '待规划验证卡', description: '先规划再执行', status: 'backlog' })
+const planCardId = (r.task && r.task.id) || ''
+check('[规划] 建卡可入「待规划」列', /待规划/.test(txt(r)) && !!(r.task && r.task.status === 'backlog'), txt(r))
+
+// 开始规划 → 派发规划任务书
+let followsPlan = followups.length
+r = T('taskboard_plan').execute({ id: planCardId, start: true })
+check('[规划] 开始规划派发任务书（followup）', /已派发规划/.test(txt(r)) && followups.length === followsPlan + 1, txt(r))
+const planBook = String((followups[followups.length - 1] || {}).text || '')
+check('[规划] 规划任务书强调「只做规划不做实现」+ 定稿协议',
+  /待规划/.test(planBook) && /不做实现/.test(planBook) && /final=true/.test(planBook), planBook.slice(0, 260))
+
+// 第一版规划
+r = T('taskboard_plan').execute({
+  id: planCardId, summary: '分三步改造', subtasks: ['读现有实现', '设计状态机', '补测试'],
+  questions: ['是否需要兼容老卡？'], risks: ['可能影响 flow_advance'],
+})
+let snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowP = (snapP.tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 第一版写入 rounds，卡仍在「待规划」',
+  !!rowP && rowP.status === 'backlog' && !!rowP.plan && rowP.plan.rounds.length === 1 &&
+  rowP.plan.stage === 'drafting' && rowP.plan.questions.length === 1 && (rowP.subtasks || []).length === 3,
+  JSON.stringify(rowP && { st: rowP.status, stage: rowP.plan && rowP.plan.stage, n: rowP.plan && rowP.plan.rounds.length, q: rowP.plan && rowP.plan.questions }))
+
+// 第二版（多轮修订）
+r = T('taskboard_plan').execute({
+  id: planCardId, summary: '分四步改造', subtasks: ['读现有实现', '设计状态机', '改 client', '补测试'],
+  questions: [], risks: [],
+})
+snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowP = (snapP.tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 多轮修订累积版本（rounds=2，subtasks 取最新）',
+  !!rowP && rowP.plan.rounds.length === 2 && rowP.plan.rounds[1].n === 2 && (rowP.subtasks || []).length === 4,
+  JSON.stringify(rowP && { n: rowP.plan && rowP.plan.rounds.length, subs: (rowP.subtasks || []).length }))
+
+// 用户参与讨论 → 记录 + 投递 agent 修订
+followsPlan = followups.length
+r = rpcs['taskboard_action']({ op: 'planDiscuss', id: planCardId, text: '老卡不用兼容，直接重构', convId: 'conv_plan' })
+snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowP = (snapP.tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 讨论写入 plan.discussion 并投递 agent 修订',
+  r.ok === true && r.dispatched === true && !!rowP && rowP.plan.discussion.length === 1 &&
+  rowP.plan.stage === 'drafting' && followups.length === followsPlan + 1 &&
+  /老卡不用兼容/.test(String((followups[followups.length - 1] || {}).text || '')),
+  JSON.stringify({ ok: r.ok, n: rowP && rowP.plan && rowP.plan.discussion.length, f: followups.length - followsPlan }))
+
+// 定稿（未开 planAutoAccept）→ 停在「待确认」
+r = T('taskboard_plan').execute({ id: planCardId, final: true })
+snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowP = (snapP.tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 定稿停在「待确认」（未开 planAutoAccept，不自动入待办）',
+  /等待用户/.test(txt(r)) && !!rowP && rowP.status === 'backlog' && rowP.plan.stage === 'review', txt(r) + ' | ' + JSON.stringify(rowP && { st: rowP.status, stage: rowP.plan && rowP.plan.stage }))
+
+// 人确认 → 待办
+r = rpcs['taskboard_action']({ op: 'planAccept', id: planCardId })
+snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowP = (snapP.tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 人确认后移入「待办」（stage=final + acceptedAt）',
+  r.ok === true && !!rowP && rowP.status === 'todo' && rowP.plan.stage === 'final' && !!rowP.plan.acceptedAt,
+  JSON.stringify(rowP && { st: rowP.status, stage: rowP.plan && rowP.plan.stage, acc: rowP.plan && rowP.plan.acceptedAt }))
+
+// 非法：对待办卡开始规划
+r = T('taskboard_plan').execute({ id: planCardId, start: true })
+check('[规划] 只有「待规划」卡可以规划（待办卡被拒）', /只有「待规划」/.test(txt(r)), txt(r))
+
+// planAutoAccept=true → 定稿直接入待办
+rd = rpcs['taskboard_action']({ op: 'driver', patch: { planAutoAccept: true } })
+r = T('taskboard_create').execute({ title: '自动定稿卡', status: 'backlog' })
+const autoPlanId = (r.task && r.task.id) || ''
+T('taskboard_plan').execute({ id: autoPlanId, summary: '一步搞定', subtasks: ['做'] })
+r = T('taskboard_plan').execute({ id: autoPlanId, final: true })
+snapP = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+const rowAP = (snapP.tasks || []).filter((t) => t.id === autoPlanId)[0]
+check('[规划] 开 planAutoAccept 后定稿直接移入「待办」',
+  rd.ok === true && !!rowAP && rowAP.status === 'todo' && rowAP.plan.stage === 'final', txt(r) + ' | ' + JSON.stringify(rowAP && { st: rowAP.status, stage: rowAP.plan && rowAP.plan.stage }))
+rpcs['taskboard_action']({ op: 'driver', patch: { planAutoAccept: false } })
+
+// ── ⑧f 派发可观测（监督者第 2 次 A1/A2/A3/A5）：失败不计成功、状态可读可重试、回写清错 ──
+// 清空「最近活跃会话」池，构造「无任何会话」的真实场景
+fs.rmSync(path.join(WS, '.pair/taskboard', '.last-conv.json'), { force: true })
+const discCardId = (T('taskboard_create').execute({ title: '派发可观测验证卡', status: 'backlog' }).task || {}).id || ''
+const snapOf = (id) => (JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body).tasks || []).filter((t) => t.id === id)[0]
+
+// ① 无会话 → 派发失败（不再谎报「已派发」，也不把 stage 改成「规划中」）
+let rDisc = rpcs['taskboard_action']({ op: 'planStart', id: discCardId })
+let rowDisc = snapOf(discCardId)
+check('[派发] 无会话 → 不计成功（ok=false / dispatched=false + 引导先选会话）',
+  rDisc.ok === false && rDisc.dispatched === false && /请先在对话里打开/.test(String(rDisc.error || '')) &&
+  !!rowDisc && !!rowDisc.plan.dispatch && rowDisc.plan.dispatch.ok === false &&
+  /没有可用的规划会话/.test(String(rowDisc.plan.dispatch.error || '')) && rowDisc.plan.stage !== 'drafting',
+  JSON.stringify({ ok: rDisc.ok, d: rDisc.dispatched, e: rDisc.error, stage: rowDisc && rowDisc.plan.stage }))
+
+// ①b 讨论同样不得静默（意见落盘 + 未投递可读）
+rDisc = rpcs['taskboard_action']({ op: 'planDiscuss', id: discCardId, text: '意见-无通道' })
+rowDisc = snapOf(discCardId)
+check('[讨论] 无会话 → 不静默成功（ok=false / dispatched=false / 已记录 + 引导）',
+  rDisc.ok === false && rDisc.dispatched === false && rDisc.recorded === true &&
+  /没有投递成功/.test(String(rDisc.error || '')) && /请先在对话里打开/.test(String(rDisc.error || '')) &&
+  !!rowDisc && rowDisc.plan.discussion.length === 1 && rowDisc.plan.discussion[0].text === '意见-无通道',
+  JSON.stringify({ ok: rDisc.ok, d: rDisc.dispatched, e: rDisc.error }))
+
+// ② followup 明确返回 ok:false → 不计成功（A1）
+const followMock = ctx.agents.followup
+ctx.agents.followup = () => ({ ok: false, error: '会话已关闭' })
+const rRej = rpcs['taskboard_action']({ op: 'planStart', id: discCardId, convId: 'conv_rejected' })
+ctx.agents.followup = followMock
+rowDisc = snapOf(discCardId)
+check('[派发] followup 返回 ok:false → 不计成功（ok=false + 被拒原因 + dispatch.ok=false）',
+  rRej.ok === false && rRej.dispatched === false && /会话投递被拒/.test(String(rRej.error || '')) &&
+  !!rowDisc && rowDisc.plan.dispatch.ok === false && /会话投递被拒/.test(String(rowDisc.plan.dispatch.error || '')),
+  JSON.stringify({ ok: rRej.ok, d: rRej.dispatched, e: rRej.error, dsp: rowDisc && rowDisc.plan.dispatch }))
+
+// ③ 成功派发 → dispatch.ok=true（可读 at/via/convId）
+const rOk = rpcs['taskboard_action']({ op: 'planStart', id: discCardId, convId: 'conv_plan_ok' })
+rowDisc = snapOf(discCardId)
+check('[派发] 成功派发 → dispatch.ok=true（at/via/convId 可读）',
+  rOk.ok === true && rOk.dispatched === true && !!rowDisc && rowDisc.plan.dispatch.ok === true &&
+  !!rowDisc.plan.dispatch.at && rowDisc.plan.dispatch.via === 'followup' && rowDisc.plan.dispatch.convId === 'conv_plan_ok',
+  JSON.stringify({ ok: rOk.ok, via: rOk.via, dsp: rowDisc && rowDisc.plan.dispatch }))
+
+// ④ 派发后超阈值（10 分钟）仍无回写 → 状态可读（at 保留 + 已等待分钟数）
+const dbPath = path.join(WS, '.pair/taskboard/tasks.json')
+const dbx = JSON.parse(fs.readFileSync(dbPath, 'utf8'))
+const recX = (dbx.tasks || []).filter((t) => t.id === discCardId)[0]
+const staleAt = new Date(Date.now() - 20 * 60000).toISOString()
+recX.plan.dispatch.at = staleAt
+fs.writeFileSync(dbPath, JSON.stringify(dbx, null, 2))
+rowDisc = snapOf(discCardId)
+const waitedMin = Math.floor((Date.now() - new Date(rowDisc.plan.dispatch.at).getTime()) / 60000)
+check('[派发] 超阈值未回写 → snapshot 状态可读（dispatch.at 保留 + 已等待≥10 分钟）',
+  rowDisc.plan.dispatch.ok === true && rowDisc.plan.dispatch.at === staleAt && waitedMin >= 10 &&
+  (rowDisc.plan.rounds || []).length === 0,
+  JSON.stringify({ at: rowDisc.plan.dispatch.at, waitedMin: waitedMin, n: (rowDisc.plan.rounds || []).length }))
+// 可重试：再派发一次 → ok:true 且 dispatch.at 被刷新（覆盖旧记录）
+const rRetry = rpcs['taskboard_action']({ op: 'planStart', id: discCardId, convId: 'conv_plan_ok' })
+rowDisc = snapOf(discCardId)
+check('[派发] 未回写可一键重试（再次派发成功 + dispatch.at 刷新）',
+  rRetry.ok === true && rRetry.dispatched === true && !!rowDisc &&
+  String(rowDisc.plan.dispatch.at) > staleAt && rowDisc.plan.dispatch.ok === true,
+  JSON.stringify({ ok: rRetry.ok, at: rowDisc && rowDisc.plan.dispatch.at, old: staleAt }))
+
+// ⑤ 新版本回写 → 清空派发错误（A3）
+ctx.agents.followup = () => ({ ok: false, error: '会话已关闭' })
+rpcs['taskboard_action']({ op: 'planStart', id: discCardId, convId: 'conv_rejected' })
+ctx.agents.followup = followMock
+const rowHadErr = snapOf(discCardId)
+const hadErr = !!(rowHadErr && rowHadErr.plan.dispatch && rowHadErr.plan.dispatch.error)
+T('taskboard_plan').execute({ id: discCardId, summary: '修订版', subtasks: ['b'] })
+rowDisc = snapOf(discCardId)
+check('[派发] 新版本回写 → 清空派发错误（dispatch.ok=true / error 空 / repliedAt）',
+  hadErr && !!rowDisc && rowDisc.plan.dispatch.ok === true && rowDisc.plan.dispatch.error === '' &&
+  !!rowDisc.plan.dispatch.repliedAt && (rowDisc.plan.rounds || []).length === 1,
+  JSON.stringify({ hadErr: hadErr, dsp: rowDisc && rowDisc.plan.dispatch, n: rowDisc && (rowDisc.plan.rounds || []).length }))
+
+// ⑥ 有会话 → followup 投递，消息正文包含意见原文
+const fBeforeDisc = followups.length
+rDisc = rpcs['taskboard_action']({ op: 'planDiscuss', id: discCardId, text: '意见-有会话', convId: 'conv_disc' })
+rowDisc = snapOf(discCardId)
+check('[讨论] 有会话时 dispatched=true 且 followup 收到含意见文本的消息',
+  rDisc.ok === true && rDisc.dispatched === true && /^followup/.test(String(rDisc.via || '')) &&
+  followups.length === fBeforeDisc + 1 &&
+  /意见-有会话/.test(String((followups[followups.length - 1] || {}).text || '')) &&
+  !!rowDisc && rowDisc.plan.discussion.length === 2,
+  JSON.stringify({ ok: rDisc.ok, via: rDisc.via, f: followups.length - fBeforeDisc, n: rowDisc && rowDisc.plan.discussion.length }))
+rpcs['taskboard_action']({ op: 'trash', id: discCardId })
+
+// ── ⑧g 修 3：定稿并入待办的卡拖回「待规划」→ 需要重新规划（历史与定稿痕迹保留）──
+const rowPreBack = (JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body).tasks || []).filter((t) => t.id === planCardId)[0]
+const preRounds = (rowPreBack.plan.rounds || []).length
+const preFinalAt = rowPreBack.plan.finalAt
+const preAcceptedAt = rowPreBack.plan.acceptedAt
+const rBack = rpcs['taskboard_action']({ op: 'move', id: planCardId, to: 'backlog' })
+const rowBack = (JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body).tasks || []).filter((t) => t.id === planCardId)[0]
+check('[规划] 定稿卡拖回「待规划」→ stage 重置 drafting（不再自相矛盾）',
+  rBack.ok === true && !!rowBack && rowBack.status === 'backlog' && rowBack.plan.stage === 'drafting',
+  JSON.stringify(rowBack && { st: rowBack.status, stage: rowBack.plan.stage }))
+check('[规划] 拖回后历史版本与定稿痕迹保留（rounds 不变 + finalAt/acceptedAt 仍在）',
+  !!rowBack && (rowBack.plan.rounds || []).length === preRounds &&
+  rowBack.plan.finalAt === preFinalAt && rowBack.plan.acceptedAt === preAcceptedAt,
+  JSON.stringify(rowBack && { n: (rowBack.plan.rounds || []).length, pre: preRounds, f: rowBack.plan.finalAt === preFinalAt, a: rowBack.plan.acceptedAt === preAcceptedAt }))
+
+// 清理
+rpcs['taskboard_action']({ op: 'trash', id: planCardId })
+rpcs['taskboard_action']({ op: 'trash', id: autoPlanId })
 
 console.log('\n=== ⑨ 安全边界（mock 与真实同语义）===')
 let boundaryOK = false

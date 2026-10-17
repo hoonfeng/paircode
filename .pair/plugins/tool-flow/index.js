@@ -422,6 +422,13 @@ return {
       }
       var from = t.status
       t.status = s
+      // 拖回「待规划」= 需要重新规划：已有规划历史的卡把阶段从 final/review 退回 drafting
+      // （历史版本与 finalAt/acceptedAt 保留，作为审计痕迹，不在重规划时抹掉）
+      if (s === 'backlog' && t.plan && typeof t.plan === 'object' &&
+          Array.isArray(t.plan.rounds) && t.plan.rounds.length > 0) {
+        t.plan.stage = 'drafting'
+        t.plan.updatedAt = nowIso()
+      }
       if (s === 'in_progress') {
         t.claimedBy = String(a.sessionId || by.sessionId || '')
         t.claimedAt = nowIso()
@@ -479,23 +486,331 @@ return {
       tbMirror(t)
       return { ok: true, task: t }
     }
-    /** 写入执行拆解（agent 开工时 plan 出的子项；看板详情按进度展示）。 */
-    function tbPlan(id, subtasks, by) {
+    // ── ②c 规划阶段：「待规划」列可执行化（2026-10-17 用户诉求）──────────
+    // 改造前：backlog 只能看 / 只能直接认领去做，没有「规划」语义。
+    // 改造后：backlog 卡由 agent 做**真实规划**（调研 → 产出可执行拆解），
+    //   多轮讨论可反复修订（每轮留版本），定稿后移入「待办」，拆解即执行骨架。
+    // 阶段：''（未规划）→ drafting（规划中）→ review（待确认）→ final（已定稿）
+    var PLAN_STAGE_LABEL = { '': '未规划', drafting: '规划中', review: '待确认', final: '已定稿' }
+    /** 规划状态（惰性初始化；老卡无 plan 字段 → 视为未规划）。 */
+    function tbPlanState(t) {
+      if (!t.plan || typeof t.plan !== 'object') t.plan = {}
+      var p = t.plan
+      if (!Array.isArray(p.rounds)) p.rounds = []
+      if (!Array.isArray(p.questions)) p.questions = []
+      if (!Array.isArray(p.risks)) p.risks = []
+      if (!Array.isArray(p.discussion)) p.discussion = []
+      if (typeof p.stage !== 'string') p.stage = ''
+      if (typeof p.summary !== 'string') p.summary = ''
+      if (typeof p.convId !== 'string') p.convId = ''
+      // 最近一次派发状态：{at, via, ok, error, convId, repliedAt?}（无则 null）
+      if (!p.dispatch || typeof p.dispatch !== 'object') p.dispatch = null
+      return p
+    }
+    function tbPlanStageLabel(s) { return PLAN_STAGE_LABEL[String(s || '')] || String(s || '') }
+    /**
+     * 规划任务书：让 agent 产出**可执行规划**（本轮不做实现）。
+     * 与执行任务书的区别：不要求动手，要求调研 + 拆解 + 待确认问题；定稿走 final=true。
+     */
+    function tbPlanTaskText(t) {
+      var p = tbPlanState(t)
+      var lines = []
+      lines.push('你在为「任务看板」上的一张【待规划】卡做规划 —— 本轮**不做实现**，唯一产物是规划。')
+      lines.push('卡片：' + t.id + ' 「' + String(t.title || '') + '」')
+      lines.push('')
+      if (String(t.description || '').trim()) {
+        lines.push('## 任务描述')
+        lines.push(String(t.description))
+        lines.push('')
+      }
+      if (String(t.prompt || '').trim()) {
+        lines.push('## 已有执行提示词（规划时参考；发现不足请在规划里指出或改写建议）')
+        lines.push(String(t.prompt))
+        lines.push('')
+      }
+      if (p.rounds.length) {
+        var last = p.rounds[p.rounds.length - 1]
+        lines.push('## 当前规划（第 ' + last.n + ' 版，' + String(last.at || '') + '）')
+        if (last.summary) lines.push('概要：' + String(last.summary))
+        var ls = Array.isArray(last.subtasks) ? last.subtasks : []
+        for (var i = 0; i < ls.length; i++) lines.push((i + 1) + '. ' + String(ls[i].text || ''))
+        if ((last.questions || []).length) {
+          lines.push('')
+          lines.push('待确认问题：')
+          for (var q = 0; q < last.questions.length; q++) lines.push('- ' + String(last.questions[q]))
+        }
+        if ((last.risks || []).length) {
+          lines.push('')
+          lines.push('已识别风险：')
+          for (var rk = 0; rk < last.risks.length; rk++) lines.push('- ' + String(last.risks[rk]))
+        }
+        lines.push('')
+      }
+      if (p.discussion.length) {
+        lines.push('## 用户已提出的规划意见（必须逐条回应后再改）')
+        var ds = p.discussion.slice(-10)
+        for (var d = 0; d < ds.length; d++) {
+          lines.push('- [' + String(ds[d].at || '') + '] ' + String(ds[d].text || ''))
+        }
+        lines.push('')
+      }
+      lines.push('## 规划协议（必须遵守）')
+      lines.push('1. 先调研再规划：读相关代码/文档，确认现状、影响面、可复用点；不要凭想象编步骤。')
+      lines.push('2. 写规划：调用 taskboard_plan(id="' + t.id + '", summary="一句话方案", subtasks=["1 …","2 …"], questions=["需要用户拍板的点"], risks=["风险"])。')
+      lines.push('3. 多轮迭代：每轮修订都再调用一次 taskboard_plan（自动记为新版本）；用户在看板「规划讨论」里的意见要先回应再改。')
+      lines.push('4. 定稿：规划成熟后调用 taskboard_plan(id="' + t.id + '", final=true, ...) —— 卡进入「待确认 / 待办」。')
+      lines.push('5. 不确定的点写进 questions 并结束本轮，不要替用户拍板；问题没答完不要定稿。')
+      lines.push('6. 本阶段不要执行任务本身（不写业务代码）；定稿后才由执行流程接手。')
+      return lines.join('\n')
+    }
+    /**
+     * 派发规划任务书：followup 是唯一真实通道（多轮对话的载体）。
+     * ★ 不自欺（2026-09 第 2 次监督）：只有 followup 明确成功（未返回 ok:false 且不抛错）
+     *   才算派发；无会话 / 投递被拒 / 抛错 三种情形统一记进 plan.dispatch 并返回 ok:false。
+     *   历史实现里的 ctx.subagent 兜底已删除 —— RPC 路径上 SubagentRuntimeFor("") 恒 nil
+     *   （只在 autopilot 决策器期间绑定），且 subagent.run 同步阻塞插件 VM（timer 回调
+     *   在 p.withLock + runJSWithTimeout 内执行，会锁死看板全部 RPC）。保留只是伪兜底。
+     * 只动 plan 阶段与 convId，不改任务状态（状态仍 backlog，等定稿才入 todo）。
+     */
+    function tbPlanDispatch(id, opts) {
+      var a = (opts && typeof opts === 'object') ? opts : {}
       var l = tbLoad()
       var t = tbFind(l, id)
       if (!t) return { ok: false, error: '任务不存在：' + id }
-      var list = tbNormSubtasks(subtasks)
-      if (!list.length) return { ok: false, error: '拆解不能为空：subtasks 需为非空字符串数组' }
+      if (t.status !== 'backlog') {
+        return { ok: false, error: '只有「待规划」的任务可以规划（当前「' + tbLabel(t.status) + '」）；执行中的卡请用 taskboard_execute' }
+      }
+      var p = tbPlanState(t)
+      if (p.stage === 'review') {
+        return { ok: false, error: '规划已提交、等待确认；如需继续修订，请先在「规划讨论」里补充意见（会自动回到规划中）' }
+      }
+      var pick = tbExecResolveConv(a, t, { sessionId: p.convId })
+      var convId = pick.convId
+      var text = tbPlanTaskText(t)
+      var via = ''
+      var queued = false
+      var err = ''
+      if (!convId) {
+        err = '没有可用的规划会话：请先在对话里打开（或新建）一个会话，再点「开始规划」'
+      } else {
+        try {
+          var ag = ctx.agents
+          if (!ag || typeof ag.followup !== 'function') {
+            err = '宿主没有提供会话投递能力（ctx.agents.followup 不可用），请重启 IDE 后再试'
+          } else {
+            var rr = ag.followup(convId, text)
+            if (rr && rr.ok === false) {
+              err = '会话投递被拒：' + String(rr.error || '未知原因') + '（请确认该会话仍在对话列表里）'
+            } else {
+              queued = !!(rr && rr.queued)
+              via = queued ? 'followup-queued' : 'followup'
+              tbRememberConv(convId)
+            }
+          }
+        } catch (e) {
+          err = '会话投递失败：' + String((e && e.message) || e)
+          logWarn('规划派发 followup 失败: ' + e)
+        }
+      }
+      // 最近一次派发状态（供看板徽标 / 重试按钮读；只保留最近一条）
+      p.dispatch = { at: nowIso(), via: via, ok: !err, error: err, convId: convId }
+      if (!err) {
+        if (!p.startedAt) p.startedAt = nowIso()
+        if (p.stage !== 'review') p.stage = 'drafting'
+        if (convId) p.convId = convId
+      }
+      p.updatedAt = nowIso()
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      if (err) return { ok: false, dispatched: false, error: err, convId: convId, convSource: pick.source, task: t, plan: p }
+      return { ok: true, dispatched: true, via: via, queued: queued, convId: convId, convSource: pick.source, task: t, plan: p }
+    }
+    /**
+     * 规划定稿：stage → review（待确认）或 final（已定稿 + 移入待办）。
+     * 直接入待办的三个来源：人显式确认、driver.planAutoAccept=true、驱动内部 autoAccept。
+     * 其余情况停在 review，等人在看板点「确认规划 → 待办」（agent 不能替用户拍板）。
+     */
+    function tbPlanFinalize(id, by, autoAccept) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (t.status !== 'backlog') {
+        return { ok: false, error: '只有「待规划」的任务需要规划定稿（当前「' + tbLabel(t.status) + '」）' }
+      }
+      var p = tbPlanState(t)
+      if (!p.rounds.length) return { ok: false, error: '还没有任何规划版本：先调用 taskboard_plan 写一版，不能空定稿' }
       var who = tbActor(by)
+      var drv = tbDriverLoad()
+      var autoMove = !!autoAccept || drv.planAutoAccept === true || who.kind === 'user'
+      p.finalAt = nowIso()
+      p.finalBy = who
+      p.updatedAt = p.finalAt
+      if (autoMove) {
+        p.stage = 'final'
+        p.acceptedAt = p.finalAt
+        p.acceptedBy = who
+      } else {
+        p.stage = 'review'
+      }
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      var moved = false
+      if (autoMove) {
+        var mr = tbMove(id, 'todo', { by: by })
+        if (!mr.ok) return mr
+        moved = true
+        t = mr.task
+      }
+      tbMirror(t)
+      return { ok: true, task: t, plan: tbPlanState(t), stage: p.stage, moved: moved }
+    }
+    /** 人确认规划 → 移入「待办」（等同定稿 + 直接流转）。 */
+    function tbPlanAccept(id, by) { return tbPlanFinalize(id, by || { kind: 'user' }, true) }
+    /** 规划讨论：人提意见 → 记进 plan.discussion 并投递到规划会话（agent 据此修订）。 */
+    function tbPlanDiscuss(id, text, by, convId) {
+      var s = String(text || '').trim()
+      if (!s) return { ok: false, error: '讨论内容不能为空' }
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (t.status !== 'backlog') {
+        return { ok: false, error: '规划讨论只用于「待规划」的卡（当前「' + tbLabel(t.status) + '」）' }
+      }
+      var p = tbPlanState(t)
+      p.discussion.push({ at: nowIso(), by: tbActor(by).kind, text: s })
+      if (p.discussion.length > 50) p.discussion = p.discussion.slice(-50)
+      // 新意见 → 回到规划中（原来在「待确认」也要让 agent 再改一版）
+      p.stage = 'drafting'
+      var target = String(convId || p.convId || tbLastConv() || '')
+      if (target) p.convId = target
+      p.updatedAt = nowIso()
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      var dispatched = false
+      var via = ''
+      var why = ''
+      if (!target) {
+        why = '最近活跃会话池为空'
+      } else {
+        try {
+          var ag = ctx.agents
+          if (ag && typeof ag.followup === 'function') {
+            var msg = '用户在「任务看板」任务卡 ' + t.id + '「' + String(t.title || '') + '」的规划讨论里提出：\n\n' + s +
+              '\n\n请据此修订规划（先逐条回应这条意见），调用 taskboard_plan 写新版本；仍有不确定的点写进 questions。'
+            var rr = ag.followup(target, msg)
+            if (rr && rr.ok === false) {
+              why = '会话投递被拒：' + String(rr.error || '未知原因')
+            } else {
+              dispatched = true
+              via = (rr && rr.queued) ? 'followup-queued' : 'followup'
+              tbRememberConv(target)
+            }
+          } else {
+            why = '宿主没有提供会话投递能力（ctx.agents.followup 不可用）'
+          }
+        } catch (e) {
+          why = String((e && e.message) || e)
+          logWarn('规划讨论 followup 投递失败: ' + e)
+        }
+      }
+      // 最近一次派发状态（与 tbPlanDispatch 同构；失败可被看板读到并重试）
+      p.dispatch = { at: nowIso(), via: via, ok: dispatched, error: dispatched ? '' : why, convId: target }
+      p.updatedAt = nowIso()
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      if (!dispatched) {
+        // 意见已落盘（不回滚），但必须把「未投递」如实告诉用户
+        return {
+          ok: false, recorded: true, dispatched: false, via: '', convId: target,
+          error: '意见已记录在规划讨论里，但没有投递成功——请先在对话里打开（或新建）一个会话，再点「开始规划」重新派发' +
+            (why ? '（' + why + '）' : ''),
+          task: t, plan: tbPlanState(t)
+        }
+      }
+      return { ok: true, task: t, plan: tbPlanState(t), dispatched: true, via: via, convId: target }
+    }
+    /**
+     * 写规划 / 写执行拆解（同一工具两种语义，由卡状态决定）：
+     *   · status=backlog（待规划）→ 规划模式：记一轮版本（summary/questions/risks/subtasks）；
+     *     final=true → 定稿（directly 入待办 or 停在待确认，见 tbPlanFinalize）。
+     *   · 其它状态 → 执行模式：写执行拆解（原语义不变）。
+     */
+    function tbPlan(id, subtasks, by, opts) {
+      var o = (opts && typeof opts === 'object') ? opts : {}
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var who = tbActor(by)
+      var list = tbNormSubtasks(subtasks)
       for (var i = 0; i < list.length; i++) {
         list[i].by = who.kind
         if (!list[i].at) list[i].at = nowIso()
       }
+      var qs = []
+      if (Array.isArray(o.questions)) {
+        for (var qi = 0; qi < o.questions.length; qi++) {
+          var qt = String(o.questions[qi] || '').trim()
+          if (qt) qs.push(qt)
+        }
+      }
+      var rk = []
+      if (Array.isArray(o.risks)) {
+        for (var ri = 0; ri < o.risks.length; ri++) {
+          var rt = String(o.risks[ri] || '').trim()
+          if (rt) rk.push(rt)
+        }
+      }
+      var summary = String(o.summary || '').trim()
+      if (!list.length && !summary && !qs.length && !o.final) {
+        return { ok: false, error: '拆解不能为空：subtasks 需为非空字符串数组（规划模式可只给 summary / questions）' }
+      }
+      // ── 规划模式（待规划卡）──
+      if (t.status === 'backlog') {
+        var p = tbPlanState(t)
+        var n = p.rounds.length + 1
+        var roundSubs = []
+        for (var ri2 = 0; ri2 < list.length; ri2++) roundSubs.push({ text: list[ri2].text, status: list[ri2].status })
+        p.rounds.push({ n: n, at: nowIso(), by: who.kind, summary: summary, subtasks: roundSubs, questions: qs, risks: rk })
+        if (p.rounds.length > 20) p.rounds = p.rounds.slice(-20)
+        p.summary = summary
+        p.questions = qs
+        p.risks = rk
+        p.stage = 'drafting'
+        // 有新版本回写 → 清掉「派发失败」错误（派发已产生真实结果，不是失败态）
+        if (p.dispatch && typeof p.dispatch === 'object' && p.dispatch.error) {
+          p.dispatch.ok = true
+          p.dispatch.error = ''
+          p.dispatch.repliedAt = nowIso()
+        }
+        p.updatedAt = nowIso()
+        if (list.length) t.subtasks = list          // 规划产物同时作执行骨架预览
+        t.updatedAt = nowIso()
+        if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+        tbMirror(t)
+        if (o.final) {
+          var fr = tbPlanFinalize(id, by, !!o.autoAccept)
+          if (!fr.ok) return fr
+          return { ok: true, task: fr.task, plan: fr.plan, round: n, stage: fr.stage, movedToTodo: !!fr.moved }
+        }
+        return { ok: true, task: t, plan: tbPlanState(t), round: n, stage: 'drafting' }
+      }
+      // ── 执行模式（原语义：写执行拆解）──
+      if (!list.length) return { ok: false, error: '拆解不能为空：subtasks 需为非空字符串数组' }
       t.subtasks = list
+      var pe = tbPlanState(t)
+      if (summary) pe.summary = summary
+      if (o.final) {
+        pe.stage = 'final'
+        pe.finalAt = pe.finalAt || nowIso()
+        pe.finalBy = pe.finalBy || who
+      }
       t.updatedAt = nowIso()
       if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
       tbMirror(t)
-      return { ok: true, task: t }
+      return { ok: true, task: t, plan: pe }
     }
     /** 勾选/取消验收清单项（agent 可勾并附证据；人可全量编辑）。 */
     function tbCheck(id, itemId, checked, note, by) {
@@ -600,7 +915,7 @@ return {
     //   工作 agent 自然结束时 autopilot 监督者接管裁决（continue 继续 / done 收尾），
     //   形成「一张卡 = 一个被监督的任务」的多轮闭环；
     //   工作 agent 通过 taskboard_plan / taskboard_check / taskboard_report 把拆解、进度、报告回填看板。
-    // 兜底：ctx.subagent.run（独立回合，同步；放 timer 回调避免阻塞 RPC）。
+    // 唯一通道就是 followup：RPC 路径没有可用的 subagent 运行环境（详见 tbExecute 注释），不做伪兜底。
     function tbExecState(t) {
       if (!t.runState || typeof t.runState !== 'object') {
         t.runState = { running: false, startedAt: '', startedBy: '', lastEndAt: '', lastError: '', sessionId: '', runCount: 0 }
@@ -676,10 +991,13 @@ return {
       return { convId: '', source: 'none' }
     }
     /**
-     * 执行一张卡：认领 → 投递任务书 → 记 runState（running）。
-     * 通道优先级：① ctx.agents.followup(convId) 唤醒工作会话（autopilot 监督者多轮接管）
-     *            ② ctx.subagent.run（不传 convId，用当前会话运行环境）兜底
-     * 只有两个通道都不可用时才返回错误并写 runState.lastError。
+     * 执行一张卡：**先投递任务书 → 投递成功后才认领（进行中）→ 记 runState**。
+     * 唯一通道：ctx.agents.followup(convId) 唤醒已存在的工作会话（autopilot 监督者多轮接管）。
+     * 不保留 subagent 兜底：RPC 路径上 SubagentRuntimeFor("") 恒 nil、available() 恒 false，
+     *   且 sub.run 同步阻塞插件 VM —— 看起来能兜底，实则永远不跑（伪兜底）。
+     * 失败语义（不允许「进行中但没人跑」）：
+     *   ok:false + dispatched:false + runState.running=false + lastError 可读；
+     *   卡若已被其它路径置于「进行中」，一并退回「待办」，用户可原地点「执行」重试。
      * 完成由工作 agent 的 taskboard_report 回填（running=false + 转待验收）。
      */
     function tbExecute(id, opts) {
@@ -694,86 +1012,79 @@ return {
       if (rs.running) return { ok: false, error: '任务正在执行中（开始于 ' + rs.startedAt + '）' }
       var pick = tbExecResolveConv(a, t, rs)
       var convId = pick.convId
-      if (t.status === 'todo' || t.status === 'backlog') {
-        var cr = tbClaim(id, tbActor(a.by || 'user'), convId)
-        if (!cr.ok) return cr
-      }
+      // ① 先投递：成功之前不碰卡状态（失败只需回滚执行态，不会留下「进行中没人跑」）
       var text = tbExecTaskText(t)
       var via = ''
       var queued = false
       var err = ''
-      var dispatched = false
-      // ① 唤醒已存在的工作会话（忙则排队；空闲立即起一轮）
-      if (convId) {
+      if (!convId) {
+        err = '没有可用的执行会话：请在对话中打开一个会话，或在「定时」里指定执行会话'
+      } else {
         try {
           var ag = ctx.agents
-          if (ag && typeof ag.followup === 'function') {
+          if (!ag || typeof ag.followup !== 'function') {
+            err = '执行通道不可用：宿主没有提供会话唤醒能力（ctx.agents.followup）'
+          } else {
             var rr = ag.followup(convId, text)
-            queued = !!(rr && rr.queued)
-            via = 'followup'
-            dispatched = true
-            tbRememberConv(convId)
+            if (rr && rr.ok === false) {
+              err = '会话投递被拒：' + String(rr.error || '未知原因')
+            } else {
+              queued = !!(rr && rr.queued)
+              via = 'followup'
+            }
           }
         } catch (e) {
-          logWarn('followup 投递失败（转 subagent 兜底）: ' + e)
+          err = '会话投递失败：' + String((e && e.message) || e)
         }
       }
-      // ② 兜底：subagent 独立回合（不传 convId → 宿主按「当前会话运行环境」解析）
-      if (!dispatched) {
-        var sub = ctx.subagent
-        var canSub = !!(sub && typeof sub.run === 'function')
-        if (canSub && typeof sub.available === 'function') { try { canSub = !!sub.available() } catch (e2) { canSub = false } }
-        var tm = null
-        try { tm = ctx.timer || (typeof ctx.get === 'function' ? ctx.get('timer') : null) } catch (e3) { tm = null }
-        if (canSub && tm && typeof tm.timeout === 'function') {
-          via = 'subagent'
-          dispatched = true
-          tm.timeout(function () {
-            var res = null
-            try {
-              res = sub.run({
-                name: 'taskboard-exec',
-                system: '你是「任务看板」上的执行 agent：按卡片完成任务，先 plan 再执行，过程中用看板工具回填进度与证据。中文思考、中文回复。',
-                task: text, tools: null, stepBudget: 60, toolCallBudget: 80, timeoutMs: 900000
-              })
-            } catch (e) { res = { error: String((e && e.message) || e), ended: 'error' } }
-            var execOk = !!(res && !res.error && res.ended !== 'error')
-            tbReport(id, {
-              summary: String((res && res.content) || '(无输出)').slice(0, 2000),
-              outcome: execOk ? 'succeeded' : 'failed',
-              risks: execOk ? '' : String((res && res.error) || '执行失败'),
-              by: { kind: 'agent', sessionId: 'subagent', name: 'taskboard-exec' }
-            })
-            var l2 = tbLoad(); var t2 = tbFind(l2, id)
-            if (t2) {
-              var rs2 = tbExecState(t2)
-              rs2.running = false; rs2.lastEndAt = nowIso(); rs2.lastError = execOk ? '' : String((res && res.error) || '')
-              t2.updatedAt = nowIso()
-              if (tbSave(l2)) tbMirror(t2)
-            }
-          }, 10)
-        } else if (convId) {
-          err = '执行通道不可用：会话唤醒投递失败，且当前没有可用的会话运行环境（请打开对话后重试）'
-        } else {
-          err = '没有可用的执行会话：请在对话中打开一个会话，或在「定时」里指定执行会话'
+      // ② 投递失败：不留脏状态 —— running=false + lastError 可读；进行中的卡退回待办
+      if (err) {
+        var lf = tbLoad()
+        var tf = tbFind(lf, id)
+        if (!tf) return { ok: false, error: err }
+        var rsf = tbExecState(tf)
+        rsf.running = false
+        rsf.startedAt = ''
+        rsf.lastEndAt = nowIso()
+        rsf.lastError = err
+        rsf.sessionId = ''
+        rsf.via = ''
+        rsf.convSource = pick.source
+        tf.updatedAt = nowIso()
+        if (tbSave(lf)) tbMirror(tf)
+        var restored = ''
+        if (tf.status === 'in_progress') {
+          var mv = tbMove(id, 'todo', { by: tbActor(a.by || 'user') })
+          if (mv && mv.ok && mv.task) { tf = mv.task; restored = 'todo' }
+        }
+        logWarn('执行派发失败 ' + id + '：' + err)
+        return { ok: false, dispatched: false, error: err, convSource: pick.source, restored: restored, task: tf }
+      }
+      // ③ 投递成功后才认领（待办 / 待规划 → 进行中）；此处失败不会产生「进行中没人跑」
+      if (t.status === 'todo' || t.status === 'backlog') {
+        var cr = tbClaim(id, tbActor(a.by || 'user'), convId)
+        if (!cr.ok) {
+          logWarn('执行已投递但认领失败 ' + id + '：' + cr.error)
+          return { ok: false, dispatched: true, via: via, error: cr.error, convId: convId, convSource: pick.source, task: cr.task || null }
         }
       }
+      // ④ 记执行态（running=true，等 taskboard_report 收尾）
       var l3 = tbLoad()
       var t3 = tbFind(l3, id)
-      if (!t3) return { ok: false, error: '任务库读取失败' }
+      if (!t3) return { ok: false, dispatched: true, via: via, error: '任务库读取失败', convId: convId }
       var rs3 = tbExecState(t3)
-      rs3.running = !err
+      rs3.running = true
       rs3.startedAt = nowIso()
       rs3.startedBy = String(a.by || 'user')
-      rs3.sessionId = convId || (via === 'subagent' ? 'subagent' : '')
+      rs3.sessionId = convId
       rs3.via = via
       rs3.convSource = pick.source
-      rs3.lastError = err
-      if (!err) rs3.runCount = (isNum(rs3.runCount) ? rs3.runCount : 0) + 1
+      rs3.lastError = ''
+      rs3.runCount = (isNum(rs3.runCount) ? rs3.runCount : 0) + 1
       if (convId) t3.execConvId = convId
       t3.updatedAt = nowIso()
       if (tbSave(l3)) tbMirror(t3)
-      if (err) return { ok: false, error: err, task: t3 }
+      tbRememberConv(convId)
       return { ok: true, dispatched: true, via: via, queued: queued, convId: convId, convSource: pick.source, task: t3 }
     }
     /**
@@ -797,6 +1108,8 @@ return {
       return {
         mode: mode,
         autoAccept: raw.autoAccept === true,
+        // 规划定稿后是否直接移入「待办」（默认 false：停在「待确认」，由人点确认）
+        planAutoAccept: raw.planAutoAccept === true,
         maxConcurrent: mc,
         updatedAt: String(raw.updatedAt || ''),
         updatedBy: String(raw.updatedBy || '')
@@ -811,6 +1124,7 @@ return {
         cur.mode = m
       }
       if (p.autoAccept !== undefined) cur.autoAccept = !!p.autoAccept
+      if (p.planAutoAccept !== undefined) cur.planAutoAccept = !!p.planAutoAccept
       if (p.maxConcurrent !== undefined) {
         var mc = parseInt(p.maxConcurrent, 10)
         if (!isFinite(mc) || mc < 1) return { ok: false, error: '并发数需为 1-5' }
@@ -819,12 +1133,13 @@ return {
       cur.updatedAt = nowIso()
       cur.updatedBy = String((by && (by.name || by.sessionId || by.kind)) || 'user')
       var ok = fsWriteJson(P_TB_DRIVER, {
-        version: 1, mode: cur.mode, autoAccept: cur.autoAccept, maxConcurrent: cur.maxConcurrent,
+        version: 1, mode: cur.mode, autoAccept: cur.autoAccept, planAutoAccept: cur.planAutoAccept,
+        maxConcurrent: cur.maxConcurrent,
         updatedAt: cur.updatedAt, updatedBy: cur.updatedBy
       })
       if (!ok) return { ok: false, error: '驱动配置写入失败' }
       logInfo('驱动模式 → ' + (cur.mode === 'auto'
-        ? ('全流程自动（自动验收=' + (cur.autoAccept ? '开' : '关') + '，并发=' + cur.maxConcurrent + '）')
+        ? ('全流程自动（自动验收=' + (cur.autoAccept ? '开' : '关') + '，规划自动入待办=' + (cur.planAutoAccept ? '开' : '关') + '，并发=' + cur.maxConcurrent + '）')
         : '手动'))
       return { ok: true, driver: cur }
     }
@@ -2725,6 +3040,7 @@ return {
             description: { type: 'string', description: '可选：任务描述' },
             prompt: { type: 'string', description: '可选：执行时额外的提示词' },
             urgency: { type: 'string', description: '可选：urgent/normal/relaxed（默认 normal）' },
+            status: { type: 'string', description: '可选：建卡入列 —— todo（默认，直接待办）/ backlog（待规划，先由 agent 规划再入待办）' },
             flowId: { type: 'string', description: '可选：绑定的流程模板 id（如 plugin-dev），门禁会成为验收清单' }
           },
           required: ['title']
@@ -2733,7 +3049,8 @@ return {
           var a = args || {}
           var r = tbCreate({
             title: a.title, description: a.description, prompt: a.prompt,
-            urgency: a.urgency, flowId: a.flowId, by: { kind: 'agent', sessionId: String(a.convId || '') }
+            urgency: a.urgency, flowId: a.flowId, status: a.status,
+            by: { kind: 'agent', sessionId: String(a.convId || '') }
           })
           if (!r.ok) return { text: r.error, error: r.error }
           return { text: '已建卡：' + r.task.id + ' ' + r.task.title + '（状态「' + tbLabel(r.task.status) + '」' + (r.task.flowId ? '，流程 ' + r.task.flowId : '') + '）', task: r.task }
@@ -2844,7 +3161,9 @@ return {
       },
       {
         name: 'taskboard_plan',
-        description: '把任务拆解成执行子项（开工时写，执行中可更新状态）。看板详情会按子项进度展示。',
+        description: '写规划 / 执行拆解。★ 任务在「待规划」(backlog) 时：写的是**规划**（可多轮修订，每轮记一版），' +
+          '规划成熟后传 final=true 定稿 → 卡移入「待办」（未开 planAutoAccept 时停在「待确认」，等人看板确认）。' +
+          '任务在「待办 / 进行中」时：写的是执行拆解（原语义）。',
         parameters: {
           type: 'object',
           properties: {
@@ -2858,15 +3177,37 @@ return {
                   status: { type: 'string', description: 'pending/in_progress/completed/blocked/cancelled' }
                 }
               },
-              description: '子项列表（3-8 条，字符串或 {text,status}）'
-            }
+              description: '子项列表（规划 3-8 条；字符串或 {text,status}）'
+            },
+            summary: { type: 'string', description: '规划概要：一句话方案（规划模式建议必填）' },
+            questions: { type: 'array', items: { type: 'string' }, description: '需要用户拍板的待确认问题（规划模式）' },
+            risks: { type: 'array', items: { type: 'string' }, description: '已识别的风险 / 前置依赖（规划模式）' },
+            final: { type: 'boolean', description: '规划模式：true=定稿（移入待办或待确认）；false/缺省=记新版本' },
+            start: { type: 'boolean', description: 'true=开始/继续规划：把规划任务书派发给规划会话（仅待规划卡）' }
           },
-          required: ['id', 'subtasks']
+          required: ['id']
         },
         execute: function (args) {
           var a = args || {}
-          var r = tbPlan(String(a.id || ''), a.subtasks, { kind: 'agent' })
+          var id = String(a.id || '')
+          if (a.start) {
+            var d = tbPlanDispatch(id, { by: { kind: 'agent' }, convId: String(a.convId || '') })
+            if (!d.ok) return { text: d.error, error: d.error }
+            return { text: '已派发规划（via=' + d.via + (d.queued ? '，排队' : '') + '）：agent 会调研后调用 taskboard_plan 写第一版', task: d.task, plan: d.plan }
+          }
+          var r = tbPlan(id, a.subtasks, { kind: 'agent' }, { summary: a.summary, questions: a.questions, risks: a.risks, final: a.final === true })
           if (!r.ok) return { text: r.error, error: r.error }
+          if (r.stage) {
+            var nm = (r.plan && r.plan.rounds) ? r.plan.rounds.length : 0
+            if (r.movedToTodo) {
+              return { text: '规划已定稿（第 ' + nm + ' 版）并移入「待办」：' + (r.task.subtasks || []).length + ' 步', task: r.task, plan: r.plan }
+            }
+            if (r.stage === 'review') {
+              return { text: '规划已提交（第 ' + nm + ' 版）→ 等待用户在「待确认」里确认后移入待办', task: r.task, plan: r.plan }
+            }
+            return { text: '已写入规划第 ' + (r.round || 1) + ' 版：' + (r.task.subtasks || []).length + ' 步' +
+              ((r.plan && r.plan.questions && r.plan.questions.length) ? ('，待确认问题 ' + r.plan.questions.length + ' 个') : ''), task: r.task, plan: r.plan }
+          }
           return { text: '已写入执行拆解：' + (r.task.subtasks || []).length + ' 条', task: r.task }
         }
       },
@@ -2965,6 +3306,7 @@ return {
           return tbCreate({
             title: a.title, description: a.description, prompt: a.prompt,
             urgency: a.urgency, flowId: a.flowId, workspace: a.workspace,
+            status: a.status,
             schedule: a.schedule, convId: a.convId, by: byUser
           })
         }
@@ -2978,7 +3320,16 @@ return {
           if (schIn && typeof schIn === 'object' && !schIn.convId && a.convId) schIn.convId = String(a.convId)
           return tbUpdate(String(a.id || ''), { schedule: schIn }, { by: byUser })
         }
-        if (op === 'plan') return tbPlan(String(a.id || ''), a.subtasks, byUser)
+        if (op === 'plan') {
+          return tbPlan(String(a.id || ''), a.subtasks, byUser, {
+            summary: a.summary, questions: a.questions, risks: a.risks, final: a.final === true
+          })
+        }
+        // 「待规划」列的可执行入口：开始/继续规划、讨论、定稿、确认
+        if (op === 'planStart') return tbPlanDispatch(String(a.id || ''), { by: byUser, convId: String(a.convId || '') })
+        if (op === 'planDiscuss') return tbPlanDiscuss(String(a.id || ''), String(a.text || ''), byUser, String(a.convId || ''))
+        if (op === 'planFinalize') return tbPlanFinalize(String(a.id || ''), byUser, false)
+        if (op === 'planAccept') return tbPlanAccept(String(a.id || ''), byUser)
         if (op === 'comment') return tbComment(String(a.id || ''), a.text, byUser)
         if (op === 'check') return tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, byUser)
         if (op === 'trash') return tbTrash(String(a.id || ''), byUser)

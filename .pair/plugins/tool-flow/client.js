@@ -160,6 +160,53 @@
     '.ftb-chips{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:5px}',
     '.ftb-chipm{font-size:10.5px;line-height:1.7;padding:0 7px;border-radius:9px;background:var(--bg-active);color:var(--text-muted);font-variant-numeric:tabular-nums}',
     '.ftb-chipm.brand{color:var(--text-secondary)}',
+    // ── 流程库：左列表 + 右画布（2026-10 重做：可视化定义流程）────────
+    '.ftb-lib{display:flex;gap:10px;align-items:stretch;min-height:0;height:100%;container-type:inline-size}',
+    '.ftb-lib-side{flex:0 0 236px;min-width:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);padding:8px;overflow:auto;max-height:100%}',
+    '.ftb-lib-side-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
+    '.ftb-lib-side-title{font-size:11px;font-weight:600;color:var(--text-secondary);letter-spacing:.2px}',
+    '.ftb-flowitem{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border:1px solid transparent;border-left:3px solid transparent;border-radius:5px;cursor:pointer;min-width:0}',
+    '.ftb-flowitem:hover{background:var(--bg-active)}',
+    '.ftb-flowitem.active{background:var(--bg-active);border-color:var(--border-color);border-left-color:#569cd6}',
+    '.ftb-flowitem-title{font-size:12px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ftb-flowitem-id{font-size:10px;color:var(--text-muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ftb-flowitem-meta{display:flex;align-items:center;gap:4px;flex-wrap:wrap}',
+    '.ftb-scope{font-size:9.5px;line-height:1.7;padding:0 5px;border-radius:8px;border:1px solid currentColor;color:var(--text-muted)}',
+    '.ftb-scope.project{color:#569cd6}',
+    '.ftb-scope.global{color:#d4a74e}',
+    '.ftb-scope.preset{color:var(--text-muted)}',
+    '.ftb-lib-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:8px}',
+    '.ftb-cv-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);padding:6px 9px}',
+    '.ftb-cv-name{font-size:12px;font-weight:600;color:var(--text-primary)}',
+    '.ftb-cv-grid{display:grid;grid-template-columns:minmax(280px,1fr) 300px;gap:10px;min-height:0;align-items:start}',
+    '.ftb-canvas{position:relative;border:1px solid var(--border-color);border-radius:8px;background-color:var(--bg-secondary);background-image:radial-gradient(var(--border-color) 1px,transparent 1px);background-size:16px 16px;padding:16px 12px 20px;overflow:auto;min-height:320px;max-height:calc(100vh - 250px)}',
+    '.ftb-cv-empty{margin:24px auto;max-width:440px;text-align:center;font-size:12px;line-height:1.8;color:var(--text-muted)}',
+    '.ftb-node{position:relative;display:flex;gap:8px;align-items:flex-start;width:min(380px,100%);margin:0 auto;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-primary);box-shadow:0 1px 3px rgba(0,0,0,.18);cursor:pointer;box-sizing:border-box;transition:border-color .12s,box-shadow .12s}',
+    '.ftb-node:hover{border-color:var(--text-muted)}',
+    '.ftb-node.sel{border-color:#569cd6;box-shadow:0 0 0 1px #569cd6 inset,0 2px 8px rgba(0,0,0,.22)}',
+    '.ftb-node.dragging{opacity:.45}',
+    '.ftb-node.drop-on{border-top:2px solid #569cd6}',
+    '.ftb-node.ro{cursor:default}',
+    '.ftb-node-idx{flex:0 0 24px;width:24px;height:24px;border-radius:50%;border:1px solid var(--border-color);background:var(--bg-active);color:var(--text-secondary);font-size:10.5px;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;box-sizing:border-box}',
+    '.ftb-node.sel .ftb-node-idx{border-color:#569cd6;color:#569cd6}',
+    '.ftb-node-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}',
+    '.ftb-node-title{font-size:12.5px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ftb-node-sid{font-size:10px;color:var(--text-muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ftb-node-act{display:flex;gap:2px;align-items:center;flex-shrink:0;opacity:0;transition:opacity .12s}',
+    '.ftb-node:hover .ftb-node-act,.ftb-node.sel .ftb-node-act{opacity:1}',
+    '.ftb-node-act .ftb-btn{font-size:10px;padding:0 5px;line-height:18px;height:19px}',
+    '.ftb-cv-link{height:20px;width:min(380px,100%);margin:0 auto;display:flex;justify-content:center}',
+    '.ftb-cv-line{position:relative;width:2px;height:100%;background:var(--border-color)}',
+    '.ftb-cv-line::after{content:"";position:absolute;left:50%;bottom:0;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--border-color)}',
+    '.ftb-cv-add{display:flex;align-items:center;justify-content:center;width:min(380px,100%);margin:0 auto;padding:7px;border:1px dashed var(--border-color);border-radius:8px;background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;box-sizing:border-box}',
+    '.ftb-cv-add:hover{color:var(--text-primary);border-color:var(--text-muted);background:var(--bg-active)}',
+    '.ftb-insp{border:1px solid var(--border-color);border-radius:8px;background:var(--bg-secondary);padding:8px 10px;max-height:calc(100vh - 250px);overflow:auto}',
+    '.ftb-insp-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}',
+    '.ftb-insp-title{font-size:12px;font-weight:600;color:var(--text-secondary)}',
+    '.ftb-insp .ftb-field>.ftb-label{width:64px;text-align:left}',
+    '.ftb-insp .ftb-block{margin-top:6px}',
+    '@container (max-width:820px){.ftb-cv-grid{grid-template-columns:1fr}.ftb-insp{max-height:none}}',
+    '@container (max-width:620px){.ftb-lib{flex-direction:column}.ftb-lib-side{flex:0 0 auto;flex-direction:column;max-height:200px}}',
   ].join('')
 
   // ── DOM 助手（一律 textContent）──────────────────────────────
@@ -315,7 +362,7 @@
       }
       editor = {
         id: def.id, scope: 'project', version: 1, readOnly: false, isNew: true,
-        mode: 'form', def: def, json: JSON.stringify(def, null, 2),
+        mode: 'canvas', def: def, json: JSON.stringify(def, null, 2), sel: 0,
         result: '新建模式：id 可改（默认 my-flow）。保存写入项目层 .pair/flows/<id>.json', dirty: true,
       }
       notify()
@@ -326,7 +373,7 @@
       const def = (r0 && r0.def) || {}
       editor = {
         id: r0.id || id, scope: r0.scope || 'project', version: r0.version || 1, readOnly: !!r0.readOnly,
-        mode: 'form', def: def, json: JSON.stringify(def, null, 2), result: '', dirty: true,
+        mode: 'canvas', def: def, json: JSON.stringify(def, null, 2), sel: 0, result: '', dirty: true,
       }
       notify()
     } catch (e) { message = '打开编辑器失败：' + e; notify() }
@@ -348,10 +395,12 @@
     } else {
       try {
         editor.def = JSON.parse(editor.json)
-        editor.mode = 'form'
-        editor.result = '已按 JSON 同步到表单（表单未渲染的字段仍保留在定义中，保存时会一并写回）'
+        editor.mode = 'canvas'
+        const stages = Array.isArray(editor.def.stages) ? editor.def.stages : []
+        editor.sel = Math.max(0, Math.min(Number(editor.sel) || 0, Math.max(0, stages.length - 1)))
+        editor.result = '已按 JSON 同步到画布（画布未渲染的字段仍保留在定义中，保存时会一并写回）'
       } catch (e) {
-        editor.result = 'JSON 解析失败，未切到表单：' + ((e && e.message) || e)
+        editor.result = 'JSON 解析失败，未切到画布：' + ((e && e.message) || e)
         touchEditor()
         return
       }
@@ -401,9 +450,9 @@
   }
   async function editorValidate() {
     if (!editor) return
-    if (editor.mode === 'form') {
+    if (editor.mode === 'canvas') {
       const local = formErrors()
-      if (local.length) { editor.result = '表单校验未通过（' + local.length + ' 项）：' + local.join('；'); touchEditor(); return }
+      if (local.length) { editor.result = '画布校验未通过（' + local.length + ' 项）：' + local.join('；'); touchEditor(); return }
     }
     const json = currentJson()
     if (!json) { touchEditor(); return }
@@ -425,9 +474,9 @@
         return
       }
     }
-    if (editor.mode === 'form') {
+    if (editor.mode === 'canvas') {
       const local = formErrors()
-      if (local.length) { editor.result = '表单校验未通过（' + local.length + ' 项）：' + local.join('；'); touchEditor(); return }
+      if (local.length) { editor.result = '画布校验未通过（' + local.length + ' 项）：' + local.join('；'); touchEditor(); return }
     }
     const json = currentJson()
     if (!json) { touchEditor(); return }
@@ -436,9 +485,26 @@
       if (!v || v.ok !== true) { editor.result = '校验未通过：' + ((v && v.errors) || ['未知原因']).join('；'); touchEditor(); return }
       // 新建不带 expectedVersion（目标尚不存在）；编辑带乐观锁
       const out = await rpc({ op: 'define', json: json, scope: editor.scope, expectedVersion: editor.isNew ? undefined : editor.version })
+      // ★ 回显用「实际写入的 id」：新建模式下用户可改「流程 id」，editor.id 仍是打开时的默认值，
+      //   若直接用它回显会打开一个不存在的旧 id（DOM 与落盘文件不一致）。
+      const savedId = String((editor.def && editor.def.id) || editor.id || '').trim() || editor.id
+      const savedSel = editor.sel
+      const savedScope = editor.scope
       editor = null
       notifyUser(out.text || '已保存', 'success')
-      await load(true); notify()
+      await load(true)
+      // 保存后回到该流程的画布（保持编辑上下文；选中节点尽量跟随）
+      libAutoOpened = true
+      await openEditor(savedId)
+      if (editor) {
+        editor.scope = (snap && (snap.library || []).some((f) => f.id === savedId && f.scope === savedScope)) ? savedScope : editor.scope
+        const n = Array.isArray(editor.def && editor.def.stages) ? editor.def.stages.length : 0
+        editor.sel = Math.max(0, Math.min(Number(savedSel) || 0, Math.max(0, n - 1)))
+        editor.result = out.text || '已保存'
+        editor.dirty = true          // ★ 必须标脏：draw() 在 dirty=false 时会跳过重绘，
+                                     //   否则 DOM 停留在 sel=0 的旧渲染，节点点击因 sel 已等于目标而不响应
+        notify()
+      }
     } catch (e) { editor.result = '保存失败：' + e; touchEditor() }
   }
 
@@ -969,161 +1035,301 @@
     })
   }
 
-  // ── 页签 3：流程库（三层）────────────────────────────────────
+  // ── 页签 3：流程库（左列表 + 右画布；2026-10 重做）──────────────
+  //   左：三层流程列表（点选即加载定义）；右：画布（节点=阶段，可增删改、拖拽重排）
+  //   画布 / JSON 双模式，保存链路不变：本地校验 → flow_validate → flow_define（乐观锁）
+  let libAutoOpened = false
+  let nodeTitleEls = []
+  let nodeIdEls = []
+  let dragFrom = -1
   function renderLibrary(body) {
-    if (editor) { renderEditor(body); return }
     const list = (snap && snap.library) || []
-    const bar = el('div', 'ftb-toolbar')
-    bar.appendChild(btn('＋ 新建流程', '用字段级表单从空白开始新建一个流程（保存到项目层 .pair/flows/）', () => openEditor('', { blank: true }), true))
-    bar.appendChild(el('span', 'ftb-count strong', list.length + ' 个流程'))
-    bar.appendChild(el('span', 'ftb-note', '预设层流程只读 —— 要改先「克隆到项目」；已有流程点「编辑」（表单 / JSON 双模式）。'))
-    body.appendChild(bar)
-    body.appendChild(el('div', 'ftb-note', '三层：项目（.pair/flows/，可写）> 全局（<InstallDir>/.pair/flowlib/，可写）> 预设（插件包 assets/flows/，只读）。同名上层覆盖下层；升级不回冲，需显式 flow_sync。'))
-    if (!list.length) { body.appendChild(el('div', 'ftb-empty', '流程库为空')); return }
-    const head = el('div', 'ftb-row')
-    head.appendChild(el('span', 'ftb-cell h wide', '流程'))
-    head.appendChild(el('span', 'ftb-cell h', '层'))
-    head.appendChild(el('span', 'ftb-cell h', '阶段'))
-    head.appendChild(el('span', 'ftb-cell h', '适用类型'))
-    body.appendChild(head)
-    list.forEach(f => {
-      const row = el('div', 'ftb-row')
-      const name = el('span', 'ftb-cell wide', f.id + '「' + f.title + '」v' + f.version)
-      name.title = f.id + '\n' + (f.projectTypes || []).join(', ')
-      row.appendChild(name)
-      row.appendChild(el('span', 'ftb-cell', f.scope + (f.readOnly ? '(只读)' : '')))
-      row.appendChild(el('span', 'ftb-cell', String(f.stages)))
-      row.appendChild(el('span', 'ftb-cell', (f.projectTypes || ['any']).join(',')))
-      row.appendChild(btn('启动', '启动该流程的新实例（会记录 git 基线并建任务）', () => act({ op: 'start', flowId: f.id, convId: currentConvId() }, '启动 ' + f.id + '…')))
-      row.appendChild(btn('绑定到当前项目', '把该流程绑定到主工作区根', () => act({ op: 'attach', flowId: f.id }, '绑定 ' + f.id + '…')))
-      if (f.readOnly) {
-        row.appendChild(btn('克隆到项目', '以预设为模板生成项目级副本后即可编辑（改自己的，不动上游）', () => cloneFlow(f.id)))
-      } else {
-        row.appendChild(btn('编辑', '在看板内编辑流程 JSON（先校验，再带乐观锁保存）', () => openEditor(f.id)))
-      }
-      if (f.overrideBy) row.appendChild(el('span', 'ftb-cell', '被 ' + f.overrideBy + ' 覆盖'))
-      body.appendChild(row)
-    })
+    // 首次进入自动选中第一个流程（取消/手动切换后不再自动打开，避免打断）
+    if (!editor && !libAutoOpened && list.length) { libAutoOpened = true; openEditor(list[0].id) }
+    const wrap = el('div', 'ftb-lib')
+    wrap.appendChild(renderFlowList(list))
+    const main = el('div', 'ftb-lib-main')
+    if (editor) renderEditor(main)
+    else {
+      const cv = el('div', 'ftb-canvas')
+      cv.appendChild(el('div', 'ftb-cv-empty', list.length
+        ? '从左侧选择一个流程，查看 / 编辑它的阶段画布；或点「＋ 新建流程」从空白开始定义。'
+        : '流程库为空：点左侧「＋ 新建流程」开始定义第一个流程。'))
+      main.appendChild(cv)
+    }
+    wrap.appendChild(main)
+    body.appendChild(wrap)
   }
 
-  // 编辑面板（D4-④：看板内「表单 / JSON」双模式，默认表单；写走 RPC + 乐观锁）
-  function renderEditor(body) {
-    const box = el('div', 'ftb-editor')
-    const head = el('div', 'ftb-gate')
-    head.appendChild(el('span', 'ftb-gate-id', editor.id))
-    head.appendChild(el('span', 'ftb-cell', editor.scope + ' 层 · v' + editor.version))
-    head.appendChild(el('span', 'ftb-cell', '保存带 expectedVersion 乐观锁'))
-    box.appendChild(head)
+  // 左栏：三层流程列表（选中高亮 + 层/版本/节点数 + 快捷操作）
+  function renderFlowList(list) {
+    const side = el('div', 'ftb-lib-side')
+    const head = el('div', 'ftb-lib-side-head')
+    head.appendChild(btn('＋ 新建流程', '从空白开始新建一个流程（保存到项目层 .pair/flows/）', () => openEditor('', { blank: true }), true))
+    head.appendChild(el('span', 'ftb-count strong', list.length + ' 个'))
+    side.appendChild(head)
+    if (!list.length) side.appendChild(el('div', 'ftb-note', '流程库为空'))
+    list.forEach((f) => {
+      const active = !!(editor && editor.id === f.id)
+      const item = el('div', 'ftb-flowitem' + (active ? ' active' : ''))
+      item.title = f.id + ' · ' + (f.projectTypes || ['any']).join(',') + (f.overrideBy ? ('\n被 ' + f.overrideBy + ' 覆盖') : '')
+      item.appendChild(el('span', 'ftb-flowitem-title', f.title || f.id))
+      item.appendChild(el('span', 'ftb-flowitem-id', f.id + ' · v' + f.version))
+      const meta = el('div', 'ftb-flowitem-meta')
+      meta.appendChild(el('span', 'ftb-scope ' + f.scope, f.scope + (f.readOnly ? '·只读' : '')))
+      meta.appendChild(el('span', 'ftb-chipm', f.stages + ' 节点'))
+      meta.appendChild(btn('启动', '启动该流程的新实例（会记录 git 基线并建任务）', (e) => {
+        if (e && e.stopPropagation) e.stopPropagation()
+        act({ op: 'start', flowId: f.id, convId: currentConvId() }, '启动 ' + f.id + '…')
+      }))
+      if (f.readOnly) {
+        meta.appendChild(btn('克隆到项目', '以预设为模板生成项目级副本后即可编辑（改自己的，不动上游）', (e) => {
+          if (e && e.stopPropagation) e.stopPropagation()
+          cloneFlow(f.id)
+        }))
+      }
+      item.appendChild(meta)
+      item.addEventListener('click', () => {
+        if (editor && editor.id === f.id) return
+        libAutoOpened = true
+        openEditor(f.id)
+      })
+      side.appendChild(item)
+    })
+    side.appendChild(el('div', 'ftb-note', '三层：项目 .pair/flows/（可写）> 全局 flowlib/（可写）> 预设 assets/flows/（只读）。同名上层覆盖下层。'))
+    return side
+  }
 
-    const bar = el('div', 'ftb-toolbar')
+  // 编辑面板：顶部工具条（层/版本/画布|JSON/校验/保存/取消）+ 左画布右检查器
+  function renderEditor(main) {
+    const def = editor.def || (editor.def = {})
+    const stages = Array.isArray(def.stages) ? def.stages : (def.stages = [])
+    const bar = el('div', 'ftb-cv-bar')
+    bar.appendChild(el('span', 'ftb-cv-name', editor.readOnly ? '预设流程（只读）' : (editor.isNew ? '新建流程' : '编辑流程')))
+    bar.appendChild(el('span', 'ftb-gate-id', editor.id))
+    bar.appendChild(el('span', 'ftb-scope ' + editor.scope, editor.scope + ' 层 · v' + editor.version))
+    bar.appendChild(el('div', 'ftb-spacer'))
     const seg = el('div', 'ftb-seg')
-    ;[['form', '表单'], ['json', 'JSON']].forEach(([m, label]) => {
+    ;[['canvas', '画布'], ['json', 'JSON']].forEach(([m, label]) => {
       const b = el('button', 'ftb-mini' + (editor.mode === m ? ' active' : ''), label)
       b.type = 'button'
-      b.title = m === 'form'
-        ? '字段级表单：按流程定义逐字段编辑阶段与门禁（默认；无需手写 JSON）'
+      b.title = m === 'canvas'
+        ? '画布：节点 = 阶段；点节点在右侧编辑属性，拖动节点可重排，支持增删'
         : '直接编辑流程 JSON（同样的保存链路：flow_validate → flow_define）'
       b.addEventListener('click', () => setMode(m))
       seg.appendChild(b)
     })
     bar.appendChild(seg)
-    if (editor.readOnly) bar.appendChild(el('span', 'ftb-readonly', '预设层只读（表单/JSON 均不可保存）——请先「克隆到项目」'))
-    else bar.appendChild(el('span', 'ftb-note', '保存链路：表单本地校验 / JSON 语法 → flow_validate → flow_define'))
-    box.appendChild(bar)
+    bar.appendChild(btn('校验', 'flow_validate：阶段/门禁契约校验（不落盘；画布模式先做同规则本地校验）', () => editorValidate(), false))
+    if (!editor.readOnly) bar.appendChild(btn('保存', 'flow_define：校验通过后带乐观锁写入该层', () => editorSave(), true))
+    bar.appendChild(btn('取消', '放弃本次编辑，回到左列表', () => { editor = null; libAutoOpened = true; notify() }, false))
+    if (editor.readOnly) bar.appendChild(el('span', 'ftb-readonly', '只读：先「克隆到项目」再改'))
+    main.appendChild(bar)
 
-    if (editor.mode === 'form') {
-      if (!editor.readOnly) box.appendChild(el('div', 'ftb-note', '表单只渲染 流程 / 阶段 / 门禁 字段；未渲染字段（如 board、appliesTo、onFail、library）在切换与保存时原样保留，不会被表单抹掉。'))
-      renderForm(box)
+    if (editor.mode === 'canvas') {
+      const grid = el('div', 'ftb-cv-grid')
+      grid.appendChild(renderCanvas(stages))
+      grid.appendChild(renderInspector(stages))
+      main.appendChild(grid)
     } else {
       const ta = document.createElement('textarea')
       ta.className = 'ftb-textarea'
       ta.spellcheck = false
       ta.value = editor.json
       ta.addEventListener('input', () => { if (editor) editor.json = ta.value })
-      box.appendChild(ta)
+      main.appendChild(ta)
     }
-
     if (editor.result) {
       const bad = /未通过|失败|非法|必须填|不能为空|重复/.test(editor.result)
-      box.appendChild(el('div', bad ? 'ftb-err' : 'ftb-note', editor.result))
+      main.appendChild(el('div', bad ? 'ftb-err' : 'ftb-note', editor.result))
     }
-    const foot = el('div', 'ftb-gate')
-    foot.appendChild(btn('校验', 'flow_validate：阶段/门禁契约校验（不落盘；表单模式先做同规则本地校验）', () => editorValidate(), false))
-    if (!editor.readOnly) foot.appendChild(btn('保存', 'flow_define：校验通过后带乐观锁写入该层', () => editorSave(), true))
-    foot.appendChild(btn('取消', '放弃本次编辑', () => { editor = null; notify() }, false))
-    box.appendChild(foot)
-    body.appendChild(box)
+    main.appendChild(el('div', 'ftb-note', '画布只渲染 阶段 / 门禁；未渲染字段（board、appliesTo、onFail、library 等）在切换与保存时原样保留。'))
   }
 
-  // 表单渲染（D4-④）：阶段（id/标题/目标/任务，可增删 + 上下移）与门禁（kind 收敛字段，可增删）
-  function renderForm(box) {
-    const def = editor.def || (editor.def = {})
+  // 画布：节点 = 阶段（纵向排布 + 连线）；拖动节点重排，支持增删
+  // 新增节点的 id：跳过已被占用的 stage-N，避免删除后再新增产生重复 id
+  function nextStageId(stages) {
+    const used = {}
+    stages.forEach((s) => { if (s && s.id) used[s.id] = 1 })
+    let n = stages.length + 1
+    while (used['stage-' + n]) n++
+    return 'stage-' + n
+  }
+  function renderCanvas(stages) {
     const ro = !!editor.readOnly
-    const stages = Array.isArray(def.stages) ? def.stages : (def.stages = [])
-
-    const meta = el('div', 'ftb-block')
-    const mh = el('div', 'ftb-block-head')
-    mh.appendChild(el('span', 'ftb-name', '流程'))
-    mh.appendChild(el('div', 'ftb-spacer'))
-    mh.appendChild(el('span', 'ftb-cell', stages.length + ' 阶段'))
-    meta.appendChild(mh)
-    const idLocked = !editor.isNew
-    meta.appendChild(field('流程 id', lock(txtInput(def.id, (v) => { if (editor.isNew) def.id = v }, ''), idLocked),
-      idLocked ? '流程 id 不在此处改（改名等于另建流程）；需要复制请用「克隆到项目」' : '新流程 id（保存后落项目层 .pair/flows/<id>.json）'))
-    meta.appendChild(field('标题', lock(txtInput(def.title, (v) => { def.title = v }), ro), '流程标题（title）'))
-    meta.appendChild(field('版本', lock(numInput(def.version || 1, (v) => { def.version = Number(v) || 1 }, 1), ro), '流程定义版本（version）——乐观锁与发布包都取它'))
-    if (Array.isArray(def.projectTypes)) {
-      meta.appendChild(field('适用类型', lock(txtInput(def.projectTypes.join(','), (v) => { def.projectTypes = splitList(v.replace(/,/g, '；')) }), ro), '逗号/分号分隔：go / web / python / plugin / docs / any'))
-    }
-    box.appendChild(meta)
-
+    nodeTitleEls = []
+    nodeIdEls = []
+    const cv = el('div', 'ftb-canvas')
+    cv.appendChild(renderFlowMeta(editor.def || {}))
     stages.forEach((st, i) => {
       if (!st || typeof st !== 'object') { st = stages[i] = { id: '', title: '', gates: [] } }
-      const gates = Array.isArray(st.gates) ? st.gates : (st.gates = [])
-      const block = el('div', 'ftb-block')
-      const bh = el('div', 'ftb-block-head')
-      bh.appendChild(el('span', 'ftb-idx', '阶段 ' + (i + 1)))
-      bh.appendChild(el('span', 'ftb-name', st.title || st.id || '（未命名）'))
-      bh.appendChild(el('span', 'ftb-cell', gates.length + ' 门禁'))
-      bh.appendChild(el('div', 'ftb-spacer'))
-      if (!ro) {
-        bh.appendChild(btn('↑', '上移该阶段（阶段顺序即流程顺序）', () => { if (i > 0) { stages.splice(i - 1, 0, stages.splice(i, 1)[0]); touchEditor() } }, false))
-        bh.appendChild(btn('↓', '下移该阶段', () => { if (i < stages.length - 1) { stages.splice(i + 1, 0, stages.splice(i, 1)[0]); touchEditor() } }, false))
-        bh.appendChild(btn('删除阶段', '删除该阶段（连同其门禁）', () => { stages.splice(i, 1); touchEditor() }, false))
+      if (i > 0) {
+        const link = el('div', 'ftb-cv-link')
+        link.appendChild(el('div', 'ftb-cv-line'))
+        cv.appendChild(link)
       }
-      block.appendChild(bh)
-      block.appendChild(field('阶段 id', lock(txtInput(st.id, (v) => { st.id = v }), ro), '阶段唯一 id（必填；阶段内不得重复）'))
-      block.appendChild(field('标题', lock(txtInput(st.title, (v) => { st.title = v }), ro), '阶段标题（title）'))
-      block.appendChild(field('目标', lock(txtInput(st.goal, (v) => { st.goal = v }), ro), '阶段目标（goal）——会注入每轮提示，给 agent 上下文'))
-      // 子任务模板（plan；兼容旧定义的 tasks）：进入该阶段时按条**播种**为子任务（幂等），
-      // agent 之后可用 flow_task 在运行时继续拆解与推进状态。
-      var planKey = Array.isArray(st.plan) ? 'plan' : (Array.isArray(st.tasks) ? 'tasks' : null)
-      if (planKey) {
-        const curPlan = st[planKey]
-        const asText = (x) => (x && typeof x === 'object') ? String(x.subject || x.title || '') : String(x || '')
-        block.appendChild(field('子任务模板', lock(txtInput(curPlan.map(asText).join('；'), (v) => {
-          const keep = {}
-          curPlan.forEach((x) => { if (x && typeof x === 'object' && x.subject) keep[x.subject] = x.detail || '' })
-          st[planKey] = splitList(v).map((s) => (keep[s] !== undefined ? { subject: s, detail: keep[s] } : s))
-        }), ro), '「；」分隔多条：进入该阶段时按条播种为子任务（agent 可再用 flow_task 增删改与推进）'))
-      }
+      cv.appendChild(canvasNode(st, i, ro))
+    })
+    if (!stages.length) cv.appendChild(el('div', 'ftb-cv-empty', '还没有阶段节点：点下面「＋ 添加节点」开始定义流程。'))
+    if (!ro) {
+      const add = el('button', 'ftb-cv-add', stages.length ? '＋ 添加节点' : '＋ 添加第一个节点')
+      add.type = 'button'
+      add.title = '在流程末尾新增一个阶段节点'
+      add.addEventListener('click', () => {
+        const id = nextStageId(stages)
+        stages.push({ id: id, title: '新阶段', goal: '', plan: [], gates: [] })
+        editor.sel = stages.length - 1
+        touchEditor()
+      })
+      cv.appendChild(add)
+    }
+    return cv
+  }
 
-      const gbox = el('div', 'ftb-gate-box')
-      gbox.appendChild(el('div', 'ftb-note', '门禁 ' + gates.length + ' 个 —— kind=command 必填命令、artifact 必填产物路径、approval 不自动通过（须用户批准）；必过（required）门禁未过时不允许推进。'))
-      gates.forEach((g, j) => gbox.appendChild(renderGateForm(st, g, i, j, ro)))
-      if (!ro) gbox.appendChild(btn('＋ 加门禁', '在该阶段末尾新增一个 check 门禁', () => {
+  // 流程元信息（画布上方，紧凑字段；未渲染字段原样保留）
+  function renderFlowMeta(def) {
+    const ro = !!editor.readOnly
+    const box = el('div', 'ftb-block')
+    const mh = el('div', 'ftb-block-head')
+    mh.appendChild(el('span', 'ftb-name', '流程属性'))
+    mh.appendChild(el('div', 'ftb-spacer'))
+    mh.appendChild(el('span', 'ftb-cell', ((def.stages || []).length) + ' 阶段'))
+    box.appendChild(mh)
+    const idLocked = !editor.isNew
+    box.appendChild(field('流程 id', lock(txtInput(def.id, (v) => { if (editor.isNew) def.id = v }, ''), idLocked),
+      idLocked ? '流程 id 不在此处改（改名等于另建流程）；需要复制请用「克隆到项目」' : '新流程 id（保存后落项目层 .pair/flows/<id>.json）'))
+    box.appendChild(field('标题', lock(txtInput(def.title, (v) => { def.title = v }), ro), '流程标题（title）'))
+    box.appendChild(field('版本', lock(numInput(def.version || 1, (v) => { def.version = Number(v) || 1 }, 1), ro), '流程定义版本（version）——乐观锁与发布包都取它'))
+    if (Array.isArray(def.projectTypes)) {
+      box.appendChild(field('适用类型', lock(txtInput(def.projectTypes.join(','), (v) => { def.projectTypes = splitList(v.replace(/,/g, '；')) }), ro), '逗号/分号分隔：go / web / python / plugin / docs / any'))
+    }
+    return box
+  }
+
+  // 画布节点：单击选中（右栏编辑）/ 拖动重排 / 悬停快捷增删
+  function canvasNode(st, i, ro) {
+    const gates = Array.isArray(st.gates) ? st.gates : (st.gates = [])
+    const node = el('div', 'ftb-node' + (Number(editor.sel) === i ? ' sel' : '') + (ro ? ' ro' : ''))
+    node.setAttribute('data-stage-id', String(st.id || ''))
+    node.title = ro ? '只读节点（点「克隆到项目」后可编辑）' : '点击编辑属性；拖动到另一个节点可重排'
+    node.appendChild(el('span', 'ftb-node-idx', String(i + 1)))
+    const main = el('div', 'ftb-node-main')
+    const titleEl = el('span', 'ftb-node-title', st.title || st.id || '（未命名阶段）')
+    const idEl = el('span', 'ftb-node-sid', st.id || '（缺少 id）')
+    nodeTitleEls[i] = titleEl
+    nodeIdEls[i] = idEl
+    main.appendChild(titleEl)
+    main.appendChild(idEl)
+    const chips = el('div', 'ftb-flowitem-meta')
+    chips.appendChild(el('span', 'ftb-chipm', gates.length + ' 门禁'))
+    const planN = Array.isArray(st.plan) ? st.plan.length : (Array.isArray(st.tasks) ? st.tasks.length : 0)
+    if (planN) chips.appendChild(el('span', 'ftb-chipm', planN + ' 子任务'))
+    if (gates.some((g) => g && g.kind === 'approval')) chips.appendChild(el('span', 'ftb-chipm brand', '含审批'))
+    main.appendChild(chips)
+    node.appendChild(main)
+    const act = el('div', 'ftb-node-act')
+    if (!ro) {
+      act.appendChild(btn('↑', '上移该节点', (e) => { if (e && e.stopPropagation) e.stopPropagation(); moveStage(i, i - 1) }))
+      act.appendChild(btn('↓', '下移该节点', (e) => { if (e && e.stopPropagation) e.stopPropagation(); moveStage(i, i + 1) }))
+      act.appendChild(btn('×', '删除该节点（连同门禁）', (e) => { if (e && e.stopPropagation) e.stopPropagation(); removeStage(i) }))
+    }
+    node.appendChild(act)
+    node.addEventListener('click', (e) => {
+      if (e && e.target && String(e.target.tagName) === 'BUTTON') return
+      if (editor.sel !== i) { editor.sel = i; touchEditor() }
+    })
+    if (!ro) {
+      node.draggable = true
+      node.addEventListener('dragstart', (e) => {
+        dragFrom = i
+        if (!/\bdragging\b/.test(node.className)) node.className += ' dragging'
+        try { if (e && e.dataTransfer) e.dataTransfer.setData('text/plain', String(i)) } catch (e2) { }
+      })
+      node.addEventListener('dragend', () => { dragFrom = -1; touchEditor() })
+      node.addEventListener('dragover', (e) => {
+        if (dragFrom < 0 || dragFrom === i) return
+        if (e && e.preventDefault) e.preventDefault()
+        if (!/\bdrop-on\b/.test(node.className)) node.className += ' drop-on'
+      })
+      node.addEventListener('dragleave', () => { node.className = node.className.replace(/\s*drop-on/g, '') })
+      node.addEventListener('drop', (e) => {
+        if (e && e.preventDefault) e.preventDefault()
+        const from = dragFrom
+        dragFrom = -1
+        if (from >= 0 && from !== i) moveStage(from, i)
+      })
+    }
+    return node
+  }
+  function moveStage(from, to) {
+    const stages = (editor && editor.def && editor.def.stages) || []
+    if (!stages.length || from === to || from < 0 || to < 0 || from >= stages.length || to >= stages.length) return
+    stages.splice(to, 0, stages.splice(from, 1)[0])
+    editor.sel = to
+    touchEditor()
+  }
+  function removeStage(i) {
+    const stages = (editor && editor.def && editor.def.stages) || []
+    if (i < 0 || i >= stages.length) return
+    stages.splice(i, 1)
+    editor.sel = Math.max(0, Math.min(i, stages.length - 1))
+    touchEditor()
+  }
+
+  // 右栏检查器：选中节点属性 + 门禁（可增删改）
+  function renderInspector(stages) {
+    const ro = !!editor.readOnly
+    const box = el('div', 'ftb-insp')
+    const head = el('div', 'ftb-insp-head')
+    head.appendChild(el('span', 'ftb-insp-title', '节点属性'))
+    const i = Math.max(0, Math.min(Number(editor.sel) || 0, Math.max(0, stages.length - 1)))
+    const st = stages[i]
+    if (!st || typeof st !== 'object') {
+      head.appendChild(el('span', 'ftb-count', '0'))
+      box.appendChild(head)
+      box.appendChild(el('div', 'ftb-note', '画布还没有节点：先用「＋ 添加节点」新增一个阶段。'))
+      return box
+    }
+    if (!Array.isArray(st.gates)) st.gates = []
+    const gates = st.gates
+    head.appendChild(el('span', 'ftb-count strong', '#' + (i + 1)))
+    const inspTitleEl = el('span', 'ftb-node-title', st.title || st.id || '（未命名）')
+    head.appendChild(inspTitleEl)
+    box.appendChild(head)
+    box.appendChild(el('div', 'ftb-note', ro ? '只读：先「克隆到项目」再改。' : '点击画布其它节点切换；在画布上拖动节点可调整顺序。'))
+    box.appendChild(field('阶段 id', lock(txtInput(st.id, (v) => {
+      st.id = v
+      if (nodeIdEls[i]) nodeIdEls[i].textContent = v || '（缺少 id）'
+    }), ro), '阶段唯一 id（必填；流程内不得重复）'))
+    box.appendChild(field('标题', lock(txtInput(st.title, (v) => {
+      st.title = v
+      if (nodeTitleEls[i]) nodeTitleEls[i].textContent = v || st.id || '（未命名阶段）'
+      inspTitleEl.textContent = v || st.id || '（未命名）'
+    }), ro), '阶段标题（title）——画布节点上显示的名字'))
+    box.appendChild(field('目标', lock(txtInput(st.goal, (v) => { st.goal = v }), ro), '阶段目标（goal）——会注入每轮提示，给 agent 上下文'))
+    // 子任务模板（plan；兼容旧定义的 tasks）：进入该阶段时按条播种为子任务（幂等）
+    var planKey = Array.isArray(st.plan) ? 'plan' : (Array.isArray(st.tasks) ? 'tasks' : null)
+    if (planKey) {
+      const curPlan = st[planKey]
+      const asText = (x) => (x && typeof x === 'object') ? String(x.subject || x.title || '') : String(x || '')
+      box.appendChild(field('子任务模板', lock(txtInput(curPlan.map(asText).join('；'), (v) => {
+        const keep = {}
+        curPlan.forEach((x) => { if (x && typeof x === 'object' && x.subject) keep[x.subject] = x.detail || '' })
+        st[planKey] = splitList(v).map((s) => (keep[s] !== undefined ? { subject: s, detail: keep[s] } : s))
+      }), ro), '「；」分隔多条：进入该阶段时按条播种为子任务（agent 可再用 flow_task 增删改与推进）'))
+    }
+    const gbox = el('div', 'ftb-gate-box')
+    gbox.appendChild(el('div', 'ftb-note', '门禁 ' + gates.length + ' 个 —— kind=command 必填命令、artifact 必填产物路径、approval 须用户批准；必过（required）未过不允许推进。'))
+    gates.forEach((g, j) => gbox.appendChild(renderGateForm(st, g, i, j, ro)))
+    if (!ro) {
+      gbox.appendChild(btn('＋ 加门禁', '在该节点末尾新增一个 check 门禁', () => {
         gates.push({ id: 'g-' + (st.id || 'new') + '-' + (gates.length + 1), kind: 'check', text: '', required: true, blocking: false })
         touchEditor()
       }, false))
-      block.appendChild(gbox)
-      box.appendChild(block)
-    })
-
-    if (ro) box.appendChild(el('div', 'ftb-readonly', '预设层只读：表单仅展示，「保存」按钮已隐藏。点「取消」返回后，用流程库里的「克隆到项目」生成可编辑副本。'))
-    else box.appendChild(btn('＋ 加阶段', '在末尾新增一个阶段', () => {
-      stages.push({ id: 'stage-' + (stages.length + 1), title: '新阶段', goal: '', plan: [], gates: [] })
-      touchEditor()
-    }, true))
+      gbox.appendChild(btn('删除节点', '删除该节点（连同其门禁）', () => removeStage(i), false))
+    }
+    box.appendChild(gbox)
+    return box
   }
 
   // 门禁表单块：按 kind 收敛字段（command→cmd、artifact→path、approval→提示语）
@@ -1171,6 +1377,34 @@
   }
   const TB_SUB_LABEL = { pending: '待办', in_progress: '进行中', completed: '已完成', blocked: '阻塞', cancelled: '取消' }
   const TB_DOT = { backlog: 'var(--text-muted)', todo: '#d4a74e', in_progress: '#569cd6', in_review: '#d4a74e', done: '#6a9955' }
+  // 规划阶段（「待规划」列可执行化）：'' 未规划 → drafting 规划中 → review 待确认 → final 已定稿
+  const TB_PLAN_LABEL = { '': '未规划', drafting: '规划中', review: '待确认', final: '已定稿' }
+  // 派发后多久没回写算「卡住了」（分钟）：徽标转红 + 允许一键重试
+  const TB_PLAN_STALE_MIN = 10
+  /** 任务的规划状态（老卡无 plan 字段 → 视为未规划）。 */
+  function tbPlan(t) { return (t && t.plan && typeof t.plan === 'object') ? t.plan : { stage: '', rounds: [], questions: [], risks: [], discussion: [] } }
+  function tbPlanStage(t) { return String(tbPlan(t).stage || '') }
+  /**
+   * 规划派发的可观测状态（看板徽标与详情「重试」按钮同源，避免两处判断漂移）：
+   *   none    无派发记录（或已有新版本回写）
+   *   waiting 已派发、等待回写（含已等待分钟）
+   *   stale   已派发但超过阈值仍无新版本（可重试）
+   *   failed  上次派发失败（红色 + 可重试）
+   */
+  function tbPlanDispatchView(t) {
+    const p = tbPlan(t)
+    const d = p.dispatch || null
+    const n = (Array.isArray(p.rounds) ? p.rounds : []).length
+    const lastAt = n ? String((p.rounds[n - 1] || {}).at || '') : ''
+    // 回写判定：最新版本的 at 晚于派发时间即为「已回写」
+    const replied = !!(d && d.ok === true && d.at && lastAt && String(lastAt) > String(d.at))
+    const waitMin = (d && d.at) ? Math.max(0, Math.floor((Date.now() - new Date(d.at).getTime()) / 60000)) : 0
+    if (d && d.ok === false && d.error) return { kind: 'failed', n: n, waitMin: waitMin, error: String(d.error) }
+    if (d && d.ok === true && d.at && !replied) {
+      return { kind: waitMin >= TB_PLAN_STALE_MIN ? 'stale' : 'waiting', n: n, waitMin: waitMin, error: '' }
+    }
+    return { kind: 'none', n: n, waitMin: waitMin, error: '' }
+  }
   const TB_CSS = [
     // ── 工具栏 ────────────────────────────────────────────────
     '.ftb-tb-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}',
@@ -1208,6 +1442,7 @@
     '.ftb-tchip.run{color:#6a9955}',
     '.ftb-tchip.timer{color:#569cd6}',
     '.ftb-tchip.blocked{color:#e5534b}',
+    '.ftb-tchip.err{color:#e5534b;background:rgba(229,83,75,.12)}',
     '.ftb-tchip.demo{color:#d4a74e;border:1px dashed rgba(212,167,78,.55)}',
     '.ftb-tcard-bar{height:3px;border-radius:2px;background:var(--bg-active);overflow:hidden}',
     '.ftb-tcard-bar i{display:block;height:100%;background:#6a9955;border-radius:2px;transition:width .2s}',
@@ -1256,6 +1491,7 @@
     '.ftb-note{color:var(--text-muted);font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-word}',
     '.ftb-note.agent{border-left:2px solid #569cd6;padding-left:8px}',
     '.ftb-note.user{border-left:2px solid #6a9955;padding-left:8px}',
+    '.ftb-note.err{color:#e5534b}',
     '.ftb-tb-meta{font-size:11px;color:var(--text-muted);line-height:1.7;margin:4px 0}',
   ].join('\n')
   let tbSnap = null
@@ -1273,7 +1509,7 @@
 
   function tbBlankDraft() {
     return {
-      title: '', description: '', prompt: '', urgency: 'normal', flowId: '', convId: '',
+      title: '', description: '', prompt: '', urgency: 'normal', flowId: '', convId: '', status: 'todo',
       schedule: { enabled: false, mode: 'interval', everyMinutes: 60, atTime: '09:00', atISO: '' },
     }
   }
@@ -1303,7 +1539,7 @@
       return null
     }
   }
-  /** 驱动模式切换（手动 / 全流程自动 + 自动验收 / 并发）。 */
+  /** 驱动模式切换（手动 / 全流程自动 + 自动验收 + 规划定稿自动入待办 / 并发）。 */
   async function tbSetDriver(patch) {
     const p = patch || {}
     const msg = p.mode
@@ -1312,7 +1548,11 @@
         : '已切到「手动」：每张卡由人点执行 / 认领 / 定时')
       : (p.autoAccept !== undefined
         ? ('自动验收已' + (p.autoAccept ? '开启' : '关闭'))
-        : ('自动并发已设为 ' + p.maxConcurrent))
+        : p.planAutoAccept !== undefined
+          ? (p.planAutoAccept
+            ? '规划定稿自动入待办已开启：agent 定稿后直接进「待办」'
+            : '规划定稿自动入待办已关闭：定稿停在「规划待确认」，由人点「确认规划 → 待办」')
+          : ('自动并发已设为 ' + p.maxConcurrent))
     await tbDo({ op: 'driver', patch: p, convId: currentConvId() }, msg)
   }
   async function tbRun(id) {
@@ -1326,6 +1566,63 @@
       tbPending = ''
       notify()
     }
+  }
+  /**
+   * 「待规划」列的可执行入口：把规划任务书派发给 agent（本轮只做规划，不动手实现）。
+   * ★ 不自欺（监督者第 2 次）：只有 ok:true 且 dispatched:true 才提示「已派发」；
+   *   无会话时直接引导用户先选/建会话，不再先把「成功」弹出去再改错。
+   */
+  async function tbPlanRun(id) {
+    if (tbPending) return null
+    if (!currentConvId()) {
+      tbMsg = '请先在对话里打开（或新建）一个会话，再点「开始规划」——规划任务书要投递到会话里'
+      notify()
+      notifyUser(tbMsg, 'warn')
+      return null
+    }
+    tbPending = id
+    notify()
+    let r = null
+    try {
+      r = await ui.invoke(PLUGIN, 'taskboard_action', { op: 'planStart', id: id, convId: currentConvId() })
+    } catch (e) {
+      r = { ok: false, dispatched: false, error: String((e && e.message) || e) }
+    }
+    tbPending = ''
+    tbMsg = ''
+    await loadBoard()
+    if (r && r.ok === true && r.dispatched === true) {
+      notifyUser('已派发规划（agent 会先调研，再写出可执行拆解）', 'info')
+    } else {
+      tbMsg = String((r && r.error) || '规划派发失败')
+      notify()
+      notifyUser('规划派发失败：' + tbMsg, 'error')
+    }
+    return r
+  }
+  /** 规划定稿：人确认 → 移入「待办」。 */
+  async function tbPlanAccept(id) {
+    await tbDo({ op: 'planAccept', id: id, convId: currentConvId() }, '规划已确认，卡已移入「待办」')
+  }
+  /**
+   * 规划讨论：意见发给 agent，agent 据此改下一版（多轮讨论的核心通道）。
+   * ★ 不得静默成功：只有后端 dispatched===true 才提示「已发给 agent」；
+   *   未投递时明确提示「已记录，未投递」，且不回滚已写入的 discussion（刷新后仍可见）。
+   */
+  async function tbPlanDiscuss(id, text) {
+    const s = String(text || '').trim()
+    if (!s) { tbMsg = '先写一条规划意见'; notify(); return }
+    let r = null
+    try {
+      r = await ui.invoke(PLUGIN, 'taskboard_action', { op: 'planDiscuss', id: id, text: s, convId: currentConvId() })
+    } catch (e) {
+      r = { ok: false, dispatched: false, error: String((e && e.message) || e) }
+    }
+    tbMsg = ''
+    await loadBoard()
+    if (r && r.dispatched === true) notifyUser('意见已发给 agent，会写新一版规划', 'info')
+    else notifyUser('意见已记录，未投递：' + String((r && r.error) || '当前没有可投递的规划会话'), 'warn')
+    return r
   }
 
   function tbTasks() { return (tbSnap && tbSnap.tasks) || [] }
@@ -1475,6 +1772,31 @@
       meta.appendChild(el('span', 'ftb-tchip flow', '流程 ' + t.flowId + fpTxt))
     }
     if (t.blocked) meta.appendChild(el('span', 'ftb-tchip blocked', '阻塞'))
+    // 「待规划」列的状态徽标：未规划 / 已派发(等待/未回写) / 派发失败 / 规划中·第 N 版 / 待确认 / 已定稿
+    if (t.status === 'backlog') {
+      const p = tbPlan(t)
+      const n = (p.rounds || []).length
+      const dv = tbPlanDispatchView(t)
+      if (dv.kind === 'failed') {
+        const chip = el('span', 'ftb-tchip err', '派发失败' + (n ? ' · 第 ' + n + ' 版' : ''))
+        chip.title = dv.error
+        meta.appendChild(chip)
+      } else if (dv.kind === 'stale') {
+        const chip = el('span', 'ftb-tchip err', '已派发 · 未回写（' + dv.waitMin + ' 分钟）')
+        chip.title = '规划任务书已投递，但超过 ' + TB_PLAN_STALE_MIN + ' 分钟没有新版本回写；可在卡片里点「重试派发」'
+        meta.appendChild(chip)
+      } else if (dv.kind === 'waiting') {
+        const chip = el('span', 'ftb-tchip timer', '已派发 · 等待回写（' + dv.waitMin + ' 分钟）')
+        chip.title = '规划任务书已投递，等 agent 写回第 ' + (n + 1) + ' 版规划'
+        meta.appendChild(chip)
+      } else if (p.stage === 'review') meta.appendChild(el('span', 'ftb-tchip timer', '规划待确认'))
+      else if (p.stage === 'final') meta.appendChild(el('span', 'ftb-tchip run', '已定稿 · 第 ' + n + ' 版'))
+      else if (p.stage === 'drafting') meta.appendChild(el('span', 'ftb-tchip run', '规划中 · 第 ' + n + ' 版'))
+      else meta.appendChild(el('span', 'ftb-tchip', '未规划'))
+      if ((p.questions || []).length && p.stage !== 'final') {
+        meta.appendChild(el('span', 'ftb-tchip', '待拍板 ' + p.questions.length))
+      }
+    }
     const rs = t.runState || {}
     if (rs.running) meta.appendChild(el('span', 'ftb-tchip run', '执行中…'))
     else if (t.status === 'in_progress') {
@@ -1524,7 +1846,11 @@
     head.appendChild(el('span', 'ftb-tcol-count', String(rows.length)))
     col.appendChild(head)
     const box = el('div', 'ftb-tcol-body')
-    if (!rows.length) box.appendChild(el('div', 'ftb-tcol-empty', '暂无任务'))
+    if (!rows.length) {
+      box.appendChild(el('div', 'ftb-tcol-empty', key === 'backlog'
+        ? '暂无待规划任务 · 建卡时选「待规划」，agent 先规划，定稿后自动移入下一列'
+        : '暂无任务'))
+    }
     rows.forEach((t) => tbCard(t, box))
     col.appendChild(box)
     col.addEventListener('dragover', (e) => {
@@ -1577,7 +1903,7 @@
     })
     bar.appendChild(seg2)
     // 驱动模式：手动（每卡点执行）/ 全流程自动（自动派发待办 + 可选自动验收）
-    const drv = (tbSnap && tbSnap.driver) || { mode: 'manual', autoAccept: false, maxConcurrent: 1 }
+    const drv = (tbSnap && tbSnap.driver) || { mode: 'manual', autoAccept: false, planAutoAccept: false, maxConcurrent: 1 }
     const segDrv = el('div', 'ftb-seg')
     ;[['manual', '手动'], ['auto', '全流程自动']].forEach(([k, label]) => {
       const b = el('button', 'ftb-btn' + (drv.mode === k ? ' active' : ''), label)
@@ -1604,6 +1930,14 @@
       cc.addEventListener('click', () => tbSetDriver({ maxConcurrent: drv.maxConcurrent >= 3 ? 1 : drv.maxConcurrent + 1 }))
       bar.appendChild(cc)
     }
+    // 规划定稿自动入待办：独立于驱动模式（手动模式也能让 agent 定稿后跳过人工确认）
+    const pa = el('button', 'ftb-btn' + (drv.planAutoAccept ? ' active' : ''), '规划定稿自动入待办')
+    pa.type = 'button'
+    pa.title = drv.planAutoAccept
+      ? '已开启：agent 规划定稿后直接进「待办」（免人工确认）。点击关闭'
+      : '关闭时 agent 定稿停在「规划待确认」，由人点「确认规划 → 待办」'
+    pa.addEventListener('click', () => tbSetDriver({ planAutoAccept: !drv.planAutoAccept }))
+    bar.appendChild(pa)
     bar.appendChild(el('div', 'ftb-spacer'))
     bar.appendChild(btn(tbNew ? '取消新建' : '＋ 新建任务', '建卡：填标题 + 描述 + 执行提示词', () => {
       tbNew = !tbNew
@@ -1680,6 +2014,18 @@
     })
     sel.addEventListener('change', () => { tbDraft.urgency = sel.value })
     opts.appendChild(sel)
+    // 入列选择：待办（直接可执行）/ 待规划（先由 agent 规划，定稿后入待办）
+    const selSt = document.createElement('select')
+    ;[['todo', '入列：待办'], ['backlog', '入列：待规划（先规划）']].forEach(([v, label]) => {
+      const o = document.createElement('option')
+      o.value = v
+      o.textContent = label
+      if ((tbDraft.status || 'todo') === v) o.selected = true
+      selSt.appendChild(o)
+    })
+    selSt.title = '「待规划」= agent 先调研并产出可执行规划，定稿后自动进入「待办」，适合还没想清楚怎么做的任务'
+    selSt.addEventListener('change', () => { tbDraft.status = selSt.value })
+    opts.appendChild(selSt)
     const sel2 = document.createElement('select')
     const o0 = document.createElement('option')
     o0.value = ''
@@ -1709,13 +2055,14 @@
     }
 
     const acts = el('div', 'ftb-row-actions')
-    acts.appendChild(btn('创建任务', '建卡进入「待办」', async () => {
+    acts.appendChild(btn('创建任务', '按选定的入列（待办 / 待规划）建卡', async () => {
       if (!String(tbDraft.title || '').trim()) { tbMsg = '任务标题不能为空'; notify(); return }
+      const st = tbDraft.status === 'backlog' ? 'backlog' : 'todo'
       const r = await tbDo({
         op: 'create', title: tbDraft.title, description: tbDraft.description, prompt: tbDraft.prompt,
-        urgency: tbDraft.urgency, flowId: tbDraft.flowId,
+        urgency: tbDraft.urgency, flowId: tbDraft.flowId, status: st,
         convId: String(tbDraft.convId || '').trim() || currentConvId(),
-      }, '已建卡')
+      }, st === 'backlog' ? '已建卡（待规划）：点卡片里的「开始规划」让 agent 产出规划' : '已建卡（待办）')
       if (r && r.ok !== false) { tbNew = false; tbDraft = tbBlankDraft(); notify() }
     }, true))
     acts.appendChild(btn('取消', '不建卡', () => { tbNew = false; tbMsg = ''; notify() }))
@@ -1754,11 +2101,33 @@
     const exec = el('div', 'ftb-exec')
     if (t.status === 'in_progress') {
       exec.appendChild(btn('释放认领', '回到「待办」并清空认领', () => tbDo({ op: 'release', id: t.id }, '已释放'), false))
-    } else if (t.status === 'todo' || t.status === 'backlog') {
+    } else if (t.status === 'backlog') {
+      // 「待规划」列的可执行入口：先规划，再入待办（不再只能直接认领去做）
+      const p = tbPlan(t)
+      const planned = (p.rounds || []).length
+      exec.appendChild(btn(planned ? '继续规划' : '开始规划',
+        '把规划任务书派发给 agent：先调研现状，再写出可执行拆解（本轮不做实现）',
+        () => tbPlanRun(t.id), true))
+      // 派发失败 / 超时未回写 → 一键重试（不让人只能干看着「规划中 · 第 0 版」）
+      const dv = tbPlanDispatchView(t)
+      if (dv.kind === 'failed' || dv.kind === 'stale') {
+        exec.appendChild(btn('重试派发',
+          dv.kind === 'failed'
+            ? ('上次派发失败：' + dv.error + '；点这里重新投递')
+            : ('上次派发已 ' + dv.waitMin + ' 分钟没有回写；点这里重新投递'),
+          () => tbPlanRun(t.id), true))
+      }
+      if (p.stage === 'review') {
+        exec.appendChild(btn('确认规划 → 待办', '采纳当前规划版本，卡移入「待办」', () => tbPlanAccept(t.id), true))
+      }
+      exec.appendChild(btn('跳过规划直接做', '直接认领这张卡（移到「进行中」），不产出规划', () => tbDo({ op: 'claim', id: t.id, convId: currentConvId() }, '已认领'), false))
+    } else if (t.status === 'todo') {
       exec.appendChild(btn('认领', '接手这张卡（移到「进行中」）', () => tbDo({ op: 'claim', id: t.id, convId: currentConvId() }, '已认领'), false))
     }
-    const canRun = t.status !== 'done' && t.status !== 'archived' && t.status !== 'canceled' && !rs.running
-    exec.appendChild(btn('执行', '把任务书投递到当前会话，由 agent 按卡执行（可配合监督者多轮驱动）', () => tbRun(t.id), canRun))
+    const canRun = t.status !== 'backlog' && t.status !== 'done' && t.status !== 'archived' && t.status !== 'canceled' && !rs.running
+    if (t.status !== 'backlog') {
+      exec.appendChild(btn('执行', '把任务书投递到当前会话，由 agent 按卡执行（可配合监督者多轮驱动）', () => tbRun(t.id), canRun))
+    }
     const state = el('div', 'ftb-exec-state' + (rs.running ? ' run' : (rs.lastError ? ' err' : '')))
     state.textContent = rs.running
       ? ('执行中… 开始于 ' + tbShort(rs.startedAt) + (rs.sessionId ? ' · 会话 ' + String(rs.sessionId).slice(0, 16) : ''))
@@ -1865,13 +2234,65 @@
     content.appendChild(pair)
     box.appendChild(content)
 
+    // ── 规划（「待规划」列的核心：多轮讨论迭代 → 定稿 → 入待办）──
+    if (t.status === 'backlog' || (t.plan && (t.plan.rounds || []).length)) {
+      const p = tbPlan(t)
+      const rounds = Array.isArray(p.rounds) ? p.rounds : []
+      const psec = el('div', 'ftb-sec')
+      const phead = el('div', 'ftb-sec-head')
+      phead.appendChild(el('span', 'ftb-sec-title', '规划'))
+      phead.appendChild(el('span', 'ftb-sec-hint',
+        (TB_PLAN_LABEL[p.stage] || '未规划') + (rounds.length ? (' · 第 ' + rounds.length + ' 版') : ' · 尚未开始')))
+      psec.appendChild(phead)
+      if (String(p.summary || '').trim()) psec.appendChild(el('div', 'ftb-note', '概要：' + p.summary))
+      const qs = Array.isArray(p.questions) ? p.questions : []
+      if (qs.length) {
+        psec.appendChild(el('div', 'ftb-note agent', '待你拍板（' + qs.length + ' 条，可直接在下方讨论里回答）：'))
+        qs.forEach((q, i) => psec.appendChild(el('div', 'ftb-note agent', (i + 1) + '. ' + String(q))))
+      }
+      const rks = Array.isArray(p.risks) ? p.risks : []
+      if (rks.length) psec.appendChild(el('div', 'ftb-note', '风险 / 前置依赖：' + rks.join('；')))
+      if (rounds.length > 1) {
+        psec.appendChild(el('div', 'ftb-note', '版本历史：' + rounds.slice(-4).map((r) => ('v' + r.n + '@' + tbShort(r.at))).join(' · ')))
+      }
+      const ds = Array.isArray(p.discussion) ? p.discussion : []
+      if (ds.length) {
+        psec.appendChild(el('div', 'ftb-sec-title', '规划讨论'))
+        ds.slice(-8).forEach((d) => {
+          const who = (d.by && d.by.kind === 'agent') ? 'agent' : 'user'
+          psec.appendChild(el('div', 'ftb-note ' + who, (who === 'agent' ? 'agent：' : '我：') + String(d.text || '') + '（' + tbShort(d.at) + '）'))
+        })
+      }
+      if (t.status === 'backlog') {
+        const dvD = tbPlanDispatchView(t)
+        if (dvD.kind === 'failed') psec.appendChild(el('div', 'ftb-note err', '派发失败：' + dvD.error + '（点「重试派发」重新投递）'))
+        else if (dvD.kind === 'stale') psec.appendChild(el('div', 'ftb-note err', '已派发 · 未回写（' + dvD.waitMin + ' 分钟）：agent 可能没跑起来，点「重试派发」重新投递'))
+        else if (dvD.kind === 'waiting') psec.appendChild(el('div', 'ftb-note', '已派发 · 等待回写（' + dvD.waitMin + ' 分钟）'))
+        const pf = el('div', 'ftb-row-actions')
+        const pin = document.createElement('input')
+        pin.type = 'text'
+        pin.placeholder = '对规划提意见（回车发给 agent 改下一版）'
+        pin.style.cssText = 'flex:1;min-width:200px;font:inherit;font-size:12px;color:var(--text-primary);background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;padding:6px 10px;outline:none'
+        pin.addEventListener('keydown', (e) => {
+          if ((e && e.key) === 'Enter' && String(pin.value || '').trim()) tbPlanDiscuss(t.id, pin.value)
+        })
+        pf.appendChild(pin)
+        pf.appendChild(btn('发给 agent', '把这条意见投递到规划会话，agent 据此修订规划', () => tbPlanDiscuss(t.id, pin.value)))
+        if (p.stage === 'review') pf.appendChild(btn('确认规划 → 待办', '采纳当前版本，卡移入「待办」', () => tbPlanAccept(t.id), true))
+        psec.appendChild(pf)
+      }
+      box.appendChild(psec)
+    }
+
     // ── 执行拆解（agent 写，人可点状态推进）──
     const subs = Array.isArray(t.subtasks) ? t.subtasks : []
     const ssec = el('div', 'ftb-sec')
     const shead = el('div', 'ftb-sec-head')
     shead.appendChild(el('span', 'ftb-sec-title', '执行拆解'))
     const st = tbSubStats(subs)
-    shead.appendChild(el('span', 'ftb-sec-hint', subs.length ? (st.done + '/' + st.total + ' 完成') : '执行时由 agent 自动拆解（taskboard_plan）'))
+    shead.appendChild(el('span', 'ftb-sec-hint', subs.length
+      ? (st.done + '/' + st.total + ' 完成')
+      : (t.status === 'backlog' ? '规划定稿后即为执行拆解（taskboard_plan）' : '执行时由 agent 自动拆解（taskboard_plan）')))
     ssec.appendChild(shead)
     if (subs.length) {
       const list = el('div', 'ftb-subs')
@@ -2057,8 +2478,10 @@
         // ★ 输入保护（监督者实测缺陷）：4s 轮询 loadBoard→notify 会重建面板，替换正在输入的
         //   textarea（焦点丢失 + 丢字）。焦点落在本视图的编辑控件上时只更新头部数据，不重建 body。
         const ae = (typeof document !== 'undefined' && document.activeElement) || null
+        // 只保护文本类输入（textarea / input）：select 的 change 已写回定义，
+        // 重绘是安全的；若把 SELECT 也算「编辑中」，切换 kind 后收敛字段不会刷新。
         const editing = !!(ae && body && typeof body.contains === 'function' && body.contains(ae) &&
-          /^(TEXTAREA|INPUT|SELECT)$/.test(String(ae.tagName || '')))
+          /^(TEXTAREA|INPUT)$/.test(String(ae.tagName || '')))
         if (editing) return
         body.textContent = ''
         try {

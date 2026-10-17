@@ -113,65 +113,104 @@ module.exports = async function runUiFormTest(check, env) {
   const unmount = view.render(host)
   await flush()
 
-  // ── ① 进入流程库页签 ─────────────────────────────────────────
+  // ── ① 进入流程库页签（左列表 + 右画布）──────────────────────
   const libTab = btnOf(host, '流程库')
   check('[UI] 顶部页签渲染（任务看板 / 流程库；旧流程视图已下线）', !!libTab && !!btnOf(host, '任务看板') && !btnOf(host, '当前流程'))
   libTab.dispatch('click')
-  await flush()
+  await flush(6)
+  const items = () => byClass(host, 'ftb-flowitem')
+  const nodeCards = () => byClass(host, 'ftb-node')
+  const insp = () => byClass(host, 'ftb-insp')[0] || null
+  check('[UI] 流程库 = 左列表 + 右画布（.ftb-lib-side / .ftb-canvas 并存）',
+    byClass(host, 'ftb-lib').length === 1 && byClass(host, 'ftb-lib-side').length === 1 && byClass(host, 'ftb-canvas').length === 1,
+    'lib=' + byClass(host, 'ftb-lib').length + ' side=' + byClass(host, 'ftb-lib-side').length + ' canvas=' + byClass(host, 'ftb-canvas').length)
+  check('[UI] 左列表列出三层流程（每项带层标签与节点数）',
+    items().length >= 5 && byClass(host, 'ftb-scope').length >= 5 && /节点/.test(textAll(items()[0])),
+    'items=' + items().length + ' first=' + (items()[0] ? textAll(items()[0]).slice(0, 80) : '（无）'))
   const newBtn = btnOf(host, '＋ 新建流程')
-  check('[UI] 流程库提供「＋ 新建流程」入口（纯表单落地路径）', !!newBtn)
+  check('[UI] 流程库提供「＋ 新建流程」入口（画布落地路径）', !!newBtn)
 
-  // ── ② 默认表单模式 + 空白骨架 ───────────────────────────────
+  // ── ② 默认画布模式 + 空白骨架（1 节点 / 检查器 1 门禁）──────
   newBtn.dispatch('click')
   await flush()
   const seg = byClass(host, 'ftb-seg')[0]
-  const formTab = seg ? btnOf(seg, '表单') : null
-  check('[UI] 默认进入表单模式（有「表单 / JSON」切换，表单态无 textarea）',
-    !!seg && !!formTab && /active/.test(formTab.className) && byClass(host, 'ftb-textarea').length === 0 && !!btnOf(seg, 'JSON'),
+  const canvasTab = seg ? btnOf(seg, '画布') : null
+  check('[UI] 默认进入画布模式（有「画布 / JSON」切换，画布态无 textarea）',
+    !!seg && !!canvasTab && /active/.test(canvasTab.className) && byClass(host, 'ftb-textarea').length === 0 && !!btnOf(seg, 'JSON'),
     seg ? textAll(seg) : '（无切换控件）')
-  check('[UI] 空白骨架渲染为 1 阶段 / 1 门禁的表单块',
-    stageBlocks(host).length === 1 && byClass(host, 'ftb-gate-form').length === 1,
-    'stages=' + stageBlocks(host).length + ' gates=' + byClass(host, 'ftb-gate-form').length)
+  check('[UI] 空白骨架 = 1 个节点 + 右栏检查器 1 个门禁',
+    nodeCards().length === 1 && byClass(host, 'ftb-gate-form').length === 1 && !!insp(),
+    'nodes=' + nodeCards().length + ' gates=' + byClass(host, 'ftb-gate-form').length + ' insp=' + !!insp())
+  check('[UI] 画布节点绘制：序号 + 标题 + 阶段 id（可视化节点）',
+    nodeCards().length === 1 && !!byClass(nodeCards()[0], 'ftb-node-idx')[0] && !!byClass(nodeCards()[0], 'ftb-node-title')[0] &&
+    !!byClass(nodeCards()[0], 'ftb-node-sid')[0],
+    nodeCards()[0] ? textAll(nodeCards()[0]) : '（无节点）')
 
-  // ── ③ 表单增删：加阶段、上下移、加门禁、删门禁 ───────────────
-  btnOf(host, '＋ 加阶段').dispatch('click')
+  // ── ③ 节点增删改与拖拽重排 ───────────────────────────────────
+  btnOf(host, '＋ 添加节点').dispatch('click')
   await flush()
-  check('[UI] 表单「＋ 加阶段」→ 阶段块 2 个', stageBlocks(host).length === 2, 'stages=' + stageBlocks(host).length)
+  check('[UI] 「＋ 添加节点」→ 2 个节点 + 1 段连线',
+    nodeCards().length === 2 && byClass(host, 'ftb-cv-link').length === 1,
+    'nodes=' + nodeCards().length + ' links=' + byClass(host, 'ftb-cv-link').length)
 
-  const sbs = stageBlocks(host)
-  const downBtn = btnOf(sbs[sbs.length - 1], '↓')
-  check('[UI] 阶段块提供上下移按钮（↑/↓）', !!btnOf(sbs[0], '↑') && !!downBtn)
-  downBtn.dispatch('click')                                  // 末尾阶段下移 → 无操作
+  // 点击第一个节点 → 选中（.sel）且检查器切到 #1
+  nodeCards()[0].dispatch('click')
   await flush()
-  check('[UI] 末尾阶段下移为无操作（阶段数不变）', stageBlocks(host).length === 2)
-  // ★ 用标题定位（而非索引）做移动断言，避免索引错位造成的假通过/假失败
-  btnOf(stageBlockByTitle(host, '新阶段'), '↑').dispatch('click')
-  await flush()
-  const firstTitle = fieldInput(stageBlocks(host)[0], '标题')
-  check('[UI] 阶段「↑」上移生效（新阶段移到首位）', !!firstTitle && firstTitle.value === '新阶段', firstTitle ? firstTitle.value : '')
-  btnOf(stageBlockByTitle(host, '新阶段'), '↓').dispatch('click')
-  await flush()
-  const backTitle = fieldInput(stageBlocks(host)[1], '标题')
-  check('[UI] 阶段「↓」下移恢复原序（新阶段回到末位）', !!backTitle && backTitle.value === '新阶段', backTitle ? backTitle.value : '')
+  check('[UI] 点击节点选中：.sel 高亮 + 检查器切换到该节点',
+    /\bsel\b/.test(nodeCards()[0].className) && /#1/.test(textAll(insp() || host)),
+    'cls=' + (nodeCards()[0] ? nodeCards()[0].className : '') + ' insp=' + (insp() ? textAll(insp()).slice(0, 60) : '（无）'))
 
-  const addGates = btnsOf(host, '＋ 加门禁')
-  check('[UI] 每个阶段各有一个「＋ 加门禁」', addGates.length === 2, 'count=' + addGates.length)
-  // 新加的阶段模板 id 即 'stage-2'；用 id 定位（标题随后会被改写）
-  const s2 = () => stageBlockById(host, 'stage-2')
+  // 节点「↑ / ↓」重排（新阶段从末位移到首位）
+  check('[UI] 每个节点提供 ↑ / ↓ / × 快捷按钮',
+    !!btnOf(nodeCards()[1], '↑') && !!btnOf(nodeCards()[1], '↓') && !!btnOf(nodeCards()[1], '×'))
+  btnOf(nodeCards()[1], '↑').dispatch('click')
+  await flush()
+  check('[UI] 节点「↑」上移生效（新阶段移到首位，节点数不变）',
+    nodeCards().length === 2 && textAll(nodeCards()[0]).indexOf('新阶段') >= 0,
+    nodeCards()[0] ? textAll(nodeCards()[0]).slice(0, 80) : '（无节点）')
+  btnOf(nodeCards()[0], '↓').dispatch('click')
+  await flush()
+  check('[UI] 节点「↓」下移恢复原序', nodeCards().length === 2 && textAll(nodeCards()[1]).indexOf('新阶段') >= 0,
+    nodeCards()[1] ? textAll(nodeCards()[1]).slice(0, 80) : '（无节点）')
+
+  // 拖拽重排：dragstart(第 2 个) → dragover/drop(第 1 个)
+  nodeCards()[1].dispatch('dragstart')
+  nodeCards()[0].dispatch('dragover')
+  check('[UI] 拖拽悬停目标节点 → drop-on 落点高亮', /\bdrop-on\b/.test(nodeCards()[0].className), nodeCards()[0].className)
+  nodeCards()[0].dispatch('drop')
+  await flush()
+  check('[UI] 拖拽 drop 后顺序交换（新阶段到首位）', textAll(nodeCards()[0]).indexOf('新阶段') >= 0,
+    nodeCards()[0] ? textAll(nodeCards()[0]).slice(0, 80) : '（无节点）')
+
+  // 删除节点（此时首位是刚新增的 stage-2；删它，再添加验证 id 不重复）
+  btnOf(nodeCards()[0], '×').dispatch('click')
+  await flush()
+  check('[UI] 「×」删除节点 → 节点数减少', nodeCards().length === 1, 'nodes=' + nodeCards().length)
+  btnOf(host, '＋ 添加节点').dispatch('click')
+  await flush()
+  check('[UI] 删除后可再添加节点（回到 2 个，且 id 不重复）',
+    nodeCards().length === 2 && !/id 重复/.test(textAll(host)), 'nodes=' + nodeCards().length)
+
+  // 选中第二个节点（stage-2）继续编辑
+  nodeCards()[1].dispatch('click')
+  await flush()
+  const s2 = () => insp()
   const s2gates = () => byClass(s2(), 'ftb-gate-form')
   btnOf(s2(), '＋ 加门禁').dispatch('click')
   await flush()
   btnOf(s2(), '＋ 加门禁').dispatch('click')
   await flush()
-  check('[UI] 表单「＋ 加门禁」×2 → 门禁块合计 3 个（≥3 门禁）', byClass(host, 'ftb-gate-form').length === 3, 'gates=' + byClass(host, 'ftb-gate-form').length)
+  check('[UI] 检查器「＋ 加门禁」×2 → 选中节点门禁 2 个（全流程共 3 个）',
+    byClass(host, 'ftb-gate-form').length === 2 && /3 门禁|2 门禁/.test(textAll(nodeCards()[1])),
+    'inspGates=' + byClass(host, 'ftb-gate-form').length + ' node=' + textAll(nodeCards()[1]).slice(0, 80))
 
   // 删除一个门禁（验证「可删」）后再加回，最终仍为 3
   btnOf(s2gates()[1], '删除门禁').dispatch('click')
   await flush()
-  check('[UI] 「删除门禁」生效 → 门禁块 2 个', byClass(host, 'ftb-gate-form').length === 2, 'gates=' + byClass(host, 'ftb-gate-form').length)
+  check('[UI] 「删除门禁」生效 → 选中节点门禁 1 个', byClass(host, 'ftb-gate-form').length === 1, 'gates=' + byClass(host, 'ftb-gate-form').length)
   btnOf(s2(), '＋ 加门禁').dispatch('click')
   await flush()
-  check('[UI] 删后再加 → 门禁块回到 3 个', byClass(host, 'ftb-gate-form').length === 3)
+  check('[UI] 删后再加 → 选中节点门禁回到 2 个', byClass(host, 'ftb-gate-form').length === 2)
 
   // ── ④ 逐字段填写（含 kind 收敛）──────────────────────────────
   setVal(fieldInput(s2(), '阶段 id'), 'stage-2')
@@ -190,27 +229,27 @@ module.exports = async function runUiFormTest(check, env) {
   const target = path.join(env.ws, '.pair', 'flows', 'my-flow.json')
   btnOf(host, '保存').dispatch('click')
   await flush()
-  const errText = textAll(byClass(host, 'ftb-editor')[0] || host)
+  const errText = textAll(byClass(host, 'ftb-lib-main')[0] || host)
   check('[UI] kind 缺字段被拦：command 未填 cmd → 提示且未落盘',
     /必须填「命令 cmd」/.test(errText) && !fs.existsSync(target),
     errText.slice(0, 220))
   check('[UI] 校验失败时给出可读错误（.ftb-err 错误样式）', byClass(host, 'ftb-err').length >= 1)
 
-  // 补齐必填 → 保存成功（纯表单新建）
+  // 补齐必填 → 保存成功（纯画布新建）
   setVal(fieldInput(s2gates()[0], '命令 cmd'), 'go test ./...')
   setVal(fieldInput(s2gates()[1], '门禁 id'), 'g-2-2')
   setVal(fieldInput(s2gates()[1], '产物路径'), 'dist/app.exe')
   btnOf(host, '保存').dispatch('click')
   await flush(8)
   if (!fs.existsSync(target)) {
-    const eb = byClass(host, 'ftb-editor')[0]
-    console.log('  [debug] 未落盘 → 编辑器面板文本：' + (eb ? textAll(eb) : '（无编辑器面板）').slice(0, 500))
+    const eb = byClass(host, 'ftb-lib-main')[0]
+    console.log('  [debug] 未落盘 → 画布面板文本：' + (eb ? textAll(eb) : '（无画布面板）').slice(0, 500))
   }
-  check('[UI] 纯表单新建保存成功（落盘项目层 .pair/flows/my-flow.json）', fs.existsSync(target), target)
+  check('[UI] 纯画布新建保存成功（落盘项目层 .pair/flows/my-flow.json）', fs.existsSync(target), target)
   const saved = fs.existsSync(target) ? JSON.parse(fs.readFileSync(target, 'utf8')) : null
   const gateCount = saved ? saved.stages.reduce((n, s) => n + (s.gates || []).length, 0) : -1
   const st2 = saved ? saved.stages.filter((s) => s.id === 'stage-2')[0] : null
-  check('[UI] 落盘内容 = 表单输入（2 阶段 / 3 门禁 / command 带 cmd / artifact 带产物路径）',
+  check('[UI] 落盘内容 = 画布输入（2 阶段 / 3 门禁 / command 带 cmd / artifact 带产物路径）',
     !!saved && saved.stages.length === 2 && gateCount === 3 && !!st2 && st2.title === '实施' &&
     (st2.gates || []).length === 2 &&
     st2.gates[0].id === 'g-2-1' && st2.gates[0].kind === 'command' && st2.gates[0].cmd === 'go test ./...' &&
@@ -218,53 +257,61 @@ module.exports = async function runUiFormTest(check, env) {
     saved ? JSON.stringify({ stages: saved.stages.map((s) => s.id), gates: gateCount, stage2: st2 }).slice(0, 360) : '（未落盘）')
   check('[UI] 保存后壳内提示（$toast 收到成功通知）', toasts.some((t) => /已创建流程|已保存流程/.test(t.text)), JSON.stringify(toasts.slice(-2)))
 
-  // ── ⑤ 表单 ↔ JSON 双向切换不丢字段 ──────────────────────────
-  const myRow = rowOf(host, 'my-flow')
-  check('[UI] 流程库出现新建流程行（可编辑层）', !!myRow, myRow ? textAll(myRow).slice(0, 120) : '（无）')
-  btnOf(myRow, '编辑').dispatch('click')
+  // ── ⑤ 画布 ↔ JSON 双向切换不丢字段 ──────────────────────────
+  const flowItemOf = (id) => items().filter((r) => textAll(r).indexOf(id) >= 0)[0] || null
+  const myRow = flowItemOf('my-flow')
+  check('[UI] 流程库出现新建流程项（可编辑层）', !!myRow, myRow ? textAll(myRow).slice(0, 120) : '（无）')
+  // 点左列表项即加载该流程到右侧画布（无需「编辑」按钮）
+  if (myRow) myRow.dispatch('click')
   await flush()
-  check('[UI] 编辑既有流程默认仍是表单模式', byClass(host, 'ftb-seg').length >= 1 && byClass(host, 'ftb-textarea').length === 0)
-  check('[UI] 表单回显既有定义（2 阶段 3 门禁）', byClass(host, 'ftb-block').length >= 3 && byClass(host, 'ftb-gate-form').length === 3,
-    'stages=' + stageBlocks(host).length + ' gates=' + byClass(host, 'ftb-gate-form').length)
+  check('[UI] 点列表项 → 右栏画布默认画布模式', byClass(host, 'ftb-seg').length >= 1 &&
+    !!btnOf(byClass(host, 'ftb-seg')[0], '画布') && byClass(host, 'ftb-textarea').length === 0)
+  // 点第二个节点（stage-2）验证节点选中切换与定义完整回显
+  if (nodeCards()[1]) nodeCards()[1].dispatch('click')
+  await flush()
+  check('[UI] 画布回显既有定义（2 节点；选中节点 2 门禁）', nodeCards().length === 2 && byClass(host, 'ftb-gate-form').length === 2,
+    'nodes=' + nodeCards().length + ' gates=' + byClass(host, 'ftb-gate-form').length +
+    ' cards=' + nodeCards().map((n) => textAll(n).slice(0, 40)).join(' || ') +
+    ' insp=' + (insp() ? textAll(insp()).slice(0, 160) : '（无）'))
 
   btnOf(byClass(host, 'ftb-seg')[0], 'JSON').dispatch('click')
   await flush()
   let ta = byClass(host, 'ftb-textarea')[0]
-  check('[UI] 切到 JSON 模式：文本 = 表单当前定义（含阶段与门禁 id）',
+  check('[UI] 切到 JSON 模式：文本 = 画布当前定义（含阶段与门禁 id）',
     !!ta && /"stages"/.test(ta.value) && /stage-2/.test(ta.value) && /g-2-1/.test(ta.value),
     ta ? ta.value.slice(0, 160) : '（无 textarea）')
-  // 在 JSON 态改一个字段 + 追加表单未渲染字段（board）
+  // 在 JSON 态改一个字段 + 追加画布未渲染字段（board）
   const parsed = JSON.parse(ta.value)
   parsed.title = 'JSON 改过的标题'
   parsed.board = { kind: 'kanban' }
   ta.value = JSON.stringify(parsed, null, 2)
   ta.dispatch('input')
-  btnOf(byClass(host, 'ftb-seg')[0], '表单').dispatch('click')
+  btnOf(byClass(host, 'ftb-seg')[0], '画布').dispatch('click')
   await flush()
   const titleInput = fieldInput(byClass(host, 'ftb-block')[0], '标题')
-  check('[UI] JSON → 表单同步：标题跟随 JSON 改动、阶段/门禁数不变',
-    blockTitleOK(host) && byClass(host, 'ftb-gate-form').length === 3,
+  check('[UI] JSON → 画布同步：标题跟随 JSON 改动、节点/门禁数不变',
+    blockTitleOK(host) && byClass(host, 'ftb-gate-form').length === 2,
     'titleField=' + (titleInput ? titleInput.value : '（无）') + ' gates=' + byClass(host, 'ftb-gate-form').length)
   btnOf(byClass(host, 'ftb-seg')[0], 'JSON').dispatch('click')
   await flush()
   ta = byClass(host, 'ftb-textarea')[0]
-  check('[UI] 双向切换不丢字段：表单未渲染的 board 仍在 JSON 中',
+  check('[UI] 双向切换不丢字段：画布未渲染的 board 仍在 JSON 中',
     !!ta && /"board"/.test(ta.value) && /"kanban"/.test(ta.value) && /"title": "JSON 改过的标题"/.test(ta.value),
     ta ? ta.value.slice(0, 200) : '（无 textarea）')
   btnOf(host, '取消').dispatch('click')
   await flush()
 
   // ── ⑥ preset 只读层入口 ─────────────────────────────────────
-  const presetRow = byClass(host, 'ftb-row').filter((r) => /preset\(只读\)/.test(textAll(r)))[0] || null
-  check('[UI] preset 层行只读：无「编辑」入口，只有「克隆到项目」',
+  const presetRow = items().filter((r) => /preset·只读/.test(textAll(r)))[0] || null
+  check('[UI] preset 层列表项只读：无「编辑」入口，只有「克隆到项目」',
     !!presetRow && !btnOf(presetRow, '编辑') && !!btnOf(presetRow, '克隆到项目'),
-    presetRow ? textAll(presetRow).slice(0, 160) : '（无 preset 行）')
+    presetRow ? textAll(presetRow).slice(0, 160) : '（无 preset 项）')
   btnOf(presetRow, '克隆到项目').dispatch('click')
   await flush(8)
-  const clonedRow = byClass(host, 'ftb-row').filter((r) => /（自定义）/.test(textAll(r)))[0] || null
-  check('[UI] 克隆到项目后该行才出现「编辑」入口（只读层不可直接编辑）',
-    !!clonedRow && !!btnOf(clonedRow, '编辑'),
-    clonedRow ? textAll(clonedRow).slice(0, 160) : '（无克隆行）')
+  const clonedRow = items().filter((r) => /（自定义）/.test(textAll(r)))[0] || null
+  check('[UI] 克隆到项目后出现可编辑副本项（只读层不可直接编辑）',
+    !!clonedRow && !/·只读/.test(textAll(clonedRow)),
+    clonedRow ? textAll(clonedRow).slice(0, 160) : '（无克隆项）')
 
   // ── ⑦ 任务看板（2026-10-17 重建：照 github.com/cloader/dsh-taskboard）──
   //   五列状态机 + 人建卡 + 认领/验收协议闸 + 流程绑定（门禁→DoD 清单）
@@ -288,6 +335,26 @@ module.exports = async function runUiFormTest(check, env) {
   check('[UI-看板] 空列有指引性占位「无任务」（不是空白格）',
     byClass(host, 'ftb-tcol-empty').length >= 1 && /无任务/.test(textAll(host)),
     'empty=' + byClass(host, 'ftb-tcol-empty').length)
+
+  // 驱动条：规划定稿自动入待办开关（修 2）——真实 RPC 落盘 + 状态回显往返
+  const paBtn = btnOf(host, '规划定稿自动入待办')
+  check('[UI-看板] 驱动条含「规划定稿自动入待办」开关（默认关，title 说明停在待确认）',
+    !!paBtn && !/active/.test(paBtn.className) && /规划待确认/.test(String(paBtn.title || '')),
+    paBtn ? ('cls=' + paBtn.className + ' title=' + paBtn.title) : '（无按钮）')
+  if (paBtn) paBtn.dispatch('click')
+  await flush(14)
+  const drvOn = ((env.boardState ? env.boardState() : {}) || {}).driver || {}
+  check('[UI-看板] 点击开关 → /api/taskboard/state 的 driver.planAutoAccept=true',
+    drvOn.planAutoAccept === true, JSON.stringify(drvOn))
+  const paBtnOn = btnOf(host, '规划定稿自动入待办')
+  check('[UI-看板] 开启后按钮呈 active 态（状态回显 + title 改为免人工确认）',
+    !!paBtnOn && /active/.test(paBtnOn.className) && /免人工确认/.test(String(paBtnOn.title || '')),
+    paBtnOn ? ('cls=' + paBtnOn.className + ' title=' + paBtnOn.title) : '（无按钮）')
+  if (paBtnOn) paBtnOn.dispatch('click')
+  await flush(14)
+  const drvOff = ((env.boardState ? env.boardState() : {}) || {}).driver || {}
+  check('[UI-看板] 再点一次 → driver.planAutoAccept 回到 false',
+    drvOff.planAutoAccept === false, JSON.stringify(drvOff))
 
   // 人建卡
   const tbNewBtn = btnOf(host, '＋ 新建任务')
