@@ -918,6 +918,156 @@ const def = JSON.parse(ctx.install.readFile('.pair/flowlib/' + id + '.json'))
 > 就绪自查两行：`ls release/PairCode/.pair/plugins/tool-flow/`（应有 index.js / client.js / assets/flows 8 个预设）
 > 与 `grep -c 未接入流程 release/PairCode/.pair/plugins/ui-sidebar/assets/ui-sidebar.js`（应非 0）。
 
+#### 14.19.5.1 ★ 复制即用的覆盖安装操作单（2026-10-16 第 9 次监督轮补）
+
+> 前置已核对，**本轮无需重跑 packager**：`release/PairCode/.pair/plugins/tool-flow/index.js` 的 md5 =
+> `54be0f8689dc650cc867a36834cf29a3`，与工作区 `.pair/plugins/tool-flow/index.js`、隔离验收副本三方一致；
+> 源侧含 8 套预设、ui-sidebar bundle 命中「未接入流程」。（之后若再改 `.pair/plugins/**`，仍必须重跑完整 `./packager.exe`。）
+
+**第 0 步 · 先看计划（零写入，必做）**
+
+```bash
+node scripts/overwrite-install.mjs --force
+```
+
+预期计划：**将新增 16 / 将更新 11 / 将删除 25**（新增含 tool-flow 的 15 个文件：`index.js` / `client.js` /
+`ui-form-test.js` / `assets/flows/` 8 套预设等）；且 `.pair/skills/**`、`.pair/flowlib/**`、
+`.pair/plugins/ui-statusbar-conn/client.js` **都不出现在「将删除」**（修复见 14.19.5.2）。
+
+**第 1 步 · 执行覆盖（保守版：保留你当前的插件启用态与用户数据）**
+
+```bash
+node scripts/overwrite-install.mjs --apply --protect .pair/skills --protect .pair/flowlib --protect .pair/plugins/ui-statusbar-conn/client.js
+```
+
+- `--protect .pair/skills`、`--protect .pair/flowlib`：这两项**修复后已默认保护**，写出来是让命令自解释，
+  不因脚本参数变化而漏保护（全局技能 / 全局流程库被清空不会重建）。
+- `--protect .pair/plugins/ui-statusbar-conn/client.js`：保留安装侧**当前启用态**的 client 半。
+  要与源目录完全对齐（该插件 client 半变「禁用」）就去掉这一项。
+- 更保守的替代：`--protect .pair/plugins/ui-statusbar-conn`（整目录保留；代价：该插件 index.js / package.json 也不随包更新）。
+
+**第 2 步 · 覆盖后自查两行**
+
+```bash
+curl -s http://127.0.0.1:9090/api/system/info | grep -o '"version":"[^"]*"'
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://127.0.0.1:9090/api/flow/state
+```
+
+期望：`"version":"1.6.17"` 与 `HTTP 200`（正文含 `matrix`）。旧装基线供对照：`1.6.16` 与 `404`。
+
+**会发生什么（务必先读）**
+
+1. 脚本会 `taskkill` 安装目录里正在运行的 `pair.exe` —— **就是承载你当前这个对话的实例**（实测 PID 16180）。
+   因此本会话会**中断数秒**（页面断开、当前这轮回复可能被截断），属**预期代价**，不是故障。
+2. **这不是权限问题**：实测 `写权限 ✓ 可写 / 管理员 ✗ 否` —— `E:\Program Files (x86)\PairCode` 对当前用户可写，
+   **普通终端即可**（脚本自检只在不可写时才提示管理员）。按「需管理员」会误导你白开一次提权终端。
+3. 覆盖完成后脚本**自动重启** pair.exe（沿用原监听端口 9090，`WEB_PORT` 由脚本注入），刷新页面即可继续。
+   不想自动重启加 `--no-restart`（之后需手动以安装目录为 cwd 启动）。
+4. 备份落在 `_temp/install-backup-<ts>/`（默认开，只保留最近 3 份，单份 ~160MB）。
+
+**失败时怎么回滚**
+
+1. **中途失败**（典型：`pair.exe` 仍被占用）：脚本打印 `✗ 删除/覆盖 …失败`，**不会**删备份；
+   确认无 pair.exe 在跑（`tasklist | findstr pair.exe`）后重跑第 1 步。
+2. **整体回退**：停 pair.exe → 把 `_temp/install-backup-<ts>/` 内容拷回安装目录 → 重启 pair.exe（cwd = 安装目录）。
+   备份**不含** `config/`、`.pair/skills/`、`.pair/flowlib/` 等受保护项 —— 它们本就没被删，无需回滚。
+3. **单文件回退**：`robocopy "_temp\install-backup-<ts>" "<InstallDir>" /E` 后重启。
+
+**覆盖后如何复验「导出 / 导入 / 三层流程库」**（本轮已在隔离实例跑通，覆盖后同法可跑）
+
+1. 先让 `flow_*` 对 Agent 可见（默认「基础」工具集下 17 个 `flow_*` 全部 `enabled=false`）：
+   在工具集面板勾选，或 `POST /api/toolsets/edit` 传
+   `{"name":"基础","action":"add_plugin","plugin_name":"tool-flow","tools":"flow_export,flow_import,flow_list,flow_show"}`。
+2. 导出（Agent 工具面）：让 Agent 调 `flow_export {id:"plugin-dev", scope:"preset"}` →
+   `.pair/flow-exports/flow-plugin-dev/{flow.json, README.md, gates/, templates/}`。
+3. 导入（看板同款 RPC，不需要 Agent）：`POST /api/plugins/invoke` 传
+   `{"plugin":"tool-flow","method":"flow_action","args":{"op":"import","dir":".pair/flow-exports/flow-plugin-dev","scope":"project"}}`
+   → `<工作区>/.pair/flows/plugin-dev.json`；同法传 `"scope":"global"` → `<InstallDir>/.pair/flowlib/plugin-dev.json`。
+4. 三层视图：看板「流程」→「流程库」页签（preset 标「(只读)」、global / project 带「编辑」按钮）；
+   或 `curl -s http://127.0.0.1:9090/api/flow/state | grep -o '"scope":"[a-z]*"' | sort | uniq -c`。
+
+#### 14.19.5.2 为什么必须先修 `overwrite-install.mjs`（2026-10-16 实测的三个丢数据缺口）
+
+`overwrite-install.mjs` 是**清空重建**式覆盖（除保护项外全删）。修复前保护清单只有 `config` +
+「源里不存在的插件目录 / 自建工具集」，于是三处用户数据会被**静默清空**：
+
+| 缺口 | 修复前 | 修复后 |
+|---|---|---|
+| `.pair/skills/wechat-no-ask-user/SKILL.md`（你装的全局技能） | 出现在「将删除的文件」 | 默认保护：`[保留] .pair/skills ← 用户安装的全局技能 (1 个文件)` |
+| `.pair/flowlib/*.json`（**全局流程库**，本轮新载体） | 伪安装目录实测：列入「将删除」**且无任何告警** | 默认保护：`[保留] .pair/flowlib ← 全局流程库（tool-flow；升级不回冲）` |
+| `.pair/plugins/ui-statusbar-conn/client.js`（安装侧启用态，源里只有 `.disabled`） | 出现在「将删除」→ 插件被**静默禁用** | 默认保留启用态 + 风险项显式列出 + 保守命令自动带 `--protect` |
+
+修复要点（`scripts/overwrite-install.mjs`，+135 / −8）：
+
+1. `USER_DATA_DIRS = ['.pair/skills', '.pair/flowlib']` 纳入**默认保护**（源里没有该目录 → 整目录保护；
+   源里也有 → 只保护源中不存在的子项，源里的照常更新）；
+2. `detectDisabledConflicts()`：源 `X.disabled` ↔ 安装目录同名启用态 `X` → 默认保留，打印
+   「⚠ 启用状态冲突…已按默认策略保留你的启用态」；加 `--no-auto-protect` 时改打印「⚠ 启用状态将改变…」；
+3. 用户数据落入 `toDelete` 时打印「⚠⚠ 用户数据，将删除（源目录中不存在，删除后**不会**自动重建）」，
+   并给出可复制的 `--protect` 命令；
+4. dry-run 末尾的「确认无误后执行」改为**保守版**（自动带上用户数据 / 启用态保护项）。
+
+实测断言（原文可复跑）：`将删除 27 → 25`；上述三者在「将删除的文件」小节**均不存在**；
+伪安装目录（预置 `.pair/skills/demo-skill/SKILL.md`、`.pair/flowlib/demo-flow.json`、启用态 `client.js`）
+复现「保留」结论；加 `--no-auto-protect` 时告警与 `--protect` 建议如期出现。
+
+> 注：用户数据 / 插件保护只在**没有** `--no-auto-protect` 时生效；该开关会一次性关闭全部用户资产保护
+> （插件 / 工具集 / 全局技能 / 全局流程库），dry-run 会逐项列出「将删除」清单。
+
+#### 14.19.5.3 本轮新发现的实现缺陷（未修，建议单独立项）
+
+**流程库「同名覆盖」的展示方向反了**（`tool-flow/index.js` 的 `allFlows()`）：
+
+- 现象：把 `plugin-dev` 同时导入 project 层与 global 层后，`GET /api/flow/state` 的 `library` 仍返回
+  `{id:"plugin-dev", scope:"preset", readOnly:true}` 且**没有** `overriddenBy` 标记 —— 即「上层已有同名流程」
+  在列表里看不见（不同名的 `plugin-dev-proj` / `plugin-dev-glob` 能正常显示为 project / global）。
+- 原因：`allFlows()` 用 `for (i = SCOPES.length-1; i >= 0; i--)`（`SCOPES = ['project','global','preset']`）
+  从**最低层**开始填表，同名先入 `seen` 后高层被 `continue` 跳过；而 `overriddenBy` 判定写成 `lo > hi`
+  （要求「更低的层」才标记），与「上层覆盖下层」语义相反 —— 遍历方向与标记方向都应反过来。
+- 影响面：**仅列表展示**。层解析本身正确：`resolveFlow()` 按 `project > global > preset` 返回最高层
+  （实测 `flow_action {op:"show", id:"plugin-dev"}` 传三种 scope 均命中 `scope=project`），
+  启动 / 绑定 / 编辑 / 删除走的都是 `resolveFlow`，故**流程可用性不受影响**。
+- 建议：遍历改为「从 project 开始」并输出 `overriddenBy`（1 行级改动），随插件下一次发布一并出。
+
+#### 14.19.5.4 实测记录：真机覆盖安装已执行（2026-10-17 02:35）
+
+- **执行方式**：分离进程（否则 `taskkill` 会杀掉脚本自身致半途失败）
+  `Start-Process cmd '/c node scripts/overwrite-install.mjs --apply --protect .pair/skills --protect .pair/plugins/ui-statusbar-conn/client.js > _temp/apply-r10.log 2>&1'`，
+  cwd = 仓库根。两项 `--protect` 与默认策略**等价**（显式写出便于对账）。
+  前置 dry-run 与本节一致：**新增 16 / 更新 11 / 删除 25**；`.pair/flowlib` 未出现在任何清单
+  （安装目录本无该目录 → 无需保护）。
+- **执行结果**：`耗时 5.0s`；`✓ taskkill /PID 16180 已结束`（端口释放 0.6s）；备份
+  `_temp/install-backup-2026-10-16T15-35-30`（312 文件 / 194.3 MB）；清理 10 项/299 文件 + 覆盖 9 项/290 文件；
+  校验全绿：`pair.exe md5 ✓ 一致`、`源文件缺失 ✓ 无`、`多余残留 ✓ 无`、`内容不一致 ✓ 无`、
+  `config/settings.json 187479dd2511… ✓ 与覆盖前逐字节一致`；`⑥ 已启动 pair.exe（PID 24948，端口 9090）`。
+- **逐条复验（原文）**：
+  - `GET /api/system/info` → `"version":"1.6.17"`（旧装 1.6.16）
+  - `GET /api/flow/state` → **HTTP 200**（旧装 404），`has_matrix=true`，`library` 8 条全 `scope=preset / readOnly=true`
+  - `POST /api/plugins/invoke {plugin:"tool-flow", method:"flow_action", args:{op:"show", id:"plugin-dev"}}`
+    → `ok=true scope=preset id=plugin-dev version=1`（三层解析在真机生效）
+  - `GET /api/plugins` → `tool-flow`(tools=17) / `tool-workflow` / `ui-statusbar` / `ui-statusbar-conn` 全部
+    `state=running`、`lastError=""` ← **启用态保护生效**（源侧 `.disabled` 未覆盖进来）
+  - 文件级：`.pair/skills/wechat-no-ask-user/SKILL.md` ✓ 在；`.pair/plugins/ui-statusbar-conn/client.js` ✓ 在；
+    `ui-modals` 目录内 `.bak-*` 残留 = **0**（实证「仅删 6 个 .bak-*」而非整目录）；`.pair/plugins/tool-flow` = 15 文件
+  - 看板：`screenshots/r10-paircode-ide.png` —— 「流程」tab 在场，流程库面板正常渲染 preset 流程 `plugin-dev` 五阶段
+    （1/5 契约确认 ACTIVE）；会话列表 18+ 条历史会话完好
+- **执行后环境事实**（下次不必重测）：
+  - 安装目录 `E:/Program Files (x86)/PairCode`，版本 **1.6.17**，实例 **PID 24948 / 端口 9090**
+  - `flow_action` 合法 op：`advance | approve | start | attach | detach | show | validate | define | clone | publish | import`；
+    参数约定：`show` 用 `id`；`validate` 用 `json`（流程定义对象）；`define` 用 `json` + `scope`；
+    `clone` 用 `id` + `scope` + `newId`；`attach` 用 `flowId` + `project`（传错字段会得到「流程不存在: undefined」，
+    是**参数问题不是故障**）
+  - `tool-flow` 装载原文：`预设 8 · 全局 0 · 项目 0 · 工具 17 · 实例 0 · 强度 enforce`。global / project 层当前**无数据**
+    （安装目录无 `.pair/flowlib`、工作区无 `.pair/flows`），故看板流程库当前只见 preset 8 条；
+    要让三层都出现可编辑条目 → 用 `clone` 或 `import`（副本 9190 已验证三层渲染）
+  - 启动瞬间**无害告警（自愈，勿误判为故障）**：`wechat-bridge 事件流握手失败: dial tcp 127.0.0.1:9090 refused`
+    → 1 秒后 `事件流已连接：ws://127.0.0.1:9090/ws`
+  - **既有缺陷（非本次安装引入）**：`tool-voice` `lastError="Node 桥已就绪但该包未装载成功"`（三处路径 ENOENT 找不到
+    `package.json`，含 `F:\syproject\gou-ide\.pair\plugins\tool-voice` 与安装目录同名路径）；
+    `ctx.kernel.install "chat.rollback" 失败：内核路由 "chat.rollback" 不存在`
+- **回滚**：备份在 `_temp/install-backup-2026-10-16T15-35-30`（保留 `config` 后拷回），
+  三种回滚路径见 §14.19.5.1。
+
 ---
 
 ## 14.20 监督轮补齐：D4-④ 表单编辑 / D9 本地发布包 / §10.1 三档定案（2026-10-16）
@@ -963,3 +1113,210 @@ node .pair/plugins/tool-flow/smoke-test.js      # → 148 通过 / 0 失败
 2. **`Stop` 硬拦仍不可实现**（核心限制，定案见 §10.1）：当前替代链路为「每轮注入 + PreToolUse 拦截 + 摘要」。
 3. **表单只渲染 流程 / 阶段 / 门禁 三组字段**：`board` / `appliesTo` / `onFail` / `library` 等未渲染字段
    经 JSON 模式编辑，表单不会抹掉它们（已断言）。
+
+## 14.21 R4 实施记录：流程模型重设计（子任务 + 进度 + 生命周期）与看板 UI 重写（2026-10-17）
+
+### 14.21.1 本轮目标（用户诉求）
+「agent 自动拆解子任务并追踪进度 / 看板清晰展示流程进展 / 支持中断·归档·删除记录」——
+把 R1–R3 的「阶段 + 门禁」模型补全为**可追踪、可收敛、可归档**的流程模型，
+并把看板从「信息罗列」升级为「此刻在哪 + 总进度 + 生命周期操作」。
+
+### 14.21.2 host 半新增（`.pair/plugins/tool-flow/index.js`，工具 17 → 19）
+| 能力 | 内部函数 | 契约 |
+|---|---|---|
+| 子任务骨架 | `seedSubtasks` | 阶段启动/切换时按流程定义 `plan` 生成 `run.stages[].subtasks`（唯一真相） |
+| 进度计算 | `runProgress` | 阶段进度（完成数/总数）+ 总进度百分比（阶段权重均分） |
+| 拆解与推进 | `taskAction` | `add` / `update` / `list`；`flow_task` 工具与看板 RPC 同源 |
+| 实例生命周期 | `lifecycleRun` | `interrupt` / `resume` / `archive` / `unarchive` / `delete` / `restore` / `purge` |
+| 运行记录列表 | `runsRecord` | 全部实例（含已归档/已删除）→ `snapshot.runs` |
+| 新工具 | `flow_task` / `flow_lifecycle` | 工具面 19 个 |
+
+### 14.21.3 本轮修掉的两处真 bug
+1. **`pickRun` 越界回退**：显式传 `convId` 且该实例已归档时，回退逻辑会落到**他人实例**（串会话）。
+   改为：显式 `convId` 命中（含归档态）即返回，不回退。
+2. **RPC `op:'task'` 被误当子操作名**：看板 RPC 用 `op` 字段既表示「操作类型」又表示「子操作」，
+   导致 `{op:'task', …}` 被误解析为 `flow_task` 的 op。改为子操作走独立字段 `action`。
+
+### 14.21.4 client 半重写（`client.js`，四页签）
+- **焦点条（新）**：一句话回答「此刻在哪」——阶段 x/y + 阶段名 + 总进度 % + 实例 id + 会话 id + git 短 hash + 已改动文件数。
+- **阶段时间线**：当前阶段高亮；每阶段带子任务进度徽标（完成/总数）；门禁行内展示未过门禁与证据说明入口。
+- **页签**：当前流程 / **运行记录（新）** / 项目 × 流程 / 流程库。
+- **运行记录页（新）**：顶部四语义说明（中断=可恢复暂停 / 归档=只读留档 / 删除=软删可恢复 / 彻底删除=物理删除），
+  逐实例卡片（流程名 · 阶段 x/y · 子任务 · 总进度 · 更新时间 · 工作区路径）+ 中断 / 归档 / 删除按钮，
+  经 `ui.invoke` → host 半 `flow_lifecycle`；新增 `actTask` / `actLife` 两条 RPC 封装（含失败提示与刷新）。
+
+### 14.21.5 流程定义升级（r12，8 个预设）
+字段 `tasks` → `plan`（结构化子任务模板）：debug-troubleshoot 4 / docs-office 4 / generic 5 /
+go-backend-feature 5 / lib-cli 4 / plugin-dev 5 / python-feature 4 / web-frontend-feature 5 阶段。
+其中 plugin-dev 预置 16 条、go-backend-feature 12 条**带验收说明**的子任务模板。
+
+### 14.21.6 验证证据
+| 层 | 命令 / 手段 | 结果 |
+|---|---|---|
+| 单元 + 集成 | `node .pair/plugins/tool-flow/smoke-test.js` + `ui-form-test.js` | **206 通过 / 0 失败** |
+| 安装 | `scripts/sync-plugins-to-bin.mjs` → `scripts/overwrite-install.mjs --apply` | 删除 10 项/298 文件、覆盖 9 项/290 文件；`config/settings.json` 逐字节一致；重启 PID 2652 / 9090 |
+| 装载 | `E:/Program Files (x86)/PairCode/logs/paircode.log` | `[js-plugin:dyn-16:tool-flow] 装载完成：预设 8 · 全局 0 · 项目 0 · 工具 19 · 实例 1 · 强度 enforce`；无 error 行 |
+| 接口 | `GET /api/flow/state` | 顶层键含 `runs` / `run` / `stages` / `runMap` / `library` / `matrix` / `recommend`；`run.progress` ✓；`stages[0].subtasks` ✓ |
+| UI（真实浏览器） | CDP（9223）+ Chrome 独立 profile 实点四页签 | 当前流程 / 运行记录 / 流程库三页的文本与控件断言与预期一致；截图 `screenshots/flow-board-r11-{current,runs,library}.png` |
+
+### 14.21.7 本轮诚实边界
+1. **未做端到端「agent 自动拆解」演练**：`flow_task` 的 agent 侧调用依赖真实对话，
+   本轮只验证了工具注册、RPC 链路与看板渲染；自动拆解的**质量**属模型行为，需在真实干活中继续观察。
+2. **`purge`（彻底删除）未在真机执行**：属不可恢复操作，仅在 smoke-test 沙箱内验证。
+3. **运行记录页仅验证单实例**：本机当前只有 1 个活动实例（`run-1792174031877-lx23`），
+   多实例/已归档实例的视觉布局待后续观察。
+
+## 14.22 看板 UI 借鉴 dsh-taskboard + 真实浏览器隔离验证（2026-10-17）
+
+### 14.22.1 借鉴来源与取舍
+参考实现：[`github.com/cloader/dsh-taskboard`](https://github.com/cloader/dsh-taskboard)
+（本地快照 `_temp/dsh-taskboard`，HEAD `bf9f35e`）。逐文件读源码后提取的设计要点：
+
+| 要点 | dsh-taskboard 做法 | 本轮落地（`client.js`） |
+|---|---|---|
+| 三列子任务看板 | 列 = 状态泳道，列头带计数 | 待办 / 进行中 / 已完成（`SUB_COLS`，`client.js:658`） |
+| 计数徽标 | 列头右侧数字徽标 | `.ftb-subcol-count`（tabular-nums、`flex-shrink:0`） |
+| 空列占位 | 空列给**指引性**文案而非留白 | `SUB_COLS[].empty`（如「把待办卡片拖到这里」） |
+| 卡片左色条 | 卡片左侧状态色条 | `.ftb-sub.s-pending/.s-doing/.s-done/.s-blocked` |
+| 拖拽改状态 | 列间拖拽 + 落点虚线反馈 | `dragstart/dragover/drop` + `.ftb-subcol.drop-on`（不用 `dataTransfer`：DOM 桩环境同样可断言） |
+| 可折叠列 | 列可收起 | 「已完成」列默认收起（`collapsedCols`），列头带 ▸ caret |
+| 工具栏筛选 | 顶部搜索 + 状态胶囊 | 运行记录页：搜索框 + 6 个筛选胶囊（全部/进行中/已完成/已中断/已归档/已删除，各带计数） |
+
+**取舍（未照搬）**：dsh-taskboard 是「列即工作流阶段」的通用看板。本 IDE 的流程**阶段**严格串行，
+顺序语义由上方时间线唯一表达；把阶段也做成泳道会造成「同一件事两处表达」的歧义。
+因此三列泳道**只作用于同一阶段内的子任务**——它们彼此无先后依赖，列间拖拽改状态是安全的，也是最快的路径。
+
+### 14.22.2 落地内容（`client.js` 1064 → 1229 行）
+- 子任务三列看板（计数 / 空占位 / 状态着色 / 拖拽 / 折叠）
+- 焦点条 chips 化：阶段 x/y · 阶段名 · 总进度 · 实例 id · 会话 id · git 短 hash · 已改动文件数
+- 运行记录页：搜索（runId / 流程 / 项目）+ 状态筛选胶囊 + 顶部语义说明条
+- 流程库页与顶栏计数（8 预设 / 实例数）
+
+### 14.22.3 隔离验证方法（全程不碰 9090）
+按 `bootstrap-iteration` 铁律，验证使用独立实例：
+- **二进制**：`release/PairCode/pair.exe` 复制为工作区根 `pair_iso_test.exe`（与安装版同构建；
+  cwd = 工作区 → 插件源 = 工作区 `.pair/plugins`、数据源 = 工作区 `.pair/flow-runs`）
+- **端口**：`WEB_PORT=9096`（9090 宿主未动）；旧测试实例 9098 复用后停掉
+- **浏览器**：Chrome 独立 profile（`_temp/chrome-cdp`）+ CDP 9223；脚本 `_temp/cdp-iso.js`（匹配 9096）
+- **通道**：真 RPC（`GET /api/flow/state`）+ 真 DOM 事件（`click` / `dragstart` / `dragover` / `drop`）
+- ★ 坑：看板「＋ 拆解子任务 / 备注」用 `window.prompt`，原生对话框会**阻塞** CDP 的 `Runtime.evaluate`
+  （表现为脚本挂起、零输出）。解法：页面上下文内覆写 `window.prompt/confirm` 后再触发点击
+  （`_temp/cdp-dialog.js` 另有 `Page.handleJavaScriptDialog` 自动应答变体）。
+- ★ 坑：**client.js 主文件改动需重启实例**才生效（宿主启动时读入插件代码；页面刷新不够），
+  验证前务必以 DOM 结构（如 `.ftb-node` 子项）确认装载的确实是新代码，不能只看截图。
+
+### 14.22.4 隔离验证抓到的真 bug（DOM 结构，非 CSS）
+`ftb-node-head`（时间线节点的标题行）被挂到 `.ftb-node` 这个 `display:flex` 行上，而非 `.ftb-node-body` 内：
+
+```js
+node.appendChild(nh)   // ✗ head 成了 flex 行的独立子项
+nb.appendChild(nh)     // ✓ 修复：head 归入 node-body
+```
+
+真实浏览器量测（非推断）：
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| `.ftb-node` 子项 | `[rail, node-head, node-body]` | `[rail, node-body]` |
+| `.ftb-node-body` 宽 | **51px** | 351px |
+| `.ftb-subcols` 宽 | **80px** | 331px |
+| 三列列宽 | **21px/列**（中文逐字竖排，不可读） | 105px/列（正常横排换行） |
+
+根因：flex 行里 `node-head`（`flex-grow:0`）按内容宽度独占约 285px，`node-body`（`flex:1`）
+被压到几十像素，内部 `grid-template-columns:repeat(3,minmax(0,1fr))` 随内容塌缩到 min-content。
+
+**教训**：`ui-form-test.js` 的 DOM 桩没有布局引擎，只能断言结构与文案——
+**宽度塌缩类缺陷必须用真实浏览器量测 `offsetWidth` 才能发现**（本轮即由 CDP 量测抓出）。
+
+### 14.22.5 验证证据（可复跑）
+
+| 层 | 命令 / 手段 | 结果 |
+|---|---|---|
+| 单元 + 集成 | `node .pair/plugins/tool-flow/smoke-test.js` | **224 通过 / 0 失败**（含拖拽、`.drop-on`、折叠列、运行记录搜索与筛选胶囊断言） |
+| 语法 | `node --check .pair/plugins/tool-flow/client.js` | OK |
+| 装载 | 隔离实例 9096 启动日志 | `[js-plugin:dyn-15:tool-flow] 装载完成：预设 8 · 全局 0 · 项目 0 · 工具 19 · 实例 1 · 强度 enforce` |
+| 接口 | `GET http://localhost:9096/api/flow/state` | `ok=true`；`library=8`、`stages=5`、`runs=1`、`run=run-1792174031877-lx23` |
+| UI（真浏览器） | CDP 量测 + 截图 | 三列 21px → 105px；截图 `screenshots/iso-r12-board-0{1,4,5,7,9,11}*.png` |
+| 状态流转 | 点「开始」→ 点「完成」 | `待办1/进行中0/已完成0` → `待办0/进行中1/已完成0` → `待办0/进行中0/已完成1`；按钮态随动（`完成` → `重开`） |
+| 拖拽 | `dragstart` → `dragover` → `drop` | 悬停目标列加 `drop-on`（虚线落点）→ 卡片 `ftb-sub s-doing`（进行中着色）→ 落「已完成 1」 |
+| 页面 | 切页签断言 | 运行记录：搜索框（`搜索 runId / 流程 / 项目…`）+ 6 胶囊（全部1/进行中1/已完成0/已中断0/已归档0/已删除0）+ 语义说明；流程库：「8 个流程」+ 三层说明 + 表头 |
+| 数据复原 | 移除测试子任务 | 各阶段 `subtasks` 归 0（回到验证前的真实状态） |
+
+### 14.22.6 本轮诚实边界
+1. **安装版同步状态**：本轮的隔离验证**达标**（上述证据），但验证期间安装目录 9090 曾被一次
+   「后台 + 日志重定向」的 `overwrite-install --apply` 提前改写（用户当轮明确要求「先隔离测试」），
+   故安装目录可能处于**修复前的中间版本**（`client.js` md5 `f6214fdb…`，含 §14.22.4 的列宽塌缩缺陷），
+   而工作区真源为修复后版本（`2f4c03b2…`）。回滚备份：`_temp/install-backup-2026-10-17T01-00-29`。
+   将修复版同步到安装版需再执行 `node scripts/overwrite-install.mjs --apply`（会重启 9090 宿主）。
+2. **子任务数据依赖 agent 拆解**：隔离实例上的真实 run（`plugin-dev`）本轮 `subtasks` 为 0
+   （R4 期创建、未走 seed）；验证用子任务为手工新增（已移除）。`seedSubtasks` 的 agent 触发路径仍待真实对话观察。
+3. **窄面板响应式未做**：三列共 331px（每列 105px）时可用；面板拖得更窄（<320px）时列宽会继续收窄，
+   是否加「窄宽时单列堆叠」留待实际使用反馈。
+
+## 14.23 流程看板完全重做为「任务看板」（按 dsh-taskboard 五列，2026-10-17）
+
+### 14.23.1 用户诉求
+1. 依据 [`github.com/cloader/dsh-taskboard`](https://github.com/cloader/dsh-taskboard) 把流程看板 UI **完全重做**为任务看板；
+2. 任务按**任务名（title）**命名与选择，不再用 `conv_...` 会话号；
+3. 流程与任务绑定，**流程门禁作为验收清单（DoD）**；
+4. 旧流程视图下线，流程库并入顶部页签。
+
+### 14.23.2 设计（与 dsh-taskboard 对齐）
+- **五列看板**：待规划 / 待办 / 进行中 / 待验收 / 已完成（`TB_COLS`，列头带计数徽标，空列给指引文案）。
+- **任务卡**：任务名 + 紧急度徽标 + 流程阶段进度（`阶段 x/y`）+ 项目标签 + 更新时间；拖拽跨列改状态
+  （`dragstart/dragover/drop`，落点列加 `drop-on` 虚线反馈；不用 `dataTransfer`，DOM 桩可断言）。
+- **建卡表单**：任务名（必填）/ 项目 / 流程模板（可选，`flowLibrary` 下拉）/ 类型 / 紧急度 / 验收清单（DoD 行文本）。
+- **任务详情**：状态机迁移按钮（只走合法迁移，`TB_TRANS`）、验收清单勾选（DoD，流程门禁自动回填）、
+  评论、执行记录、标记阻塞、删除；「启动流程」按钮（绑定流程模板时可用）。
+- **协议闸**：agent 不能把任务移到「已完成」（验收只能由人做），`tbAdvance` 对 `byUser` 强校验。
+- **页签**：主视图「任务看板 / 流程库」；旧流程图 / 运行记录视图下线（代码保留但不渲染）。
+
+### 14.23.3 数据落点与同步方向
+| 数据 | 位置 | 说明 |
+|---|---|---|
+| 任务库 | `.pair/taskboard/tasks.json` | `{revision, tasks:[{id, title, status, flowId, runId, checklist, comments, executions, ...}]}` |
+| 宿主镜像 | `.pair/tasks/flowtb_<id>.json` | **`tbMirror`：看板任务 → 宿主任务目录**（右栏任务进度面板读取，字段沿用宿主契约 §5.3） |
+| 流程绑定 | `task.flowId/flowScope/flowVersion` + `task.runId` | 建卡时选流程模板；`flow_start{taskId}` 或详情页「启动流程」启动后由 `tbBindRun` 回写 `runId`（卡未设流程时补 `flowId/flowScope/flowVersion` 并生成 DoD 清单） |
+| DoD 回填 | `task.checklist[]`（每项 `{id, gate, stage, checked, by, evidence}`） | **`tbSyncFromRun`：流程实例 → 绑定的看板卡**——门禁 `pass/approved` → 对应项 `checked=true, by='flow'`；流程 `completed` → 卡转 `in_review`（**绝不自动 `done`**） |
+
+> 触发路径（两条，语义完全一致）：① agent 工具 `flow_advance`（execute 内 `advanceRun` 成功后同步）；
+> ② client RPC `flow_action` 的 `advance` / `approve` 分支。注意方向：`tbMirror` = 看板 → 宿主任务；
+> `tbSyncFromRun` = 流程实例 → 看板卡。**不存在**「宿主任务写同步到看板」这条路径。
+
+### 14.23.4 host 半新增（`.pair/plugins/tool-flow/index.js`）
+- 任务库数据层：`tbLoad/tbSave/tbCreate/tbUpdate/tbMove/tbComment/tbCheck/tbTrash/tbSnapshot/tbMirror` 等；
+- 流程↔任务三件套：`tbFlowChecklist`（流程门禁 → 验收清单）、`tbBindRun`（启动即回写 `runId`，
+  卡未设流程时补 `flowId/flowScope/flowVersion` 并生成清单）、`tbSyncFromRun`（门禁回填 DoD；
+  全流程完成 → 卡转 `in_review`）；
+- 「启动流程」单一入口：`startRun` 新增 `taskId / boardTaskId` 参数 —— `flow_start` 工具、
+  `flow_action.start`、`taskboard_action.startFlow` 三个调用点统一经 `startRun` → `tbBindRun`
+  完成绑定；`taskId` 不存在时在创建实例**之前**明确报错（不静默成功）；
+- agent 工具 **7 个 `taskboard_*`**：`taskboard_create / list / move / claim / comment / check / report`；
+- 只读接口 `GET /api/taskboard/state`（任务 + 流程进度 + 流程库）；
+- 写 RPC `taskboard_action`（`state / create / update / move / comment / check / trash / startFlow`）；
+- 工具面合计 **26 个**（19 个 `flow_*` + 7 个 `taskboard_*`，以 `TOOLS`/`TB_TOOLS` 实际注册为准）。
+
+### 14.23.5 client 半改动（`client.js`）
+- 主视图切换为「任务看板 / 流程库」；五列看板 + 建卡表单 + 任务详情 + 拖拽；
+- 任务详情含验收清单（DoD 勾选）、评论、执行记录、状态机按钮、启动流程按钮；
+- 旧流程图 / 运行记录渲染代码保留但不再挂载（见 14.23.7 遗留）。
+
+### 14.23.6 验证证据
+| 层 | 命令 / 手段 | 结果 |
+|---|---|---|
+| 单元 + 集成 | `node .pair/plugins/tool-flow/smoke-test.js` + `ui-form-test.js` | **213 通过 / 0 失败**；四文件语法 OK |
+| 流程↔任务绑定（⑧c 段 13 条断言） | 同上 | 工具 `flow_advance` 过门禁 → 卡 DoD 项 `checked=true, by='flow'`；全流程完成 → 卡 `in_review` 且 ≠ `done`；`flow_start{taskId}` → 快照 `flowProgress.runId` = 实际 runId；未绑流程卡 `startFlow` 返回可读错误；`taskId` 不存在明确报错 |
+| 隔离实例 | `pair_iso_test.exe`（WEB_PORT=9096，cwd=工作区） | `/api/taskboard/state` 返回 `ok:true` + `flowLibrary=8`；装载 `dyn-15:tool-flow 预设 8 · 工具 19 · 实例 1 · 强度 enforce` |
+| UI（真浏览器 9096） | CDP（9223）点击「任务看板」 | 五列各 **186px** 横排；建卡成功（真实点「＋新建任务」→ 填标题 → 创建）；拖拽「待办→进行中」`drop-on` ✓、列计数随动；详情展开含状态机按钮/紧急度/评论 |
+| 覆盖安装 | `node scripts/overwrite-install.mjs --apply`（后台 + 日志重定向） | 删除 10 项/298 文件、覆盖 10 项/298 文件；重启 PID 34848 / 9090 |
+| md5 校验 | 安装目录 vs 工作区真源 | `client.js` `6caaf65d…`、`index.js` `0a4aa316…` **完全一致** |
+| 用户实例 9090 | CDP（9224）点击「任务看板」 | 五列（待规划/待办/进行中/待验收/已完成）渲染 + 任务卡显示；页签「任务看板 / 流程库」✓ |
+
+### 14.23.7 本轮诚实边界
+1. **旧视图代码未删**：`client.js` 中流程图 / 运行记录渲染函数（`renderGraph/renderRun/…`）保留未挂载，
+   后续确认无回滚需求后可清理（约数百行 + 对应 CSS）。
+2. ~~「启动流程」链路只验证到按钮可用~~（2026-10-17 已修复）：`flow_advance` 工具与 `flow_action`
+   RPC 两条路径都会触发 `tbSyncFromRun`；`flow_start` 支持 `taskId` 绑定，`startRun` 为唯一绑定入口。
+   smoke-test ⑧c 段 13 条断言覆盖「建卡绑流程 → 启动 → 工具推进 → DoD ✓ 标 flow → 待验收」全链路。
+3. **agent 侧建卡质量待观察**：`flow_task` 工具注册与 RPC 链路已验证，agent 在真实任务中拆卡的质量属模型行为。
+4. **浏览器缓存**：`client.js` 由宿主启动时读入并前端加载，改版后需**硬刷新（Ctrl+Shift+R）**才能看到新看板。

@@ -3,56 +3,185 @@
   "id": "plugin-dev",
   "title": "插件开发（本 IDE 自举）",
   "version": 1,
-  "projectTypes": ["plugin"],
-  "taskTypes": ["feature", "plugin"],
-  "appliesTo": { "types": ["plugin"], "signals": [".pair/plugins/", "plugins-dist/", "plugins-src/"] },
+  "projectTypes": [
+    "plugin"
+  ],
+  "taskTypes": [
+    "feature",
+    "plugin"
+  ],
+  "appliesTo": {
+    "types": [
+      "plugin"
+    ],
+    "signals": [
+      ".pair/plugins/",
+      "plugins-dist/",
+      "plugins-src/"
+    ]
+  },
   "stages": [
     {
       "id": "contract",
       "title": "契约确认",
       "goal": "先 cordis(op=services) 查签名、读现成范例，禁止臆测 API",
-      "tasks": ["查 ctx 服务签名", "读同类插件范例", "列数据落点"],
       "gates": [
-        { "id": "g-contract-1", "kind": "check", "text": "所需 ctx 能力与精确签名已确认（含 inject 白名单核对）", "required": true, "blocking": true }
+        {
+          "id": "g-contract-1",
+          "kind": "check",
+          "text": "所需 ctx 能力与精确签名已确认（含 inject 白名单核对）",
+          "required": true,
+          "blocking": true
+        }
+      ],
+      "plan": [
+        {
+          "subject": "查 ctx 服务签名",
+          "detail": "用 cordis(op=services) 或读宿主源码，抄下要用到的精确方法签名（禁臆测 API）"
+        },
+        {
+          "subject": "读同类插件范例",
+          "detail": "找 1-2 个现成插件，记录目录结构、apply 形态与注册方式"
+        },
+        {
+          "subject": "定 inject 白名单",
+          "detail": "只注入真正用到的 ctx 能力（多写会导致插件 waiting）"
+        },
+        {
+          "subject": "列数据落点",
+          "detail": "确定状态存哪（工作区 .pair/ 还是安装数据区），写进设计真源文档"
+        }
       ]
     },
     {
       "id": "host",
       "title": "实现 host 半",
       "goal": "工具/接口/钩子/提示注入落地",
-      "tasks": ["写 index.js", "注册工具与接口"],
       "gates": [
-        { "id": "g-host-1", "kind": "check", "text": "host 半完成且 apply 无异常", "required": true }
+        {
+          "id": "g-host-1",
+          "kind": "check",
+          "text": "host 半完成且 apply 无异常",
+          "required": true
+        }
+      ],
+      "plan": [
+        {
+          "subject": "写 index.js 骨架",
+          "detail": "name/purpose/inject/apply 四件套齐全，apply 内零异常"
+        },
+        {
+          "subject": "注册工具与接口",
+          "detail": "tools.register / http.register / registerClientMethod 按面注册，工具参数描述写清基准路径"
+        },
+        {
+          "subject": "落盘路径与兜底",
+          "detail": "fs 写前 ensureDir；读写失败要 logWarn 不抛穿"
+        }
       ]
     },
     {
       "id": "client",
       "title": "实现 client 半",
       "goal": "看板/面板 UI 落地（文本走 textContent）",
-      "tasks": ["写 client.js", "接数据接口"],
       "gates": [
-        { "id": "g-client-1", "kind": "check", "text": "client 半完成且未用 innerHTML 渲染模型产出" }
+        {
+          "id": "g-client-1",
+          "kind": "check",
+          "text": "client 半完成且未用 innerHTML 渲染模型产出"
+        }
+      ],
+      "plan": [
+        {
+          "subject": "写 client.js 视图",
+          "detail": "registerView 注册主内容区 tab；渲染纪律：一切文本走 textContent"
+        },
+        {
+          "subject": "接数据接口",
+          "detail": "只读走 GET 快照、写操作走 RPC；切会话自动重拉"
+        },
+        {
+          "subject": "视觉与交互自查",
+          "detail": "沿用壳 CSS 变量与既有语义色；不用 emoji 图标；危险操作二次确认"
+        }
       ]
     },
     {
       "id": "load",
       "title": "装载验证",
       "goal": "隔离实例实测：插件不 waiting、能力真的可用",
-      "tasks": ["独立目录+非默认端口启动", "探针/接口实测", "落证据"],
       "gates": [
-        { "id": "g-load-1", "kind": "command", "text": "隔离实例启动并实测通过", "cmd": "echo 隔离实例实测（见证据文件）", "required": true, "blocking": true, "onFail": "rollback" }
+        {
+          "id": "g-load-1",
+          "kind": "command",
+          "text": "隔离实例启动并实测通过",
+          "cmd": "echo 隔离实例实测（见证据文件）",
+          "required": true,
+          "blocking": true,
+          "onFail": "rollback"
+        }
+      ],
+      "plan": [
+        {
+          "subject": "隔离实例启动",
+          "detail": "独立目录 + 非默认端口（绝不动默认端口），确认插件 state=running"
+        },
+        {
+          "subject": "探针实测",
+          "detail": "接口/RPC/工具各打一发，断言真实输出（不是「看起来对」）"
+        },
+        {
+          "subject": "落证据",
+          "detail": "日志与截图存 _temp/，写清命令与结论"
+        }
       ]
     },
     {
       "id": "wrap",
       "title": "收尾",
       "goal": "同步镜像、更新文档与记忆，清理临时产物",
-      "tasks": ["同步 bin/.pair/plugins", "更新 SKILL/知识库", "清理探针残留"],
       "gates": [
-        { "id": "g-wrap-1", "kind": "check", "text": "文档已更新且临时残留已清理", "required": true }
+        {
+          "id": "g-wrap-1",
+          "kind": "check",
+          "text": "文档已更新且临时残留已清理",
+          "required": true
+        }
+      ],
+      "plan": [
+        {
+          "subject": "同步镜像",
+          "detail": "按插件所在渠道同步（bin/.pair/plugins 或 plugins-dist）"
+        },
+        {
+          "subject": "更新文档与记忆",
+          "detail": "设计真源、SKILL/知识库、跨会话记忆一并更新"
+        },
+        {
+          "subject": "清理临时产物",
+          "detail": "删掉探针残留与临时二进制，不留垃圾"
+        }
       ]
     }
   ],
-  "board": { "kind": "kanban", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
-  "library": { "author": "paircode", "tags": ["plugin", "self-hosted"] }
+  "board": {
+    "kind": "kanban",
+    "columns": [
+      "stage",
+      "status"
+    ],
+    "fields": [
+      "goal",
+      "gates",
+      "evidence"
+    ],
+    "groupBy": "stage"
+  },
+  "library": {
+    "author": "paircode",
+    "tags": [
+      "plugin",
+      "self-hosted"
+    ]
+  }
 }

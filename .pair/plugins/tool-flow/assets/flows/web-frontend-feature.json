@@ -3,56 +3,137 @@
   "id": "web-frontend-feature",
   "title": "Web 前端功能开发",
   "version": 1,
-  "projectTypes": ["web"],
-  "taskTypes": ["feature", "refactor"],
-  "appliesTo": { "types": ["web"], "signals": ["package.json", "vite.config.js", "vite.config.mjs", "next.config.js"] },
+  "projectTypes": [
+    "web"
+  ],
+  "taskTypes": [
+    "feature",
+    "refactor"
+  ],
+  "appliesTo": {
+    "types": [
+      "web"
+    ],
+    "signals": [
+      "package.json",
+      "vite.config.js",
+      "vite.config.mjs",
+      "next.config.js"
+    ]
+  },
   "stages": [
     {
       "id": "req",
       "title": "需求拆解",
       "goal": "明确交互与数据来源，确认不改核心",
-      "tasks": ["读相关组件与样式", "确认数据接口", "列出受影响文件"],
       "gates": [
-        { "id": "g-req-1", "kind": "check", "text": "已列出受影响组件与样式文件", "required": true, "blocking": true }
+        {
+          "id": "g-req-1",
+          "kind": "check",
+          "text": "已列出受影响组件与样式文件",
+          "required": true,
+          "blocking": true
+        }
+      ],
+      "plan": [
+        "读相关组件与样式",
+        "确认数据接口",
+        "列出受影响文件"
       ]
     },
     {
       "id": "design",
       "title": "组件设计",
       "goal": "确定 DOM 结构与状态来源（事实数据走接口）",
-      "tasks": ["定组件边界", "定状态来源"],
       "gates": [
-        { "id": "g-design-1", "kind": "check", "text": "结构/状态来源已确定且无自造全局状态" }
+        {
+          "id": "g-design-1",
+          "kind": "check",
+          "text": "结构/状态来源已确定且无自造全局状态"
+        }
+      ],
+      "plan": [
+        "定组件边界",
+        "定状态来源"
       ]
     },
     {
       "id": "impl",
       "title": "实现",
       "goal": "完成组件与样式改动",
-      "tasks": ["改组件", "改样式", "文本一律 textContent"],
       "gates": [
-        { "id": "g-impl-1", "kind": "check", "text": "实现完成且未使用 innerHTML 渲染模型产出", "required": true }
+        {
+          "id": "g-impl-1",
+          "kind": "check",
+          "text": "实现完成且未使用 innerHTML 渲染模型产出",
+          "required": true
+        }
+      ],
+      "plan": [
+        "改组件",
+        "改样式",
+        "文本一律 textContent"
       ]
     },
     {
       "id": "build",
       "title": "构建",
       "goal": "前端产物构建通过",
-      "tasks": ["跑构建脚本"],
       "gates": [
-        { "id": "g-build-1", "kind": "command", "text": "前端构建通过", "cmd": "npm run build", "required": true, "blocking": true, "onFail": "advise" }
+        {
+          "id": "g-build-1",
+          "kind": "command",
+          "text": "前端构建通过",
+          "cmd": "npm run build",
+          "required": true,
+          "blocking": true,
+          "onFail": "advise"
+        }
+      ],
+      "plan": [
+        "跑构建脚本"
       ]
     },
     {
       "id": "verify",
       "title": "浏览器验证",
       "goal": "页面实际渲染与交互符合预期（截图为准）",
-      "tasks": ["打开页面截图", "看控制台错误", "验证交互"],
       "gates": [
-        { "id": "g-verify-1", "kind": "artifact", "text": "页面截图已生成", "artifact": "screenshots/", "required": true, "blocking": true }
+        {
+          "id": "g-verify-1",
+          "kind": "artifact",
+          "text": "页面截图已生成",
+          "artifact": "screenshots/",
+          "required": true,
+          "blocking": true
+        }
+      ],
+      "plan": [
+        "打开页面截图",
+        "看控制台错误",
+        "验证交互"
       ]
     }
   ],
-  "board": { "kind": "kanban", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
-  "library": { "author": "paircode", "tags": ["web", "frontend", "feature"] }
+  "board": {
+    "kind": "kanban",
+    "columns": [
+      "stage",
+      "status"
+    ],
+    "fields": [
+      "goal",
+      "gates",
+      "evidence"
+    ],
+    "groupBy": "stage"
+  },
+  "library": {
+    "author": "paircode",
+    "tags": [
+      "web",
+      "frontend",
+      "feature"
+    ]
+  }
 }

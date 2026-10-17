@@ -52,6 +52,11 @@ return {
     var GATE_KINDS = ['check', 'command', 'artifact', 'approval']
     var BOARD_KINDS = ['kanban', 'checklist', 'timeline', 'swimlane']
     var SCOPES = ['project', 'global', 'preset']                 // 解析优先级
+    // 子任务状态（阶段内可细化的最小执行单元；cancelled 不计入进度口径）
+    var SUB_STATUS = ['pending', 'in_progress', 'completed', 'blocked', 'cancelled']
+    // 实例生命周期：active 进行中 / completed 已完成 / interrupted 已中断（可 resume）
+    //              archived 已归档（只读留档，移出活跃列表）/ deleted 已删除（软删可恢复）
+    var RUN_STATUS = ['active', 'completed', 'interrupted', 'archived', 'deleted']
 
     // ── ② 基础助手 ───────────────────────────────────────────────
     function nowIso() { return new Date().toISOString() }
@@ -124,6 +129,313 @@ return {
         if (!ctx.install.exists(p)) return null
         return JSON.parse(ctx.install.readFile(p))
       } catch (e) { return null }
+    }
+
+    // ── ②b 任务看板数据层（照 github.com/cloader/dsh-taskboard 重建，2026-10-17）──
+    // 照参考：任务归**项目（工作区）**、不归会话（会话只出现在 claimedBy＝认领执行者）；
+    //         七态严格状态机；人建卡 → agent 认领 → 交报告 → **人验收**（agent 不能自己 done）。
+    // 结合流程（本 IDE 增量）：任务可绑定一个流程模板作**执行骨架** ——
+    //         阶段进度显示在卡片/详情；流程门禁 → 任务验收清单（DoD）；流程走完 → 任务转「待验收」。
+    // 落点：<ws>/.pair/taskboard/tasks.json（单文件 ledger + revision，照参考）
+    // 镜像：每条任务同步 <ws>/.pair/tasks/flowtb_<id>.json → 右栏「任务进度」面板可见
+    var P_TB = '.pair/taskboard/tasks.json'
+    var TB_MAIN = ['backlog', 'todo', 'in_progress', 'in_review', 'done']
+    var TB_SECONDARY = ['canceled', 'archived']
+    var TB_STATUS = TB_MAIN.concat(TB_SECONDARY)
+    var TB_LABEL = { backlog: '待规划', todo: '待办', in_progress: '进行中', in_review: '待验收', done: '已完成', canceled: '已取消', archived: '已归档' }
+    var TB_URGENCY = ['urgent', 'normal', 'relaxed']
+    // 合法迁移（照参考 TRANSITIONS 原样）；archived 为终态
+    var TB_TRANS = {
+      backlog: ['todo', 'canceled'],
+      todo: ['in_progress', 'backlog', 'canceled'],
+      in_progress: ['in_review', 'todo', 'canceled'],
+      in_review: ['in_progress', 'todo', 'done', 'canceled'],
+      done: ['archived', 'todo'],
+      canceled: ['archived', 'todo'],
+      archived: []
+    }
+    function tbIsClaim(from, to) { return from === 'todo' && to === 'in_progress' }
+    function tbCanTransition(from, to) {
+      var t = TB_TRANS[from]
+      return !!(t && t.indexOf(to) >= 0)
+    }
+    function tbLabel(s) { return TB_LABEL[s] || String(s == null ? '' : s) }
+    function tbActor(by) {
+      if (by && typeof by === 'object') {
+        return { kind: String(by.kind || 'user'), sessionId: String(by.sessionId || ''), name: String(by.name || '') }
+      }
+      return { kind: by === 'agent' ? 'agent' : 'user', sessionId: '', name: '' }
+    }
+    function tbWorkspaceId() {
+      var r = String(wsRoot() || '').replace(/[\\/]+$/, '')
+      var i = Math.max(r.lastIndexOf('/'), r.lastIndexOf('\\'))
+      return i < 0 ? (r || 'workspace') : r.slice(i + 1)
+    }
+    function tbLoad() {
+      var l = fsReadJson(P_TB)
+      if (!l || typeof l !== 'object' || !Array.isArray(l.tasks)) return { version: 1, revision: 0, tasks: [] }
+      if (!isNum(l.revision)) l.revision = 0
+      return l
+    }
+    function tbSave(l) {
+      l.version = 1
+      l.revision = (isNum(l.revision) ? l.revision : 0) + 1
+      return fsWriteJson(P_TB, l)
+    }
+    function tbNewId() { return 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) }
+    function tbFind(l, id) {
+      for (var i = 0; i < l.tasks.length; i++) if (l.tasks[i].id === id) return l.tasks[i]
+      return null
+    }
+    function tbMirrorName(id) { return 'flowtb_' + String(id).replace(/[^A-Za-z0-9]/g, '_') }
+    /** 宿主镜像（右栏任务面板读 .pair/tasks/<id>.json，字段沿用宿主契约 §5.3）。 */
+    function tbMirror(t) {
+      if (!t) return
+      var st = t.status === 'done' ? 'completed'
+        : (t.status === 'in_progress' ? 'in_progress'
+          : ((t.status === 'canceled' || t.status === 'archived') ? 'cancelled' : 'pending'))
+      fsWriteJson(P_TASKS + '/' + tbMirrorName(t.id) + '.json', {
+        id: tbMirrorName(t.id), subject: String(t.title || ''), description: String(t.description || ''),
+        status: st, dependencies: [], convId: String(t.claimedBy || ''),
+        created_at: t.createdAt || '', updated_at: t.updatedAt || '', boardTaskId: t.id
+      })
+    }
+    /** 流程门禁 → 任务验收清单（DoD）：每个门禁一条清单项，阶段名做前缀。 */
+    function tbFlowChecklist(def) {
+      var out = []
+      var stages = (def && def.stages) || []
+      for (var i = 0; i < stages.length; i++) {
+        var gs = stages[i].gates || []
+        for (var j = 0; j < gs.length; j++) {
+          out.push({
+            id: String(gs[j].id),
+            text: '[' + String(stages[i].title || stages[i].id) + '] ' + String(gs[j].text || gs[j].id),
+            stage: String(stages[i].id), gate: String(gs[j].id),
+            checked: false, evidence: '', by: ''
+          })
+        }
+      }
+      return out
+    }
+    function tbCreate(o) {
+      var a = (o && typeof o === 'object') ? o : {}
+      var title = String(a.title || a.subject || '').trim()
+      if (!title) return { ok: false, error: '任务标题不能为空' }
+      var l = tbLoad()
+      var st = String(a.status || '')
+      var t = {
+        id: tbNewId(), title: title,
+        description: String(a.description || ''), prompt: String(a.prompt || ''),
+        workspace: String(a.workspace || tbWorkspaceId()),
+        urgency: TB_URGENCY.indexOf(String(a.urgency || '')) >= 0 ? String(a.urgency) : 'normal',
+        status: TB_MAIN.indexOf(st) >= 0 ? st : 'todo',
+        blocked: !!a.blocked,
+        flowId: String(a.flowId || ''), flowScope: '', flowVersion: 0, runId: '',
+        checklist: [], comments: [], executions: [],
+        claimedBy: '', claimedAt: '', version: 1,
+        createdAt: nowIso(), updatedAt: nowIso(),
+        createdBy: tbActor(a.by), updatedBy: tbActor(a.by), trashedAt: ''
+      }
+      if (t.flowId) {
+        var f = resolveFlow(t.flowId)
+        if (f) { t.flowScope = f.scope; t.flowVersion = f.def.version || 1; t.checklist = tbFlowChecklist(f.def) }
+      }
+      l.tasks.push(t)
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败（' + P_TB + '）' }
+      tbMirror(t)
+      return { ok: true, task: t, revision: l.revision }
+    }
+    function tbUpdate(id, patch, o) {
+      var p = (patch && typeof patch === 'object') ? patch : {}
+      var a = (o && typeof o === 'object') ? o : {}
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (p.title !== undefined && String(p.title).trim()) t.title = String(p.title).trim()
+      if (typeof p.description === 'string') t.description = p.description
+      if (typeof p.prompt === 'string') t.prompt = p.prompt
+      if (TB_URGENCY.indexOf(String(p.urgency || '')) >= 0) t.urgency = String(p.urgency)
+      if (typeof p.blocked === 'boolean') t.blocked = p.blocked
+      if (typeof p.flowId === 'string' && p.flowId !== t.flowId) {
+        t.flowId = p.flowId
+        var f = p.flowId ? resolveFlow(p.flowId) : null
+        t.flowScope = f ? f.scope : ''
+        t.flowVersion = f ? (f.def.version || 1) : 0
+        if (f) t.checklist = tbFlowChecklist(f.def)
+      }
+      t.version = (isNum(t.version) ? t.version : 1) + 1
+      t.updatedAt = nowIso()
+      t.updatedBy = tbActor(a.by)
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t, revision: l.revision }
+    }
+    /**
+     * 改状态：看板拖拽 / 卡片按钮 / agent claim 全走这里。
+     * 协议闸（照参考）：agent 永远不能把卡移到 done —— 验收只能由人做。
+     */
+    function tbMove(id, to, o) {
+      var a = (o && typeof o === 'object') ? o : {}
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var s = String(to || '')
+      if (TB_STATUS.indexOf(s) < 0) return { ok: false, error: '未知状态：' + s }
+      var by = tbActor(a.by)
+      if (s === 'done' && by.kind !== 'user') {
+        return { ok: false, error: '「已完成」只能由人验收 —— agent 不能自己把任务移到已完成' }
+      }
+      if (t.status === s) return { ok: true, task: t, unchanged: true, revision: l.revision }
+      if (!tbCanTransition(t.status, s)) {
+        return { ok: false, error: '无法从「' + tbLabel(t.status) + '」移到「' + tbLabel(s) + '」' }
+      }
+      var from = t.status
+      t.status = s
+      if (s === 'in_progress') { t.claimedBy = String(a.sessionId || by.sessionId || ''); t.claimedAt = nowIso() }
+      if (from === 'in_progress') { t.claimedBy = ''; t.claimedAt = '' }   // 离开进行中即释放认领（照参考）
+      t.version = (isNum(t.version) ? t.version : 1) + 1
+      t.updatedAt = nowIso()
+      t.updatedBy = by
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t, from: from, revision: l.revision }
+    }
+    function tbComment(id, text, by) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var s = String(text || '').trim()
+      if (!s) return { ok: false, error: '评论内容不能为空' }
+      if (!Array.isArray(t.comments)) t.comments = []
+      t.comments.push({ id: 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), text: s, at: nowIso(), by: tbActor(by) })
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t }
+    }
+    /** 勾选/取消验收清单项（agent 可勾并附证据；人可全量编辑）。 */
+    function tbCheck(id, itemId, checked, note, by) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var list = Array.isArray(t.checklist) ? t.checklist : []
+      var it = null
+      for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(itemId)) it = list[i]
+      if (!it) return { ok: false, error: '清单项不存在：' + itemId }
+      it.checked = !!checked
+      it.evidence = String(note || '')
+      it.by = tbActor(by).kind
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t }
+    }
+    /** agent 交报告：留执行记录 + 任务转「待验收」（照参考 report 语义）。 */
+    function tbReport(id, o) {
+      var a = (o && typeof o === 'object') ? o : {}
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      if (!Array.isArray(t.executions)) t.executions = []
+      t.executions.push({
+        id: 'x-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+        at: nowIso(), by: tbActor(a.by || 'agent'),
+        outcome: String(a.outcome || 'succeeded'),
+        summary: String(a.summary || ''), files: Array.isArray(a.files) ? a.files : [], risks: String(a.risks || '')
+      })
+      if (t.executions.length > 20) t.executions = t.executions.slice(-20)
+      var moved = false
+      if (t.status === 'in_progress') { t.status = 'in_review'; moved = true }
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t, movedToReview: moved }
+    }
+    /**
+     * 任务 ↔ 流程绑定（启动流程时用）：回写 runId；卡上未设流程时补 flowId/flowScope/flowVersion
+     * 并按该流程门禁生成验收清单（DoD）。所有启动入口（flow_start 工具 / flow_action.start /
+     * taskboard_action.startFlow）都经 startRun 调这里 —— 绑定只有这一处，避免漏写。
+     */
+    function tbBindRun(id, runId, flowMeta) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      var fm = (flowMeta && typeof flowMeta === 'object') ? flowMeta : null
+      if (fm && fm.flowId && !t.flowId) {
+        var f = resolveFlow(String(fm.flowId))
+        t.flowId = String(fm.flowId)
+        t.flowScope = String(fm.flowScope || (f ? f.scope : ''))
+        t.flowVersion = isNum(fm.flowVersion) ? fm.flowVersion : (f ? (f.def.version || 1) : 1)
+        if (f && (!Array.isArray(t.checklist) || !t.checklist.length)) t.checklist = tbFlowChecklist(f.def)
+      }
+      t.runId = String(runId || '')
+      t.updatedAt = nowIso()
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      tbMirror(t)
+      return { ok: true, task: t }
+    }
+    /**
+     * 流程结合（用户选定方案）：流程推进后把结果同步到绑定它的任务。
+     *   · 流程门禁通过 → 勾选对应验收清单项（DoD，by=flow）
+     *   · 流程全部走完 → 任务自动转「待验收」（等人工验收，绝不自动 completed）
+     */
+    function tbSyncFromRun(run) {
+      if (!run || !run.runId) return null
+      var l = tbLoad()
+      var t = null
+      for (var i = 0; i < l.tasks.length; i++) if (l.tasks[i].runId === run.runId) t = l.tasks[i]
+      if (!t) return null
+      var changed = false
+      var cl = Array.isArray(t.checklist) ? t.checklist : []
+      for (var k = 0; k < cl.length; k++) {
+        var item = cl[k]
+        if (!item || !item.gate || item.checked) continue
+        var passed = false
+        for (var si = 0; si < (run.stages || []).length; si++) {
+          var gr = gateResult(run.stages[si], item.gate)
+          if (gr && (gr.status === 'pass' || gr.status === 'approved')) { passed = true; break }
+        }
+        if (passed) { item.checked = true; item.by = 'flow'; changed = true }
+      }
+      if (run.status === 'completed' && t.status !== 'in_review' && t.status !== 'done' && t.status !== 'archived' && t.status !== 'canceled') {
+        t.status = 'in_review'
+        changed = true
+      }
+      if (changed) {
+        t.updatedAt = nowIso()
+        if (tbSave(l)) tbMirror(t)
+      }
+      return { ok: true, task: t, changed: changed }
+    }
+    /** 任务看板状态快照（client 半渲染用；带流程阶段进度）。 */
+    function tbSnapshot(q) {
+      var qq = (q && typeof q === 'object') ? q : {}
+      var l = tbLoad()
+      var want = String(qq.workspace || '')
+      var rows = []
+      for (var i = 0; i < l.tasks.length; i++) {
+        var t = l.tasks[i]
+        if (t.trashedAt) continue
+        if (want && t.workspace !== want) continue
+        rows.push(t)
+      }
+      // 绑定了流程的任务：带上阶段进度（卡片上显示「流程名 · x/y」）
+      var runs = listRuns ? listRuns('all') : []
+      var byRun = {}
+      for (var r = 0; r < runs.length; r++) byRun[runs[r].runId] = runs[r]
+      for (var k = 0; k < rows.length; k++) {
+        var row = rows[k]
+        row.flowProgress = null
+        var run = row.runId ? byRun[row.runId] : null
+        if (run) {
+          var sp = stageProgress(run)
+          var rp = runProgress(run)
+          row.flowProgress = { runId: run.runId, status: run.status, label: sp.label, percent: rp.percent, stagesDone: rp.stagesDone, stagesTotal: rp.stagesTotal }
+        } else if (row.flowId) {
+          row.flowProgress = { runId: '', status: 'idle', label: '未启动', percent: 0 }
+        }
+      }
+      return { ok: true, at: nowIso(), revision: l.revision, workspace: want || tbWorkspaceId(), tasks: rows, flowLibrary: allFlows() }
     }
 
     // ── ③ 三层流程库（project > global > preset）─────────────────
@@ -331,15 +643,242 @@ return {
       }
     }
 
+    // ── ⑥b 子任务（subtasks：模板骨架 + agent 运行时细化）────────
+    // 语义：流程定义 stage.plan（兼容旧 stage.tasks）只是「子任务模板骨架」，
+    //   进入阶段时 seed 成 run.stages[].subtasks —— 这是子任务的唯一真相；
+    //   agent 在运行时用 flow_task 工具增删改（source='agent'），把粗阶段拆细。
+    // 镜像：每条子任务同步建/更宿主任务（.pair/tasks/<id>.json）→ 右栏任务面板可见。
+    function subStatusOf(s) { return String((s && s.status) || 'pending') }
+    function nextSubId(stageRun) {
+      var max = 0
+      var list = (stageRun && stageRun.subtasks) || []
+      for (var i = 0; i < list.length; i++) {
+        var m = /^s(\d+)$/.exec(String((list[i] && list[i].id) || ''))
+        if (m) { var n = parseInt(m[1], 10); if (n > max) max = n }
+      }
+      return 's' + (max + 1)
+    }
+    function subMirrorStatus(st) {
+      var s = subStatusOf(st)
+      if (s === 'completed') return 'completed'
+      if (s === 'in_progress') return 'in_progress'
+      return 'pending'
+    }
+    function subMirror(run, stageDef, stageRun, st) {
+      try {
+        if (!st.hostTaskId) {
+          var title = (stageDef && stageDef.title) || (stageRun && stageRun.id) || '阶段'
+          st.hostTaskId = createTask('[' + title + '] ' + st.subject,
+            '流程 ' + run.flowId + ' · 阶段 ' + title + ' · 子任务 ' + st.id + (st.detail ? ('：' + st.detail) : ''),
+            run.convId)
+          stageRun.taskIds = (stageRun.taskIds || []).concat([st.hostTaskId])
+        } else {
+          updateTaskStatus(st.hostTaskId, subMirrorStatus(st))
+        }
+      } catch (e) { logWarn('子任务镜像宿主任务失败 ' + st.id + ': ' + e) }
+    }
+    function seedSubtasks(run, stageDef, stageRun) {
+      if (!stageRun.subtasks) stageRun.subtasks = []
+      if (stageRun.seeded) return []                       // 幂等：同一阶段只播一次种
+      stageRun.seeded = true
+      var plan = []
+      if (stageDef && Array.isArray(stageDef.plan) && stageDef.plan.length) plan = stageDef.plan
+      else if (stageDef && Array.isArray(stageDef.tasks)) plan = stageDef.tasks
+      var out = []
+      for (var i = 0; i < plan.length; i++) {
+        var raw = plan[i]
+        var subject = (raw && typeof raw === 'object') ? String(raw.subject || raw.title || '') : String(raw || '')
+        subject = subject.replace(/^\s+|\s+$/g, '')
+        if (!subject) continue
+        var st = {
+          id: nextSubId(stageRun), subject: subject,
+          detail: (raw && typeof raw === 'object') ? String(raw.detail || '') : '',
+          status: 'pending', source: 'plan', hostTaskId: '',
+          note: '', evidence: '',
+          createdAt: nowIso(), startedAt: '', completedAt: '',
+        }
+        stageRun.subtasks.push(st)
+        subMirror(run, stageDef, stageRun, st)
+        out.push(st.id)
+      }
+      return out
+    }
+    function subStats(stageRun) {
+      var list = (stageRun && stageRun.subtasks) || []
+      var o = { total: list.length, done: 0, doing: 0, blocked: 0, cancelled: 0, pending: 0 }
+      for (var i = 0; i < list.length; i++) {
+        var s = subStatusOf(list[i])
+        if (s === 'completed') o.done++
+        else if (s === 'in_progress') o.doing++
+        else if (s === 'blocked') o.blocked++
+        else if (s === 'cancelled') o.cancelled++
+        else o.pending++
+      }
+      o.active = o.total - o.cancelled
+      o.label = o.done + '/' + o.active
+      o.percent = o.active ? Math.round((o.done / o.active) * 100) : (o.total ? 100 : 0)
+      return o
+    }
+    function runSubStats(run) {
+      var list = (run && run.stages) || []
+      var o = { total: 0, done: 0, doing: 0, blocked: 0, cancelled: 0, pending: 0 }
+      for (var i = 0; i < list.length; i++) {
+        var s = subStats(list[i])
+        o.total += s.total; o.done += s.done; o.doing += s.doing
+        o.blocked += s.blocked; o.cancelled += s.cancelled; o.pending += s.pending
+      }
+      o.active = o.total - o.cancelled
+      o.label = o.done + '/' + o.active
+      o.percent = o.active ? Math.round((o.done / o.active) * 100) : (o.total ? 100 : 0)
+      return o
+    }
+    // 「此刻在做什么」：优先进行中，其次待办，再次阻塞
+    function focusSubtask(run) {
+      var list = (run && run.stages) || []
+      var st = list[stageIdx(run)] || null
+      var subs = (st && st.subtasks) || []
+      for (var i = 0; i < subs.length; i++) if (subStatusOf(subs[i]) === 'in_progress') return subs[i]
+      for (var j = 0; j < subs.length; j++) if (subStatusOf(subs[j]) === 'pending') return subs[j]
+      for (var k = 0; k < subs.length; k++) if (subStatusOf(subs[k]) === 'blocked') return subs[k]
+      return null
+    }
+    // 总进度：阶段为主权重 + 当前阶段子任务细化（0-100）
+    function runProgress(run) {
+      var list = (run && run.stages) || []
+      var total = list.length || 1
+      var idx = stageIdx(run)
+      var cur = list[idx] || null
+      var stagesDone = 0
+      for (var i = 0; i < list.length; i++) if (list[i].status === 'completed') stagesDone++
+      var curStats = subStats(cur)
+      var frac = 0
+      if (cur && cur.status !== 'completed' && curStats.active > 0) frac = curStats.done / curStats.active
+      var percent = Math.round(((stagesDone + (stagesDone < total ? frac : 0)) / total) * 100)
+      if (percent > 100) percent = 100
+      if (percent < 0) percent = 0
+      if (run && run.status === 'completed') percent = 100
+      return {
+        stagesDone: stagesDone, stagesTotal: total,
+        stageIdx: idx, stageLabel: Math.min(idx + 1, total) + '/' + total,
+        currentStage: cur ? cur.id : '',
+        currentSub: curStats,
+        subs: runSubStats(run),
+        percent: percent,
+      }
+    }
+    function resolveStageRef(run, ref) {
+      var list = (run && run.stages) || []
+      if (ref === undefined || ref === null || ref === '') return stageIdx(run)
+      if (isNum(ref)) { var n = Number(ref); return (n >= 0 && n < list.length) ? n : -1 }
+      var str = String(ref)
+      for (var i = 0; i < list.length; i++) if (String(list[i].id) === str) return i
+      return -1
+    }
+    function subtaskText(stageRun) {
+      var subs = (stageRun && stageRun.subtasks) || []
+      if (!subs.length) return ''
+      var marks = { completed: '[x]', in_progress: '[>]', blocked: '[!]', cancelled: '[-]', pending: '[ ]' }
+      return subs.map(function (s) {
+        return (marks[subStatusOf(s)] || '[ ]') + ' ' + s.id + ' ' + s.subject + (s.note ? ('（' + s.note + '）') : '')
+      }).join('\n')
+    }
+    // 子任务操作（flow_task 工具与看板 RPC 共用；run.stages[].subtasks 为唯一真相）
+    function taskAction(o) {
+      var a = o || {}
+      var op = String(a.op || 'list')
+      var run = pickRun(a)
+      if (!run) return { ok: false, error: '没有可用的流程实例（flow_start 启动）' }
+      var si = resolveStageRef(run, a.stage)
+      if (si < 0) return { ok: false, error: '阶段不存在: ' + String(a.stage) }
+      var stageRun = run.stages[si]
+      if (!stageRun.subtasks) stageRun.subtasks = []
+      var flow = runFlow(run)
+      var stageDef = (flow && flow.def && flow.def.stages) ? flow.def.stages[si] : null
+      var stageTitle = (stageDef && stageDef.title) || stageRun.id
+      if (op === 'list') {
+        var st0 = subStats(stageRun)
+        return {
+          ok: true, runId: run.runId, stage: stageRun.id, subtasks: stageRun.subtasks, stats: st0,
+          text: '阶段「' + stageTitle + '」子任务 ' + st0.label + '（进行中 ' + st0.doing + ' · 待办 ' + st0.pending +
+            ' · 阻塞 ' + st0.blocked + ' · 已取消 ' + st0.cancelled + '）：\n' +
+            (subtaskText(stageRun) || '（无子任务 —— 用 op=add 拆解）'),
+        }
+      }
+      if (run.status === 'archived' || run.status === 'deleted') {
+        return { ok: false, error: '实例已' + run.status + '（只读留档）——先恢复再改子任务' }
+      }
+      if (op === 'add') {
+        var subject = String(a.subject || '').replace(/^\s+|\s+$/g, '')
+        if (!subject) return { ok: false, error: 'subject 必填（子任务标题）' }
+        var ns0 = String(a.status || 'pending')
+        if (SUB_STATUS.indexOf(ns0) < 0) ns0 = 'pending'
+        var st = {
+          id: nextSubId(stageRun), subject: subject, detail: String(a.detail || ''),
+          status: ns0, source: 'agent', hostTaskId: '',
+          note: String(a.note || ''), evidence: '',
+          createdAt: nowIso(), startedAt: ns0 === 'in_progress' ? nowIso() : '', completedAt: '',
+        }
+        stageRun.subtasks.push(st)
+        subMirror(run, stageDef, stageRun, st)
+        saveRun(run)
+        var s1 = subStats(stageRun)
+        return { ok: true, subtask: st, stats: s1, text: '已拆解子任务 ' + st.id + '：' + st.subject + '\n阶段「' + stageTitle + '」进度 ' + s1.label }
+      }
+      if (op === 'update') {
+        var id = String(a.id || a.subId || '')
+        var target = null
+        for (var i = 0; i < stageRun.subtasks.length; i++) if (String(stageRun.subtasks[i].id) === id) target = stageRun.subtasks[i]
+        if (!target) return {
+          ok: false,
+          error: '子任务不存在: ' + id + '（现有: ' + (stageRun.subtasks.map(function (s) { return s.id }).join(', ') || '无') + '）',
+        }
+        if (a.status !== undefined) {
+          var ns = String(a.status)
+          if (SUB_STATUS.indexOf(ns) < 0) return { ok: false, error: 'status 非法（可选 ' + SUB_STATUS.join(' | ') + '）' }
+          target.status = ns
+          if (ns === 'in_progress' && !target.startedAt) target.startedAt = nowIso()
+          if (ns === 'completed') target.completedAt = nowIso()
+          else target.completedAt = ''
+        }
+        if (a.subject !== undefined) target.subject = String(a.subject)
+        if (a.detail !== undefined) target.detail = String(a.detail)
+        if (a.note !== undefined) target.note = String(a.note)
+        if (a.evidence !== undefined) target.evidence = String(a.evidence)
+        subMirror(run, stageDef, stageRun, target)
+        saveRun(run)
+        var s2 = subStats(stageRun)
+        var all2 = runSubStats(run)
+        return {
+          ok: true, subtask: target, stats: s2, runStats: all2,
+          text: '子任务 ' + target.id + ' → ' + target.status + '：' + target.subject +
+            '\n阶段「' + stageTitle + '」' + s2.label + ' · 全流程 ' + all2.label,
+        }
+      }
+      if (op === 'remove') {
+        var id2 = String(a.id || a.subId || '')
+        var idx2 = -1
+        for (var j = 0; j < stageRun.subtasks.length; j++) if (String(stageRun.subtasks[j].id) === id2) idx2 = j
+        if (idx2 < 0) return { ok: false, error: '子任务不存在: ' + id2 }
+        var gone = stageRun.subtasks.splice(idx2, 1)[0]
+        if (gone.hostTaskId) { try { updateTaskStatus(gone.hostTaskId, 'cancelled') } catch (e2) { } }
+        saveRun(run)
+        return { ok: true, removed: gone, text: '已移除子任务 ' + id2 + '：' + gone.subject }
+      }
+      return { ok: false, error: '未知 op（支持 list | add | update | remove）' }
+    }
+
     // ── ⑦ 流程实例 / 门禁 / 证据 / 推进 ──────────────────────────
     function runPath(runId) { return P_RUNS + '/' + safeName(runId) + '.json' }
     function loadRun(runId) { return fsReadJson(runPath(runId)) }
     function saveRun(run) { run.updatedAt = nowIso(); fsWriteJson(runPath(run.runId), run); return run }
-    function listRuns() {
-      return fsListNames(P_RUNS).filter(function (x) { return /\.json$/.test(x) })
+    // 归档/删除 = 只读留档：默认从活跃视图隐藏（只在「运行记录」里出现）；'all' 取全部
+    function runHidden(r) { return r.status === 'archived' || r.status === 'deleted' }
+    function listRuns(scope) {
+      var out = fsListNames(P_RUNS).filter(function (x) { return /\.json$/.test(x) })
         .map(function (x) { return fsReadJson(P_RUNS + '/' + x) })
         .filter(function (r) { return r && r.runId })
-        .sort(function (a, b) { return String(a.updatedAt || '') < String(b.updatedAt || '') ? -1 : 1 })
+      if (String(scope || '') !== 'all') out = out.filter(function (r) { return !runHidden(r) })
+      return out.sort(function (a, b) { return String(a.updatedAt || '') < String(b.updatedAt || '') ? -1 : 1 })
     }
     function activeRuns() { return listRuns().filter(function (r) { return r.status === 'active' }) }
     function pickRun(opts) {
@@ -349,6 +888,10 @@ return {
       if (o.convId) {
         var mine = act.filter(function (r) { return r.convId === o.convId })
         if (mine.length) return mine[mine.length - 1]
+        // ★ 显式指定会话却没有活跃实例时**不越界**到别的会话/项目（否则对已归档实例的
+        //   操作会打到别人身上）；退回该会话的任意实例（含归档/删除），由调用方按状态给准确提示。
+        var anyMine = listRuns('all').filter(function (r) { return r.convId === o.convId })
+        return anyMine.length ? anyMine[anyMine.length - 1] : null
       }
       if (act.length) return act[act.length - 1]
       var all = listRuns()
@@ -369,9 +912,12 @@ return {
       var st = list[idx] || {}
       var def = flow && flow.def.stages ? flow.def.stages[idx] : null
       var pending = def ? pendingRequired(st, def) : []
+      var allDone = run.status === 'completed'
       return {
         idx: idx, total: list.length,
-        label: (idx + 1) + '/' + list.length + (def ? ' ' + def.title : ''),
+        label: allDone
+          ? ('全部完成 ' + list.length + '/' + list.length)
+          : ((idx + 1) + '/' + list.length + (def ? ' ' + def.title : '')),
         stageId: st.id || '', pending: pending.length,
       }
     }
@@ -491,6 +1037,11 @@ return {
     // 启动流程（§14.4 解析顺序：会话级临时 → 项目绑定 → 类型推荐 → 全局默认）
     function startRun(opts) {
       var o = opts || {}
+      // 任务绑定：taskId/boardTaskId 必须真实存在（不存在就明确报错，不静默成功）
+      var taskId = String(o.taskId || o.boardTaskId || '')
+      if (taskId && !tbFind(tbLoad(), taskId)) {
+        return { ok: false, error: '看板任务不存在：' + taskId + '（taskId 须为任务看板上的卡 id，如 t-…；先用 taskboard_list 查）' }
+      }
       var project = String(o.project || wsRoot() || '')
       var picked = null
       if (o.flowId) picked = { flowId: String(o.flowId), source: 'explicit' }
@@ -536,9 +1087,16 @@ return {
         gitHead: gitHead(), modifiedFiles: [],
         evidenceDir: P_EVID + '/' + runId + '/',
       }
-      createStageTasks(run, defStages[0], stages[0])
+      seedSubtasks(run, defStages[0], stages[0])
       saveRun(run)
-      return { ok: true, run: run, source: picked.source, flowScope: flow.scope }
+      // 绑定看板卡（唯一入口）：启动成功即回写 runId；卡未设流程时补 flowId 并生成 DoD 清单
+      var boundTask = null
+      if (taskId) {
+        var bRes = tbBindRun(taskId, runId, { flowId: run.flowId, flowScope: run.flowScope, flowVersion: run.flowVersion })
+        if (!bRes.ok) return { ok: false, error: '流程已启动但绑定看板任务失败：' + bRes.error + '（实例 ' + runId + '）' }
+        boundTask = bRes.task
+      }
+      return { ok: true, run: run, source: picked.source, flowScope: flow.scope, task: boundTask }
     }
 
     // 推进（含门禁记录）
@@ -546,7 +1104,14 @@ return {
       var o = opts || {}
       var run = pickRun(o)
       if (!run) return { ok: false, error: '没有可用的流程实例（用 flow_start 启动）' }
-      if (run.status !== 'active') return { ok: false, error: '流程实例已结束: ' + run.status, run: run }
+      if (run.status !== 'active') {
+        var why = '流程实例不是进行中状态（' + run.status + '）'
+        if (run.status === 'interrupted') why += '——用 resume 恢复后继续'
+        else if (run.status === 'archived') why += '——先取消归档（unarchive）'
+        else if (run.status === 'deleted') why += '——先恢复删除（restore）'
+        else if (run.status === 'completed') why += '——实例已完成'
+        return { ok: false, error: why, run: run }
+      }
       var flow = runFlow(run)
       if (!flow) return { ok: false, error: '流程定义已不存在: ' + run.flowId }
       var idx = stageIdx(run)
@@ -565,7 +1130,7 @@ return {
         var passed = gateRec.status === 'pass' || gateRec.status === 'approved'
         if (!passed) {
           var out = {
-            ok: true, advanced: false, gate: gateRec,
+            ok: true, advanced: false, gate: gateRec, run: run,
             text: '门禁 ' + gate.id + ' 未通过：' + (gateRec.summary || '') + '\n' + gateRecText(run, gate, gateRec, stageDef.title),
           }
           if (gate.onFail === 'rollback') out.rollback = rollbackAdvice(run, gate, gateRec)
@@ -577,7 +1142,7 @@ return {
       var pending = pendingRequired(stageRun, stageDef)
       if (pending.length && !o.force) {
         return {
-          ok: true, advanced: false, gate: gateRec,
+          ok: true, advanced: false, gate: gateRec, run: run,
           pending: pending.map(function (g) { return { id: g.id, kind: g.kind, text: g.text, cmd: g.cmd || '', artifact: g.artifact || '' } }),
           text: '阶段「' + stageDef.title + '」还有 ' + pending.length + ' 个必过门禁未通过，不能推进：\n' +
             pending.map(function (g) { return '  · ' + g.id + '（' + g.kind + '）' + g.text + (g.cmd ? ' | cmd: ' + g.cmd : (g.artifact ? ' | artifact: ' + g.artifact : '')) }).join('\n') +
@@ -586,6 +1151,9 @@ return {
       }
 
       // ③ 完成本阶段 → 进入下一阶段
+      // 子任务保留真实状态（未完成的**不**代填 completed）：进度要可信，遗留要看见
+      var stDone = subStats(stageRun)
+      var leftOver = stDone.active - stDone.done
       stageRun.status = 'completed'
       stageRun.completedAt = nowIso()
       completeStageTasks(stageRun)
@@ -594,22 +1162,122 @@ return {
         run.status = 'completed'
         run.currentStage = ''
         saveRun(run)
-        return { ok: true, advanced: true, completed: true, gate: gateRec, text: '流程「' + flow.def.title + '」全部阶段已完成 [全部通过]（run ' + run.runId + '）' }
+        var allDone = runSubStats(run)
+        return {
+          ok: true, advanced: true, completed: true, gate: gateRec, run: run,
+          text: '流程「' + flow.def.title + '」全部阶段已完成 [全部通过]（run ' + run.runId + '）' +
+            '\n子任务合计 ' + allDone.label + ' · 总进度 100%' +
+            (leftOver > 0 ? ('\n[注意] 末阶段还有 ' + leftOver + ' 个子任务未完成（保留真实状态）。') : ''),
+        }
       }
       var nextRun = run.stages[nextIdx]
       var nextDef = flow.def.stages[nextIdx]
       nextRun.status = 'in_progress'
       nextRun.startedAt = nowIso()
       run.currentStage = nextDef.id
-      createStageTasks(run, nextDef, nextRun)
+      seedSubtasks(run, nextDef, nextRun)
       saveRun(run)
       return {
-        ok: true, advanced: true, stage: nextDef.id, title: nextDef.title, gate: gateRec,
+        ok: true, advanced: true, stage: nextDef.id, title: nextDef.title, gate: gateRec, run: run,
         text: '阶段 ' + (idx + 1) + '/' + run.stages.length + '「' + stageDef.title + '」已完成 → 进入阶段 ' + (nextIdx + 1) + '「' + nextDef.title + '」' +
           (nextDef.goal ? '\n阶段目标：' + nextDef.goal : '') +
           '\n门禁：' + ((nextDef.gates || []).map(function (g) { return g.id + '(' + g.kind + ')' }).join('、') || '无') +
-          '\n已为该阶段建任务（见右栏任务面板）。',
+          '\n子任务骨架 ' + subStats(nextRun).label + '（已镜像到右栏任务面板；用 flow_task add/update 可细化与推进）：\n' +
+          (subtaskText(nextRun) || '（本阶段无模板子任务 —— 可用 flow_task 自行拆解）') +
+          (leftOver > 0 ? ('\n[注意] 上一阶段还有 ' + leftOver + ' 个子任务未完成（保留真实状态，未自动标完成）。') : ''),
       }
+    }
+    // ── ⑦b 实例生命周期（中断 / 恢复 / 归档 / 取消归档 / 删除 / 恢复删除 / 彻底删除）──
+    // 语义：中断=可恢复暂停（进度全留）；归档=移出活跃列表的只读留档；
+    //       删除=软删（默认隐藏、可恢复）；彻底删除=物理删 run 与证据（需 confirm=true）。
+    function lifecycleRun(opName, o) {
+      var a = o || {}
+      var run = a.runId ? loadRun(String(a.runId)) : pickRun(a)
+      if (!run) return { ok: false, error: '实例不存在' + (a.runId ? (': ' + a.runId) : '（没有活跃实例）') }
+      var prev = String(run.status || 'active')
+      var pg = runProgress(run)
+      if (opName === 'interrupt') {
+        if (prev !== 'active') return { ok: false, error: '只有进行中的实例可中断（当前 ' + prev + '）', run: run }
+        run.status = 'interrupted'; run.statusBefore = prev
+        run.interruptedAt = nowIso(); run.interruptReason = String(a.reason || '')
+        saveRun(run)
+        return {
+          ok: true, run: run,
+          text: '流程已中断（进度保留，可 resume 恢复）：' + run.runId +
+            '\n停在 阶段 ' + pg.stageLabel + ' · 子任务 ' + pg.subs.label + ' · 总进度 ' + pg.percent + '%' +
+            (a.reason ? ('\n原因：' + a.reason) : ''),
+        }
+      }
+      if (opName === 'resume') {
+        if (prev !== 'interrupted') return { ok: false, error: '只有已中断的实例可恢复（当前 ' + prev + '）', run: run }
+        run.status = 'active'; run.resumedAt = nowIso()
+        saveRun(run)
+        return { ok: true, run: run, text: '流程已恢复运行：' + run.runId + '\n继续 阶段 ' + pg.stageLabel + '（子任务 ' + pg.subs.label + '）' }
+      }
+      if (opName === 'archive') {
+        if (prev === 'archived') return { ok: false, error: '该实例已归档', run: run }
+        if (prev === 'deleted') return { ok: false, error: '该实例已删除 —— 先「恢复」再归档', run: run }
+        run.status = 'archived'; run.statusBefore = prev; run.archivedAt = nowIso()
+        saveRun(run)
+        return { ok: true, run: run, text: '已归档（移出活跃列表，记录与证据保留，只读）：' + run.runId + '（原状态 ' + prev + '）' }
+      }
+      if (opName === 'unarchive') {
+        if (prev !== 'archived') return { ok: false, error: '该实例未归档（当前 ' + prev + '）', run: run }
+        run.status = String(run.statusBefore || 'interrupted'); run.archivedAt = ''
+        saveRun(run)
+        return { ok: true, run: run, text: '已取消归档：' + run.runId + ' → 状态 ' + run.status }
+      }
+      if (opName === 'delete') {
+        if (prev === 'deleted') return { ok: false, error: '该实例已是删除状态', run: run }
+        run.status = 'deleted'; run.statusBefore = prev; run.deletedAt = nowIso()
+        saveRun(run)
+        return { ok: true, run: run, text: '已删除记录（软删：默认从流程视图隐藏，可在「运行记录」里恢复）：' + run.runId }
+      }
+      if (opName === 'restore') {
+        if (prev !== 'deleted') return { ok: false, error: '该实例不是删除状态（当前 ' + prev + '）', run: run }
+        run.status = String(run.statusBefore || 'interrupted'); run.deletedAt = ''
+        saveRun(run)
+        return { ok: true, run: run, text: '已恢复删除的记录：' + run.runId + ' → 状态 ' + run.status }
+      }
+      if (opName === 'purge') {
+        if (a.confirm !== true) return { ok: false, error: '彻底删除需 confirm=true（物理删除实例与证据文件，不可恢复）', run: run }
+        var gone = []
+        var fail = []
+        var rp = runPath(run.runId)
+        try { ctx.fs.rm(rp, false); gone.push(rp) } catch (e) { fail.push(rp + ': ' + e) }
+        var ed = String(run.evidenceDir || '').replace(/\/+$/, '') || (P_EVID + '/' + safeName(run.runId))
+        if (fsExists(ed)) { try { ctx.fs.rm(ed, true); gone.push(ed) } catch (e2) { fail.push(ed + ': ' + e2) } }
+        return {
+          ok: !fail.length, run: null, removed: gone, errors: fail,
+          text: '已彻底删除实例 ' + run.runId + '\n删除：' + (gone.join('\n') || '（无）') +
+            (fail.length ? ('\n失败：' + fail.join('；')) : '') +
+            '\n（宿主任务文件 .pair/tasks/<id>.json 保留为历史，不影响流程真相）',
+        }
+      }
+      return { ok: false, error: '未知生命周期操作: ' + opName + '（支持 interrupt | resume | archive | unarchive | delete | restore | purge）' }
+    }
+    // 运行记录（含归档/删除；「运行记录」页签与 flow_status all 用）
+    function runsRecord() {
+      var all = listRuns('all')
+      var out = []
+      for (var i = all.length - 1; i >= 0; i--) {
+        var r = all[i]
+        var pg = runProgress(r)
+        var flow = runFlow(r)
+        out.push({
+          runId: r.runId, flowId: r.flowId, title: flow ? (flow.def.title || r.flowId) : r.flowId,
+          status: r.status, statusBefore: r.statusBefore || '',
+          project: r.project || '', convId: r.convId || '',
+          stageLabel: pg.stageLabel, currentStage: pg.currentStage,
+          stagesDone: pg.stagesDone, stagesTotal: pg.stagesTotal,
+          subs: pg.subs, percent: pg.percent,
+          createdAt: r.createdAt || '', updatedAt: r.updatedAt || '',
+          archivedAt: r.archivedAt || '', deletedAt: r.deletedAt || '',
+          interruptedAt: r.interruptedAt || '', interruptReason: r.interruptReason || '',
+          gitHead: r.gitHead || '', evidenceDir: r.evidenceDir || '',
+        })
+      }
+      return out
     }
     function gateRecText(run, gate, rec, stageTitle) {
       var lines = []
@@ -625,9 +1293,13 @@ return {
       if (!run) return '当前没有流程实例。用 flow_start 启动；flow_list 查看可用流程。'
       var flow = runFlow(run)
       var sp = stageProgress(run)
+      var pg = runProgress(run)
       var lines = []
       lines.push('流程 ' + run.flowId + (flow ? '「' + flow.def.title + '」' : '') + '（' + (run.flowScope || '?') + ' 级 v' + run.flowVersion + '）· 状态 ' + run.status)
-      lines.push('进度：阶段 ' + sp.label + (run.convId ? ' · 会话 ' + run.convId : ''))
+      lines.push('进度：阶段 ' + sp.label + ' · 子任务 ' + pg.subs.label + ' · 总进度 ' + pg.percent + '%' + (run.convId ? ' · 会话 ' + run.convId : ''))
+      if (run.status === 'interrupted') lines.push('已中断' + (run.interruptedAt ? ('于 ' + run.interruptedAt) : '') + (run.interruptReason ? ('：' + run.interruptReason) : '') + '（flow_lifecycle resume 恢复）')
+      if (run.status === 'archived') lines.push('已归档（只读留档）' + (run.archivedAt ? ('于 ' + run.archivedAt) : '') + '（flow_lifecycle unarchive 取消归档）')
+      if (run.status === 'deleted') lines.push('已删除（软删）' + (run.deletedAt ? ('于 ' + run.deletedAt) : '') + '（flow_lifecycle restore 恢复）')
       var stages = run.stages || []
       for (var i = 0; i < stages.length; i++) {
         var st = stages[i]
@@ -639,7 +1311,20 @@ return {
           var icon = (s === 'pass' || s === 'approved') ? 'PASS' : (s === 'fail' ? 'FAIL' : (s === 'pending' ? 'PEND' : '----'))
           return icon + g.id
         })
-        lines.push('  ' + (st.status === 'completed' ? '[x]' : (st.status === 'in_progress' ? '[>]' : '[ ]')) + ' ' + (i + 1) + '. ' + (def ? def.title : st.id) + (marks.length ? '  ' + marks.join(' ') : ''))
+        var ss = subStats(st)
+        var subTxt = ss.total
+          ? ('  <子任务 ' + ss.label + (ss.doing ? (' · 进行中' + ss.doing) : '') + (ss.blocked ? (' · 阻塞' + ss.blocked) : '') + '>')
+          : '  <无子任务>'
+        lines.push('  ' + (st.status === 'completed' ? '[x]' : (st.status === 'in_progress' ? '[>]' : '[ ]')) + ' ' + (i + 1) + '. ' + (def ? def.title : st.id) + (marks.length ? '  ' + marks.join(' ') : '') + subTxt)
+        // 当前阶段展开子任务明细（一眼看清「此刻在做哪一条」）
+        if (i === pg.stageIdx && (st.subtasks || []).length) {
+          var subs0 = st.subtasks
+          for (var j = 0; j < subs0.length; j++) {
+            var sb0 = subs0[j]
+            var mk0 = sb0.status === 'completed' ? '[x]' : (sb0.status === 'in_progress' ? '[>]' : (sb0.status === 'blocked' ? '[!]' : (sb0.status === 'cancelled' ? '[-]' : '[ ]')))
+            lines.push('        ' + mk0 + ' ' + sb0.id + ' ' + sb0.subject + (sb0.note ? ('（' + sb0.note + '）') : '') + (sb0.source === 'agent' ? ' [agent 拆解]' : ''))
+          }
+        }
       }
       if (run.modifiedFiles && run.modifiedFiles.length) lines.push('本次改动文件（' + run.modifiedFiles.length + '）：' + run.modifiedFiles.slice(0, 8).join(', ') + (run.modifiedFiles.length > 8 ? ' …' : ''))
       if (run.gitHead) lines.push('git 基线：' + run.gitHead)
@@ -666,7 +1351,8 @@ return {
         var st = stages[i]
         L.push('### ' + (i + 1) + '. ' + (st.title || st.id) + '（' + st.id + '）')
         if (st.goal) L.push('- 目标：' + st.goal)
-        if (st.tasks && st.tasks.length) L.push('- 任务：' + st.tasks.join('；'))
+        var planL = Array.isArray(st.plan) ? st.plan : (Array.isArray(st.tasks) ? st.tasks : [])
+        if (planL.length) L.push('- 子任务模板：' + planL.map(function (x) { return (x && typeof x === 'object') ? String(x.subject || x.title || '') : String(x) }).join('；'))
         var gates = st.gates || []
         if (gates.length) {
           L.push('- 门禁：')
@@ -905,8 +1591,24 @@ return {
         var stageRun = run.stages[idx] || {}
         var stageDef = flow && flow.def.stages ? flow.def.stages[idx] : null
         var pending = stageDef ? pendingRequired(stageRun, stageDef) : []
-        var s = '[流程] ' + run.flowId + (flow ? '「' + flow.def.title + '」' : '') + '（' + (run.flowScope || '?') + ' 级 v' + run.flowVersion + '）· 阶段 ' + sp.label
+        var pg = runProgress(run)
+        var stageSubs = subStats(stageRun)
+        var s = '[流程] ' + run.flowId + (flow ? '「' + flow.def.title + '」' : '') + '（' + (run.flowScope || '?') + ' 级 v' + run.flowVersion + '）· 阶段 ' + sp.label + ' · 总进度 ' + pg.percent + '%'
+        if (run.status === 'interrupted') s += '\n[注意] 该实例已中断' + (run.interruptReason ? ('（' + run.interruptReason + '）') : '') + ' —— flow_lifecycle {op:"resume"} 可恢复。'
         if (stageDef && stageDef.goal) s += '\n阶段目标：' + stageDef.goal
+        // 子任务闭环（本流程模型的核心执行面）：拆解 → 推进 → 收口，进度实时可见
+        if (stageSubs.total) {
+          s += '\n子任务 ' + stageSubs.label + (stageSubs.doing ? ('（进行中 ' + stageSubs.doing + '）') : '') + (stageSubs.blocked ? ('（阻塞 ' + stageSubs.blocked + '）') : '') + '：'
+          var subs1 = stageRun.subtasks || []
+          for (var si = 0; si < subs1.length; si++) {
+            var sb = subs1[si]
+            var mk = sb.status === 'completed' ? '[x]' : (sb.status === 'in_progress' ? '[>]' : (sb.status === 'blocked' ? '[!]' : (sb.status === 'cancelled' ? '[-]' : '[ ]')))
+            s += '\n  ' + mk + ' ' + sb.id + ' ' + sb.subject
+          }
+          s += '\n维护方式：flow_task {op:"add",subject:"…"} 拆解 / {op:"update",id:"s1",status:"in_progress|completed"} 推进 / {op:"list"} 查看。'
+        } else {
+          s += '\n本阶段暂无子任务 —— 建议先用 flow_task {op:"add",subject:"…"} 把阶段拆成可执行的小步（拆解后本提示会实时带上进度）。'
+        }
         if (pending.length) {
           s += '\n未过门禁：' + pending.map(function (g) { return g.id + '（' + g.text + '，kind=' + g.kind + '）' }).join('；')
           s += '\n下一步：先把门禁做实（command 门禁可 flow_advance {gateId} 代跑并留证；check/artifact 需给出证据；approval 必须用户批准），再 flow_advance 推进阶段。'
@@ -977,7 +1679,8 @@ return {
             var st = stages[i]
             lines.push('')
             lines.push((i + 1) + '. ' + (st.title || st.id) + '（' + st.id + '）' + (st.goal ? ' — ' + st.goal : ''))
-            if (st.tasks && st.tasks.length) lines.push('   任务：' + st.tasks.join('；'))
+            var planL2 = Array.isArray(st.plan) ? st.plan : (Array.isArray(st.tasks) ? st.tasks : [])
+            if (planL2.length) lines.push('   子任务模板：' + planL2.map(function (x) { return (x && typeof x === 'object') ? String(x.subject || x.title || '') : String(x) }).join('；'))
             var gates = st.gates || []
             for (var j = 0; j < gates.length; j++) {
               var g = gates[j]
@@ -1285,6 +1988,8 @@ return {
             convId: { type: 'string', description: '可选：绑定会话（多会话并行时必填，缺省为项目级实例）' },
             project: { type: 'string', description: '可选：项目根（默认当前主工作区根）' },
             force: { type: 'boolean', description: '可选：已有进行中实例时仍另起一个（不推荐）' },
+            taskId: { type: 'string', description: '可选：绑定任务看板上的卡 id（如 t-…）——启动成功后回写 runId；卡未设流程时自动补 flowId/flowScope/flowVersion 并生成验收清单。id 不存在会明确报错' },
+            boardTaskId: { type: 'string', description: '可选：taskId 的别名（同义）' },
           },
         },
         execute: function (args) {
@@ -1297,6 +2002,7 @@ return {
             text: '流程已启动：' + run.flowId + '（' + r.flowScope + ' 层 · 来源 ' + r.source + '）\n实例：' + run.runId + '\n阶段 ' + sp.label +
               '\n已建任务 ' + ((run.stages[0].taskIds || []).length) + ' 条（右栏任务面板可见）' +
               (run.gitHead ? '\ngit 基线：' + run.gitHead : '\n（未取到 git 基线：非 git 仓库，回滚只能人工处理）') +
+              (r.task ? ('\n已绑定看板任务：' + r.task.id + '（' + String(r.task.title || '') + '）——门禁通过会自动勾选验收清单，流程走完转「待验收」') : '') +
               '\n用 flow_status 看全貌，flow_advance 过门禁/推进。',
             run: run,
           }
@@ -1346,9 +2052,56 @@ return {
         execute: function (args) {
           var r = advanceRun(args || {})
           if (!r.ok) return { text: r.error, run: r.run || null }
+          // 流程门禁 → 看板任务（DoD 回填 / 全部走完转「待验收」）：与 flow_action RPC 完全同语义
+          try { if (r.run) tbSyncFromRun(r.run) } catch (e) { logWarn('任务同步失败: ' + e) }
           var extra = ''
           if (r.rollback) extra = '\n\n[注意] 回滚建议（插件不自动执行，高风险命令必须用户批准）：\n' + r.rollback.rollbackOptions.map(function (o) { return '  · [' + o.risk + '] ' + o.text + ' → ' + o.cmd }).join('\n') + (r.rollback.note ? ('\n  ' + r.rollback.note) : '')
           return { text: r.text + extra, result: r }
+        },
+      },
+      {
+        name: 'flow_task',
+        description: '阶段子任务：把当前阶段拆成可执行的小步并实时推进进度（拆解 → 推进 → 收口）。op=list 列出（默认）；add 新增（subject 必填）；update 改状态/备注/证据（id 形如 s1）；remove 移除。子任务状态是看板与每轮提示里的进度真相（cancelled 不计入进度口径）。',
+        parameters: {
+          type: 'object',
+          properties: {
+            op: { type: 'string', description: 'list | add | update | remove（默认 list）' },
+            subject: { type: 'string', description: 'add：子任务标题（必填）' },
+            detail: { type: 'string', description: '可选：细化说明（做到什么算完成）' },
+            id: { type: 'string', description: 'update/remove：子任务 id（如 s1）' },
+            status: { type: 'string', description: 'update：pending | in_progress | completed | blocked | cancelled' },
+            note: { type: 'string', description: '可选：备注（如卡在哪里、为什么阻塞）' },
+            evidence: { type: 'string', description: '可选：完成证据（文件路径 / 命令 / 结论）' },
+            stage: { type: 'string', description: '可选：阶段 id 或索引（缺省=当前阶段）' },
+            runId: { type: 'string', description: '可选：指定流程实例' },
+            convId: { type: 'string', description: '可选：按会话定位实例' },
+          },
+        },
+        execute: function (args) {
+          var r = taskAction(args || {})
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: r.text, subtasks: r.subtasks || null, subtask: r.subtask || null, stats: r.stats || null, runStats: r.runStats || null }
+        },
+      },
+      {
+        name: 'flow_lifecycle',
+        description: '流程实例生命周期：interrupt 中断（可恢复暂停，进度与证据全留）/ resume 恢复运行 / archive 归档（移出活跃列表、只读留档）/ unarchive 取消归档 / delete 删除记录（软删，可恢复）/ restore 恢复删除 / purge 彻底删除（物理删实例与证据文件，需 confirm=true，不可恢复）。',
+        parameters: {
+          type: 'object',
+          properties: {
+            op: { type: 'string', description: 'interrupt | resume | archive | unarchive | delete | restore | purge' },
+            reason: { type: 'string', description: '可选：中断原因（interrupt）' },
+            confirm: { type: 'boolean', description: 'purge 必填 true（确认物理删除，不可恢复）' },
+            runId: { type: 'string', description: '可选：指定实例（缺省取会话/最近活跃实例；已归档/已删除的实例必须显式给 runId）' },
+            convId: { type: 'string', description: '可选：按会话定位实例' },
+          },
+          required: ['op'],
+        },
+        execute: function (args) {
+          var a2 = args || {}
+          var rl2 = lifecycleRun(String(a2.op || ''), a2)
+          if (!rl2.ok) return { text: rl2.error, error: rl2.error, run: rl2.run || null }
+          return { text: rl2.text, run: rl2.run || null, removed: rl2.removed || null }
         },
       },
     ]
@@ -1365,10 +2118,244 @@ return {
       })(TOOLS[ti])
     }
 
+    // ── ⑫b 任务看板：接口 / agent 工具 / 写 RPC（照参考重建）──────────
+    function tbTrash(id, by) {
+      var l = tbLoad()
+      var t = tbFind(l, id)
+      if (!t) return { ok: false, error: '任务不存在：' + id }
+      t.trashedAt = nowIso()
+      t.updatedAt = nowIso()
+      t.updatedBy = tbActor(by)
+      if (!tbSave(l)) return { ok: false, error: '任务库写入失败' }
+      try { ctx.fs.rm(P_TASKS + '/' + tbMirrorName(t.id) + '.json') } catch (e) { }
+      return { ok: true, task: t }
+    }
+    function tbToolLine(t) {
+      var bits = [t.id, '[' + tbLabel(t.status) + ']', t.title]
+      if (t.urgency === 'urgent') bits.push('（紧急）')
+      if (t.blocked) bits.push('（阻塞）')
+      if (t.flowId) bits.push('流程 ' + t.flowId + (t.flowProgress && t.flowProgress.label ? ' · ' + t.flowProgress.label : ''))
+      if (t.claimedBy) bits.push('认领 ' + t.claimedBy)
+      return bits.join(' ')
+    }
+    var TB_TOOLS = [
+      {
+        name: 'taskboard_list',
+        description: '列出任务看板上的任务（默认当前项目；可只列某状态）。任务归项目，不归会话。',
+        parameters: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', description: '可选：backlog/todo/in_progress/in_review/done/canceled/archived' },
+            workspace: { type: 'string', description: '可选：项目（工作区）名；默认当前项目' },
+            limit: { type: 'number', description: '可选：最多返回条数（默认 50）' }
+          },
+          required: []
+        },
+        execute: function (args) {
+          var a = args || {}
+          var snap = tbSnapshot({ workspace: a.workspace ? String(a.workspace) : '' })
+          var rows = snap.tasks || []
+          if (a.status) rows = rows.filter(function (t) { return t.status === String(a.status) })
+          var lim = isNum(a.limit) ? Math.max(1, Math.min(200, a.limit)) : 50
+          rows = rows.slice(0, lim)
+          var text = rows.length
+            ? ('任务看板（' + snap.workspace + '，rev ' + snap.revision + '）：\n' + rows.map(function (t) { return '· ' + tbToolLine(t) }).join('\n'))
+            : ('任务看板（' + snap.workspace + '）暂无任务。可用 taskboard_create 建卡。')
+          return { text: text, tasks: rows }
+        }
+      },
+      {
+        name: 'taskboard_create',
+        description: '在看板上建一张任务卡（归当前项目）。可选绑定一个流程模板作为执行骨架。',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: '任务标题（必填，也是卡片名）' },
+            description: { type: 'string', description: '可选：任务描述' },
+            prompt: { type: 'string', description: '可选：执行时额外的提示词' },
+            urgency: { type: 'string', description: '可选：urgent/normal/relaxed（默认 normal）' },
+            flowId: { type: 'string', description: '可选：绑定的流程模板 id（如 plugin-dev），门禁会成为验收清单' }
+          },
+          required: ['title']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbCreate({
+            title: a.title, description: a.description, prompt: a.prompt,
+            urgency: a.urgency, flowId: a.flowId, by: { kind: 'agent', sessionId: String(a.convId || '') }
+          })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已建卡：' + r.task.id + ' ' + r.task.title + '（状态「' + tbLabel(r.task.status) + '」' + (r.task.flowId ? '，流程 ' + r.task.flowId : '') + '）', task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_claim',
+        description: '认领一个待办任务（todo → 进行中），认领者记为该会话。被他人持有时不可抢。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            convId: { type: 'string', description: '可选：认领会话 id' }
+          },
+          required: ['id']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var l = tbLoad()
+          var t = tbFind(l, String(a.id || ''))
+          if (!t) return { text: '任务不存在：' + a.id, error: 'not_found' }
+          if (t.status === 'in_progress' && t.claimedBy && a.convId && t.claimedBy !== String(a.convId)) {
+            return { text: '任务 ' + t.id + ' 已被 ' + t.claimedBy + ' 认领，不能抢', error: 'held' }
+          }
+          var r = tbMove(t.id, 'in_progress', { by: { kind: 'agent', sessionId: String(a.convId || '') } })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已认领 ' + r.task.id + '「' + r.task.title + '」→ 进行中', task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_move',
+        description: '改任务状态（受七态状态机约束）。★ agent 不能把任务移到 done —— 验收只能由人做。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            to: { type: 'string', description: '目标状态：backlog/todo/in_progress/in_review/done/canceled/archived' },
+            convId: { type: 'string', description: '可选：执行会话 id' }
+          },
+          required: ['id', 'to']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbMove(String(a.id || ''), String(a.to || ''), { by: { kind: 'agent', sessionId: String(a.convId || '') } })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '任务 ' + r.task.id + ' → 「' + tbLabel(r.task.status) + '」', task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_report',
+        description: '交执行报告（摘要/改动文件/风险），任务自动转「待验收」等人验收（不能自己标完成）。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            summary: { type: 'string', description: '做了什么、结果如何' },
+            files: { type: 'array', items: { type: 'string' }, description: '可选：改动文件列表' },
+            risks: { type: 'string', description: '可选：风险/未完成项' },
+            outcome: { type: 'string', description: '可选：succeeded/failed/cancelled（默认 succeeded）' }
+          },
+          required: ['id', 'summary']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbReport(String(a.id || ''), { summary: a.summary, files: a.files, risks: a.risks, outcome: a.outcome, by: { kind: 'agent' } })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已交报告，任务 ' + r.task.id + ' 状态「' + tbLabel(r.task.status) + '」' + (r.movedToReview ? '（转待验收）' : ''), task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_check',
+        description: '勾选/取消任务的验收清单项（DoD），可附证据说明。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            itemId: { type: 'string', description: '清单项 id' },
+            checked: { type: 'boolean', description: 'true 勾选 / false 取消' },
+            note: { type: 'string', description: '可选：证据说明' }
+          },
+          required: ['id', 'itemId']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, { kind: 'agent' })
+          if (!r.ok) return { text: r.error, error: r.error }
+          var done = (r.task.checklist || []).filter(function (x) { return x.checked }).length
+          return { text: '清单已更新：' + done + '/' + (r.task.checklist || []).length, task: r.task }
+        }
+      },
+      {
+        name: 'taskboard_comment',
+        description: '给任务加一条评论（协作/卡点记录）。',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '任务 id' },
+            text: { type: 'string', description: '评论内容' }
+          },
+          required: ['id', 'text']
+        },
+        execute: function (args) {
+          var a = args || {}
+          var r = tbComment(String(a.id || ''), String(a.text || ''), { kind: 'agent' })
+          if (!r.ok) return { text: r.error, error: r.error }
+          return { text: '已评论任务 ' + r.task.id, task: r.task }
+        }
+      }
+    ]
+    for (var tbI = 0; tbI < TB_TOOLS.length; tbI++) {
+      (function (t) {
+        try {
+          ctx.tools.register({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+            execute: function (args) { return t.execute(args || {}) },
+          })
+        } catch (e) { logWarn('任务看板工具注册失败 ' + t.name + ': ' + e) }
+      })(TB_TOOLS[tbI])
+    }
+
+    try {
+      ctx.http.register('GET', '/api/taskboard/state', function (req) {
+        var q = parseQuery(req && req.query)
+        var body = ''
+        try { body = JSON.stringify(tbSnapshot(q)) }
+        catch (e) {
+          return { status: 500, body: JSON.stringify({ ok: false, error: '任务看板快照失败: ' + e }), headers: { 'Content-Type': 'application/json' } }
+        }
+        return { status: 200, body: body, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+      })
+    } catch (e) { logWarn('接口注册失败 /api/taskboard/state: ' + e) }
+
+    try {
+      ctx.registerClientMethod('taskboard_action', function (args) {
+        var a = (args && typeof args === 'object') ? args : {}
+        var op = String(a.op || '')
+        var byUser = { kind: 'user', sessionId: String(a.convId || '') }
+        if (op === 'state') return tbSnapshot(a)
+        if (op === 'create') {
+          return tbCreate({
+            title: a.title, description: a.description, prompt: a.prompt,
+            urgency: a.urgency, flowId: a.flowId, workspace: a.workspace, by: byUser
+          })
+        }
+        if (op === 'update') return tbUpdate(String(a.id || ''), a.patch || a, { by: byUser })
+        if (op === 'move') return tbMove(String(a.id || ''), String(a.to || ''), { by: byUser, sessionId: a.convId })
+        if (op === 'comment') return tbComment(String(a.id || ''), a.text, byUser)
+        if (op === 'check') return tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, byUser)
+        if (op === 'trash') return tbTrash(String(a.id || ''), byUser)
+        if (op === 'startFlow') {
+          var l0 = tbLoad()
+          var tk = tbFind(l0, String(a.id || ''))
+          if (!tk) return { ok: false, error: '任务不存在：' + a.id }
+          if (!tk.flowId) return { ok: false, error: '任务未绑定流程（建卡时可选流程模板）' }
+          var sr = startRun({ flowId: tk.flowId, convId: String(a.convId || '') })
+          if (!sr || !sr.ok) return { ok: false, error: (sr && sr.error) || '流程启动失败' }
+          var rid = (sr.run && sr.run.runId) || sr.runId || ''
+          if (rid) tbBindRun(tk.id, rid)
+          return { ok: true, runId: rid, run: sr.run || null }
+        }
+        return { ok: false, error: '未知操作：' + op }
+      })
+    } catch (e) { logWarn('RPC 注册失败 taskboard_action: ' + e) }
+
     // ── ⑫ 只读接口（给看板）─────────────────────────────────────
     function stateSnapshot(q) {
       var convId = String(q.convId || '')
       var run = pickRun({ convId: convId })
+      // 归档/删除 = 只读留档：不出现在活跃视图（只在「运行记录」页签里）。
+      // （生命周期/子任务操作内部仍走 pickRun：会拿到归档实例并给出准确的状态提示。）
+      if (run && runHidden(run)) run = null
       var flow = run ? runFlow(run) : null
       var stagesOut = []
       if (run) {
@@ -1386,9 +2373,20 @@ return {
           })
           stagesOut.push({
             id: st.id, title: def ? def.title : st.id, goal: def ? (def.goal || '') : '',
-            tasks: def ? (def.tasks || []) : [], status: st.status,
+            tasks: def ? (def.tasks || []) : [],
+            plan: def ? (def.plan || def.tasks || []) : [],
+            status: st.status,
             startedAt: st.startedAt || '', completedAt: st.completedAt || '',
             taskIds: st.taskIds || [], gates: gates,
+            subtasks: (st.subtasks || []).map(function (s) {
+              return {
+                id: s.id, subject: s.subject, detail: s.detail || '', status: subStatusOf(s),
+                source: s.source || 'plan', note: s.note || '', evidence: s.evidence || '',
+                createdAt: s.createdAt || '', startedAt: s.startedAt || '', completedAt: s.completedAt || '',
+                hostTaskId: s.hostTaskId || '',
+              }
+            }),
+            subStats: subStats(st),
           })
         }
       }
@@ -1399,9 +2397,15 @@ return {
         run: run ? {
           runId: run.runId, flowId: run.flowId, flowScope: run.flowScope, flowVersion: run.flowVersion,
           title: flow ? (flow.def.title || run.flowId) : run.flowId,
-          status: run.status, currentStage: run.currentStage, project: run.project,
+          status: run.status, statusBefore: run.statusBefore || '',
+          currentStage: run.currentStage, project: run.project, convId: run.convId || '',
           gitHead: run.gitHead || '', modifiedFiles: run.modifiedFiles || [],
           evidenceDir: run.evidenceDir || '', stageProgress: sp,
+          progress: runProgress(run),
+          focus: focusSubtask(run),
+          createdAt: run.createdAt || '', updatedAt: run.updatedAt || '',
+          interruptedAt: run.interruptedAt || '', interruptReason: run.interruptReason || '',
+          archivedAt: run.archivedAt || '', deletedAt: run.deletedAt || '',
         } : null,
         stages: stagesOut,
         runMap: (function () {
@@ -1416,6 +2420,7 @@ return {
         })(),
         library: allFlows(),
         matrix: bindingsMatrix(),
+        runs: runsRecord(),
         recommend: (settings().autoRecommend === false) ? null : recommendFlow(),
         settings: { gateStrength: gateStrength() },
       }
@@ -1438,18 +2443,52 @@ return {
         if (op === 'advance') {
           var r = advanceRun(a)
           if (!r.ok) return { ok: false, error: r.error }
+          try { if (r.run) tbSyncFromRun(r.run) } catch (e) { logWarn('任务同步失败: ' + e) }
           return { ok: true, result: { advanced: !!r.advanced, completed: !!r.completed, stage: r.stage || '', text: r.text || '', gate: r.gate || null, pending: r.pending || null, rollback: r.rollback || null } }
         }
         if (op === 'approve') {
           if (a.approve !== true) return { ok: false, error: 'approve 必须为 true（审批卡点由用户在界面显式批准）' }
           var r2 = advanceRun({ runId: a.runId, convId: a.convId, gateId: a.gateId, approve: true, note: a.note })
           if (!r2.ok) return { ok: false, error: r2.error }
+          try { if (r2.run) tbSyncFromRun(r2.run) } catch (e) { logWarn('任务同步失败: ' + e) }
           return { ok: true, result: { gate: r2.gate || null, advanced: !!r2.advanced, text: r2.text || '' } }
         }
+        // 子任务（看板勾选/增删 → 与 flow_task 工具同一实现）
+        // 注意：顶层 op='task' 是**通道名**，子操作由 action（兼容 subOp）指定：list | add | update | remove
+        if (op === 'task') {
+          var ta = {}
+          for (var tk in a) { if (Object.prototype.hasOwnProperty.call(a, tk)) ta[tk] = a[tk] }
+          ta.op = String(a.action || a.subOp || 'list')
+          var rt = taskAction(ta)
+          if (!rt.ok) return { ok: false, error: rt.error }
+          return {
+            ok: true,
+            result: {
+              subtask: rt.subtask || null, removed: rt.removed || null,
+              stats: rt.stats || null, runStats: rt.runStats || null,
+              subtasks: rt.subtasks || null, stage: rt.stage || '',
+              text: rt.text || '',
+            },
+          }
+        }
+        // 实例生命周期（中断/恢复/归档/取消归档/删除/恢复删除/彻底删除）
+        if (op === 'interrupt' || op === 'resume' || op === 'archive' || op === 'unarchive' ||
+            op === 'delete' || op === 'restore' || op === 'purge') {
+          var rl = lifecycleRun(op, a)
+          if (!rl.ok) return { ok: false, error: rl.error }
+          return {
+            ok: true,
+            result: {
+              status: rl.run ? rl.run.status : 'purged',
+              runId: (rl.run && rl.run.runId) || String(a.runId || ''),
+              removed: rl.removed || null, text: rl.text || '',
+            },
+          }
+        }
         if (op === 'start') {
-          var r3 = startRun({ flowId: a.flowId, convId: a.convId, project: a.project, force: !!a.force })
+          var r3 = startRun({ flowId: a.flowId, convId: a.convId, project: a.project, force: !!a.force, taskId: a.taskId || a.boardTaskId })
           if (!r3.ok) return { ok: false, error: r3.error }
-          return { ok: true, result: { runId: r3.run.runId, flowId: r3.run.flowId, text: '流程已启动：' + r3.run.flowId } }
+          return { ok: true, result: { runId: r3.run.runId, flowId: r3.run.flowId, taskId: (r3.task && r3.task.id) || '', text: '流程已启动：' + r3.run.flowId } }
         }
         if (op === 'show') {
           var f0 = resolveFlow(String(a.id || ''))
@@ -1528,7 +2567,7 @@ return {
           if (ri.dryRun) return { ok: true, result: { dryRun: true, report: ri.report, conflicts: ri.conflicts || [], text: dryRunText(ri) } }
           return { ok: true, result: { report: ri.report, conflicts: ri.conflicts || [], skipped: !!ri.skipped, text: ri.text || '' } }
         }
-        return { ok: false, error: '未知 op（支持 advance | approve | start | attach | detach | show | validate | define | clone | publish | import）' }
+        return { ok: false, error: '未知 op（支持 advance | approve | start | task | interrupt | resume | archive | unarchive | delete | restore | purge | attach | detach | show | validate | define | clone | publish | import）' }
       })
     } catch (e) { logWarn('RPC 注册失败 flow_action: ' + e) }
 

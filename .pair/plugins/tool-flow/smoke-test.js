@@ -125,7 +125,7 @@ console.log('=== 装载 tool-flow ===')
 console.log('  name=' + def.name + ' inject=[' + def.inject.join(',') + ']')
 check('插件对象形态正确', def && def.name === 'tool-flow' && typeof def.apply === 'function')
 def.apply(ctx, {})
-check('工具注册数量 = 17', Object.keys(registered).length === 17, Object.keys(registered).join(','))
+check('工具注册数量 = 26（19 个 flow_* + 7 个 taskboard_*）', Object.keys(registered).length === 26, Object.keys(registered).join(','))
 check('只读接口已注册', !!httpRoutes['GET /api/flow/state'], Object.keys(httpRoutes).join(','))
 check('RPC flow_action 已注册', typeof rpcs['flow_action'] === 'function')
 check('命令面已注册（flow/flow-board/flow-import）', !!commands.flow && !!commands['flow-board'] && !!commands['flow-import'])
@@ -179,7 +179,13 @@ const run1 = JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'flow-runs', runI
 check('run 落盘：阶段1 completed + 阶段2 in_progress', run1.stages[0].status === 'completed' && run1.stages[1].status === 'in_progress', JSON.stringify(run1.stages.map((s) => s.status)))
 check('阶段1 的 gateResults 留档（1 条必过门禁 + 证据文件）', (run1.stages[0].gateResults || []).length === 1 && !!run1.stages[0].gateResults[0].evidenceFile, JSON.stringify(run1.stages[0].gateResults || []).slice(0, 300))
 check('阶段1 任务已标 completed', (() => { const ids = run1.stages[0].taskIds; return ids.every((id) => JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'tasks', id + '.json'), 'utf8')).status === 'completed') })())
-check('阶段2 任务已新建', (run1.stages[1].taskIds || []).length === 2, JSON.stringify(run1.stages[1].taskIds))
+// 条数不再写死：与流程定义的子任务模板（plan，兼容 tasks）动态比对
+check('阶段2 子任务已按模板播种（条数=模板数，且 source=plan）', (function () {
+  const def = JSON.parse(fs.readFileSync(path.join(INSTALL, '.pair', 'plugins', 'tool-flow', 'assets', 'flows', 'go-backend-feature.json'), 'utf8'))
+  const want = (def.stages[1].plan || def.stages[1].tasks || []).length
+  const subs = run1.stages[1].subtasks || []
+  return subs.length === want && subs.every((x) => x.source === 'plan') && (run1.stages[1].taskIds || []).length === want
+})(), JSON.stringify({ taskIds: run1.stages[1].taskIds, subs: (run1.stages[1].subtasks || []).map((x) => x.id + ':' + x.status) }))
 
 console.log('\n=== ④ command 门禁（插件代跑 + 输出留证）===')
 // 用自定义流程验证 command/artifact/approval 三种门禁
@@ -222,7 +228,7 @@ const runGj = JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'flow-runs', run
 const appr = (runGj.stages[0].gateResults || []).filter((x) => x.id === 'g-appr')[0]
 check('审批留痕 approvedBy=user + note', appr && appr.status === 'approved' && appr.by === 'user' && appr.note === '对话确认', JSON.stringify(appr))
 r = T('flow_advance').execute({ runId: runG })
-check('已结束实例再推进 → 明确拒绝', /已结束/.test(txt(r)), txt(r).slice(0, 200))
+check('已结束实例再推进 → 明确拒绝', /不是进行中状态/.test(txt(r)) && /已完成/.test(txt(r)), txt(r).slice(0, 200))
 
 console.log('\n=== ⑤ 流程管理面（clone/define 乐观锁/sync/delete/export/import）===')
 r = T('flow_clone').execute({ id: 'go-backend-feature', newId: 'go-custom', scope: 'project' })
@@ -393,6 +399,148 @@ const offEvidFiles = fs.existsSync(offEvid) ? fs.readdirSync(offEvid) : []
 check('[off] 证据文件仍写入 evidence 目录', offEvidFiles.some((f) => /g-impl-1/.test(f)), offEvidFiles.join(',') || ('目录不存在 ' + offEvid))
 settingsStore = { gateStrength: 'enforce', autoRecommend: true, trackModifiedFiles: true }
 
+console.log('\n=== ⑧c 子任务（flow_task：模板骨架 + agent 运行时拆解）+ 实例生命周期 ===')
+r = T('flow_start').execute({ flowId: 'go-backend-feature', convId: 'conv_sub1' })
+check('[子任务] 新实例启动', /流程已启动/.test(txt(r)), txt(r))
+const runS = (r.run && r.run.runId) || ''
+const st0subs = ((r.run && r.run.stages[0] && r.run.stages[0].subtasks) || [])
+check('[子任务] 启动即按流程定义模板播种子任务', st0subs.length > 0, 'subtasks=' + JSON.stringify(st0subs.map((x) => x.id + ':' + x.subject)))
+check('[子任务] 播种项 source=plan 且初始 pending', st0subs.length > 0 && st0subs.every((x) => x.source === 'plan' && x.status === 'pending'))
+check('[子任务] 每条子任务镜像宿主任务（hostTaskId）', st0subs.length > 0 && st0subs.every((x) => !!x.hostTaskId))
+check('[子任务] 宿主任务文件真实落盘（右栏任务面板可见）', st0subs.every((x) => fs.existsSync(path.join(WS, '.pair', 'tasks', x.hostTaskId + '.json'))))
+r = T('flow_task').execute({ op: 'list', convId: 'conv_sub1' })
+check('[子任务] list 输出阶段进度与清单', /子任务 \d+\/\d+/.test(txt(r)), txt(r).slice(0, 220))
+r = T('flow_task').execute({ op: 'add', convId: 'conv_sub1', subject: '运行时拆解：补一条边界用例', detail: '覆盖空输入' })
+check('[子任务] agent 运行时 add 成功且 source=agent', /已拆解子任务/.test(txt(r)) && !!(r.subtask && r.subtask.source === 'agent'), JSON.stringify(r.subtask || {}))
+const subId = (r.subtask && r.subtask.id) || ''
+check('[子任务] 新 id 递增（s 前缀）', /^s\d+$/.test(subId), subId)
+r = T('flow_task').execute({ op: 'update', convId: 'conv_sub1', id: subId, status: 'in_progress' })
+check('[子任务] update → in_progress（记 startedAt）', !!(r.subtask && r.subtask.status === 'in_progress' && !!r.subtask.startedAt), JSON.stringify(r.subtask || {}))
+r = T('flow_task').execute({ op: 'update', convId: 'conv_sub1', id: subId, status: 'completed', evidence: '用例已跑通' })
+check('[子任务] update → completed（记 completedAt 与 evidence）', !!(r.subtask && r.subtask.status === 'completed' && !!r.subtask.completedAt && r.subtask.evidence === '用例已跑通'))
+const runSj = JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'flow-runs', runS + '.json'), 'utf8'))
+const subPersist = (runSj.stages[0].subtasks || []).filter((x) => x.id === subId)[0]
+check('[子任务] 状态落盘（run.stages[].subtasks 为唯一真相）', !!(subPersist && subPersist.status === 'completed'))
+check('[子任务] 宿主任务镜像同步为 completed', (function () {
+  try { return JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'tasks', subPersist.hostTaskId + '.json'), 'utf8')).status === 'completed' } catch (e) { return false }
+})())
+r = T('flow_task').execute({ op: 'update', convId: 'conv_sub1', id: 's999', status: 'completed' })
+check('[子任务] 不存在的 id → 拒绝并列出现有 id', /子任务不存在/.test(txt(r)), txt(r).slice(0, 180))
+r = T('flow_task').execute({ op: 'add', convId: 'conv_sub1', subject: '   ' })
+check('[子任务] subject 为空 → 拒绝', /subject 必填/.test(txt(r)))
+r = T('flow_task').execute({ op: 'update', convId: 'conv_sub1', id: subId, status: 'bogus' })
+check('[子任务] 非法 status → 拒绝', /status 非法/.test(txt(r)))
+const snapS = JSON.parse(httpRoutes['GET /api/flow/state']({ query: 'convId=conv_sub1' }).body)
+check('[子任务] 快照携带 subtasks / subStats / progress / runs', Array.isArray(snapS.stages[0].subtasks) && !!snapS.stages[0].subStats && !!(snapS.run.progress && typeof snapS.run.progress.percent === 'number') && Array.isArray(snapS.runs), JSON.stringify(snapS.run.progress || {}).slice(0, 200))
+check('[子任务] 快照 focus = 当前该做的子任务', !!(snapS.run.focus && snapS.run.focus.id), JSON.stringify(snapS.run.focus || {}).slice(0, 160))
+check('[子任务] 每轮提示注入带 flow_task 指引', /flow_task/.test(promptVars['paircode_flow_state'].provider()))
+// RPC 通道（看板）：顶层 op='task' 是通道名，子操作走 action
+const rpcTaskAdd = rpcs['flow_action']({ op: 'task', action: 'add', convId: 'conv_sub1', subject: 'RPC 通道拆解' })
+check('[子任务] RPC task/action=add 通道可用', rpcTaskAdd.ok === true && /已拆解子任务/.test((rpcTaskAdd.result && rpcTaskAdd.result.text) || ''), JSON.stringify(rpcTaskAdd).slice(0, 220))
+const rpcTaskList = rpcs['flow_action']({ op: 'task', action: 'list', convId: 'conv_sub1' })
+check('[子任务] RPC task/action=list 返回清单', rpcTaskList.ok === true && Array.isArray(rpcTaskList.result.subtasks) && rpcTaskList.result.subtasks.length > 0)
+const rpcTaskDone = rpcs['flow_action']({ op: 'task', action: 'update', convId: 'conv_sub1', id: subId, status: 'completed' })
+check('[子任务] RPC task/action=update 生效', rpcTaskDone.ok === true && rpcTaskDone.result.subtask.status === 'completed', JSON.stringify(rpcTaskDone).slice(0, 180))
+
+// ── 生命周期：中断 → 恢复 → 归档 → 取消归档 → 删除 → 恢复 → 彻底删除 ──
+r = T('flow_lifecycle').execute({ op: 'interrupt', convId: 'conv_sub1', reason: '先处理线上问题' })
+check('[生命周期] interrupt → interrupted（进度保留）', /已中断/.test(txt(r)) && !!(r.run && r.run.status === 'interrupted' && r.run.interruptReason === '先处理线上问题'), txt(r))
+r = T('flow_advance').execute({ convId: 'conv_sub1' })
+check('[生命周期] 中断态推进 → 拒绝并给出 resume 指引', /不是进行中状态/.test(txt(r)) && /resume/.test(txt(r)), txt(r).slice(0, 200))
+r = T('flow_lifecycle').execute({ op: 'resume', convId: 'conv_sub1' })
+check('[生命周期] resume → active 且子任务进度保留', /已恢复运行/.test(txt(r)) && !!(r.run && r.run.status === 'active') && ((JSON.parse(fs.readFileSync(path.join(WS, '.pair', 'flow-runs', runS + '.json'), 'utf8')).stages[0].subtasks || []).length > 0), txt(r))
+r = T('flow_lifecycle').execute({ op: 'archive', convId: 'conv_sub1' })
+check('[生命周期] archive → archived（记 statusBefore）', /已归档/.test(txt(r)) && !!(r.run && r.run.status === 'archived' && r.run.statusBefore === 'active'), txt(r))
+const snapArch = JSON.parse(httpRoutes['GET /api/flow/state']({ query: 'convId=conv_sub1' }).body)
+check('[生命周期] 归档后不在活跃快照（run=null）', snapArch.run === null, JSON.stringify(snapArch.run || {}).slice(0, 160))
+check('[生命周期] 归档记录仍在运行记录（runs.status=archived）', (snapArch.runs || []).some((x) => x.runId === runS && x.status === 'archived'))
+const rpcArchAdv = rpcs['flow_action']({ op: 'advance', convId: 'conv_sub1' })
+check('[生命周期] 归档实例 RPC 推进被拒（不越界改别人）', rpcArchAdv.ok === false && /不是进行中状态/.test(rpcArchAdv.error), JSON.stringify(rpcArchAdv).slice(0, 200))
+const rpcTaskLocked = rpcs['flow_action']({ op: 'task', action: 'add', convId: 'conv_sub1', subject: '归档态不该能加' })
+check('[生命周期] 归档态子任务被拒（只读留档）', rpcTaskLocked.ok === false && /只读留档/.test(rpcTaskLocked.error), JSON.stringify(rpcTaskLocked).slice(0, 180))
+r = T('flow_lifecycle').execute({ op: 'unarchive', runId: runS })
+check('[生命周期] unarchive → 回到 statusBefore', /已取消归档/.test(txt(r)) && !!(r.run && r.run.status === 'active'), JSON.stringify(r.run && r.run.status))
+r = T('flow_lifecycle').execute({ op: 'delete', runId: runS })
+check('[生命周期] delete → deleted（软删，可恢复）', /已删除记录/.test(txt(r)) && !!(r.run && r.run.status === 'deleted'), txt(r))
+const snapDel = JSON.parse(httpRoutes['GET /api/flow/state']({ query: 'convId=conv_sub1' }).body)
+check('[生命周期] 软删后快照无活跃实例', snapDel.run === null)
+check('[生命周期] 软删记录仍可查（runs 含 deleted）', (snapDel.runs || []).some((x) => x.runId === runS && x.status === 'deleted'))
+r = T('flow_lifecycle').execute({ op: 'restore', runId: runS })
+check('[生命周期] restore → 回到删除前状态', /已恢复删除的记录/.test(txt(r)) && !!(r.run && r.run.status === 'active'), JSON.stringify(r.run && r.run.status))
+r = T('flow_lifecycle').execute({ op: 'purge', runId: runS })
+check('[生命周期] purge 未带 confirm → 拒绝（二阶保护）', /confirm=true/.test(txt(r)))
+const evDirS = path.join(WS, '.pair', 'flow-runs', 'evidence', runS)
+fs.mkdirSync(evDirS, { recursive: true })
+fs.writeFileSync(path.join(evDirS, 'probe.log'), 'evidence')
+r = T('flow_lifecycle').execute({ op: 'purge', runId: runS, confirm: true })
+check('[生命周期] purge confirm=true → 物理删除实例文件', /已彻底删除/.test(txt(r)) && !fs.existsSync(path.join(WS, '.pair', 'flow-runs', runS + '.json')), txt(r))
+check('[生命周期] purge 连证据目录一并删除', !fs.existsSync(evDirS), evDirS)
+
+console.log('\n=== ⑧c 流程 ↔ 任务绑定（门禁 → DoD 回填 / 转待验收）===')
+// 极简流程：2 阶段 × 1 个必过 check 门禁（便于断言「阶段推进 → 全流程完成」）
+const bindFlow = {
+  schemaVersion: 1, id: 'bind-lab', title: '绑定实验室', version: 1,
+  stages: [
+    { id: 'bs1', title: '取证', tasks: ['收集证据'], gates: [{ id: 'b-g1', kind: 'check', text: '证据齐全', required: true, blocking: true }] },
+    { id: 'bs2', title: '收口', tasks: ['写结论'], gates: [{ id: 'b-g2', kind: 'check', text: '结论已写', required: true, blocking: true }] },
+  ],
+}
+r = T('flow_define').execute({ json: JSON.stringify(bindFlow), scope: 'project' })
+check('[绑定] 定义 bind-lab 流程（2 阶段 2 门禁）', /已创建流程 bind-lab/.test(txt(r)), txt(r).slice(0, 160))
+
+// 建卡并绑定流程（建卡时验收清单 = 该流程门禁）
+r = T('taskboard_create').execute({ title: '绑定链路验证卡', flowId: 'bind-lab' })
+const bindCardId = (r.task && r.task.id) || ''
+check('[绑定] 建卡并绑定流程 → 验收清单 = 门禁数（2 项，全未勾选）',
+  !!bindCardId && (r.task.checklist || []).length === 2 && r.task.checklist.every((x) => x.checked === false),
+  JSON.stringify(r.task && r.task.checklist))
+
+// taskId 不存在 → 明确报错（不得静默成功）
+r = T('flow_start').execute({ flowId: 'bind-lab', convId: 'conv_bind_missing', taskId: 't-not-exist', force: true })
+check('[绑定] flow_start 的 taskId 不存在 → 明确报错', /看板任务不存在/.test(txt(r)), txt(r).slice(0, 200))
+
+// flow_start {taskId} → 启动并绑定
+r = T('flow_start').execute({ flowId: 'bind-lab', convId: 'conv_bind', taskId: bindCardId, force: true })
+const bindRunId = (r.run && r.run.runId) || ''
+check('[绑定] flow_start{taskId} 启动成功并回报绑定', !!bindRunId && /已绑定看板任务/.test(txt(r)), txt(r).slice(0, 260))
+let snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowB = (snapB.tasks || []).filter((t) => t.id === bindCardId)[0]
+check('[绑定] 快照 flowProgress.runId = 实际 runId（卡片不再显示「未启动」）',
+  !!rowB && !!rowB.flowProgress && rowB.flowProgress.runId === bindRunId && rowB.flowProgress.status === 'active',
+  JSON.stringify(rowB && rowB.flowProgress))
+
+// ①「flow_advance 工具」过门禁 → DoD 自动勾选（by=flow）
+r = T('flow_advance').execute({ runId: bindRunId, gateId: 'b-g1', evidence: '已收集 2 条证据' })
+check('[绑定] flow_advance 工具过门禁 → 自动进入下一阶段', /进入阶段 2/.test(txt(r)), txt(r).slice(0, 220))
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowB = (snapB.tasks || []).filter((t) => t.id === bindCardId)[0]
+const itemB1 = rowB && (rowB.checklist || []).filter((x) => x.gate === 'b-g1')[0]
+check('[绑定] 工具推进后卡上对应验收项 checked=true 且 by=flow', !!itemB1 && itemB1.checked === true && itemB1.by === 'flow', JSON.stringify(itemB1))
+check('[绑定] 卡上流程进度前进（阶段 2/2）', !!rowB && !!rowB.flowProgress && /^2\/2/.test(rowB.flowProgress.label), rowB && rowB.flowProgress && rowB.flowProgress.label)
+
+// ② 走完全部阶段 → 卡进「待验收」（绝不自动 done）
+r = T('flow_advance').execute({ runId: bindRunId, gateId: 'b-g2', evidence: '结论已写' })
+check('[绑定] 全流程完成（工具推进）', /全部阶段已完成/.test(txt(r)), txt(r).slice(0, 220))
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowB = (snapB.tasks || []).filter((t) => t.id === bindCardId)[0]
+check('[绑定] 流程全部完成后卡为 in_review（待验收），绝不自动 done',
+  !!rowB && rowB.status === 'in_review' && rowB.status !== 'done', rowB && rowB.status)
+check('[绑定] 全部验收项由门禁回填（2/2, by=flow）',
+  !!rowB && (rowB.checklist || []).length === 2 && rowB.checklist.every((x) => x.checked === true && x.by === 'flow'),
+  JSON.stringify(rowB && rowB.checklist))
+check('[绑定] 快照 flowProgress.percent 是数字 100（不是对象）',
+  !!rowB && !!rowB.flowProgress && typeof rowB.flowProgress.percent === 'number' && rowB.flowProgress.percent === 100,
+  rowB && rowB.flowProgress)
+check('[绑定] 流程完成后进度标签为「全部完成 2/2」（不误导为 1/2）',
+  !!rowB && !!rowB.flowProgress && /全部完成 2\/2/.test(String(rowB.flowProgress.label)),
+  rowB && rowB.flowProgress && rowB.flowProgress.label)
+
+// ③ 未绑流程的卡：startFlow 返回可读错误（不静默成功）
+r = T('taskboard_create').execute({ title: '未绑流程的卡' })
+const plainCardId = (r.task && r.task.id) || ''
+const srPlain = rpcs['taskboard_action']({ op: 'startFlow', id: plainCardId })
+check('[绑定] 未绑流程的卡 startFlow → 可读错误', srPlain.ok === false && /未绑定流程/.test(srPlain.error), JSON.stringify(srPlain))
+
 console.log('\n=== ⑨ 安全边界（mock 与真实同语义）===')
 let boundaryOK = false
 try { fsSvc.readFile('../../../etc/passwd') } catch (e) { boundaryOK = /超出工作区范围/.test(e.message) }
@@ -411,6 +559,9 @@ console.log('\n=== ⑩ D4-④ 看板表单编辑器（真实 client.js + DOM 桩
       snapshot: (convId) => JSON.parse(httpRoutes['GET /api/flow/state']({ query: convId ? ('convId=' + convId) : '' }).body),
       rpc: (args) => rpcs['flow_action'](args),
       ws: WS,
+      boardState: () => JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body),
+      boardRpc: (args) => rpcs['taskboard_action'](args),
+      tool: (name, args) => registered[name] ? registered[name].execute(args) : { text: 'no tool ' + name },
     })
   } catch (e) {
     check('[UI] 表单编辑器脚本执行无异常抛出', false, String((e && e.stack) || e).slice(0, 400))

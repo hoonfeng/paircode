@@ -3,47 +3,111 @@
   "id": "debug-troubleshoot",
   "title": "调试排错",
   "version": 1,
-  "projectTypes": ["any"],
-  "taskTypes": ["debug", "bugfix"],
-  "appliesTo": { "types": ["any"], "signals": [] },
+  "projectTypes": [
+    "any"
+  ],
+  "taskTypes": [
+    "debug",
+    "bugfix"
+  ],
+  "appliesTo": {
+    "types": [
+      "any"
+    ],
+    "signals": []
+  },
   "stages": [
     {
       "id": "repro",
       "title": "复现",
       "goal": "稳定复现并保留原始报错",
-      "tasks": ["构造最小复现", "保留日志/截图"],
       "gates": [
-        { "id": "g-repro-1", "kind": "check", "text": "已稳定复现并记录原始报错", "required": true, "blocking": true }
+        {
+          "id": "g-repro-1",
+          "kind": "check",
+          "text": "已稳定复现并记录原始报错",
+          "required": true,
+          "blocking": true
+        }
+      ],
+      "plan": [
+        "构造最小复现",
+        "保留日志/截图"
       ]
     },
     {
       "id": "locate",
       "title": "定位",
       "goal": "找到根因（而非症状）",
-      "tasks": ["缩小范围", "验证根因假设"],
       "gates": [
-        { "id": "g-locate-1", "kind": "check", "text": "根因已确证（有验证动作支撑）", "required": true, "blocking": true }
+        {
+          "id": "g-locate-1",
+          "kind": "check",
+          "text": "根因已确证（有验证动作支撑）",
+          "required": true,
+          "blocking": true
+        }
+      ],
+      "plan": [
+        "缩小范围",
+        "验证根因假设"
       ]
     },
     {
       "id": "fix",
       "title": "修复",
       "goal": "最小改动修根因",
-      "tasks": ["改代码", "写清修复理由"],
       "gates": [
-        { "id": "g-fix-1", "kind": "check", "text": "修复对应根因且未夹带无关改动", "required": true }
+        {
+          "id": "g-fix-1",
+          "kind": "check",
+          "text": "修复对应根因且未夹带无关改动",
+          "required": true
+        }
+      ],
+      "plan": [
+        "改代码",
+        "写清修复理由"
       ]
     },
     {
       "id": "regress",
       "title": "回归",
       "goal": "原复现步骤不再出现，相关用例通过",
-      "tasks": ["重跑复现步骤", "跑相关测试"],
       "gates": [
-        { "id": "g-regress-1", "kind": "command", "text": "相关测试通过", "cmd": "go test ./...", "required": true, "blocking": true, "onFail": "rollback" }
+        {
+          "id": "g-regress-1",
+          "kind": "command",
+          "text": "相关测试通过",
+          "cmd": "go test ./...",
+          "required": true,
+          "blocking": true,
+          "onFail": "rollback"
+        }
+      ],
+      "plan": [
+        "重跑复现步骤",
+        "跑相关测试"
       ]
     }
   ],
-  "board": { "kind": "checklist", "columns": ["stage", "status"], "fields": ["goal", "gates", "evidence"], "groupBy": "stage" },
-  "library": { "author": "paircode", "tags": ["debug"] }
+  "board": {
+    "kind": "checklist",
+    "columns": [
+      "stage",
+      "status"
+    ],
+    "fields": [
+      "goal",
+      "gates",
+      "evidence"
+    ],
+    "groupBy": "stage"
+  },
+  "library": {
+    "author": "paircode",
+    "tags": [
+      "debug"
+    ]
+  }
 }

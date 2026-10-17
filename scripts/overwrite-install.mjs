@@ -26,7 +26,14 @@
  *   ★ 用户资产自动保护（默认开，无需手动 --protect）：
  *     · .pair/plugins/<name>   源目录中不存在的插件目录（你自己装的，实测 moc3-tools）
  *     · .pair/toolsets/*.json  源中不存在的**自建**工具集（内置预设会自动重建，不保护）
+ *     · .pair/skills[/<名>]    你安装的**全局技能**（源目录里没有 → 整目录保护；如 wechat-no-ask-user）
+ *     · .pair/flowlib[/<id>]   你定义/导入的**全局流程库**（tool-flow 的 I_LIB）。被清空 = 升级把
+ *                              全局流程冲掉，与设计承诺「升级不回冲、需显式 flow_sync」相悖
  *     要连用户资产一起清空 → 加 --no-auto-protect
+ *   ★ 启用态冲突（源里是 X.disabled ↔ 安装目录里存在同名**启用态** X）：
+ *     源目录中被禁用的模块，覆盖后会让安装目录里「已启用」的同名文件消失（实测
+ *     .pair/plugins/ui-statusbar-conn/client.js）→ dry-run 列为风险项并给出
+ *     `--protect <启用态文件>`；末尾「保守命令」默认带上它（保留你当前的启用态）。
  *
  * 用法
  * ----
@@ -35,6 +42,7 @@
  *   node scripts/overwrite-install.mjs --apply --no-restart    # 执行但不起进程
  *   node scripts/overwrite-install.mjs --apply --no-auto-protect  # 连用户插件/工具集一起清掉
  *   node scripts/overwrite-install.mjs --apply --protect .pair/plugins/moc3-tools
+ *   node scripts/overwrite-install.mjs --apply --protect .pair/plugins/ui-statusbar-conn/client.js
  *   node scripts/overwrite-install.mjs --apply --src release/PairCode \
  *        --install-dir "E:/Program Files (x86)/PairCode" --port 9090
  *
@@ -128,6 +136,20 @@ const REQUIRED_SRC = [
 
 // 内置工具集预设：新实例启动时按 .preset-seeded 自动重建 → 无需保护（自建的才需保护）
 const BUILTIN_TOOLSETS = ['基础', '调试', '办公', '全功能', '全栈开发', '计划讨论']
+
+// 用户数据目录：只长在**安装目录侧**、源目录里没有的用户自有数据 —— 覆盖 = 整目录清空，
+// 而它们不会被自动重建，故默认保护；--no-auto-protect 时 dry-run 必须显著告警。
+//   .pair/skills   ← 你安装的全局技能
+//   .pair/flowlib  ← 全局流程库（tool-flow 读写的 I_LIB；设计承诺「升级不回冲、需显式 flow_sync」）
+const USER_DATA_DIRS = ['.pair/skills', '.pair/flowlib']
+const USER_DATA_DESC = {
+  '.pair/skills': '用户安装的全局技能',
+  '.pair/flowlib': '全局流程库（tool-flow；升级不回冲）',
+}
+const userDataDescOf = (rel) => {
+  const base = USER_DATA_DIRS.find((d) => rel === d || rel.startsWith(d + '/'))
+  return base ? USER_DATA_DESC[base] : '用户数据'
+}
 
 // 每次运行保留的备份份数（超出按名称=时间戳淘汰），避免 _temp 无限膨胀（单份 ~160MB）
 const BACKUP_KEEP = 3
@@ -292,29 +314,75 @@ function detectInstallDir() {
 }
 
 /**
+/** 读目录（Dirent[]），不可读返回 [] */
+const rdDir = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }) } catch { return [] } }
+/** 读目录名集合，不可读返回空集 */
+const dirNames = (d) => { try { return new Set(fs.readdirSync(d)) } catch { return new Set() } }
+
+/**
  * 「用户资产」探测：安装目录里存在、但**源目录中没有**的东西 ——
  * 自装插件（.pair/plugins/<name>）与自建工具集（.pair/toolsets/*.json，非内置预设）。
  * 删了不会自动重建（实测 moc3-tools 属此类），故默认保护；--no-auto-protect 关闭。
  */
 function detectUserAssets() {
   const out = []
-  const rd = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }) } catch { return [] } }
-  const names = (d) => { try { return new Set(fs.readdirSync(d)) } catch { return new Set() } }
-
   // 插件目录：源里没有的整个插件目录 → 保护
-  const srcPluginNames = names(path.join(SRC, '.pair', 'plugins'))
-  for (const e of rd(path.join(INSTALL, '.pair', 'plugins'))) {
+  const srcPluginNames = dirNames(path.join(SRC, '.pair', 'plugins'))
+  for (const e of rdDir(path.join(INSTALL, '.pair', 'plugins'))) {
     if (e.isDirectory() && !srcPluginNames.has(e.name)) out.push(`.pair/plugins/${e.name}`)
   }
   // 工具集：源里没有、且非内置预设（内置的启动时自动重建，无需保护）
-  const srcTsNames = names(path.join(SRC, '.pair', 'toolsets'))
-  for (const e of rd(path.join(INSTALL, '.pair', 'toolsets'))) {
+  const srcTsNames = dirNames(path.join(SRC, '.pair', 'toolsets'))
+  for (const e of rdDir(path.join(INSTALL, '.pair', 'toolsets'))) {
     if (!e.isFile() || !e.name.endsWith('.json')) continue
     if (srcTsNames.has(e.name)) continue
     if (BUILTIN_TOOLSETS.includes(path.basename(e.name, '.json'))) continue
     out.push(`.pair/toolsets/${e.name}`)
   }
   return out.map(norm)
+}
+
+/**
+ * 「用户数据」探测：USER_DATA_DIRS（全局技能 / 全局流程库）在安装目录里存在、源目录里没有。
+ *   · 源目录里没有该目录 → 保护**整个目录**（用户自己攒的，源侧无基准可比）
+ *   · 源目录里也有该目录 → 只保护**源中不存在的子项**（用户自己加的技能/流程，源里的照常更新）
+ * 与 detectUserAssets 分开，便于在输出与告警里区分「插件/工具集」与「用户数据」。
+ */
+function detectUserData() {
+  const out = []
+  for (const rel of USER_DATA_DIRS) {
+    if (!exists(path.join(INSTALL, rel))) continue
+    if (!exists(path.join(SRC, rel))) { out.push(rel); continue }
+    const srcSub = dirNames(path.join(SRC, rel))
+    for (const e of rdDir(path.join(INSTALL, rel))) {
+      if (!srcSub.has(e.name)) out.push(`${rel}/${e.name}`)
+    }
+  }
+  return out.map(norm)
+}
+
+/**
+ * 「启用态冲突」探测：源里是 X.disabled，安装目录里却存在同名**启用态** X。
+ * 覆盖后 X 会被删除（源中无同名）→ 模块由「启用」翻成「禁用」，属行为变更，须显式告知，
+ * 并给出 `--protect X` 让用户能一键保留现状。实测样例：
+ *   .pair/plugins/ui-statusbar-conn/client.js（启用态） ↔ 源 .pair/plugins/ui-statusbar-conn/client.js.disabled
+ */
+function detectDisabledConflicts() {
+  const out = []
+  for (const f of srcFiles) {
+    if (!f.rel.endsWith('.disabled')) continue
+    const enabled = f.rel.slice(0, -'.disabled'.length)
+    const full = path.join(INSTALL, enabled)
+    if (!enabled || isProtected(enabled) || !exists(full)) continue
+    let size = 0, mtime = ''
+    try {
+      const st = fs.statSync(full)
+      size = st.size
+      mtime = new Date(st.mtimeMs).toISOString().slice(0, 10)
+    } catch { /* 读不到就留空 */ }
+    out.push({ disabled: f.rel, enabled, size, mtime })
+  }
+  return out.sort((a, b) => a.enabled.localeCompare(b.enabled))
 }
 
 // ───────────────────────────── 主流程 ─────────────────────────────
@@ -384,6 +452,24 @@ if (userAssets.length) {
   console.log('\n自动保护用户资产（源目录中不存在，默认保留；要删加 --no-auto-protect）:')
   for (const a of userAssets) console.log(`  [保留] ${a}`)
 }
+// 用户数据（全局技能 / 全局流程库）：与「插件/工具集」分开列 —— 它们是**数据**不是程序，
+// 被清空 = 用户资产真丢（且不会重建），语义比插件更重
+const userData = AUTO_PROTECT ? detectUserData() : []
+if (userData.length) {
+  PROTECT.push(...userData)
+  console.log('\n自动保护用户数据（源目录中不存在，删了不会重建；要删加 --no-auto-protect）:')
+  for (const d of userData) {
+    console.log(`  [保留] ${d}  ← ${userDataDescOf(d)}  (${walk(path.join(INSTALL, d)).length} 个文件)`)
+  }
+}
+// 启用态冲突（源里 *.disabled ↔ 安装目录里同名启用态）：默认**保留你当前的启用态**，
+// 免得「一次覆盖把插件静默禁用」；确认要与源目录对齐再 --no-auto-protect 显式放弃保护。
+const disabledConflicts = detectDisabledConflicts()
+if (AUTO_PROTECT && disabledConflicts.length) {
+  PROTECT.push(...disabledConflicts.map((c) => c.enabled))
+  console.log('\n自动保护「当前启用态」文件（源里是 *.disabled，避免覆盖后插件被静默禁用）:')
+  for (const c of disabledConflicts) console.log(`  [保留] ${c.enabled}  ← 源侧为 ${c.disabled}`)
+}
 console.log('保护项        :', PROTECT.join(', ') || '(无)')
 
 // ── 差异 ──
@@ -426,6 +512,34 @@ if (builtinTs.length) {
   console.log(`\n提示：${builtinTs.length} 个内置预设（${builtinTs.map((r) => path.basename(r, '.json')).join('、')}）与 logs/ 会在新实例启动时自动重建，无需保护。`)
 }
 
+// 风险项：用户数据（全局技能 / 全局流程库）落入删除清单 —— 只在 --no-auto-protect 时才会发生
+const userDataLost = toDelete.filter((r) => USER_DATA_DIRS.some((d) => r === d || r.startsWith(d + '/')))
+if (userDataLost.length) {
+  console.log('\n⚠⚠ 用户数据，将删除（源目录中不存在，删除后**不会**自动重建）:')
+  for (const d of USER_DATA_DIRS) {
+    const hit = userDataLost.filter((r) => r === d || r.startsWith(d + '/'))
+    if (!hit.length) continue
+    console.log(`    --protect ${d}   ← ${USER_DATA_DESC[d]}，共 ${hit.length} 个文件`)
+    for (const r of hit.slice(0, 5)) console.log(`         ${r}`)
+    if (hit.length > 5) console.log(`         ...（其余 ${hit.length - 5} 个省略）`)
+  }
+  console.log('    原因：--no-auto-protect 已开启 → 复制下方命令时请带上这些 --protect')
+}
+
+// 风险项：启用态冲突（源里是 *.disabled，安装目录里同名文件是启用态）
+if (disabledConflicts.length) {
+  console.log(AUTO_PROTECT
+    ? '\n⚠ 启用状态冲突（源里是 *.disabled，安装目录里同名文件为「启用态」）—— 已按默认策略保留你的启用态:'
+    : '\n⚠ 启用状态将改变（源里是 *.disabled，安装目录里同名文件是「启用态」，覆盖后该文件消失）:')
+  for (const c of disabledConflicts) {
+    console.log(`  - ${c.enabled}  （${c.size} B，${c.mtime}，当前启用态）`)
+    console.log(`    源侧对应  : ${c.disabled}`)
+    console.log(AUTO_PROTECT
+      ? '    处置      : 已保留（覆盖后插件仍为「启用」）;要与源对齐使其「禁用」→ 加 --no-auto-protect'
+      : `    处置      : 将被删除（插件变为「禁用」）;要保留 → --protect ${c.enabled}`)
+  }
+}
+
 if (toDelete.length) {
   console.log('\n将删除的文件:')
   for (const r of toDelete.slice(0, 40)) console.log('  - ' + r)
@@ -458,7 +572,20 @@ if (!APPLY) {
     ...(PORT_ARG ? ['--port', String(PORT_ARG)] : []),
   ]
   console.log('确认无误后执行（已含本次全部默认行为，可直接复制）:')
-  console.log(`  node scripts/overwrite-install.mjs --apply${extra.length ? ' ' + extra.join(' ') : ''}`)
+  // 保守命令：显式带上「用户数据」与「启用态」保护项（默认自动保护已生效，写明是为了让
+  // 复制出去的这条命令自解释 —— 参数变更或他人复用时不至于漏保护）
+  const keepProtect = [
+    ...(userData.length ? [] : userDataLost),
+    ...(AUTO_PROTECT ? [] : disabledConflicts.map((c) => c.enabled)),
+  ]
+  const keepCmd = ['node scripts/overwrite-install.mjs --apply', ...extra, ...keepProtect.flatMap((p) => ['--protect', p])].join(' ')
+  console.log('确认无误后执行（保守 · 保留你当前的插件启用态与用户数据，可直接复制）:')
+  console.log(`  ${keepCmd}`)
+  if (disabledConflicts.length) {
+    console.log(AUTO_PROTECT
+      ? '  （上列「启用态」文件在默认策略下已自动保留，覆盖不会把插件静默禁用；要与源目录完全对齐 → 加 --no-auto-protect，但它会一并关闭插件 / 工具集 / 用户数据保护）'
+      : '  （--no-auto-protect 已开启：上列文件将被删除，对应插件变为「禁用」态）')
+  }
   if (RESTART) console.log('  （默认会结束安装目录实例并在覆盖后重新启动；不想重启加 --no-restart）')
   process.exit(0)
 }

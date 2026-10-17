@@ -74,8 +74,17 @@ module.exports = async function runUiFormTest(check, env) {
   let view = null
   const ui = {
     registerView: (v) => { view = v },
-    http: { get: async (p, params) => env.snapshot(params && params.convId) },
-    invoke: async (plugin, method, args) => env.rpc(args || {}),
+    http: {
+      // 面板主体已是任务看板：/taskboard/state 走任务快照；流程快照仍供「流程库」页签用
+      get: async (p, params) => {
+        if (String(p || '').indexOf('taskboard') >= 0) return env.boardState ? env.boardState() : null
+        return env.snapshot(params && params.convId)
+      },
+    },
+    invoke: async (plugin, method, args) => {
+      if (String(method) === 'taskboard_action' && env.boardRpc) return env.boardRpc(args || {})
+      return env.rpc(args || {})
+    },
   }
   const flush = async (n) => { for (let i = 0; i < (n || 4); i++) await new Promise((r) => setTimeout(r, 3)) }
   const noop = () => { }
@@ -92,7 +101,7 @@ module.exports = async function runUiFormTest(check, env) {
 
   // ── ① 进入流程库页签 ─────────────────────────────────────────
   const libTab = btnOf(host, '流程库')
-  check('[UI] 看板三页签渲染（当前流程 / 项目 × 流程 / 流程库）', !!libTab && !!btnOf(host, '当前流程') && !!btnOf(host, '项目 × 流程'))
+  check('[UI] 顶部页签渲染（任务看板 / 流程库；旧流程视图已下线）', !!libTab && !!btnOf(host, '任务看板') && !btnOf(host, '当前流程'))
   libTab.dispatch('click')
   await flush()
   const newBtn = btnOf(host, '＋ 新建流程')
@@ -243,10 +252,122 @@ module.exports = async function runUiFormTest(check, env) {
     !!clonedRow && !!btnOf(clonedRow, '编辑'),
     clonedRow ? textAll(clonedRow).slice(0, 160) : '（无克隆行）')
 
+  // ── ⑦ 任务看板（2026-10-17 重建：照 github.com/cloader/dsh-taskboard）──
+  //   五列状态机 + 人建卡 + 认领/验收协议闸 + 流程绑定（门禁→DoD 清单）
+  //   旧流程视图（当前流程 / 运行记录 / 项目 × 流程）已下线，流程库并入顶部页签。
+  win.__state.currentConvId = 'conv_board1'
+  const tabLabels = () => byClass(host, 'ftb-tab').map((b) => b._text)
+  check('[UI-看板] 顶部页签 = 任务看板 / 流程库（旧流程视图已下线）',
+    tabLabels().indexOf('任务看板') >= 0 && tabLabels().indexOf('流程库') >= 0 &&
+    tabLabels().indexOf('当前流程') < 0 && tabLabels().indexOf('运行记录') < 0,
+    'tabs=' + tabLabels().join('/'))
+  const tabBoard = btnOf(host, '任务看板')
+  if (tabBoard) tabBoard.dispatch('click')
+  await flush(10)
+
+  const cols = () => byClass(host, 'ftb-tcol')
+  const colByTitle = (t) => cols().filter((c) => textAll(c).indexOf(t) >= 0)[0] || null
+  check('[UI-看板] 五列主看板（待规划/待办/进行中/待验收/已完成），列头各带计数',
+    cols().length === 5 && ['待规划', '待办', '进行中', '待验收', '已完成'].every((t) => !!colByTitle(t)) &&
+    byClass(host, 'ftb-tcol-count').length === 5,
+    'cols=' + cols().length)
+  check('[UI-看板] 空列有指引性占位「无任务」（不是空白格）',
+    byClass(host, 'ftb-tcol-empty').length >= 1 && /无任务/.test(textAll(host)),
+    'empty=' + byClass(host, 'ftb-tcol-empty').length)
+
+  // 人建卡
+  const tbNewBtn = btnOf(host, '＋ 新建任务')
+  check('[UI-看板] 有「＋ 新建任务」入口（人建卡）', !!tbNewBtn)
+  if (tbNewBtn) tbNewBtn.dispatch('click')
+  await flush(8)
+  const titleIn = fieldInput(host, '标题')
+  check('[UI-看板] 建卡表单有「标题」输入框', !!titleIn)
+  if (titleIn) setVal(titleIn, '看板断言：写一个测试任务')
+  const createBtn = btnOf(host, '创建任务')
+  if (createBtn) createBtn.dispatch('click')
+  await flush(16)
+  const board1 = env.boardState ? env.boardState() : { tasks: [] }
+  const made = (board1.tasks || []).filter((t) => t.title === '看板断言：写一个测试任务')[0] || null
+  check('[UI-看板] 建卡成功（真 RPC 落 .pair/taskboard/tasks.json，状态 todo）',
+    !!made && made.status === 'todo', made ? made.id + ' ' + made.status : '（无）')
+  check('[UI-看板] 卡片出现在「待办」列',
+    !!made && !!colByTitle('待办') && textAll(colByTitle('待办')).indexOf('看板断言') >= 0,
+    'todoCol=' + (colByTitle('待办') ? textAll(colByTitle('待办')).slice(0, 140) : '（无列）') +
+    ' | cards=' + byClass(host, 'ftb-tcard').length + ' | made=' + (made ? made.id : '（无）') +
+    ' | tcols=' + byClass(host, 'ftb-tcol').length + ' | bar=' + byClass(host, 'ftb-tb-bar').length +
+    ' | err=' + (/看板渲染失败[^|]{0,160}/.exec(textAll(host)) || [''])[0] +
+    ' | bodyText=' + textAll(host).slice(0, 180))
+
+  const mirrorFile = made ? path.join(env.ws, '.pair', 'tasks', 'flowtb_' + String(made.id).replace(/[^A-Za-z0-9]/g, '_') + '.json') : ''
+  check('[UI-看板] 任务镜像到宿主 .pair/tasks（右栏任务进度面板可见）',
+    !!made && fs.existsSync(mirrorFile), mirrorFile ? path.basename(mirrorFile) : '（无）')
+
+  // 拖拽：待办 → 进行中（合法迁移）
+  const cardOf = (title) => byClass(host, 'ftb-tcard').filter((c) => textAll(c).indexOf(title) >= 0)[0] || null
+  let card = cardOf('看板断言')
+  check('[UI-看板] 卡片可拖拽（draggable=true）', !!card && card.draggable === true)
+  if (card) card.dispatch('dragstart')
+  const colDoing = colByTitle('进行中')
+  if (colDoing) colDoing.dispatch('dragover')
+  check('[UI-看板] 拖拽悬停目标列 → 落点虚线（drop-on）',
+    !!colDoing && /drop-on/.test(colDoing.className), colDoing ? colDoing.className : '（无列）')
+  if (colDoing) colDoing.dispatch('drop')
+  await flush(16)
+  const board2 = env.boardState ? env.boardState() : { tasks: [] }
+  const moved = (board2.tasks || []).filter((t) => t.id === (made && made.id))[0] || null
+  check('[UI-看板] 拖到「进行中」→ 状态真的变了（dragstart + drop 全链路）',
+    !!moved && moved.status === 'in_progress',
+    moved ? moved.status + ' claimed=' + moved.claimedBy : '（无）')
+
+  // 非法迁移被状态机拦住（照参考 drag.forbidden）
+  const refreshBtn = btnOf(host, '刷新')
+  if (refreshBtn) refreshBtn.dispatch('click')
+  await flush(12)
+  card = cardOf('看板断言')
+  if (card) card.dispatch('dragstart')
+  const colDone = colByTitle('已完成')
+  if (colDone) colDone.dispatch('drop')
+  await flush(12)
+  const board3 = env.boardState ? env.boardState() : { tasks: [] }
+  const still = (board3.tasks || []).filter((t) => t.id === (made && made.id))[0] || null
+  check('[UI-看板] 非法迁移被拦：进行中 → 已完成 不允许，给可读提示且状态不变',
+    !!still && still.status === 'in_progress' &&
+    /无法从「进行中」移到「已完成」/.test(textAll(host) + '|' + textAll(byClass(host, 'ftb-msg')[0] || host)),
+    still ? still.status : '（无）')
+
+  // 详情（清单 / 评论 / 状态机按钮）
+  if (refreshBtn) refreshBtn.dispatch('click')
+  await flush(12)
+  card = cardOf('看板断言')
+  if (card) card.dispatch('click')
+  await flush(10)
+  check('[UI-看板] 点卡片 → 展开详情（状态机迁移按钮 + 评论入口）',
+    !!byClass(host, 'ftb-detail')[0] && !!btnOf(host, '移到「待验收」') && !!btnOf(host, '评论'),
+    'detail=' + byClass(host, 'ftb-detail').length)
+
+  // 协议闸：agent 不能移到 done（host 工具层强制）；人能移到待验收
+  const agentTry = env.tool ? await env.tool('taskboard_move', { id: made && made.id, to: 'done' }) : null
+  check('[UI-看板] 协议闸：agent 不能把任务移到「已完成」（验收只能由人做）',
+    !!agentTry && /只能由人验收/.test(String(agentTry.text || agentTry.error || '')),
+    JSON.stringify(agentTry || {}).slice(0, 140))
+  const humanReview = env.boardRpc ? env.boardRpc({ op: 'move', id: made && made.id, to: 'in_review' }) : null
+  check('[UI-看板] 人可把任务移到「待验收」', !!humanReview && humanReview.ok === true,
+    JSON.stringify(humanReview || {}).slice(0, 120))
+
+  // 流程绑定：建卡带流程 → 流程门禁成为验收清单（DoD）
+  const fx = env.boardRpc ? env.boardRpc({ op: 'create', title: '看板断言：绑定流程的卡', flowId: 'generic' }) : null
+  check('[UI-看板] 建卡可绑定流程，流程门禁成为验收清单（DoD）',
+    !!fx && fx.ok === true && (fx.task.checklist || []).length > 0,
+    fx && fx.task ? '清单 ' + (fx.task.checklist || []).length + ' 项' : JSON.stringify(fx || {}).slice(0, 120))
+
+  // 清理：不留测试卡给真实工作区
+  if (env.boardRpc && made && made.id) env.boardRpc({ op: 'trash', id: made.id })
+  if (env.boardRpc && fx && fx.task && fx.task.id) env.boardRpc({ op: 'trash', id: fx.task.id })
+  await flush(6)
+  win.__state.currentConvId = 'conv_form'
   unmount && unmount()
   return
 }
-
 // 表单里「阶段 1 标题」= JSON 改过的标题（位于第一个阶段块的标题字段）
 function blockTitleOK(host) {
   const blocks = byClass(host, 'ftb-block')
