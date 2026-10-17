@@ -23,7 +23,7 @@ function makeEl(tag) {
     tagName: String(tag).toUpperCase(), children: [], parent: null,
     className: '', value: '', title: '', type: '', placeholder: '',
     disabled: false, checked: false, selected: false, min: '', spellcheck: true,
-    style: {}, _text: '', _listeners: {},
+    style: {}, _text: '', _listeners: {}, _attrs: {},
   }
   Object.defineProperty(e, 'textContent', {
     get() { return e._text },
@@ -32,6 +32,8 @@ function makeEl(tag) {
   e.appendChild = (c) => { c.parent = e; e.children.push(c); return c }
   e.addEventListener = (ev, fn) => { (e._listeners[ev] = e._listeners[ev] || []).push(fn) }
   e.dispatch = (ev) => { for (const fn of (e._listeners[ev] || []).slice()) fn({ target: e }) }
+  e.setAttribute = (k, v) => { e._attrs[String(k)] = String(v) }
+  e.getAttribute = (k) => (String(k) in e._attrs ? e._attrs[String(k)] : null)
   return e
 }
 function all(root, out) { out = out || []; if (!root) return out; out.push(root); for (const c of root.children) all(c, out); return out }
@@ -64,7 +66,18 @@ function stageBlockById(root, id) {
 }
 
 module.exports = async function runUiFormTest(check, env) {
-  const doc = { createElement: (t) => makeEl(t) }
+  let queryRoot = null
+  const doc = {
+    createElement: (t) => makeEl(t),
+    // client.js 用 querySelectorAll('[data-tb-desc="id"]') 同步卡片摘要（编辑保存后不整页重渲染）
+    querySelectorAll: (sel) => {
+      if (!queryRoot) return []
+      const m = /^\[data-tb-([a-z]+)="([^"]*)"\]$/.exec(String(sel || ''))
+      if (!m) return []
+      const key = 'data-tb-' + m[1]
+      return nodes(queryRoot, (n) => !!n._attrs && n._attrs[key] === m[2])
+    },
+  }
   const toasts = []
   const win = {
     __state: { currentConvId: 'conv_form' },
@@ -96,6 +109,7 @@ module.exports = async function runUiFormTest(check, env) {
   check('[UI] client.js 装载并注册看板视图（id=flow-board）', !!view && view.id === 'flow-board', view && view.id)
 
   const host = makeEl('div')
+  queryRoot = host
   const unmount = view.render(host)
   await flush()
 
@@ -355,6 +369,31 @@ module.exports = async function runUiFormTest(check, env) {
     detailTas.length >= 2 && nodes(host, (n) => n.tagName === 'SELECT').length >= 1,
     'exec=' + !!btnOf(host, '执行') + ' claim=' + (!!btnOf(host, '释放认领') || !!btnOf(host, '认领')) +
     ' textareas=' + detailTas.length + ' selects=' + nodes(host, (n) => n.tagName === 'SELECT').length)
+
+  // ★ 编辑回归（监督者实测缺陷）：逐字符 input 不得重建 textarea（本地草稿 + 不重渲染）
+  const taDesc = detailTas[0]
+  const taCountBefore = detailTas.length
+  const probeText = '自动化探针-多行输入'
+  let typed = ''
+  for (const ch of probeText) { typed += ch; setVal(taDesc, typed) }
+  await flush(2)
+  const taAfter = nodes(host, (n) => n.tagName === 'TEXTAREA')
+  check('[UI-看板] 逐字符输入不重建 textarea（同一节点仍在树中）且值完整',
+    taAfter.indexOf(taDesc) >= 0 && taDesc.value === probeText && taAfter.length === taCountBefore,
+    'inTree=' + (taAfter.indexOf(taDesc) >= 0) + ' value=' + JSON.stringify(taDesc.value) +
+    ' count=' + taCountBefore + '->' + taAfter.length)
+  // 失焦保存 → 只把 task 合并进快照，不整页 notify（节点不被替换）
+  taDesc.dispatch('blur')
+  await flush(8)
+  const taAfter2 = nodes(host, (n) => n.tagName === 'TEXTAREA')
+  check('[UI-看板] 保存后不整页重建（同一 textarea 节点保持、值不丢）',
+    taAfter2.indexOf(taDesc) >= 0 && taDesc.value === probeText,
+    'inTree=' + (taAfter2.indexOf(taDesc) >= 0) + ' value=' + JSON.stringify(taDesc.value))
+  // 认领者可读身份：展示「你」而不是完整 convId（完整 id 在 title 里）
+  const detailText = byClass(host, 'ftb-detail')[0] ? textAll(byClass(host, 'ftb-detail')[0]) : ''
+  check('[UI-看板] 详情认领展示可读身份「你」（完整 convId 在 title）',
+    detailText.indexOf('认领 你') >= 0 && detailText.indexOf('conv_form') < 0,
+    detailText.slice(0, 160))
 
   // 协议闸：agent 不能移到 done（host 工具层强制）；人能移到待验收
   const agentTry = env.tool ? await env.tool('taskboard_move', { id: made && made.id, to: 'done' }) : null

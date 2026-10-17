@@ -94,9 +94,11 @@ let settingsStore = { gateStrength: 'enforce', autoRecommend: true, trackModifie
 const followups = []
 const timers = { timeouts: [], intervals: [] }
 const timerSvc = {
-  timeout: (fn) => { timers.timeouts.push(fn); fn(); return () => { } },
+  // 与真实语义一致：先收集，测试用 flushTimeouts() 手动执行（保证 runState 先写、执行后回填的顺序）
+  timeout: (fn) => { timers.timeouts.push(fn); return () => { } },
   interval: (fn) => { timers.intervals.push(fn); return () => { } },
 }
+function flushTimeouts() { const list = timers.timeouts.splice(0); for (const fn of list) { try { fn() } catch (e) { } } }
 
 const ctx = {
   logger: () => ({ log: () => { }, info: (m) => logs.push(m), warn: (m) => logs.push('WARN ' + m), debug: () => { }, error: (m) => logs.push('ERR ' + m) }),
@@ -620,8 +622,48 @@ check('[驱动] 关闭定时 → nextAt 清空',
   rc.ok === true && rc.task.schedule.enabled === false && !rc.task.schedule.nextAt,
   JSON.stringify(rc.task && rc.task.schedule))
 
+// ── ⑧d-2 定时对「从未执行过的卡」可用（无显式会话 → subagent 兜底）──
+// 清空最近活跃会话池：模拟「新建卡 + 设定时 + 没有任何会话绑定」的最典型路径
+try { fs.rmSync(path.join(WS, '.pair', 'taskboard', '.last-conv.json'), { force: true }) } catch (e) { }
+r = T('taskboard_create').execute({ title: '定时兜底卡', description: '定时到点自动执行', prompt: '按描述执行并交报告' })
+const schedCardId = (r.task && r.task.id) || ''
+check('[定时] 新卡没有执行会话（execConvId 为空）', !!r.task && !r.task.execConvId, r.task && r.task.execConvId)
+rc = rpcs['taskboard_action']({ op: 'schedule', id: schedCardId, schedule: { enabled: true, mode: 'at', atISO: new Date(Date.now() - 60000).toISOString() } })
+check('[定时] 未执行过的卡可直接设定时（不需要先点「执行」）',
+  rc.ok === true && rc.task.schedule.enabled === true && !!rc.task.schedule.nextAt,
+  JSON.stringify(rc.task && rc.task.schedule))
+const scanFn = timers.intervals[0]
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowS = (snapB.tasks || []).filter((t) => t.id === schedCardId)[0]
+check('[定时] 无会话时到点自动执行（subagent 兜底，runCount=1 / via=subagent）',
+  !!rowS && rowS.runState.runCount === 1 && rowS.runState.via === 'subagent' && rowS.runState.sessionId === 'subagent',
+  JSON.stringify(rowS && { rs: rowS.runState }))
+check('[定时] 到点执行后自动交报告 → 待验收（executions=1、lastError 为空）',
+  !!rowS && rowS.status === 'in_review' && (rowS.executions || []).length === 1 && !rowS.runState.lastError,
+  JSON.stringify(rowS && { st: rowS.status, ex: (rowS.executions || []).length, err: rowS.runState.lastError }))
+
+// ── ⑧d-3 多实例互斥：其它实例持扫描锁（90s 内）→ 本实例跳过，不重复派发 ──
+const lockPath = path.join(WS, '.pair', 'taskboard', '.scheduler.lock')
+fs.writeFileSync(lockPath, JSON.stringify({ holder: 'tb-other-instance', at: new Date().toISOString() }))
+r = T('taskboard_create').execute({ title: '锁跳过卡' })
+const lockCardId = (r.task && r.task.id) || ''
+rpcs['taskboard_action']({ op: 'schedule', id: lockCardId, schedule: { enabled: true, mode: 'at', atISO: new Date(Date.now() - 60000).toISOString() } })
+const followBefore = followups.length
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+const rowL = (snapB.tasks || []).filter((t) => t.id === lockCardId)[0]
+check('[定时] 其它实例持有扫描锁 → 本实例跳过（不重复派发）',
+  !!rowL && rowL.runState.runCount === 0 && followups.length === followBefore && (rowL.executions || []).length === 0,
+  JSON.stringify(rowL && { rs: rowL.runState, ex: (rowL.executions || []).length }))
+try { fs.rmSync(lockPath, { force: true }) } catch (e) { }
+
 // 清理
 rpcs['taskboard_action']({ op: 'trash', id: drvId })
+rpcs['taskboard_action']({ op: 'trash', id: schedCardId })
+rpcs['taskboard_action']({ op: 'trash', id: lockCardId })
 
 console.log('\n=== ⑨ 安全边界（mock 与真实同语义）===')
 let boundaryOK = false

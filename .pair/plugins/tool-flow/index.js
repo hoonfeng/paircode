@@ -139,6 +139,15 @@ return {
     // 落点：<ws>/.pair/taskboard/tasks.json（单文件 ledger + revision，照参考）
     // 镜像：每条任务同步 <ws>/.pair/tasks/flowtb_<id>.json → 右栏「任务进度」面板可见
     var P_TB = '.pair/taskboard/tasks.json'
+    // ── 多实例共存（9090/9096 等共享同一工作区）的隔离与互斥 ──
+    // 同一份 tasks.json 被两个进程各自 60s 扫描会重复派发 + last-write-wins 覆盖写。
+    // 方案：① 定时扫描文件锁（90s 心跳）——同一时刻只有一个实例扫 schedule；
+    //       ② 到期任务「先推进 nextAt 再执行」（CAS 重读 revision），抢到的实例才执行；
+    //       ③ 最近活跃会话池——定时执行没有显式会话时的兜底投递目标。
+    var P_TB_CONV = '.pair/taskboard/.last-conv.json'
+    var P_TB_LOCK = '.pair/taskboard/.scheduler.lock'
+    var TB_INSTANCE = 'tb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+    var TB_LOCK_TTL_MS = 90000
     var TB_MAIN = ['backlog', 'todo', 'in_progress', 'in_review', 'done']
     var TB_SECONDARY = ['canceled', 'archived']
     var TB_STATUS = TB_MAIN.concat(TB_SECONDARY)
@@ -170,6 +179,52 @@ return {
       var r = String(wsRoot() || '').replace(/[\\/]+$/, '')
       var i = Math.max(r.lastIndexOf('/'), r.lastIndexOf('\\'))
       return i < 0 ? (r || 'workspace') : r.slice(i + 1)
+    }
+    /**
+     * 最近活跃会话池：任何带 convId 的看板 RPC（建卡/认领/执行/设定时…）都会记一笔。
+     * 定时执行没有显式会话时，按「最近活跃会话」投递（ctx.agents.followup），
+     * 这样「新建卡 → 设定时 → 到点自动跑」不需要先人工点一次「执行」。
+     */
+    function tbRememberConv(convId) {
+      var c = String(convId || '').trim()
+      if (!c) return
+      var cur = fsReadJson(P_TB_CONV) || {}
+      var list = Array.isArray(cur.convs) ? cur.convs : []
+      var out = []
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i] || {}
+        if (String(it.id || '') === c) continue
+        if (it.id) out.push({ id: String(it.id), at: String(it.at || '') })
+      }
+      out.unshift({ id: c, at: nowIso() })
+      if (out.length > 20) out = out.slice(0, 20)
+      fsWriteJson(P_TB_CONV, { version: 1, convs: out, updatedAt: nowIso() })
+    }
+    function tbLastConv() {
+      var cur = fsReadJson(P_TB_CONV) || {}
+      var list = Array.isArray(cur.convs) ? cur.convs : []
+      for (var i = 0; i < list.length; i++) {
+        var c = String((list[i] && list[i].id) || '')
+        if (c) return c
+      }
+      return ''
+    }
+    /**
+     * 定时扫描实例锁（近似互斥）：写自己的 holder → 立刻读回确认。
+     * 90s 心跳窗口内其它实例看到「活锁」就跳过本轮扫描；过期锁可被抢占。
+     * 说明：goja 沙箱没有 O_EXCL，读回校验存在极小竞态；因此调度侧还有
+     *       「先推进 nextAt（CAS 重读 revision）再执行」的第二道防线。
+     */
+    function tbLockAcquire() {
+      var now = Date.now()
+      var cur = fsReadJson(P_TB_LOCK) || null
+      if (cur && cur.holder && String(cur.holder) !== TB_INSTANCE) {
+        var at = new Date(String(cur.at || '')).getTime()
+        if (isFinite(at) && now - at < TB_LOCK_TTL_MS) return false
+      }
+      fsWriteJson(P_TB_LOCK, { holder: TB_INSTANCE, at: nowIso(), note: 'taskboard schedule scan lock' })
+      var back = fsReadJson(P_TB_LOCK) || null
+      return !!(back && String(back.holder) === TB_INSTANCE)
     }
     function tbLoad() {
       var l = fsReadJson(P_TB)
@@ -248,6 +303,7 @@ return {
         everyMinutes: isNum(s.everyMinutes) ? Math.max(1, Math.min(10080, Math.floor(s.everyMinutes))) : 60,
         atTime: /^\d{1,2}:\d{2}$/.test(String(s.atTime || '')) ? String(s.atTime) : '09:00',
         atISO: String(s.atISO || ''),
+        convId: String(s.convId || ''),
         nextAt: String(s.nextAt || ''),
         lastAt: String(s.lastAt || '')
       }
@@ -281,6 +337,8 @@ return {
       if (!title) return { ok: false, error: '任务标题不能为空' }
       var l = tbLoad()
       var st = String(a.status || '')
+      var sch0 = tbNormSchedule(a.schedule)
+      if (sch0.enabled && !sch0.convId) sch0.convId = String(a.convId || '')
       var t = {
         id: tbNewId(), title: title,
         description: String(a.description || ''), prompt: String(a.prompt || ''),
@@ -291,7 +349,7 @@ return {
         flowId: String(a.flowId || ''), flowScope: '', flowVersion: 0, runId: '',
         checklist: [], comments: [], executions: [],
         claimedBy: '', claimedAt: '', claimedByKind: '',
-        schedule: tbNormSchedule(a.schedule),
+        schedule: sch0,
         runState: { running: false, startedAt: '', startedBy: '', lastEndAt: '', lastError: '', runCount: 0 },
         subtasks: tbNormSubtasks(a.subtasks),
         version: 1,
@@ -585,8 +643,26 @@ return {
       return lines.join('\n')
     }
     /**
-     * 执行一张卡：认领 → 投递任务书到工作会话 → 记 runState（running）。
-     * 多会话：convId 指定目标；未指定时用卡上 execConvId（上次执行会话）；仍无 → 明确报错。
+     * 解析执行会话：显式参数 → 卡上 execConvId → 上次执行会话 → 定时指定会话 → 最近活跃会话池。
+     * 「新建卡 → 设定时 → 到点自动跑」靠最后一档兜底（看板 RPC 都会把 convId 记进会话池）。
+     */
+    function tbExecResolveConv(a, t, rs) {
+      var explicit = String((a && a.convId) || '')
+      if (explicit) return { convId: explicit, source: 'explicit' }
+      if (t.execConvId) return { convId: String(t.execConvId), source: 'execConvId' }
+      var lastSess = String((rs && rs.sessionId) || '')
+      if (lastSess && lastSess.indexOf('subagent') !== 0) return { convId: lastSess, source: 'runState' }
+      var schConv = (t.schedule && t.schedule.convId) ? String(t.schedule.convId) : ''
+      if (schConv) return { convId: schConv, source: 'schedule' }
+      var last = tbLastConv()
+      if (last) return { convId: last, source: 'lastActive' }
+      return { convId: '', source: 'none' }
+    }
+    /**
+     * 执行一张卡：认领 → 投递任务书 → 记 runState（running）。
+     * 通道优先级：① ctx.agents.followup(convId) 唤醒工作会话（autopilot 监督者多轮接管）
+     *            ② ctx.subagent.run（不传 convId，用当前会话运行环境）兜底
+     * 只有两个通道都不可用时才返回错误并写 runState.lastError。
      * 完成由工作 agent 的 taskboard_report 回填（running=false + 转待验收）。
      */
     function tbExecute(id, opts) {
@@ -599,39 +675,49 @@ return {
       }
       var rs = tbExecState(t)
       if (rs.running) return { ok: false, error: '任务正在执行中（开始于 ' + rs.startedAt + '）' }
-      var convId = String(a.convId || t.execConvId || rs.sessionId || '')
-      if (!convId) {
-        return { ok: false, error: '没有可用的执行会话：请先在对话中打开一个会话，或在卡片执行条里指定会话' }
-      }
+      var pick = tbExecResolveConv(a, t, rs)
+      var convId = pick.convId
       if (t.status === 'todo' || t.status === 'backlog') {
         var cr = tbClaim(id, tbActor(a.by || 'user'), convId)
         if (!cr.ok) return cr
       }
       var text = tbExecTaskText(t)
-      var via = 'followup'
+      var via = ''
       var queued = false
       var err = ''
-      try {
-        var ag = ctx.agents
-        var okAg = !!(ag && typeof ag.followup === 'function')
-        if (okAg && typeof ag.ready === 'function') { try { okAg = !!ag.ready() } catch (e) { okAg = false } }
-        if (okAg) {
-          var rr = ag.followup(convId, text)
-          queued = !!(rr && rr.queued)
-        } else {
+      var dispatched = false
+      // ① 唤醒已存在的工作会话（忙则排队；空闲立即起一轮）
+      if (convId) {
+        try {
+          var ag = ctx.agents
+          if (ag && typeof ag.followup === 'function') {
+            var rr = ag.followup(convId, text)
+            queued = !!(rr && rr.queued)
+            via = 'followup'
+            dispatched = true
+            tbRememberConv(convId)
+          }
+        } catch (e) {
+          logWarn('followup 投递失败（转 subagent 兜底）: ' + e)
+        }
+      }
+      // ② 兜底：subagent 独立回合（不传 convId → 宿主按「当前会话运行环境」解析）
+      if (!dispatched) {
+        var sub = ctx.subagent
+        var canSub = !!(sub && typeof sub.run === 'function')
+        if (canSub && typeof sub.available === 'function') { try { canSub = !!sub.available() } catch (e2) { canSub = false } }
+        var tm = null
+        try { tm = ctx.timer || (typeof ctx.get === 'function' ? ctx.get('timer') : null) } catch (e3) { tm = null }
+        if (canSub && tm && typeof tm.timeout === 'function') {
           via = 'subagent'
-          var sub = ctx.subagent
-          if (!sub || typeof sub.run !== 'function') throw new Error('执行能力不可用：ctx.agents / ctx.subagent 均未提供')
-          if (typeof sub.available === 'function' && !sub.available()) throw new Error('没有可用的会话运行环境（请先打开对话）')
-          var tm = ctx.timer || (typeof ctx.get === 'function' ? ctx.get('timer') : null)
-          if (!tm || typeof tm.timeout !== 'function') throw new Error('定时器不可用，无法后台执行')
+          dispatched = true
           tm.timeout(function () {
             var res = null
             try {
               res = sub.run({
                 name: 'taskboard-exec',
                 system: '你是「任务看板」上的执行 agent：按卡片完成任务，先 plan 再执行，过程中用看板工具回填进度与证据。中文思考、中文回复。',
-                task: text, tools: null, stepBudget: 60, toolCallBudget: 80, timeoutMs: 900000, convId: convId
+                task: text, tools: null, stepBudget: 60, toolCallBudget: 80, timeoutMs: 900000
               })
             } catch (e) { res = { error: String((e && e.message) || e), ended: 'error' } }
             var execOk = !!(res && !res.error && res.ended !== 'error')
@@ -639,7 +725,7 @@ return {
               summary: String((res && res.content) || '(无输出)').slice(0, 2000),
               outcome: execOk ? 'succeeded' : 'failed',
               risks: execOk ? '' : String((res && res.error) || '执行失败'),
-              by: { kind: 'agent', sessionId: convId, name: 'taskboard-exec' }
+              by: { kind: 'agent', sessionId: 'subagent', name: 'taskboard-exec' }
             })
             var l2 = tbLoad(); var t2 = tbFind(l2, id)
             if (t2) {
@@ -649,9 +735,11 @@ return {
               if (tbSave(l2)) tbMirror(t2)
             }
           }, 10)
+        } else if (convId) {
+          err = '执行通道不可用：会话唤醒投递失败，且当前没有可用的会话运行环境（请打开对话后重试）'
+        } else {
+          err = '没有可用的执行会话：请在对话中打开一个会话，或在「定时」里指定执行会话'
         }
-      } catch (e) {
-        err = String((e && e.message) || e)
       }
       var l3 = tbLoad()
       var t3 = tbFind(l3, id)
@@ -660,21 +748,25 @@ return {
       rs3.running = !err
       rs3.startedAt = nowIso()
       rs3.startedBy = String(a.by || 'user')
-      rs3.sessionId = convId
+      rs3.sessionId = convId || (via === 'subagent' ? 'subagent' : '')
+      rs3.via = via
+      rs3.convSource = pick.source
       rs3.lastError = err
       if (!err) rs3.runCount = (isNum(rs3.runCount) ? rs3.runCount : 0) + 1
-      t3.execConvId = convId
+      if (convId) t3.execConvId = convId
       t3.updatedAt = nowIso()
       if (tbSave(l3)) tbMirror(t3)
       if (err) return { ok: false, error: err, task: t3 }
-      return { ok: true, dispatched: true, via: via, queued: queued, convId: convId, task: t3 }
+      return { ok: true, dispatched: true, via: via, queued: queued, convId: convId, convSource: pick.source, task: t3 }
     }
     /**
      * 定时调度扫描（插件内 60s 一次）：
-     *   · schedule 到点 → tbExecute（用卡上 execConvId；没有则记 lastError，不反复重试打爆）
+     *   · 实例锁：同一时刻只允许一个进程扫描（9090/9096 共享 tasks.json 时防重复派发）
+     *   · schedule 到点 → 先推进 nextAt 落盘（CAS 重读 revision），抢到的实例才执行
      *   · running 超 30 分钟无 report → 标记超时恢复，避免永久卡在「执行中」
      */
     function tbScheduleScan() {
+      if (!tbLockAcquire()) return { ok: true, skipped: 'lock-held', due: 0, instance: TB_INSTANCE }
       var l = tbLoad()
       var now = Date.now()
       var due = []
@@ -697,26 +789,32 @@ return {
         if (t.runState && t.runState.running) continue
         var nx = new Date(String(sch.nextAt)).getTime()
         if (!isFinite(nx) || nx > now) continue
-        due.push(t.id)
+        // ★ 先推进 nextAt（立刻落盘）：即使两个实例同时扫到，也只有先写者能保留这个推进
+        due.push({ id: t.id, convId: String(sch.convId || '') })
+        sch.lastAt = nowIso()
+        if (sch.mode === 'at') { sch.enabled = false; sch.nextAt = '' }
+        else sch.nextAt = tbNextAt(sch, new Date(now))
+        t.updatedAt = nowIso()
       }
-      if (due.length) tbSave(l)
-      for (var d = 0; d < due.length; d++) {
-        var r = tbExecute(due[d], { by: 'agent' })
-        var l2 = tbLoad()
-        var t2 = tbFind(l2, due[d])
-        if (!t2 || !t2.schedule) continue
-        t2.schedule.lastAt = nowIso()
-        t2.schedule.lastError = r.ok ? '' : String(r.error || '')
-        if (t2.schedule.mode === 'at') {
-          t2.schedule.enabled = false
-          t2.schedule.nextAt = ''
-        } else {
-          t2.schedule.nextAt = tbNextAt(t2.schedule)
+      if (due.length) {
+        // CAS：写前重读文件，revision 变了说明别的实例已写 → 放弃本轮（下一轮按新 nextAt 重扫）
+        var chk = tbLoad()
+        if (isNum(l.revision) && chk.revision !== l.revision) {
+          return { ok: true, skipped: 'concurrent-write', due: 0, instance: TB_INSTANCE }
         }
+        if (!tbSave(l)) return { ok: false, error: '任务库写入失败', due: 0, instance: TB_INSTANCE }
+      }
+      for (var d = 0; d < due.length; d++) {
+        var r = tbExecute(due[d].id, { by: 'agent', convId: due[d].convId })
+        var l2 = tbLoad()
+        var t2 = tbFind(l2, due[d].id)
+        if (!t2 || !t2.schedule) continue
+        t2.schedule.lastError = r.ok ? '' : String(r.error || '')
         t2.updatedAt = nowIso()
         if (tbSave(l2)) tbMirror(t2)
+        logInfo('定时执行 ' + due[d].id + '：' + (r.ok ? ('已派发 via=' + r.via + ' conv=' + (r.convId || '-')) : ('失败 ' + r.error)))
       }
-      return { ok: true, due: due.length }
+      return { ok: true, due: due.length, instance: TB_INSTANCE }
     }
     /** 任务看板状态快照（client 半渲染用；带流程阶段进度）。 */
     function tbSnapshot(q) {
@@ -2718,11 +2816,14 @@ return {
         var a = (args && typeof args === 'object') ? args : {}
         var op = String(a.op || '')
         var byUser = { kind: 'user', sessionId: String(a.convId || '') }
+        // 任何带会话的看板操作都记进「最近活跃会话池」：定时执行无显式会话时按它投递
+        if (a.convId) tbRememberConv(String(a.convId))
         if (op === 'state') return tbSnapshot(a)
         if (op === 'create') {
           return tbCreate({
             title: a.title, description: a.description, prompt: a.prompt,
-            urgency: a.urgency, flowId: a.flowId, workspace: a.workspace, by: byUser
+            urgency: a.urgency, flowId: a.flowId, workspace: a.workspace,
+            schedule: a.schedule, convId: a.convId, by: byUser
           })
         }
         if (op === 'update') return tbUpdate(String(a.id || ''), a.patch || a, { by: byUser })
@@ -2730,7 +2831,11 @@ return {
         if (op === 'claim') return tbClaim(String(a.id || ''), byUser, String(a.convId || ''))
         if (op === 'release') return tbRelease(String(a.id || ''), byUser)
         if (op === 'execute') return tbExecute(String(a.id || ''), { by: 'user', convId: String(a.convId || '') })
-        if (op === 'schedule') return tbUpdate(String(a.id || ''), { schedule: a.schedule || a.patch || a }, { by: byUser })
+        if (op === 'schedule') {
+          var schIn = a.schedule || a.patch || a
+          if (schIn && typeof schIn === 'object' && !schIn.convId && a.convId) schIn.convId = String(a.convId)
+          return tbUpdate(String(a.id || ''), { schedule: schIn }, { by: byUser })
+        }
         if (op === 'plan') return tbPlan(String(a.id || ''), a.subtasks, byUser)
         if (op === 'comment') return tbComment(String(a.id || ''), a.text, byUser)
         if (op === 'check') return tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, byUser)

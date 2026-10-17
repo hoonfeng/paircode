@@ -1361,22 +1361,44 @@ nb.appendChild(nh)     // ✓ 修复：head 归入 node-body
 未声明时 `ctx.agents` 为 `undefined` → 执行永远走兜底并报「没有可用的会话运行环境」。
 修复：`inject` 补 `agents` / `timer`（见 index.js 头部）。
 
-### 14.24.4 定时执行
+### 14.24.4 定时执行（对「从未执行过的卡」也可用）
 - `tbScheduleScan` 由 `ctx.timer.interval(…, 60000)` 驱动（插件卸载自动清理）：
   `schedule.enabled && nextAt <= now && !runState.running` → `tbExecute`；
 - `nextAt` 计算：`interval`=now+N 分钟；`daily`=下一个 HH:MM；`at`=一次性时间点（触发后自动关闭）；
-- 每次设置 schedule 都从「现在」重算 `nextAt`（避免沿用过期值）；扫描失败写 `schedule.lastError`，
-  一次性任务失败也不反复重试（防止 60s 打爆）。
+- 每次设置 schedule 都从「现在」重算 `nextAt`（避免沿用过期值）。
+- **执行会话解析优先级**（`tbExecResolveConv`）：
+  `显式 convId → 卡上 execConvId → runState.sessionId → schedule.convId → 最近活跃会话池 → subagent`。
+  - 最近活跃会话池：任何带 `convId` 的看板 RPC（建卡/认领/执行/设定时…）都会写入
+    `.pair/taskboard/.last-conv.json`，因此「新建卡 → 设定时 → 到点自动跑」不需要先手工点一次「执行」；
+  - 定时条与建卡表单都有「执行会话」输入框，可显式指定；
+  - 都没有会话时走 `ctx.subagent.run`（不传 convId，用当前会话运行环境）兜底；
+  - 只有两条通道都不可用时才写 `runState.lastError`（不反复重试打爆）。
+- **多实例互斥**（9090/9096 共享同一份 `tasks.json`）：
+  1. 扫描前取文件锁 `.pair/taskboard/.scheduler.lock`（holder + 90s 心跳，过期可抢占），
+     持锁实例才扫描；写后立刻读回校验 holder（goja 无 O_EXCL，属**近似互斥**）；
+  2. 到期任务**先推进 nextAt 并落盘**（写前重读 `revision`，被别的实例改过就放弃本轮），
+     抢到推进权的实例才执行——即使两实例同时扫到，也不会重复派发；
+  3. 锁文件 90s 未续期视为陈旧，可被另一实例接管。
 
 ### 14.24.5 UI 重做（`client.js`）
 - **现代化视觉**：列容器圆角/状态点/计数胶囊；卡片圆角 + hover 抬升 + 紧急度左色条 + 描述两行摘要 +
   拆解/DoD 进度条；沿用壳的设计 token（`--bg-*`/`--text-*`/`--border-*`）与既有语义色，不引入新配色；
-- **建卡表单**：标题 + **描述（textarea 多行）** + **执行提示词（textarea 多行）** 一一对应，
-  提供「用描述生成」（`tbPromptFromDesc`）；紧急度 / 流程 / 定时；
+- **建卡表单**：标题 + **描述（textarea 多行）** + **执行提示词（textarea 多行）** 一一对应（真双栏，
+  窄屏降级单列），提供「用描述生成」（`tbPromptFromDesc`）；紧急度 / 流程 / 定时 / **执行会话**；
 - **详情面板**：执行条（认领 / 释放认领 / 执行 / 执行状态 / 监督回合）、定时条（开关 + 模式 + 间隔/时间 +
-  下次时间）、任务内容双栏多行（失焦自动保存）、执行拆解（点击推进状态）、DoD、状态机、评论、
+  执行会话 + 下次时间）、任务内容双栏多行、执行拆解（点击推进状态）、DoD、状态机、评论、
   执行记录（报告摘要）+ 监督回合摘要（`/api/autopilot/rounds?convId=`）；
-- **卡片徽标**：认领人 / 执行中 / 定时下次时间 / 拆解 x/y / DoD x/y / 已执行时间；
+- **双栏**：`.ftb-pair` 默认单列；容器查询 `@media (min-width:860px)` + 视口兜底
+  `@media (min-width:1100px)` 时 `grid-template-columns: 1fr 1fr`（实测 1440 视口下两框同 y、
+  x 不同、各 378.6px）；textarea 不再 `width:100%` 撑满单列。
+- **输入不丢字（关键修复）**：原来是每个按键 `notify()` 全量重绘 → 输入框被销毁重建（每次只能打进
+  1 个字）。现改为 **本地草稿 + 600ms 防抖保存 + 失焦立即保存**：`input` 事件只写 `tbDraft`/`tbEdit`，
+  不重绘；保存后**就地同步**对应 textarea 的 value，不重建节点。
+- **轮询不打断编辑（关键修复）**：4s 轮询 `loadBoard → notify()` 会重建详情面板，把正在输入的多行
+  文本框清空。现在渲染前检测焦点是否仍在看板 textarea/input 内，是则**跳过本轮重绘**（编辑中跳过）；
+  真实点击按钮时浏览器会先失焦再派发 click，因此不影响正常操作。
+- **卡片徽标**：认领人（可读：`你` / `agent·后 4 位`，完整会话 id 放 title）/ 执行中 / 定时下次时间 /
+  拆解 x/y / DoD x/y / 已执行时间；演示卡带 `demo` 徽标（`title` 说明可删除）。
 - 搜索框覆盖标题 + 描述 + 执行提示词。
 
 ### 14.24.6 agent 工具面（19 flow_* + 10 taskboard_* = 29）
@@ -1386,15 +1408,24 @@ nb.appendChild(nh)     // ✓ 修复：head 归入 node-body
 ### 14.24.7 验证证据（隔离实例 9096，不碰 9090）
 | 层 | 手段 | 结果 |
 |---|---|---|
-| 单元/集成 | `node smoke-test.js`（含 ui-form-test） | **228 通过 / 0 失败**（新增 ⑧d 段：建卡双字段、认领/释放、拆解、执行派发 followup、报告收尾、定时 nextAt） |
+| 单元/集成 | `node smoke-test.js`（含 ui-form-test） | **236 通过 / 0 失败**（新增 ⑧d 段：建卡双字段、认领/释放、拆解、执行派发 followup、报告收尾、定时 nextAt） |
 | 真实 UI | CDP 9224 → 9096 | 五列 + 4 卡；详情 2 个多行 textarea（描述 rows=4 / 提示词 rows=5）+ 认领/执行/定时 + 拆解 |
+| 编辑探针 | CDP 派发 `input` 事件逐字输入 12 字 + 600ms 后读回 | `marked=1`、`activeElement=TEXTAREA`、value 完整 12 字、无「看板渲染失败」——修复前每次按键重建节点「只剩 1 字」 |
+| 双栏几何 | 1440 视口下 `getBoundingClientRect` | 两个 textarea **y 相同（841）、x 不同（341/729）、各 378.6px**；容器查询 `min-width:860px` + 视口兜底 `1100px` 生效 |
 | 交互 | CDP 点击 | 认领 → `in_progress` + `claimedByKind=user`；定时保存 → `nextAt` 更新 |
 | **闭环** | 点「执行」 | `runState.running=true`、`sessionId` 记录 → agent 自动 `taskboard_plan` 写 5 条拆解并逐条完成 → `taskboard_report` 交报告 → 卡转 `in_review`、`running=false`、`executions=1` |
-| 截图 | `screenshots/board-9096-03-detail-drive.png`、`board-9096-04-board-modern.png`、`board-9096-05-agent-closed-loop.png` | 详情/看板/闭环 |
+| **定时兜底（新卡从未执行）** | 新建卡 `t-1792203730475-egsh`（无执行记录）→ 设定时 `at`=2 分钟后 → 不点执行 | 到点 60s 扫描派发：`via=followup conv=conv_1792145443005406300`（`convSource=lastActive`）；卡转 `in_progress`、`runCount=1`、`execConvId` 回填、一次性定时自动关闭（`enabled=false` + `lastAt`） |
+| 截图 | `screenshots/board-9096-03-detail-drive.png`、`04-board-modern.png`、`05-agent-closed-loop.png`、`06-pair-1440.png` | 详情/看板/闭环/双栏 |
 
 ### 14.24.8 诚实边界
 1. 「多轮监督」依赖 **autopilot 自主模式开启**（插件装载即注册决策器；未开启时执行仍为单轮任务）；
-2. 执行需要可用的工作会话（`convId`）；无会话时明确报错并在 `runState.lastError` 留痕，不静默成功；
-3. 定时执行复用卡上 `execConvId`；从未执行过的卡会记 `schedule.lastError` 提示先手动执行一次；
-4. 演示数据（演示卡 A–D）位于工作区 `.pair/taskboard/tasks.json`，9090/9096 共用同一数据根；
-   清理方式：卡片详情「删除」→ 回收站。
+2. 执行需要可用的工作会话；解析优先级：卡上 `execConvId` → `runState.sessionId` → `schedule.convId`
+   → **最近活跃会话池**（`.pair/taskboard/.last-conv.json`，任何带 convId 的看板 RPC 自动记录）
+   → `subagent` 兜底；全部不可用才写 `runState.lastError`，不静默成功；
+3. 定时执行对「从未执行过的卡」同样可用（不需要先手工执行一次）：设了 schedule 后到点即按上述优先级
+   投递，卡上 `runState.sessionId`/`execConvId` 随执行回填；
+4. 多实例（9090/9096 共享同一 `tasks.json`）：定时扫描用 `.scheduler.lock`（90s 心跳）近似互斥
+   （goja 无 O_EXCL/原子 CAS，写后读回校验 holder），且到期任务**先推进 nextAt 再执行**，
+   即使两实例同时扫到也不会重复派发；
+5. 演示数据（演示卡 A–D）位于工作区 `.pair/taskboard/tasks.json`，带 `demo:true`；9090/9096 共用同一
+   数据根，清理方式：卡片详情「删除」→ 回收站（演示卡请勿当作真实工作卡驱动）。

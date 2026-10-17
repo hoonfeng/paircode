@@ -1208,10 +1208,11 @@
     '.ftb-tchip.run{color:#6a9955}',
     '.ftb-tchip.timer{color:#569cd6}',
     '.ftb-tchip.blocked{color:#e5534b}',
+    '.ftb-tchip.demo{color:#d4a74e;border:1px dashed rgba(212,167,78,.55)}',
     '.ftb-tcard-bar{height:3px;border-radius:2px;background:var(--bg-active);overflow:hidden}',
     '.ftb-tcard-bar i{display:block;height:100%;background:#6a9955;border-radius:2px;transition:width .2s}',
     // ── 详情面板 ──────────────────────────────────────────────
-    '.ftb-detail{max-width:980px;margin:12px auto 0;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-secondary);padding:14px 16px;box-shadow:0 6px 24px rgba(0,0,0,.16)}',
+    '.ftb-detail{max-width:980px;margin:12px auto 0;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-secondary);padding:14px 16px;box-shadow:0 6px 24px rgba(0,0,0,.16);container-type:inline-size}',
     '.ftb-detail-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}',
     '.ftb-detail-title{font-size:15px;font-weight:700;color:var(--text-primary);word-break:break-word}',
     '.ftb-detail-meta{font-size:11px;color:var(--text-muted);line-height:1.7;margin:2px 0 10px}',
@@ -1222,9 +1223,14 @@
     '.ftb-ta{display:block;width:100%;box-sizing:border-box;resize:vertical;min-height:70px;font:inherit;font-size:12px;line-height:1.6;color:var(--text-primary);background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;padding:8px 10px;outline:none}',
     '.ftb-ta:focus{border-color:#569cd6}',
     '.ftb-ta.prompt{min-height:96px;border-color:#3d6d96}',
-    '.ftb-pair{display:grid;grid-template-columns:1fr;gap:10px}',
+    '.ftb-pair{display:grid;grid-template-columns:1fr;gap:10px;align-items:start}',
     '.ftb-pair-item{display:flex;flex-direction:column;gap:5px}',
-    '.ftb-pair-label{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px}',
+    '.ftb-pair-label{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;height:22px;min-height:22px;box-sizing:border-box;overflow:hidden}',
+    '.ftb-mini{font:inherit;font-size:10px;line-height:18px;height:18px;padding:0 8px;color:var(--text-secondary);background:var(--bg-active);border:1px solid var(--border-color);border-radius:9px;cursor:pointer;flex-shrink:0}',
+    '.ftb-mini:hover{color:var(--text-primary);border-color:var(--text-muted)}',
+    // 真双栏：面板可用宽度 ≥860px 时左右并排（描述左 / 执行提示词右）；窄屏自动降级单列
+    '@media (min-width:1100px){.ftb-pair{grid-template-columns:1fr 1fr;align-items:start}}',
+    '@container (min-width:860px){.ftb-pair{grid-template-columns:1fr 1fr;align-items:start}}',
     '.ftb-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}',
     // ── 执行条 / 定时条 ───────────────────────────────────────
     '.ftb-exec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:10px;padding:10px 12px}',
@@ -1267,7 +1273,7 @@
 
   function tbBlankDraft() {
     return {
-      title: '', description: '', prompt: '', urgency: 'normal', flowId: '',
+      title: '', description: '', prompt: '', urgency: 'normal', flowId: '', convId: '',
       schedule: { enabled: false, mode: 'interval', everyMinutes: 60, atTime: '09:00', atISO: '' },
     }
   }
@@ -1343,6 +1349,80 @@
     const done = list.filter((x) => x.status === 'completed').length
     return { total: list.length, done: done, pct: list.length ? Math.round(done * 100 / list.length) : 0 }
   }
+  // ── 详情编辑内核：本地草稿 + 防抖 600ms（★ 输入时不重渲染）──
+  // 关键：input 只更新本地草稿，绝不 notify/loadBoard —— 否则面板重建会替换 textarea 节点，
+  //       逐字输入必丢焦点与内容（监督者 CDP 实测 12 字只剩 1 字即此因）。
+  // 保存：字段级串行（inflight 时只置 dirty，完成后补发「最后一次值」）→ 同一波输入只发 1 次 RPC；
+  //       响应只把 task 合并进 tbSnap + 同步卡片摘要文本，不整页 notify。
+  const tbEdit = {}
+  function tbEditState(id) {
+    if (!tbEdit[id]) tbEdit[id] = { description: null, prompt: null, timer: null, inflight: false, dirty: false }
+    return tbEdit[id]
+  }
+  function tbEditSeed(t, field) {
+    const st = tbEditState(t.id)
+    const saved = String(t[field] == null ? '' : t[field])
+    if (!st.timer && !st.inflight && !st.dirty) st[field] = saved
+    else if (st[field] == null) st[field] = saved
+    return st
+  }
+  function tbMergeTask(task) {
+    if (!task || !tbSnap || !Array.isArray(tbSnap.tasks)) return
+    for (let i = 0; i < tbSnap.tasks.length; i++) {
+      if (tbSnap.tasks[i].id === task.id) { tbSnap.tasks[i] = task; return }
+    }
+  }
+  function tbSyncCardText(id, field, value) {
+    const nodes = document.querySelectorAll('[data-tb-' + field + '="' + String(id).replace(/"/g, '') + '"]')
+    for (let i = 0; i < nodes.length; i++) nodes[i].textContent = value
+  }
+  function tbEditFlush(t, field) {
+    const st = tbEditState(t.id)
+    if (st.timer) { clearTimeout(st.timer); st.timer = null }
+    const val = st[field]
+    const saved = String(t[field] == null ? '' : t[field])
+    if (val == null || val === saved) return
+    if (st.inflight) { st.dirty = true; return }
+    st.inflight = true
+    const patch = {}
+    patch[field] = val
+    tbCall({ op: 'update', id: t.id, patch: patch })
+      .then((r) => {
+        if (r && r.task) {
+          tbMergeTask(r.task)
+          t[field] = String(r.task[field] == null ? '' : r.task[field])
+          if (field === 'description') tbSyncCardText(t.id, 'desc', String(r.task.description == null ? '' : r.task.description).trim())
+          if (field === 'prompt') tbSyncCardText(t.id, 'prompt', String(r.task.prompt == null ? '' : r.task.prompt))
+        }
+      })
+      .catch((e) => { tbMsg = String((e && e.message) || e) })
+      .then(() => {
+        st.inflight = false
+        if (st.dirty) { st.dirty = false; tbEditFlush(t, field) }
+      })
+  }
+  function tbEditBind(t, field, ta) {
+    tbEditSeed(t, field)
+    ta.addEventListener('input', () => {
+      const st = tbEditState(t.id)
+      st[field] = ta.value
+      if (st.timer) clearTimeout(st.timer)
+      st.timer = setTimeout(() => tbEditFlush(t, field), 600)
+    })
+    ta.addEventListener('blur', () => tbEditFlush(t, field))
+  }
+  // 认领者可读身份：user → 「你」；agent → 「agent·会话后 4 位」；完整 convId 放 title
+  function tbWho(t) {
+    const kind = String(t.claimedByKind || '')
+    const id = String(t.claimedBy || '')
+    if (kind === 'user') return '你'
+    if (kind === 'agent') return id ? ('agent·' + id.slice(-4)) : 'agent'
+    if (!id) return '你'
+    return 'agent·' + id.slice(-4)
+  }
+  function tbWhoTitle(t) {
+    return t.claimedBy ? ('认领会话：' + t.claimedBy) : ''
+  }
   function tbTextarea(value, placeholder, rows, cls, onInput) {
     const ta = document.createElement('textarea')
     ta.className = 'ftb-ta' + (cls ? ' ' + cls : '')
@@ -1365,10 +1445,17 @@
       tbNew = false
       notify()
     })
-    node.appendChild(el('div', 'ftb-tcard-title', t.title || '(无标题)'))
+    const titleNode = el('div', 'ftb-tcard-title', t.title || '(无标题)')
+    titleNode.setAttribute('data-tb-title', t.id)
+    node.appendChild(titleNode)
     const desc = String(t.description || '').trim()
-    if (desc) node.appendChild(el('div', 'ftb-tcard-desc', desc))
+    if (desc) {
+      const descNode = el('div', 'ftb-tcard-desc', desc)
+      descNode.setAttribute('data-tb-desc', t.id)
+      node.appendChild(descNode)
+    }
     const meta = el('div', 'ftb-tcard-meta')
+    if (t.demo) meta.appendChild(el('span', 'ftb-tchip demo', 'demo'))
     if (t.urgency && t.urgency !== 'normal') meta.appendChild(el('span', 'ftb-tchip', TB_URG[t.urgency] || t.urgency))
     if (t.flowId) {
       const fp = t.flowProgress || null
@@ -1378,7 +1465,12 @@
     if (t.blocked) meta.appendChild(el('span', 'ftb-tchip blocked', '阻塞'))
     const rs = t.runState || {}
     if (rs.running) meta.appendChild(el('span', 'ftb-tchip run', '执行中…'))
-    else if (t.status === 'in_progress') meta.appendChild(el('span', 'ftb-tchip claim', '认领 ' + (t.claimedBy || (t.claimedByKind === 'user' ? '我' : '—'))))
+    else if (t.status === 'in_progress') {
+      const claimChip = el('span', 'ftb-tchip claim', '认领 ' + tbWho(t))
+      const wt = tbWhoTitle(t)
+      if (wt) claimChip.title = wt
+      meta.appendChild(claimChip)
+    }
     const sch = t.schedule
     if (sch && sch.enabled) meta.appendChild(el('span', 'ftb-tchip timer', '⏱ ' + tbSchedText(sch) + (sch.nextAt ? ' · ' + tbShort(sch.nextAt) : '')))
     const st = tbSubStats(t.subtasks)
@@ -1560,6 +1652,15 @@
     })
     sel2.addEventListener('change', () => { tbDraft.flowId = sel2.value; notify() })
     opts.appendChild(sel2)
+    // 执行会话（可选）：留空 = 当前会话；用于「新建卡 → 定时 → 到点自动跑」
+    const convIn = document.createElement('input')
+    convIn.type = 'text'
+    convIn.placeholder = '执行会话（留空=当前会话）'
+    convIn.value = tbDraft.convId || ''
+    convIn.title = '定时/执行时投递到哪个会话；留空用当前会话，定时时再回落到最近活跃会话'
+    convIn.style.cssText = 'font:inherit;font-size:11px;color:var(--text-primary);background:var(--bg-primary);border:1px solid var(--border-color);border-radius:6px;padding:3px 7px;width:170px'
+    convIn.addEventListener('input', () => { tbDraft.convId = convIn.value })
+    opts.appendChild(convIn)
     box.appendChild(opts)
     if (tbDraft.flowId) {
       box.appendChild(el('div', 'ftb-note', '绑定流程后：流程门禁 = 这张卡的验收清单（DoD）；agent 执行时按门禁推进，流程走完自动转「待验收」。'))
@@ -1570,7 +1671,8 @@
       if (!String(tbDraft.title || '').trim()) { tbMsg = '任务标题不能为空'; notify(); return }
       const r = await tbDo({
         op: 'create', title: tbDraft.title, description: tbDraft.description, prompt: tbDraft.prompt,
-        urgency: tbDraft.urgency, flowId: tbDraft.flowId, convId: currentConvId(),
+        urgency: tbDraft.urgency, flowId: tbDraft.flowId,
+        convId: String(tbDraft.convId || '').trim() || currentConvId(),
       }, '已建卡')
       if (r && r.ok !== false) { tbNew = false; tbDraft = tbBlankDraft(); notify() }
     }, true))
@@ -1593,14 +1695,18 @@
     const head = el('div', 'ftb-detail-head')
     head.appendChild(el('span', 'ftb-detail-title', t.title || '(无标题)'))
     head.appendChild(badge(t.status === 'done' ? 'done' : (t.status === 'in_progress' ? 'active' : 'todo'), TB_LABEL[t.status] || t.status))
+    if (t.demo) head.appendChild(el('span', 'ftb-badge', 'demo'))
     head.appendChild(el('span', 'ftb-badge', TB_URG[t.urgency] || '一般'))
     if (rs.running) head.appendChild(el('span', 'ftb-badge active', '执行中'))
     if (t.blocked) head.appendChild(el('span', 'ftb-badge fail', '阻塞'))
     head.appendChild(el('div', 'ftb-spacer'))
     head.appendChild(btn('关闭', '收起详情', () => { tbDetail = ''; notify() }))
     box.appendChild(head)
-    box.appendChild(el('div', 'ftb-detail-meta', '项目 ' + (t.workspace || '-') + ' · 创建 ' + tbShort(t.createdAt) +
-      (t.claimedBy ? (' · 认领 ' + t.claimedBy) : (t.claimedByKind === 'user' && t.status === 'in_progress' ? ' · 我认领' : '')) + ' · ' + t.id))
+    const metaLine = el('div', 'ftb-detail-meta', '项目 ' + (t.workspace || '-') + ' · 创建 ' + tbShort(t.createdAt) +
+      (t.status === 'in_progress' ? (' · 认领 ' + tbWho(t)) : '') + ' · ' + t.id)
+    const metaTitle = tbWhoTitle(t)
+    if (metaTitle) metaLine.title = metaTitle
+    box.appendChild(metaLine)
 
     // ── 执行条：认领 / 执行 / 状态 ──
     const exec = el('div', 'ftb-exec')
@@ -1661,8 +1767,16 @@
     }
     valWrap.appendChild(valInput)
     srow.appendChild(valWrap)
+    // 执行会话（可选）：定时到点投递到哪个会话；留空 = 最近活跃会话 → subagent 兜底
+    const convIn = document.createElement('input')
+    convIn.type = 'text'
+    convIn.placeholder = '执行会话（留空=自动）'
+    convIn.value = sch.convId || ''
+    convIn.title = '定时到点的投递会话；留空用最近活跃会话；仍无则走 subagent 兜底'
+    convIn.style.width = '150px'
+    srow.appendChild(convIn)
     srow.appendChild(btn('保存定时', '按当前模式与值保存', () => {
-      const next = Object.assign({}, sch, { enabled: true, mode: modeSel.value })
+      const next = Object.assign({}, sch, { enabled: true, mode: modeSel.value, convId: String(convIn.value || '').trim() })
       if (modeSel.value === 'interval') next.everyMinutes = Math.max(1, parseInt(valInput.value || '60', 10) || 60)
       if (modeSel.value === 'daily') next.atTime = valInput.value || '09:00'
       if (modeSel.value === 'at') next.atISO = String(valInput.value || '').trim()
@@ -1674,33 +1788,37 @@
     })
     if (sch.enabled && sch.nextAt) srow.appendChild(el('span', 'ftb-sched-tag', '下次 ' + tbShort(sch.nextAt)))
     box.appendChild(srow)
-    box.appendChild(el('div', 'ftb-note', '定时执行会按「上次执行会话」投递任务书；若从未执行过，先在详情点一次「执行」以绑定会话。'))
+    box.appendChild(el('div', 'ftb-note', '定时执行按「指定执行会话 → 卡上上次会话 → 最近活跃会话」投递；都没有时走 subagent 兜底。未执行过的新卡也能到点自动跑。'))
 
-    // ── 描述 + 执行提示词（一一对应，多行，失焦保存）──
+    // ── 描述 + 执行提示词（一一对应，多行；本地草稿 + 防抖 600ms 保存，输入不重渲染）──
     const content = el('div', 'ftb-sec')
     const chead = el('div', 'ftb-sec-head')
     chead.appendChild(el('span', 'ftb-sec-title', '任务内容'))
-    chead.appendChild(el('span', 'ftb-sec-hint', '失焦自动保存 · 两栏都会进入执行任务书'))
+    chead.appendChild(el('span', 'ftb-sec-hint', '输入后 600ms 自动保存 · 失焦立即保存 · 两栏都会进入执行任务书'))
     content.appendChild(chead)
     const pair = el('div', 'ftb-pair')
     const d1 = el('div', 'ftb-pair-item')
     d1.appendChild(el('div', 'ftb-pair-label', '描述'))
-    d1.appendChild(tbTextarea(t.description, '背景、范围、验收标准…（多行）', 4, '', (v) => {
-      if (v === String(t.description || '')) return
-      tbDo({ op: 'update', id: t.id, patch: { description: v } })
-    }))
+    const taD = tbTextarea(tbEditSeed(t, 'description').description, '背景、范围、验收标准…（多行）', 4, '')
+    tbEditBind(t, 'description', taD)
+    d1.appendChild(taD)
     pair.appendChild(d1)
     const d2 = el('div', 'ftb-pair-item')
     const lab2 = el('div', 'ftb-pair-label')
     lab2.appendChild(el('span', null, '执行提示词'))
-    lab2.appendChild(btn('用描述生成', '用「描述 + 标题」重写执行提示词', () => {
-      tbDo({ op: 'update', id: t.id, patch: { prompt: tbPromptFromDesc(t.title, t.description) } }, '已用描述生成执行提示词')
-    }))
+    const genBtn = el('button', 'ftb-mini', '用描述生成')
+    genBtn.type = 'button'
+    genBtn.title = '用「描述（含未保存草稿） + 标题」重写执行提示词'
+    genBtn.addEventListener('click', () => {
+      const stD = tbEditState(t.id)
+      const descNow = stD.description != null ? stD.description : String(t.description || '')
+      tbDo({ op: 'update', id: t.id, patch: { prompt: tbPromptFromDesc(t.title, descNow) } }, '已用描述生成执行提示词')
+    })
+    lab2.appendChild(genBtn)
     d2.appendChild(lab2)
-    d2.appendChild(tbTextarea(t.prompt, '告诉 agent 怎么干：步骤、边界、产物、验证方式…（多行）', 5, 'prompt', (v) => {
-      if (v === String(t.prompt || '')) return
-      tbDo({ op: 'update', id: t.id, patch: { prompt: v } })
-    }))
+    const taP = tbTextarea(tbEditSeed(t, 'prompt').prompt, '告诉 agent 怎么干：步骤、边界、产物、验证方式…（多行）', 5, 'prompt')
+    tbEditBind(t, 'prompt', taP)
+    d2.appendChild(taP)
     pair.appendChild(d2)
     content.appendChild(pair)
     box.appendChild(content)
@@ -1894,6 +2012,12 @@
           if (editor && !editor.dirty) return
           if (editor) editor.dirty = false
         }
+        // ★ 输入保护（监督者实测缺陷）：4s 轮询 loadBoard→notify 会重建面板，替换正在输入的
+        //   textarea（焦点丢失 + 丢字）。焦点落在本视图的编辑控件上时只更新头部数据，不重建 body。
+        const ae = (typeof document !== 'undefined' && document.activeElement) || null
+        const editing = !!(ae && body && typeof body.contains === 'function' && body.contains(ae) &&
+          /^(TEXTAREA|INPUT|SELECT)$/.test(String(ae.tagName || '')))
+        if (editing) return
         body.textContent = ''
         try {
           if (tbTab === 'library') {
