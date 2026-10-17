@@ -1429,3 +1429,43 @@ nb.appendChild(nh)     // ✓ 修复：head 归入 node-body
    即使两实例同时扫到也不会重复派发；
 5. 演示数据（演示卡 A–D）位于工作区 `.pair/taskboard/tasks.json`，带 `demo:true`；9090/9096 共用同一
    数据根，清理方式：卡片详情「删除」→ 回收站（演示卡请勿当作真实工作卡驱动）。
+
+### 14.24.9 驱动模式：手动 / 全流程自动（2026-10-17）
+**诉求**：不想每次手点「执行」——希望看板自己把「待办」卡派发给 agent 跑完，并在可选时自动验收。
+
+**数据模型**：`.pair/taskboard/driver.json`（跨实例共享，默认文件不存在 = 手动）
+```json
+{ "version": 1, "mode": "manual|auto", "autoAccept": false, "maxConcurrent": 1,
+  "updatedAt": "ISO", "updatedBy": "conv_xxx" }
+```
+
+**host 实现（`index.js`）**
+- RPC `tbSetDriver {mode?, autoAccept?, maxConcurrent?, convId}` → 落盘 + 返回快照；`tbBoardState` 快照新增 `driver` 字段；
+- 60s 扫描（`ensureScheduler`）在定时派发之后追加两段（仅 `mode=auto` 时生效）：
+  1. **自动派发**：取「`status=todo` 且未认领/未定时」的卡，按 `createdAt` 升序，最多派 `maxConcurrent - 当前running数` 张；
+     走与「点执行」完全相同的 `dispatchTask` 链路（`via=auto`、`startedBy=agent`、`convSource=lastActive`）；
+  2. **自动验收**：`autoAccept=true` 时，把 `in_review` 且无 running 的卡直接 `accepted`（写 `autoAcceptedAt` +
+     `executions` 追加 `outcome=accepted, by=auto-accept`），与手工「认领」同语义。
+- 安全边界：不碰 `backlog`（待规划）、不碰 `blocked`、不碰「有认领人/设了定时」的卡；`maxConcurrent` 限制并发
+  （默认 1，避免多卡同时抢会话）；派发前重读磁盘，避免与用户操作竞态。
+
+**client 实现（`client.js`）**
+- 工具条新增分段控件「手动 / 全流程自动」（`tbSetDriver`），自动模式下再暴露「自动验收」开关与「并发 N」按钮；
+- 驱动状态完全来自快照（`state.driver`），多标签页/多实例刷新后一致；切换后立即 `tbRefresh` 重绘。
+
+**验证证据（隔离实例 9096，不碰 9090）**
+| 层 | 手段 | 结果 |
+|---|---|---|
+| 单元/集成 | `node smoke-test.js` | **243 通过 / 0 失败**（驱动模式 7 项：默认手动、切自动落盘、缺字段校验、自动派发选卡、并发上限、自动验收、手动模式不动作） |
+| 真实 UI 切换 | CDP 点「全流程自动」 | `driver.json` → `mode=auto, autoAccept=false, maxConcurrent=1, updatedBy=conv_1792145443005406300`；9096 日志「驱动模式 → 全流程自动（自动验收=关，并发=1）」 |
+| **自动派发** | 建卡 `自动驱动实测卡-624548`（未点执行、未设定时） | 60s 扫描自动领取：11:10:38 `claimedByKind=agent`、`runState.via=followup`、`convSource=lastActive`、`sessionId=conv_1792145443005406300`；卡 `todo → in_progress`、`runCount=1`；agent 收到任务书并写 2 条拆解 + `taskboard_report`（summary「自动驱动执行成功」）→ 11:10:52 卡 `in_review`、`executions=1` |
+| **自动验收（关）** | `autoAccept=false` 时观察 | 卡停在 `in_review` 不动（符合设计），无 `autoAcceptedAt` |
+| **自动验收（开）** | 点「自动验收」→ `autoAccept=true` | 下一轮扫描 11:11:38 自动完成：`status=done`、`autoAcceptedAt=2026-10-17T03:11:38.355Z`、`executions=['succeeded','accepted']`（by=`auto-accept`） |
+| 现场恢复 | 切回「手动」+ 关自动验收 + 演示卡A 回「待办」 | `driver.json` = `mode=manual, autoAccept=false`；演示卡A `backlog → todo` |
+| 截图 | `screenshots/board-9096-14-auto-card-created.png`、`15-manual-restored.png` | 建卡未执行状态 / 恢复手动模式 |
+
+**诚实边界**
+1. 自动派发只在「看板某实例存活」时生效（60s 扫描跑在 host 进程里），进程退出即停止；
+2. `maxConcurrent=1` 时旧 `todo` 卡会先占名额（演示卡 A 演示期间被暂移到「待规划」腾位，验收后已移回）；
+3. 自动验收只处理 `in_review`，不越级处理被阻塞 / 有认领人的卡；`autoAccept` 切回手动后仍保留在 driver.json，
+   以便下次切自动时沿用（本次验证后已显式关闭）。

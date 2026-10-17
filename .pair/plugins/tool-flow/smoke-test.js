@@ -660,10 +660,73 @@ check('[定时] 其它实例持有扫描锁 → 本实例跳过（不重复派�
   JSON.stringify(rowL && { rs: rowL.runState, ex: (rowL.executions || []).length }))
 try { fs.rmSync(lockPath, { force: true }) } catch (e) { }
 
+// ── ⑧d-4 驱动模式：手动 / 全流程自动（自动派发待办 + 可选自动验收）──
+// 本段独立验证驱动模式：归零看板数据（测试工作区夹具），避免历史 todo/执行中卡抢占并发名额
+fs.writeFileSync(path.join(WS, '.pair', 'taskboard', 'tasks.json'),
+  JSON.stringify({ version: 1, revision: 0, tasks: [], updatedAt: new Date().toISOString() }))
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+check('[驱动模式] 默认手动（driver.mode=manual、自动验收关闭）',
+  !!snapB.driver && snapB.driver.mode === 'manual' && snapB.driver.autoAccept === false,
+  JSON.stringify(snapB.driver))
+let rd = rpcs['taskboard_action']({ op: 'driver', patch: { mode: 'auto', autoAccept: false, maxConcurrent: 1 }, convId: 'conv_drv' })
+check('[驱动模式] 切到「全流程自动」（配置落盘并返回新配置）',
+  rd.ok === true && rd.driver && rd.driver.mode === 'auto' && rd.driver.autoAccept === false && rd.driver.maxConcurrent === 1,
+  JSON.stringify(rd))
+// 建一张待办卡：不点执行、不设定时，靠自动模式扫描派发
+r = T('taskboard_create').execute({ title: '自动驱动卡', description: '自动派发验证', prompt: '只做 plan + report' })
+const autoCardId = (r.task && r.task.id) || ''
+const followsBeforeAuto = followups.length
+try { fs.rmSync(lockPath, { force: true }) } catch (e) { }
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+let rowA = (snapB.tasks || []).filter((t) => t.id === autoCardId)[0]
+check('[驱动模式] 自动模式：待办卡被自动派发（未点执行 / 未设定时）',
+  !!rowA && rowA.status === 'in_progress' && rowA.runState.running === true && followups.length === followsBeforeAuto + 1,
+  JSON.stringify(rowA && { st: rowA.status, rs: rowA.runState, follows: followups.length - followsBeforeAuto }))
+check('[驱动模式] 自动派发的任务书带「自动驱动模式」章节',
+  /自动驱动模式/.test(String((followups[followups.length - 1] || {}).text || '')),
+  String((followups[followups.length - 1] || {}).text || '').slice(0, 220))
+// 交报告 → 待验收；autoAccept=false 时扫描不得自动完成
+r = T('taskboard_report').execute({ id: autoCardId, summary: '自动跑完', outcome: 'succeeded' })
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowA = (snapB.tasks || []).filter((t) => t.id === autoCardId)[0]
+check('[驱动模式] 未开自动验收：报告后停在「待验收」，扫描不会自动完成',
+  !!rowA && rowA.status === 'in_review' && !rowA.autoAcceptedAt,
+  JSON.stringify(rowA && { st: rowA.status, auto: rowA.autoAcceptedAt }))
+// 开自动验收 → 扫描 → done + 痕迹
+rd = rpcs['taskboard_action']({ op: 'driver', patch: { autoAccept: true } })
+try { fs.rmSync(lockPath, { force: true }) } catch (e) { }
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+rowA = (snapB.tasks || []).filter((t) => t.id === autoCardId)[0]
+check('[驱动模式] 开自动验收后扫描 → 自动完成（done + autoAcceptedAt + accepted 痕迹）',
+  rd.ok === true && !!rowA && rowA.status === 'done' && !!rowA.autoAcceptedAt &&
+  (rowA.executions || []).some((e) => e.outcome === 'accepted'),
+  JSON.stringify(rowA && { st: rowA.status, auto: rowA.autoAcceptedAt, ex: (rowA.executions || []).map((e) => e.outcome) }))
+// 切回手动 → 待办卡不再被自动派发
+rd = rpcs['taskboard_action']({ op: 'driver', patch: { mode: 'manual', autoAccept: false } })
+r = T('taskboard_create').execute({ title: '手动模式卡', description: '手动模式下不应被自动派发' })
+const manualCardId = (r.task && r.task.id) || ''
+const followsBeforeManual = followups.length
+try { fs.rmSync(lockPath, { force: true }) } catch (e) { }
+if (scanFn) scanFn()
+flushTimeouts()
+snapB = JSON.parse(httpRoutes['GET /api/taskboard/state']({ query: '' }).body)
+const rowM = (snapB.tasks || []).filter((t) => t.id === manualCardId)[0]
+check('[驱动模式] 切回手动：待办卡不被自动派发（保持 todo、无新 followup）',
+  rd.ok === true && !!rowM && rowM.status === 'todo' && followups.length === followsBeforeManual,
+  JSON.stringify(rowM && { st: rowM.status, follows: followups.length - followsBeforeManual }))
+
 // 清理
 rpcs['taskboard_action']({ op: 'trash', id: drvId })
 rpcs['taskboard_action']({ op: 'trash', id: schedCardId })
 rpcs['taskboard_action']({ op: 'trash', id: lockCardId })
+rpcs['taskboard_action']({ op: 'trash', id: autoCardId })
+rpcs['taskboard_action']({ op: 'trash', id: manualCardId })
 
 console.log('\n=== ⑨ 安全边界（mock 与真实同语义）===')
 let boundaryOK = false

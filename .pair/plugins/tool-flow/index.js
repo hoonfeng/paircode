@@ -146,6 +146,9 @@ return {
     //       ③ 最近活跃会话池——定时执行没有显式会话时的兜底投递目标。
     var P_TB_CONV = '.pair/taskboard/.last-conv.json'
     var P_TB_LOCK = '.pair/taskboard/.scheduler.lock'
+    // 驱动模式（手动 / 全流程自动）：工作区级配置，9090/9096 多实例共享。
+    // 独立文件而不写 tasks.json —— 避免与任务写入的 revision CAS 互相踩。
+    var P_TB_DRIVER = '.pair/taskboard/driver.json'
     var TB_INSTANCE = 'tb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
     var TB_LOCK_TTL_MS = 90000
     var TB_MAIN = ['backlog', 'todo', 'in_progress', 'in_review', 'done']
@@ -408,7 +411,9 @@ return {
       var s = String(to || '')
       if (TB_STATUS.indexOf(s) < 0) return { ok: false, error: '未知状态：' + s }
       var by = tbActor(a.by)
-      if (s === 'done' && by.kind !== 'user') {
+      // 「已完成」默认只能由人验收；a.autoAccept 仅由「全流程自动」驱动内部传入
+      // （只在 tbAutoAccept 里出现，agent 工具面无法构造该参数）。
+      if (s === 'done' && by.kind !== 'user' && !a.autoAccept) {
         return { ok: false, error: '「已完成」只能由人验收 —— agent 不能自己把任务移到已完成' }
       }
       if (t.status === s) return { ok: true, task: t, unchanged: true, revision: l.revision }
@@ -640,6 +645,18 @@ return {
         lines.push('## 流程骨架')
         lines.push('流程 ' + t.flowId + (fp && fp.label ? '（当前阶段：' + fp.label + '）' : '') + '；门禁即上面的 DoD，按顺序推进。')
       }
+      // 全流程自动：告知 agent 验收由看板自动完成 + 流程阶段自己推进（approval 仍须等人）
+      var drv = null
+      try { drv = tbDriverLoad() } catch (eD) { drv = null }
+      if (drv && drv.mode === 'auto') {
+        lines.push('')
+        lines.push('## 自动驱动模式（用户已在看板开启「全流程自动」）')
+        lines.push('- 本卡完成后看板会自动验收（用户已预授权），但你仍必须调用 taskboard_report 交报告，不能跳过。')
+        if (t.flowId) {
+          lines.push('- 流程按骨架逐阶段推进：本阶段任务与门禁完成后调用 flow_advance 推进到下一阶段，直到全部阶段完成。')
+          lines.push('- approval 类门禁**必须停下等人批准**，不得自行通过（插件与 agent 都无权自动批准）。')
+        }
+      }
       return lines.join('\n')
     }
     /**
@@ -765,6 +782,128 @@ return {
      *   · schedule 到点 → 先推进 nextAt 落盘（CAS 重读 revision），抢到的实例才执行
      *   · running 超 30 分钟无 report → 标记超时恢复，避免永久卡在「执行中」
      */
+    // ── ②e 驱动模式：手动 / 全流程自动（2026-10-17 用户诉求）──────────────
+    // 手动（manual，默认）：每张卡由人点「执行 / 认领 / 定时」，与原行为一致。
+    // 全流程自动（auto）：60s 扫描自动把「待办」卡派发给 agent（无需点执行、无需设定时），
+    //   可选「自动验收」（in_review → done，留 executions 痕迹）；并发上限 maxConcurrent。
+    // 配置落 <ws>/.pair/taskboard/driver.json（工作区级，多实例共享）。
+    function tbDriverLoad() {
+      var raw = fsReadJson(P_TB_DRIVER) || {}
+      var mode = String(raw.mode || 'manual')
+      if (mode !== 'auto') mode = 'manual'
+      var mc = parseInt(raw.maxConcurrent, 10)
+      if (!isFinite(mc) || mc < 1) mc = 1
+      if (mc > 5) mc = 5
+      return {
+        mode: mode,
+        autoAccept: raw.autoAccept === true,
+        maxConcurrent: mc,
+        updatedAt: String(raw.updatedAt || ''),
+        updatedBy: String(raw.updatedBy || '')
+      }
+    }
+    function tbDriverSave(patch, by) {
+      var cur = tbDriverLoad()
+      var p = (patch && typeof patch === 'object') ? patch : {}
+      if (p.mode !== undefined) {
+        var m = String(p.mode)
+        if (m !== 'manual' && m !== 'auto') return { ok: false, error: '未知驱动模式：' + m + '（manual / auto）' }
+        cur.mode = m
+      }
+      if (p.autoAccept !== undefined) cur.autoAccept = !!p.autoAccept
+      if (p.maxConcurrent !== undefined) {
+        var mc = parseInt(p.maxConcurrent, 10)
+        if (!isFinite(mc) || mc < 1) return { ok: false, error: '并发数需为 1-5' }
+        cur.maxConcurrent = mc > 5 ? 5 : mc
+      }
+      cur.updatedAt = nowIso()
+      cur.updatedBy = String((by && (by.name || by.sessionId || by.kind)) || 'user')
+      var ok = fsWriteJson(P_TB_DRIVER, {
+        version: 1, mode: cur.mode, autoAccept: cur.autoAccept, maxConcurrent: cur.maxConcurrent,
+        updatedAt: cur.updatedAt, updatedBy: cur.updatedBy
+      })
+      if (!ok) return { ok: false, error: '驱动配置写入失败' }
+      logInfo('驱动模式 → ' + (cur.mode === 'auto'
+        ? ('全流程自动（自动验收=' + (cur.autoAccept ? '开' : '关') + '，并发=' + cur.maxConcurrent + '）')
+        : '手动'))
+      return { ok: true, driver: cur }
+    }
+    /** 自动验收：in_review → done（留 autoAcceptedAt + executions 痕迹，便于追溯是机器验收）。 */
+    function tbAutoAccept(id) {
+      var r = tbMove(id, 'done', { by: { kind: 'agent', name: 'auto-accept' }, autoAccept: true })
+      if (!r.ok) return r
+      var l = tbLoad(); var t = tbFind(l, id)
+      if (!t) return r
+      if (!Array.isArray(t.executions)) t.executions = []
+      t.executions.push({
+        id: 'x-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+        at: nowIso(), by: { kind: 'agent', sessionId: '', name: 'auto-accept' },
+        outcome: 'accepted',
+        summary: '全流程自动模式自动验收（用户已在看板开启「自动验收」）',
+        files: [], risks: ''
+      })
+      if (t.executions.length > 20) t.executions = t.executions.slice(-20)
+      t.autoAcceptedAt = nowIso()
+      t.updatedAt = nowIso()
+      if (tbSave(l)) tbMirror(t)
+      return { ok: true, task: t }
+    }
+    /**
+     * 全流程自动扫描（在调度锁内、定时派发之后执行）：
+     *   ① 自动验收：in_review 且最后一条执行记录不是 failed → done（失败卡留人工看）
+     *   ② 自动派发：status=todo 且未在跑的卡，紧急度优先、创建早的先跑，
+     *      最多 maxConcurrent - 正在执行数 张 → tbExecute（等价于点「执行」）
+     */
+    function tbAutoScan(l, now) {
+      var drv = tbDriverLoad()
+      if (drv.mode !== 'auto') return { mode: drv.mode, accepted: [], dispatched: [], errors: [] }
+      var accepted = []
+      var cands = []
+      var runningCount = 0
+      for (var i = 0; i < l.tasks.length; i++) {
+        var t = l.tasks[i]
+        if (t.trashedAt) continue
+        var rs = t.runState || {}
+        if (rs.running) { runningCount++; continue }
+        if (drv.autoAccept && t.status === 'in_review') {
+          var ex = Array.isArray(t.executions) ? t.executions : []
+          var last = ex.length ? ex[ex.length - 1] : null
+          if (last && String(last.outcome || 'succeeded') !== 'failed') accepted.push(t.id)
+          continue
+        }
+        if (t.status === 'todo') cands.push(t)
+      }
+      var errors = []
+      for (var a = 0; a < accepted.length; a++) {
+        var ar = tbAutoAccept(accepted[a])
+        if (!ar.ok) errors.push('验收 ' + accepted[a] + '：' + ar.error)
+      }
+      var rank = { urgent: 0, normal: 1, relaxed: 2 }
+      cands.sort(function (x, y) {
+        var rx = rank[x.urgency] === undefined ? 1 : rank[x.urgency]
+        var ry = rank[y.urgency] === undefined ? 1 : rank[y.urgency]
+        if (rx !== ry) return rx - ry
+        var cx = new Date(String(x.createdAt || '')).getTime()
+        var cy = new Date(String(y.createdAt || '')).getTime()
+        if (!isFinite(cx)) cx = 0
+        if (!isFinite(cy)) cy = 0
+        return cx - cy
+      })
+      var dispatched = []
+      var slots = drv.maxConcurrent - runningCount
+      for (var c = 0; c < cands.length && slots > 0; c++, slots--) {
+        var cr = tbExecute(cands[c].id, { by: 'agent', auto: true })
+        if (cr.ok) {
+          dispatched.push(cands[c].id)
+          logInfo('自动驱动派发 ' + cands[c].id + '「' + String(cands[c].title || '') + '」via=' + cr.via + ' conv=' + (cr.convId || '-'))
+        } else {
+          errors.push('派发 ' + cands[c].id + '：' + cr.error)
+          logWarn('自动驱动派发失败 ' + cands[c].id + '：' + cr.error)
+        }
+      }
+      if (accepted.length) logInfo('自动验收 ' + accepted.join(',') + ' → 已完成')
+      return { mode: 'auto', running: runningCount, accepted: accepted, dispatched: dispatched, errors: errors }
+    }
     function tbScheduleScan() {
       if (!tbLockAcquire()) return { ok: true, skipped: 'lock-held', due: 0, instance: TB_INSTANCE }
       var l = tbLoad()
@@ -814,7 +953,10 @@ return {
         if (tbSave(l2)) tbMirror(t2)
         logInfo('定时执行 ' + due[d].id + '：' + (r.ok ? ('已派发 via=' + r.via + ' conv=' + (r.convId || '-')) : ('失败 ' + r.error)))
       }
-      return { ok: true, due: due.length, instance: TB_INSTANCE }
+      // 全流程自动：定时派发之后，自动派发待办卡 + 可选自动验收（仍在本轮扫描锁内）
+      var autoRes = null
+      try { autoRes = tbAutoScan(tbLoad(), now) } catch (eA) { logWarn('自动驱动扫描失败: ' + eA) }
+      return { ok: true, due: due.length, instance: TB_INSTANCE, auto: autoRes }
     }
     /** 任务看板状态快照（client 半渲染用；带流程阶段进度）。 */
     function tbSnapshot(q) {
@@ -844,7 +986,7 @@ return {
           row.flowProgress = { runId: '', status: 'idle', label: '未启动', percent: 0 }
         }
       }
-      return { ok: true, at: nowIso(), revision: l.revision, workspace: want || tbWorkspaceId(), tasks: rows, flowLibrary: allFlows() }
+      return { ok: true, at: nowIso(), revision: l.revision, workspace: want || tbWorkspaceId(), tasks: rows, flowLibrary: allFlows(), driver: tbDriverLoad() }
     }
 
     // ── ③ 三层流程库（project > global > preset）─────────────────
@@ -2840,6 +2982,8 @@ return {
         if (op === 'comment') return tbComment(String(a.id || ''), a.text, byUser)
         if (op === 'check') return tbCheck(String(a.id || ''), String(a.itemId || ''), a.checked !== false, a.note, byUser)
         if (op === 'trash') return tbTrash(String(a.id || ''), byUser)
+        if (op === 'driver') return tbDriverSave(a.patch || a, byUser)
+        if (op === 'driverState') return { ok: true, driver: tbDriverLoad() }
         if (op === 'startFlow') {
           var l0 = tbLoad()
           var tk = tbFind(l0, String(a.id || ''))

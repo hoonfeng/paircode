@@ -1303,6 +1303,18 @@
       return null
     }
   }
+  /** 驱动模式切换（手动 / 全流程自动 + 自动验收 / 并发）。 */
+  async function tbSetDriver(patch) {
+    const p = patch || {}
+    const msg = p.mode
+      ? (p.mode === 'auto'
+        ? '已切到「全流程自动」：待办卡会自动派发给 agent，无需点执行'
+        : '已切到「手动」：每张卡由人点执行 / 认领 / 定时')
+      : (p.autoAccept !== undefined
+        ? ('自动验收已' + (p.autoAccept ? '开启' : '关闭'))
+        : ('自动并发已设为 ' + p.maxConcurrent))
+    await tbDo({ op: 'driver', patch: p, convId: currentConvId() }, msg)
+  }
   async function tbRun(id) {
     if (tbPending) return
     tbPending = id
@@ -1564,6 +1576,34 @@
       seg2.appendChild(b)
     })
     bar.appendChild(seg2)
+    // 驱动模式：手动（每卡点执行）/ 全流程自动（自动派发待办 + 可选自动验收）
+    const drv = (tbSnap && tbSnap.driver) || { mode: 'manual', autoAccept: false, maxConcurrent: 1 }
+    const segDrv = el('div', 'ftb-seg')
+    ;[['manual', '手动'], ['auto', '全流程自动']].forEach(([k, label]) => {
+      const b = el('button', 'ftb-btn' + (drv.mode === k ? ' active' : ''), label)
+      b.type = 'button'
+      b.title = k === 'auto'
+        ? '自动派发「待办」卡给 agent（无需点执行），可再开「自动验收」'
+        : '每张卡由人点「执行 / 认领 / 定时」'
+      b.addEventListener('click', () => {
+        if (drv.mode === k) return
+        tbSetDriver({ mode: k })
+      })
+      segDrv.appendChild(b)
+    })
+    bar.appendChild(segDrv)
+    if (drv.mode === 'auto') {
+      const ac = el('button', 'ftb-btn' + (drv.autoAccept ? ' active' : ''), '自动验收')
+      ac.type = 'button'
+      ac.title = 'agent 交报告后自动转「已完成」（执行记录留 auto-accept 痕迹；执行失败的卡不自动验收）'
+      ac.addEventListener('click', () => tbSetDriver({ autoAccept: !drv.autoAccept }))
+      bar.appendChild(ac)
+      const cc = el('button', 'ftb-btn', '并发 ' + drv.maxConcurrent)
+      cc.type = 'button'
+      cc.title = '自动模式下同时执行的卡数（点击在 1-3 之间循环）'
+      cc.addEventListener('click', () => tbSetDriver({ maxConcurrent: drv.maxConcurrent >= 3 ? 1 : drv.maxConcurrent + 1 }))
+      bar.appendChild(cc)
+    }
     bar.appendChild(el('div', 'ftb-spacer'))
     bar.appendChild(btn(tbNew ? '取消新建' : '＋ 新建任务', '建卡：填标题 + 描述 + 执行提示词', () => {
       tbNew = !tbNew
@@ -1585,7 +1625,9 @@
     if (!rows.length) {
       body.appendChild(el('div', 'ftb-note', tbTasks().length
         ? '当前筛选下没有任务。'
-        : '看板还没有任务 —— 点「＋ 新建任务」建一张卡：写清描述与执行提示词，然后点卡片里的「执行」，agent 会按卡工作并回填进度。'))
+        : (drv.mode === 'auto'
+          ? '看板是空的 —— 建一张卡即可：「全流程自动」会在 60s 内自动把它派发给 agent，跑完自动转「待验收」（开了自动验收则直接完成）。'
+          : '看板还没有任务 —— 点「＋ 新建任务」建一张卡：写清描述与执行提示词，然后点卡片里的「执行」，agent 会按卡工作并回填进度。')))
     }
     if (tbDetail) {
       const t = tbFind(tbDetail)
