@@ -815,20 +815,6 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 					headers[k] = vs[0]
 				}
 			}
-			// req 对象（goja 构造，附 json() 便捷解析）
-			reqObj := vm.NewObject()
-			reqObj.Set("method", r.Method)
-			reqObj.Set("path", r.URL.Path)
-			reqObj.Set("query", r.URL.RawQuery)
-			reqObj.Set("headers", headers)
-			reqObj.Set("body", string(body))
-			reqObj.Set("json", func(call goja.FunctionCall) goja.Value {
-				var out any
-				if err := json.Unmarshal(body, &out); err != nil {
-					panic(vm.NewGoError(fmt.Errorf("req.json(): 请求体不是合法 JSON: %w", err)))
-				}
-				return vm.ToValue(out)
-			})
 			var (
 				callErr      error
 				savedStatus  int
@@ -836,6 +822,23 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 				savedHeaders map[string]string
 			)
 			p.withLock(func() {
+				// ★ req 对象必须在 VM 锁内构造：goja 的对象属性表非并发安全。
+				//   同插件并发处理两个请求时，在锁外 NewObject/Set 会触发
+				//   "fatal error: concurrent map writes"（实测 UI 启动并发拉取
+				//   插件 ext 路由即崩掉整个进程）。
+				reqObj := vm.NewObject()
+				reqObj.Set("method", r.Method)
+				reqObj.Set("path", r.URL.Path)
+				reqObj.Set("query", r.URL.RawQuery)
+				reqObj.Set("headers", headers)
+				reqObj.Set("body", string(body))
+				reqObj.Set("json", func(call goja.FunctionCall) goja.Value {
+					var out any
+					if err := json.Unmarshal(body, &out); err != nil {
+						panic(vm.NewGoError(fmt.Errorf("req.json(): 请求体不是合法 JSON: %w", err)))
+					}
+					return vm.ToValue(out)
+				})
 				v, err := fn(goja.Undefined(), reqObj)
 				if err == nil {
 					// ★ async handler：返回值若是 Promise，同步 drain 取结果
