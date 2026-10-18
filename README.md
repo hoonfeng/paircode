@@ -48,6 +48,20 @@ MCP 支持与 HTTP 接口插件化。
 - **MCP 支持**：接入外部 MCP 服务器（scope: user/project）。
 - **跨平台打包**：`packager` 一键产出 windows/linux/darwin 三平台发布包。
 
+## 从 Release 运行（推荐）
+
+发布包三平台统一形态：**主体只有一个可执行文件，双击即用，无需解压**。
+`pair-server[.exe]` 是可选的服务版（无窗口，浏览器访问 `http://localhost:9090`）。
+
+| 平台 | 发布包 | 启动文件 | 说明 |
+|---|---|---|---|
+| Windows | `PairCode-<版本>.zip` | `PairCode.exe` | Release 同时提供**裸 `PairCode.exe`**，下载后直接双击即可（运行时库 / 前端 / 插件均已嵌入） |
+| Linux | `PairCode-linux-<版本>.zip` | `PairCode-linux-amd64` | `chmod +x` 后执行；同样单文件自足（Skia 运行库内嵌解出） |
+| macOS | `PairCode-darwin-<版本>.zip` | `PairCode-darwin-arm64` | 同上；首次运行需在「系统设置 → 隐私与安全性」中允许 |
+
+- 工作区 = 启动文件所在目录；`config/`、`logs/`、`.pair/` 会就地生成。
+- 端口默认 9090，可用环境变量 `WEB_PORT` 覆盖（桌面版窗口与后端同进程）。
+
 ## 快速开始
 
 ```bash

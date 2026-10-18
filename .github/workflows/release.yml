@@ -268,6 +268,17 @@ jobs:
           path: paircode/release/*.zip
           if-no-files-found: error
 
+      # 「单 exe」交付形态：Windows 的 PairCode.exe 自身已内嵌 Skia 运行库、
+      # 前端与插件资源，可脱离 zip 直接双击运行。这里额外上传裸 exe，
+      # 用户从 Release 一次下载即可用，无需解压。
+      - name: Upload standalone Windows exe
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-windows
+          path: paircode/release/PairCode.exe
+          if-no-files-found: error
+
   publish:
     name: publish-release
     needs: build
@@ -280,13 +291,21 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
+      - name: Download standalone Windows exe
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          name: standalone-windows
+
       - name: List assets
         run: ls -lh dist
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.zip
+          files: |
+            dist/*.zip
+            dist/PairCode.exe
           draft: false
           prerelease: false
           generate_release_notes: true
