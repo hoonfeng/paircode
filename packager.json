@@ -69,10 +69,6 @@
       "ignoreError": true
     },
     {
-      "name": "build-stub",
-      "type": "build-stub"
-    },
-    {
       "name": "package",
       "type": "package"
     },
@@ -196,10 +192,76 @@
       {
         "name": "gui",
         "dirName": "PairCode-gui",
-        "mainSrc": "PairCode.exe",
+        "mainSrc": "pair.exe",
         "mainDst": "PairCode",
         "nativeOnly": true,
-        "include": []
+        "include": [
+          {
+            "src": "release/libSkiaSharp*",
+            "dst": ".",
+            "optional": false
+          },
+          {
+            "src": ".pair/plugins",
+            "dst": ".pair/plugins",
+            "optional": true,
+            "recursive": true
+          },
+          {
+            "src": "plugins-src/ui-app",
+            "dst": "plugins-src/ui-app",
+            "optional": true,
+            "recursive": true,
+            "exclude": [
+              "node_modules"
+            ]
+          },
+          {
+            "src": ".pair/assets/runtime/web",
+            "dst": ".pair/assets/runtime/web",
+            "optional": true,
+            "recursive": true
+          },
+          {
+            "src": ".pair/assets/runtime/bridge_node.js",
+            "dst": ".pair/assets/runtime/bridge_node.js",
+            "optional": true
+          },
+          {
+            "src": ".pair/assets/runtime/cordis.bundle.js",
+            "dst": ".pair/assets/runtime/cordis.bundle.js",
+            "optional": true
+          },
+          {
+            "src": "bin/config/models.json",
+            "dst": "bin/config/models.json",
+            "optional": true
+          },
+          {
+            "src": "bin/config/onnx/onnxruntime.dll",
+            "dst": "bin/config/onnx/onnxruntime.dll",
+            "optional": true,
+            "os": "windows"
+          },
+          {
+            "src": "bin/config/onnx/libonnxruntime.so",
+            "dst": "bin/config/onnx/libonnxruntime.so",
+            "optional": true,
+            "os": "linux"
+          },
+          {
+            "src": "bin/config/onnx/libonnxruntime.dylib",
+            "dst": "bin/config/onnx/libonnxruntime.dylib",
+            "optional": true,
+            "os": "darwin"
+          },
+          {
+            "src": "config/models",
+            "dst": "models",
+            "optional": true,
+            "recursive": true
+          }
+        ]
       }
     ]
   },

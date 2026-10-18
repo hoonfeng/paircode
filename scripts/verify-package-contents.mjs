@@ -54,7 +54,16 @@ const EDITION_RULES = [
   {
     name: 'gui',
     re: /^PairCode-gui-.*\.zip$/,
-    must: [/^PairCode(\.exe)?$/],
+    // gui 包 2026-10-19 起改为「目录形态」：主程序 + Skia 运行库 + .pair 插件/
+    // 前端资源 + bin 运行时配置缺一不可（单文件自解压 stub 已不再用于发布包，
+    // 用户明确要求解压即见完整运行目录，且 GUI 自身起 HTTP/插件服务）。
+    must: [
+      /^PairCode(\.exe)?$/,
+      /^libSkiaSharp/,
+      /^\.pair\/plugins\//,
+      /^\.pair\/assets\//,
+      /^bin\/config\//,
+    ],
     forbid: [{ label: '服务端主程序', re: /^pair-server(\.exe)?$/ }],
   },
 ]
@@ -121,9 +130,26 @@ if (zips.length === 0) {
 
 console.log(`[verify-package-contents] 校验发布产物 zip（${zips.length} 个）…`)
 
+// nativeOnly 版（如 gui：cgo + Skia 只能原生构建）在非本机平台不会产出 zip，
+// 这属于预期跳过而非校验失败。
+const nativeOnlyEditions = (() => {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packager.json'), 'utf8'))
+    return new Set((cfg.dist?.editions || []).filter((e) => e.nativeOnly).map((e) => e.name))
+  } catch {
+    return new Set()
+  }
+})()
+const currentOs = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
+
 for (const zip of zips) {
   const base = path.basename(zip)
   if (!fs.existsSync(zip)) {
+    const m = base.match(/^PairCode-([a-z0-9]+)-[\d.]+-(windows|linux|darwin)\.zip$/i)
+    if (m && nativeOnlyEditions.has(m[1]) && m[2] !== currentOs) {
+      console.log(`  ⏭ ${base}: 跳过（${m[1]} 版 nativeOnly，需在 ${m[2]} 原生构建）`)
+      continue
+    }
     errors.push(`${base} 不存在（packager package 阶段未产出？）`)
     console.log(`  ✘ ${base}: 文件不存在`)
     continue
@@ -153,8 +179,8 @@ for (const zip of zips) {
   if (rule) {
     const missing = rule.must.filter((re) => !names.some((x) => re.test(x)))
     if (missing.length > 0) {
-      errors.push(`${base} 缺少 ${rule.name} 版主程序（${missing.map((r) => r.source).join(', ')}）`)
-      console.log(`  ✘ ${base}: 缺少 ${rule.name} 版主程序`)
+      errors.push(`${base} 缺少 ${rule.name} 版必需内容（${missing.map((r) => r.source).join(', ')}）`)
+      console.log(`  ✘ ${base}: 缺少 ${rule.name} 版必需内容`)
     }
     for (const f of rule.forbid) {
       const hit = names.filter((x) => f.re.test(x))

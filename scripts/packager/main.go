@@ -630,6 +630,26 @@ func packageEdition(root string, cfg *PackagerConfig, ed DistEdition, goos, goar
 			continue // 非本平台条目跳过
 		}
 		srcPath := filepath.Join(root, entry.Src)
+		if strings.ContainsAny(entry.Src, "*?[") {
+			// ★ 通配条目：Linux 的 Skia 库 SONAME 别名带版本号
+			//   （libSkiaSharp.so.119.0.0），配置无法写死文件名——按通配
+			//   展开，每个命中文件落到 dst 目录（dst 为 "." 即包根）。
+			matches, _ := filepath.Glob(srcPath)
+			if len(matches) == 0 {
+				if entry.Optional {
+					continue
+				}
+				return fmt.Errorf("必需文件缺失: %s", entry.Src)
+			}
+			for _, m := range matches {
+				dst := filepath.Join(distDir, entry.Dst, filepath.Base(m))
+				if err := copyDistEntry(m, dst, entry); err != nil {
+					return fmt.Errorf("复制 %s: %w", m, err)
+				}
+				fmt.Printf("  → %s\n", filepath.Join(entry.Dst, filepath.Base(m)))
+			}
+			continue
+		}
 		dstPath := filepath.Join(distDir, entry.Dst)
 		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
 			if entry.Optional {

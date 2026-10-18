@@ -794,6 +794,10 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 10px;
   cursor: pointer;
+  /* ★ 徽章多（全局/UI/N 工具/UI 已启用…）时不能让插件名被挤没：
+     名字保底宽度，放不下的徽章换到第二行。此前 flex:1 的 name 在
+     agent-teams（4 个徽章）只剩 3px 宽 → 视觉上「插件没有名字」。 */
+  flex-wrap: wrap;
 }
 .pp-item-row:hover { background: var(--bg-hover); }
 .pp-state {
@@ -802,7 +806,7 @@ onUnmounted(() => {
 .pp-state.on { background: var(--color-success); box-shadow: 0 0 4px var(--color-success); }
 .pp-state.off { background: var(--text-muted); opacity: .4; }
 .pp-name {
-  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 auto; min-width: 96px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pp-src {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
