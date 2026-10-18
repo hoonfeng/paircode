@@ -25,9 +25,6 @@ on:
 permissions:
   contents: write
 
-env:
-  PACKAGER: packager${{ runner.os == 'Windows' && '.exe' || '' }}
-
 jobs:
   build:
     name: build-${{ matrix.name }}
@@ -81,7 +78,13 @@ jobs:
       - name: Build packager
         shell: bash
         working-directory: paircode
-        run: go build -o "$PACKAGER" ./scripts/packager
+        # 顶层 env 里不能用 runner 上下文（GitHub 在 job 起动前求值），
+        # 因此在 step 内按实际 runner 决定可执行文件后缀，再导出给后续步骤。
+        run: |
+          EXE=""
+          if [ "$RUNNER_OS" = "Windows" ]; then EXE=".exe"; fi
+          go build -o "packager$EXE" ./scripts/packager
+          echo "PACKAGER=packager$EXE" >> "$GITHUB_ENV"
 
       # tag 触发的发布：以 tag 名（v1.6.21 → 1.6.21）覆盖 packager.json 的版本，
       # 保证 zip 文件名与 Release tag 一致。--step 指向不存在的步骤，只做版本
