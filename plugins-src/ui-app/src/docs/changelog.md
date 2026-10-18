@@ -4,6 +4,36 @@
 
 ---
 
+## 1.6.21 — 2026-10-18
+
+> 本版聚焦**一体化发布形态**：GUI 不再是「后端 + 另起窗口进程」，`pair.exe` 自己在同一进程里
+> 开窗、供 `/api` 与 `/ws`；安装包进一步收敛为**单个 `PairCode.exe`**（首次运行自解压运行时），
+> 三平台由各自原生 CI 构建后汇总发布。
+
+### 新增
+
+- **GUI 一体化（`-tags gui`）**：`InitCore` → `StartWebServer(port)` → `runGUI(port)` 同进程串行，
+  页面以 `http://127.0.0.1:<port>` 为来源加载，不再拉起 `pair.exe` 子进程；非 GUI 构建行为不变。
+- **单文件安装包**：新增 `cmd/paircode-stub`（`-tags stub`）启动器——把 GUI 主程序、Skia 原生库、
+  插件与前端资源嵌入一个 `PairCode.exe`，首次运行时释放到
+  `%LOCALAPPDATA%\PairCode\runtime\<版本>\` 后启动；Windows PE 在进程启动前解析导入表，
+  因此解压必须发生在不触碰 Skia 的外层进程里。发布包顶层因此只剩一个可执行文件。
+- **三平台原生发布流水线**：`.github/workflows/release.yml` 用 windows/ubuntu/macos 各自构建本平台产物
+  （Linux 预装 `xorg-dev libgl1-mesa-dev libxkbcommon-dev`），汇总上传 GitHub Release；
+  新增 `build-stub`、`stage-gui-runtime`、`prepare-embed.mjs` 等打包步骤。
+
+### 修复
+
+- **goskia 模块校验和不一致**：`tools/zig/zig.exe` 是 Git LFS 文件，module proxy 打包时退化为 134 字节
+  pointer，与本地含实体的 zip 哈希不同，导致 CI 三平台 `build-go-gui` 全部 `checksum mismatch`；
+  已核对两版 234 个 `.go/.mod` 文件完全一致（仅 zig.exe 差异、无代码引用），改用 proxy 侧哈希。
+- **Linux 构建失败**：`window_x11.go` 的 Xdnd 回复写入用了 `.xclient.type`——`type` 是 Go 关键字，
+  cgo 生成的字段名是 `_type`；Windows 不编译该文件因此长期未暴露。
+- **macOS 构建失败**：goskia 的 `#cgo LDFLAGS` 含 `-Wl,-rpath,@loader_path`，被 Go 1.26 的 cgo
+  flag 白名单拒绝；CI 以 `CGO_LDFLAGS_ALLOW` 显式放行。
+- **Windows 打包无产物**：CI 分步执行时漏了 `build-stub`，`package` 找不到 `PairCode.exe` 直接跳过；
+  已把启动器构建加进流水线（`-H windowsgui`，双击不弹控制台）。
+
 ## 1.6.20 — 2026-10-17
 
 > 本版聚焦**网络工具与 LLM 接入的可配置性**：搜索/抓取改为按「AI 配置实例」解析，

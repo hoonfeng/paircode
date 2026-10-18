@@ -98,12 +98,26 @@ jobs:
       - name: Build GUI binary (cgo, native)
         shell: bash
         working-directory: paircode
+        env:
+          # goskia 的 #cgo LDFLAGS 里带 -Wl,-rpath,@loader_path（macOS 的运行时库搜索路径），
+          # Go 1.26 的 cgo flag 白名单默认拒绝它，报
+          # "invalid flag in #cgo LDFLAGS: -Wl,-rpath,@loader_path"。
+          # 显式放行（CI 构建机是隔离环境，全放行没有额外风险）。
+          CGO_LDFLAGS_ALLOW: ".*"
         run: ./"$PACKAGER" --step build-go-gui
 
       - name: Stage Skia runtime library
         shell: bash
         working-directory: paircode
         run: ./"$PACKAGER" --step stage-gui-runtime
+
+      # 单文件启动器：把本机 GUI 主程序 + Skia 原生库 + 插件/前端资源嵌入一个可执行文件，
+      # 发布包顶层只暴露 PairCode[.exe]。必须排在 build-go-gui 与 stage-gui-runtime 之后
+      # （它从 release/ 目录读取这两步的产物），并排在 package 之前（package 找的就是它）。
+      - name: Build single-file launcher (stub)
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --step build-stub
 
       - name: Build server binaries (cross-free, native target)
         shell: bash
