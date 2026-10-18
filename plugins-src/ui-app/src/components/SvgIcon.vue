@@ -1,7 +1,13 @@
 <template>
+  <!-- ★ 2026-10-18 color 走内联 style：组件此前没有 color prop，调用方写的
+       color="var(--color-cat-amber)" 会作为 **HTML 属性** 落到 <svg> 上。
+       SVG 的 color 表现属性不支持 var()（浏览器会整条忽略），wb-ui 则把它
+       当颜色值解析失败回退黑色 → 自主模式开关等图标颜色不对。改用 style 绑定，
+       两个引擎都会按 CSS 继承正确解析。 -->
   <svg class="svg-icon" :width="size" :height="size" viewBox="0 0 24 24"
        fill="none" stroke="currentColor" stroke-width="2"
-       stroke-linecap="round" stroke-linejoin="round">
+       stroke-linecap="round" stroke-linejoin="round"
+       :style="color ? { color } : undefined">
     <!-- Folder -->
     <template v-if="name === 'folder'">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -346,6 +352,9 @@
 defineProps({
   name: { type: String, required: true },
   size: { type: Number, default: 16 },
+  // 图标颜色（CSS 颜色或 var(--x)）。渲染为内联 style 的 color，
+  // 由 SVG 的 stroke="currentColor" 继承。
+  color: { type: String, default: '' },
 })
 </script>
 
