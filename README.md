@@ -62,6 +62,24 @@ MCP 支持与 HTTP 接口插件化。
 - 工作区 = 启动文件所在目录；`config/`、`logs/`、`.pair/` 会就地生成。
 - 端口默认 9090，可用环境变量 `WEB_PORT` 覆盖（桌面版窗口与后端同进程）。
 
+### Linux / macOS 中文字体（v1.6.22 起）
+
+GUI 引擎（wb-ui `fontmgr`）早期只按 Windows 字体族名找字体，Linux/macOS 上中文会渲染成方块。
+v1.6.22 起的行为：
+
+- **白名单按平台分表**（`runtime.GOOS`）：Linux 覆盖 `Noto Sans CJK SC/JP`、`Source Han Sans`、
+  `WenQuanYi Zen Hei/Micro Hei`、`Droid Sans Fallback`；macOS 覆盖 `PingFang SC`、
+  `Hiragino Sans GB`、`Heiti SC`、`STHeiti`、`Songti SC` 等。Windows 表保持原样。
+- **TTC 逐 face 尝试**：`NotoSansCJK-Regular.ttc` 这类大集合按 face 索引逐个加载，
+  至少保证拿到 SC face（不会停在 JP/KR face 上）。
+- **平台默认 CJK 族 + 分类修正**：找不到对应西文族时按平台选默认 CJK 族；`classifyFont`
+  把上述族标为 cjk，等宽/无衬线回退链不再断在方块上。
+- **可观测**：启动日志打印 `[fontmgr] cjk=<族名>`（无可用字体为 `(none)`），
+  release 流水线对该行做硬断言，字体回归会直接把发布打红。
+
+Linux 上需要系统装有 CJK 字体（Ubuntu：`fonts-noto-cjk`、`fonts-wqy-zenhei`）；
+macOS 自带 PingFang，无需额外安装。逐版本核验记录见 `docs/releases/`。
+
 ## 快速开始
 
 ```bash
