@@ -704,7 +704,10 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--text-primary); font-weight: 600;
 }
-.pp-slots-head svg { color: var(--accent); }
+/* ★ 2026-10-19：svg 是子组件 SvgIcon 的根元素，只带该子组件自身 scopeId（data-v-cdf5ecb9），
+   普通后代选择器会被 scoped 编译成 `.pp-slots-head svg[data-v-9bffa838]` 而永不命中 →
+   用 :deep() 让编译结果为 `.pp-slots-head[data-v-9bffa838] svg`（宿主在祖先、svg 不带 scope 后缀）。 */
+.pp-slots-head :deep(svg) { color: var(--accent); }
 .pp-slots-sub { font-weight: 400; font-size: 10px; color: var(--text-muted); }
 .pp-slot-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
