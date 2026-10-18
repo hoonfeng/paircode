@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: write
+
 jobs:
   lint-and-build:
     runs-on: windows-latest
@@ -46,9 +49,31 @@ jobs:
         run: node scripts/prepare-embed.mjs
 
       - name: Run unit tests
-        run: go test -short -count=1 ./cmd/companion/ ./pkg/... ./internal/...
+        shell: bash
+        run: |
+          set -o pipefail
+          CGO_ENABLED=0 go test -short -count=1 ./cmd/companion/ ./pkg/... ./internal/... 2>&1 | tee ut.log
         env:
           CGO_ENABLED: "0"
+
+      # ★ 2026-10-18：Actions job 日志/artifact 下载都要仓库 token，外部会话排查
+      # 失败只能看到「Run unit tests failure」而无任何细节。这里在失败时把完整
+      # 测试输出推到 `ci-logs` 分支（只写一个 log 文件），任何有仓库读权限的人
+      # 都能直接读到失败用例名。
+      - name: Publish failure log to ci-logs branch
+        if: failure()
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f ut.log ]; then echo "no ut.log"; exit 0; fi
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git checkout -B ci-logs
+          mkdir -p docs/ci-logs
+          cp ut.log "docs/ci-logs/${GITHUB_SHA}.log"
+          git add -A docs/ci-logs
+          git commit -m "ci: unit test failure log for ${GITHUB_SHA}"
+          git push -f origin ci-logs
 
   # 跨平台构建门禁（2026-10 新增）：Linux/macOS 支持不能只靠"代码里写了
   # 平台分支"来保证——必须有 CI 真实构建一次。Windows 上交叉编译发现不了
