@@ -1,0 +1,148 @@
+name: release
+
+# 发布流水线：三平台原生构建 → 上传 GitHub Release 资产。
+#
+# 为什么要三平台原生构建（不在 Windows 上一键交叉）：
+#   GUI 版 pair.exe 用 cgo 链接 wb-ui 引擎（Skia + GLFW + 平台窗口层）：
+#     - Linux 需要 X11 / GL 开发头文件与库（xorg-dev、libgl1-mesa-dev）；
+#     - macOS 需要 Xcode 的 Objective-C / Cocoa 框架；
+#   这些无法从 Windows 交叉获得，因此每个 runner 只构建**本机平台**产物，
+#   产物再汇总到同一个 Release。
+#
+# 触发：
+#   - push tag v*（如 v1.6.21）→ 构建并发布；
+#   - workflow_dispatch → 手动构建并发布（版本号取 packager.json）。
+#
+# 依赖仓库：paircode（后端 + 构建器）与 wb-ui（GUI 引擎），检出为兄弟目录，
+# 由 paircode/go.work.gui 的 `use ../wb-ui` 纳入同一 workspace。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  PACKAGER: packager${{ runner.os == 'Windows' && '.exe' || '' }}
+
+jobs:
+  build:
+    name: build-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            target: windows/amd64
+          - name: linux
+            os: ubuntu-latest
+            target: linux/amd64
+          - name: darwin
+            os: macos-latest
+            target: darwin/arm64
+    steps:
+      - name: Checkout paircode
+        uses: actions/checkout@v4
+        with:
+          repository: hoonfeng/paircode
+          path: paircode
+          fetch-depth: 0
+
+      - name: Checkout wb-ui (GUI engine)
+        uses: actions/checkout@v4
+        with:
+          repository: hoonfeng/wb-ui
+          path: wb-ui
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: paircode/go.sum
+
+      - name: Install Linux GUI build deps
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xorg-dev libgl1-mesa-dev libxkbcommon-dev
+
+      - name: Prepare go:embed frontend
+        shell: bash
+        working-directory: paircode
+        run: node scripts/prepare-embed.mjs
+
+      - name: Build packager
+        shell: bash
+        working-directory: paircode
+        run: go build -o "$PACKAGER" ./scripts/packager
+
+      # tag 触发的发布：以 tag 名（v1.6.21 → 1.6.21）覆盖 packager.json 的版本，
+      # 保证 zip 文件名与 Release tag 一致。--step 指向不存在的步骤，只做版本
+      # 改写、不执行任何 pipeline（packager 在 pipeline 之前处理版本号）。
+      - name: Apply tag version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --version "${GITHUB_REF_NAME#v}" --step __version_only__
+
+      - name: Build GUI binary (cgo, native)
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --step build-go-gui
+
+      - name: Stage Skia runtime library
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --step stage-gui-runtime
+
+      - name: Build server binaries (cross-free, native target)
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --targets "${{ matrix.target }}" --step build-go
+
+      - name: Package release zip
+        shell: bash
+        working-directory: paircode
+        run: ./"$PACKAGER" --targets "${{ matrix.target }}" --step package
+
+      - name: Show artifacts
+        shell: bash
+        working-directory: paircode
+        run: ls -lh release/*.zip
+
+      - name: Upload release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: paircode/release/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish-release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform zips
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -lh dist
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

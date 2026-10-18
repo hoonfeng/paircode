@@ -52,7 +52,21 @@
     },
     {
       "name": "build-go",
-      "type": "build-go"
+      "type": "build-go",
+      "output": "pair-server.exe"
+    },
+    {
+      "name": "build-go-gui",
+      "type": "build-go-gui",
+      "pkg": "./cmd/companion",
+      "output": "pair.exe",
+      "tags": "gui",
+      "gowork": "go.work.gui"
+    },
+    {
+      "name": "stage-gui-runtime",
+      "command": "node scripts/stage-gui-runtime.mjs",
+      "ignoreError": true
     },
     {
       "name": "package",
@@ -109,6 +123,42 @@
         "src": "lib/libSkiaSharp.dll",
         "dst": "lib/libSkiaSharp.dll",
         "optional": true
+      },
+      {
+        "src": "release/pair-server.exe",
+        "dst": "pair-server.exe",
+        "optional": true,
+        "os": "windows"
+      },
+      {
+        "src": "release/pair-server-linux-amd64",
+        "dst": "pair-server",
+        "optional": true,
+        "os": "linux"
+      },
+      {
+        "src": "release/pair-server-darwin-arm64",
+        "dst": "pair-server",
+        "optional": true,
+        "os": "darwin"
+      },
+      {
+        "src": "release/libSkiaSharp.dll",
+        "dst": "libSkiaSharp.dll",
+        "optional": true,
+        "os": "windows"
+      },
+      {
+        "src": "release/libSkiaSharp.so",
+        "dst": "libSkiaSharp.so",
+        "optional": true,
+        "os": "linux"
+      },
+      {
+        "src": "release/libSkiaSharp.dylib",
+        "dst": "libSkiaSharp.dylib",
+        "optional": true,
+        "os": "darwin"
       },
       {
         "src": "bin/config/models.json",

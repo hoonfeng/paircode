@@ -76,6 +76,15 @@ func main() {
 	}
 	log.Printf("[main] 已启动，请打开 http://0.0.0.0:%d（本机浏览器可用 http://localhost:%d，局域网设备用本机 IP）", port, port)
 
+	// ★ GUI 一体化（-tags gui）：窗口与本进程共用同一个后端，不拉起子进程。
+	//   非 gui 构建下 runGUI 立即返回 false，随后的永久阻塞保持原行为。
+	if runGUI(port) {
+		log.Printf("[main] 桌面窗口已关闭，正在清理并退出…")
+		agent.CloseAllMCPConnections()
+		agent.KillAllBackgroundProcesses()
+		return
+	}
+
 	// ★ 2026-09-15：退出信号钩子——Ctrl+C / SIGTERM 时清理 MCP 连接池中的子进程，
 	//   避免 MCP 服务器进程孤儿化残留。
 	// ★ 2026-09-16：追加 KillAllBackgroundProcesses——终止全部后台进程

@@ -53,6 +53,12 @@ type StepDef struct {
 	IgnoreError bool              `json:"ignoreError,omitempty"` // true=失败继续
 	Env         map[string]string `json:"env,omitempty"`         // 环境变量
 	Type        string            `json:"type,omitempty"`        // "build-go" | "package"（内置逻辑）
+
+	// 以下字段供 build-go / build-go-gui 覆盖 vars 中的同名配置。
+	Pkg    string `json:"pkg,omitempty"`     // 主包（覆盖 vars.mainPkg）
+	Output string `json:"output,omitempty"`  // 产物名（覆盖 vars.output）
+	Tags   string `json:"tags,omitempty"`    // -tags（build-go-gui 用，如 "gui"）
+	GoWork string `json:"gowork,omitempty"`  // GOWORK 文件（build-go-gui 用，如 "go.work.gui"）
 }
 
 type DistConfig struct {
@@ -205,7 +211,9 @@ func main() {
 		var err error
 		switch step.Type {
 		case "build-go":
-			err = execBuildGo(root, cfg, vars)
+			err = execBuildGo(root, step, cfg, vars)
+		case "build-go-gui":
+			err = execBuildGoGUI(root, step, cfg, vars)
 		case "package":
 			err = execPackage(root, cfg, vars)
 		default:
@@ -269,12 +277,18 @@ func targetExeName(output, goos, goarch string) string {
 
 // ─── 内置步骤：Go 编译 ───────────────────────────────────
 
-func execBuildGo(root string, cfg *PackagerConfig, vars *Vars) error {
+func execBuildGo(root string, step StepDef, cfg *PackagerConfig, vars *Vars) error {
 	mainPkg := vars.custom["mainPkg"]
+	if step.Pkg != "" {
+		mainPkg = step.Pkg
+	}
 	if mainPkg == "" {
 		return fmt.Errorf("vars.mainPkg 未配置")
 	}
 	outputName := vars.custom["output"]
+	if step.Output != "" {
+		outputName = step.Output
+	}
 	if outputName == "" {
 		outputName = "app" + exeSuffix()
 	}
@@ -330,6 +344,86 @@ func execBuildGo(root string, cfg *PackagerConfig, vars *Vars) error {
 
 // ─── 内置步骤：打包发布目录 ──────────────────────────────
 
+// execBuildGoGUI 构建带 GUI 的主程序（-tags gui）。
+//
+// 与 execBuildGo 的区别：
+//   - 只在**本机平台**构建：GUI 依赖 cgo（Skia/GLFW/WebKit），交叉编译需要
+//     目标平台的 C 工具链与系统头文件（Linux 的 X11、macOS 的 SDK），无法在
+//     Windows 上一键产出其它平台产物。其它平台请在对应系统（或 CI 原生
+//     runner）上运行本程序，各自产出本平台的发布包。
+//   - CGO_ENABLED=1（GUI 渲染必须）。
+//   - 可指定 GOWORK（如 go.work.gui：把兄弟仓库 wb-ui 纳入 workspace）。
+func execBuildGoGUI(root string, step StepDef, cfg *PackagerConfig, vars *Vars) error {
+	pkg := step.Pkg
+	if pkg == "" {
+		pkg = vars.custom["guiMainPkg"]
+	}
+	if pkg == "" {
+		pkg = vars.custom["mainPkg"]
+	}
+	if pkg == "" {
+		return fmt.Errorf("build-go-gui: pkg 未配置")
+	}
+	outputName := step.Output
+	if outputName == "" {
+		outputName = vars.custom["output"]
+	}
+	if outputName == "" {
+		outputName = "pair.exe"
+	}
+	tags := step.Tags
+	if tags == "" {
+		tags = vars.custom["guiTags"]
+	}
+	if tags == "" {
+		tags = "gui"
+	}
+
+	goos, goarch := runtime.GOOS, runtime.GOARCH
+	outName := targetExeName(outputName, goos, goarch)
+	outPath := filepath.Join(root, "release", outName)
+
+	// 清理历史遗留的「非本机平台」GUI 产物：GUI 无法交叉编译，这些文件只可能
+	// 来自旧版本构建；留在 release/ 会被 package 步骤误打进其它平台的包
+	// （历史事故：v1.6.20 本地打包时把 Oct 17 的旧 pair-linux-amd64 塞进了
+	// Linux 包）。目标平台各自原生构建时，本机产物不受影响。
+	for _, t := range [][2]string{{"windows", "amd64"}, {"linux", "amd64"}, {"darwin", "arm64"}} {
+		if t[0] == goos && t[1] == goarch {
+			continue
+		}
+		_ = os.Remove(filepath.Join(root, "release", targetExeName(outputName, t[0], t[1])))
+	}
+
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
+
+	ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
+	if extra := vars.custom["extraLdflags"]; extra != "" {
+		ldflags += " " + extra
+	}
+	args := []string{"build", "-tags", tags, "-ldflags=" + ldflags, "-o", outPath, pkg}
+	cmd := exec.Command("go", args...)
+	cmd.Dir = root
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	env := append(os.Environ(), "CGO_ENABLED=1", "GOOS="+goos, "GOARCH="+goarch)
+	if step.GoWork != "" {
+		p := step.GoWork
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(root, p)
+		}
+		env = append(env, "GOWORK="+p)
+	}
+	cmd.Env = env
+
+	fmt.Printf("  → go build -tags %s [%s/%s cgo=1] -o %s %s\n", tags, goos, goarch, outName, pkg)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("编译 GUI 主程序 %s/%s 失败: %w", goos, goarch, err)
+	}
+	return nil
+}
+
 func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 	if cfg.Dist == nil {
 		return nil
@@ -352,6 +446,14 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 		outName := targetExeName(outputName, goos, goarch)
 		exePath := filepath.Join(root, "release", outName)
 		distDir := filepath.Join(root, cfg.Dist.OutputDir, dirName)
+
+		// GUI 主程序只在本机平台构建（交叉编译 cgo 需要目标平台的 C 工具链与
+		// 系统头文件）。缺失时跳过该平台的打包，由目标平台（或 CI 原生 runner）
+		// 各自构建并上传。
+		if _, statErr := os.Stat(exePath); statErr != nil {
+			fmt.Printf("  ⏭ [%s/%s] %s 不存在（GUI 版需在目标平台原生构建），跳过\n", goos, goarch, outName)
+			continue
+		}
 
 		os.RemoveAll(distDir)
 		os.MkdirAll(distDir, 0755)
