@@ -42,6 +42,24 @@ function goModDir(cwd) {
   }
 }
 
+// readSoname 读出 Linux 共享库的 SONAME（readelf 优先，objdump 兜底）。
+// Windows 上没有这两个工具，但本函数只在 Linux 分支调用。
+function readSoname(file) {
+  for (const [cmd, args] of [['readelf', ['-d', file]], ['objdump', ['-p', file]]]) {
+    try {
+      const out = execFileSync(cmd, args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      const m = out.match(/SONAME[^\[]*\[([^\]]+)\]/)
+      if (m) return m[1].trim()
+    } catch {
+      // 换下一个工具
+    }
+  }
+  return ''
+}
+
 // 依次尝试：wb-ui 兄弟仓库（go.mod require goskia）→ 当前项目。
 const moduleDirs = [
   goModDir(path.resolve(root, '..', 'wb-ui')),
@@ -69,6 +87,21 @@ for (const modDir of moduleDirs) {
     const mb = (fs.statSync(dst).size / 1024 / 1024).toFixed(1)
     console.log(`  → ${name} (${mb} MB) ← ${src}`)
     copied++
+
+    // Linux 上可执行文件的 DT_NEEDED 记录的是库的 SONAME
+    // （libSkiaSharp.so.119.0.0），而 module 里只有不带版本号的 libSkiaSharp.so。
+    // 运行期动态链接器按 SONAME 找文件，缺了就报
+    // "cannot open shared object file"（进程以 127 退出）。读出 SONAME 再补一份
+    // 同内容文件，headless 自检与 stub payload 都按前缀复制，自动带上它。
+    if (osName === 'linux') {
+      const soname = readSoname(dst)
+      if (soname && soname !== name) {
+        const alias = path.join(releaseDir, soname)
+        fs.rmSync(alias, { force: true })
+        fs.copyFileSync(dst, alias)
+        console.log(`  → ${soname} (SONAME alias, ${mb} MB)`)
+      }
+    }
   }
   if (copied > 0) break
 }

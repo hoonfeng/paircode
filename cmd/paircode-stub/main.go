@@ -162,7 +162,11 @@ func ensurePayload(dir string) error {
 func isExecutable(rel string) bool {
 	base := filepath.Base(rel)
 	switch base {
-	case "pair.exe", "pair", "libSkiaSharp.dll", "libSkiaSharp.so", "libSkiaSharp.dylib":
+	case "pair.exe", "pair":
+		return true
+	}
+	// Linux 上库的 SONAME 带版本后缀（libSkiaSharp.so.119.0.0），按前缀判断。
+	if strings.HasPrefix(base, "libSkiaSharp") {
 		return true
 	}
 	return false

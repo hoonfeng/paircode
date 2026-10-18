@@ -470,12 +470,22 @@ func execBuildStub(root string, step StepDef, cfg *PackagerConfig) error {
 		return err
 	}
 	mainSrc := filepath.Join(root, "release", targetExeName("pair.exe", goos, goarch))
-	skiaSrc := filepath.Join(root, "release", skiaLib)
 	if err := copyFile(filepath.Join(payloadDir, mainInPayload), mainSrc); err != nil {
 		return fmt.Errorf("build-stub: 复制 GUI 主程序（需先执行 build-go-gui）: %w", err)
 	}
-	if err := copyFile(filepath.Join(payloadDir, skiaLib), skiaSrc); err != nil {
-		return fmt.Errorf("build-stub: 复制 Skia 原生库（需先执行 stage-gui-runtime）: %w", err)
+	// Linux 的 DT_NEEDED 记录的是库的 SONAME（如 libSkiaSharp.so.119.0.0），而
+	// goskia module 里只有不带版本号的 libSkiaSharp.so——stage-gui-runtime 已把
+	// SONAME 别名一并放进 release/。这里按前缀把所有 libSkiaSharp* 带进 payload，
+	// 否则解压后的 GUI 会因找不到 SONAME 对应文件而启动失败。
+	libs, _ := filepath.Glob(filepath.Join(root, "release", "libSkiaSharp*"))
+	if len(libs) == 0 {
+		return fmt.Errorf("build-stub: 复制 Skia 原生库（需先执行 stage-gui-runtime）: %s 不存在",
+			filepath.Join(root, "release", skiaLib))
+	}
+	for _, src := range libs {
+		if err := copyFile(filepath.Join(payloadDir, filepath.Base(src)), src); err != nil {
+			return fmt.Errorf("build-stub: 复制 Skia 原生库 %s: %w", filepath.Base(src), err)
+		}
 	}
 	// 插件与前端资源是 IDE 界面的组成部分：只释放主程序+Skia 库时，插件宿主为 0、
 	// 侧边栏与面板全部显示「未装配」。随 stub 一起内嵌，空目录首次启动即可完整。
