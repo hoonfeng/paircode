@@ -128,29 +128,21 @@
       </div>
       <div v-for="p in plugins" :key="p.name" class="pp-item">
         <div class="pp-item-row" @click="toggleDetail(p)">
-          <!-- ★ 2026-10-18 GUI 兼容：名称独占一行，徽章另起行。
-               wb-ui（GUI 版渲染引擎）不实现 flex-wrap，原名/徽章挤在一行时
-               UI 插件（多「UI 已启用 + 开关」）的名称会被压到 0 宽 → 列表里
-               只剩徽章没有名字。改成块级两行结构后不再依赖换行语义。 -->
-          <div class="pp-row-main">
-            <span class="pp-state" :class="p.state === 'running' ? 'on' : 'off'"></span>
-            <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
-            <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
-          </div>
-          <div class="pp-row-meta">
-            <span class="pp-src" :class="p.source" :title="srcTitle(p)">{{ srcLabel(p) }}</span>
-            <span v-if="p.scope === 'global'" class="pp-badge" title="全局插件：跨工作区生效（UI 类），不属于任何工具集">全局</span>
-            <span v-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI，运行中自动装载）">UI</span>
-            <span v-if="conflictsOf(p).length" class="pp-badge pp-badge-warn" :title="conflictTitle(p)">同名并存 {{ conflictsOf(p).length }}</span>
-            <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
-          </div>
-          <div v-if="p.hasClient && uiSlotsOf(p.name).length" class="pp-row-ui">
+          <span class="pp-state" :class="p.state === 'running' ? 'on' : 'off'"></span>
+          <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
+          <span class="pp-src" :class="p.source" :title="srcTitle(p)">{{ srcLabel(p) }}</span>
+          <span v-if="p.scope === 'global'" class="pp-badge" title="全局插件：跨工作区生效（UI 类），不属于任何工具集">全局</span>
+          <span v-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI，运行中自动装载）">UI</span>
+          <span v-if="conflictsOf(p).length" class="pp-badge pp-badge-warn" :title="conflictTitle(p)">同名并存 {{ conflictsOf(p).length }}</span>
+          <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
+          <template v-if="p.hasClient && uiSlotsOf(p.name).length">
             <span class="pp-ui-label" :class="{ on: uiPluginActive(p.name) }">{{ uiPluginActive(p.name) ? 'UI 已启用' : 'UI 未启用' }}</span>
             <label class="pp-switch" :title="uiPluginActive(p.name) ? '停用该插件的 UI（恢复内置界面）' : '启用该插件的 UI（替换对应界面区域）'">
               <input type="checkbox" :checked="uiPluginActive(p.name)" @change="toggleUiPlugin(p, $event.target.checked)" @click.stop />
               <span class="pp-switch-track"></span>
             </label>
-          </div>
+          </template>
+          <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
           </div>
           <div v-if="expanded[p.name]" class="pp-detail">
             <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
@@ -799,23 +791,9 @@ onUnmounted(() => {
 .pp-empty-sub { font-size: 11px; color: var(--text-muted); text-align: center; }
 .pp-item { border-bottom: 1px solid var(--border-color); }
 .pp-item-row {
-  /* ★ 2026-10-18 GUI 兼容：改成块级多行结构（row-main / row-meta / row-ui）。
-     GUI 版用 wb-ui 渲染，其 flex 实现没有 flex-wrap —— 原先名称与徽章
-     挤在同一行时，UI 插件（「UI 已启用 + 开关」占位）的名称被压到 0 宽，
-     列表里只剩徽章没有名字。块级行不依赖换行语义，两个引擎表现一致。 */
-  display: block;
+  display: flex; align-items: center; gap: 6px;
   padding: 7px 10px;
   cursor: pointer;
-}
-.pp-row-main { display: flex; align-items: center; gap: 6px; }
-.pp-row-meta {
-  display: flex; align-items: center; gap: 5px;
-  margin-top: 3px; margin-left: 14px;
-  overflow: hidden;
-}
-.pp-row-ui {
-  display: flex; align-items: center; gap: 6px;
-  margin-top: 3px; margin-left: 14px;
 }
 .pp-item-row:hover { background: var(--bg-hover); }
 .pp-state {
@@ -824,12 +802,7 @@ onUnmounted(() => {
 .pp-state.on { background: var(--color-success); box-shadow: 0 0 4px var(--color-success); }
 .pp-state.off { background: var(--text-muted); opacity: .4; }
 .pp-name {
-  /* 名称独占主行剩余宽度；不再与徽章争位，长名（tool-codegraph 等）
-     也能完整显示。★ 2026-10-18 GUI 实测：wb-ui 对 flex 收缩的计算比 Chrome
-     保守，带 ellipsis 时「tool-codegraph」被截成「tool-codegra…」——去掉
-     ellipsis/nowrap，允许在词内换行，两个引擎都能完整显示插件名。 */
-  flex: 1 1 auto; min-width: 0; font-weight: 500;
-  white-space: normal; word-break: break-all; overflow: visible;
+  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pp-src {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
