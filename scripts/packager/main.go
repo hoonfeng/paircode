@@ -37,8 +37,8 @@ type PackagerConfig struct {
 	Description string            `json:"description,omitempty"`
 	Company     string            `json:"company,omitempty"`
 	Copyright   string            `json:"copyright,omitempty"`
-	Vars        map[string]string `json:"vars,omitempty"`    // 自定义变量 {{varName}}
-	Pipeline    []StepDef         `json:"pipeline"`           // 步骤定义（顺序执行）
+	Vars        map[string]string `json:"vars,omitempty"` // 自定义变量 {{varName}}
+	Pipeline    []StepDef         `json:"pipeline"`       // 步骤定义（顺序执行）
 	Dist        *DistConfig       `json:"dist,omitempty"`
 
 	// 密钥脱敏：打包前从指定 JSON 文件中清除密钥字段
@@ -55,17 +55,36 @@ type StepDef struct {
 	Type        string            `json:"type,omitempty"`        // "build-go" | "package"（内置逻辑）
 
 	// 以下字段供 build-go / build-go-gui 覆盖 vars 中的同名配置。
-	Pkg    string `json:"pkg,omitempty"`     // 主包（覆盖 vars.mainPkg）
-	Output string `json:"output,omitempty"`  // 产物名（覆盖 vars.output）
-	Tags   string `json:"tags,omitempty"`    // -tags（build-go-gui 用，如 "gui"）
-	GoWork string `json:"gowork,omitempty"`  // GOWORK 文件（build-go-gui 用，如 "go.work.gui"）
+	Pkg    string `json:"pkg,omitempty"`    // 主包（覆盖 vars.mainPkg）
+	Output string `json:"output,omitempty"` // 产物名（覆盖 vars.output）
+	Tags   string `json:"tags,omitempty"`   // -tags（build-go-gui 用，如 "gui"）
+	GoWork string `json:"gowork,omitempty"` // GOWORK 文件（build-go-gui 用，如 "go.work.gui"）
 }
 
 type DistConfig struct {
-	OutputDir string      `json:"outputDir"`         // 发布根目录（默认 "release"）
-	DirName   string      `json:"dirName"`           // 包内目录名
-	Format    string      `json:"format,omitempty"`  // "zip"（默认）或 "dir"
+	OutputDir string      `json:"outputDir"`        // 发布根目录（默认 "release"）
+	DirName   string      `json:"dirName"`          // 包内目录名
+	Format    string      `json:"format,omitempty"` // "zip"（默认）或 "dir"
 	Include   []DistEntry `json:"include,omitempty"`
+	// Editions 发行版拆分（web / gui …）：每个 edition 独立产出「平台 × 版本」zip。
+	// 为空时退回旧的单包逻辑（dirName + vars.output），保持向后兼容。
+	Editions []DistEdition `json:"editions,omitempty"`
+}
+
+// DistEdition 一种独立发行版（如 web = 纯服务端、gui = 桌面单文件）。
+//
+// 拆分的直接原因：旧逻辑把「GUI 单文件启动器」与「pair-server」同时塞进
+// 同一个 zip（两个 exe 互相重复约 40MB），且发布件无法区分用途。
+// 现在每个 edition 只放自己的主程序与所需资源：
+//   - web: release/pair-server-* → 包内 pair-server[.exe]
+//   - gui: release/PairCode[*]   → 包内 PairCode[.exe]（单文件启动器）
+type DistEdition struct {
+	Name       string      `json:"name"`                 // web / gui（用于日志与校验）
+	DirName    string      `json:"dirName"`              // 包内顶层目录 & zip 名前缀
+	MainSrc    string      `json:"mainSrc"`              // release/ 下主程序基名（按目标平台加后缀）
+	MainDst    string      `json:"mainDst"`              // 包内主程序基名（windows 自动补 .exe）
+	NativeOnly bool        `json:"nativeOnly,omitempty"` // true = 只打本机平台（GUI 需 cgo）
+	Include    []DistEntry `json:"include,omitempty"`    // 该 edition 专属资源（与 dist.include 合并）
 }
 
 type DistEntry struct {
@@ -73,7 +92,7 @@ type DistEntry struct {
 	Dst       string   `json:"dst"`
 	Optional  bool     `json:"optional,omitempty"`
 	Recursive bool     `json:"recursive,omitempty"`
-	OS        string   `json:"os,omitempty"` // 平台过滤："windows"/"linux"/"darwin"（空=全部平台）
+	OS        string   `json:"os,omitempty"`      // 平台过滤："windows"/"linux"/"darwin"（空=全部平台）
 	Exclude   []string `json:"exclude,omitempty"` // 相对 Src 的路径（目录/文件），递归拷贝时跳过
 }
 
@@ -527,76 +546,116 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 	if cfg.Dist == nil {
 		return nil
 	}
-	outputName := vars.custom["output"]
-	if outputName == "" {
-		outputName = "app" + exeSuffix()
-	}
 	targets := parseTargets(vars.custom["targets"])
 	if len(targets) == 0 {
 		return fmt.Errorf("vars.targets 解析为空")
 	}
 
-	for _, t := range targets {
-		goos, goarch := t[0], t[1]
-		dirName := cfg.Dist.DirName
-		if goos != "windows" {
-			dirName = cfg.Dist.DirName + "-" + goos
+	editions := cfg.Dist.Editions
+	if len(editions) == 0 {
+		// 向后兼容：旧配置没有 editions 时，维持「一个包 = vars.output 主程序 + include」。
+		outputName := vars.custom["output"]
+		if outputName == "" {
+			outputName = "app" + exeSuffix()
 		}
-		outName := targetExeName(outputName, goos, goarch)
-		exePath := filepath.Join(root, "release", outName)
-		distDir := filepath.Join(root, cfg.Dist.OutputDir, dirName)
+		editions = []DistEdition{{
+			Name:    "default",
+			DirName: cfg.Dist.DirName,
+			MainSrc: outputName,
+			MainDst: outputName,
+			Include: cfg.Dist.Include,
+		}}
+	}
 
-		// GUI 主程序只在本机平台构建（交叉编译 cgo 需要目标平台的 C 工具链与
-		// 系统头文件）。缺失时跳过该平台的打包，由目标平台（或 CI 原生 runner）
-		// 各自构建并上传。
-		if _, statErr := os.Stat(exePath); statErr != nil {
-			fmt.Printf("  ⏭ [%s/%s] %s 不存在（GUI 版需在目标平台原生构建），跳过\n", goos, goarch, outName)
-			continue
-		}
-
-		os.RemoveAll(distDir)
-		os.MkdirAll(distDir, 0755)
-
-		// 复制主程序
-		if err := copyFile(filepath.Join(distDir, outName), exePath); err != nil {
-			return fmt.Errorf("复制主程序 %s: %w", outName, err)
-		}
-		fmt.Printf("  → [%s/%s] %s\n", goos, goarch, outName)
-
-		// 复制附加资源（含平台过滤）
-		for _, entry := range cfg.Dist.Include {
-			if entry.OS != "" && entry.OS != goos {
-				continue // 非本平台条目跳过
+	for _, ed := range editions {
+		for _, t := range targets {
+			if err := packageEdition(root, cfg, ed, t[0], t[1]); err != nil {
+				return err
 			}
-			srcPath := filepath.Join(root, entry.Src)
-			dstPath := filepath.Join(distDir, entry.Dst)
-			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-				if entry.Optional {
-					continue
-				}
-				return fmt.Errorf("必需文件缺失: %s", entry.Src)
-			}
-			if err := copyDistEntry(srcPath, dstPath, entry); err != nil {
-				return fmt.Errorf("复制 %s: %w", entry.Src, err)
-			}
-			fmt.Printf("  → %s\n", entry.Dst)
 		}
+	}
+	return nil
+}
 
-		// 密钥脱敏
-		if cfg.StripSecrets != nil {
-			stripSecrets(distDir, cfg.StripSecrets.Fields, cfg.StripSecrets.Files)
-		}
+// packageEdition 打一个「发行版 × 目标平台」的包。
+//
+// 主程序按 edition.MainSrc 在 release/ 下解析（带平台后缀），包内改名为
+// edition.MainDst[.exe]；资源 = dist.include（公共）+ edition.include（专属）。
+func packageEdition(root string, cfg *PackagerConfig, ed DistEdition, goos, goarch string) error {
+	// GUI 主程序只在本机平台构建（交叉编译 cgo 需要目标平台的 C 工具链与
+	// 系统头文件）。edition 声明 nativeOnly 时，非本机目标直接跳过。
+	if ed.NativeOnly && !(goos == runtime.GOOS && goarch == runtime.GOARCH) {
+		fmt.Printf("  ⏭ [%s/%s] %s 需原生构建（cgo），跳过\n", goos, goarch, ed.Name)
+		return nil
+	}
 
-		// ZIP 打包
-		if cfg.Dist.Format != "dir" {
-			zipName := fmt.Sprintf("%s-%s.zip", dirName, cfg.Version)
-			zipPath := filepath.Join(root, cfg.Dist.OutputDir, zipName)
-			if err := createZIP(zipPath, distDir); err != nil {
-				return fmt.Errorf("ZIP 打包: %w", err)
-			}
-			zi, _ := os.Stat(zipPath)
-			fmt.Printf("  ✔ ZIP: %s (%.1f MB)\n", zipName, float64(zi.Size())/1024/1024)
+	mainSrcName := targetExeName(ed.MainSrc, goos, goarch)
+	mainSrcPath := filepath.Join(root, "release", mainSrcName)
+	if _, statErr := os.Stat(mainSrcPath); statErr != nil {
+		fmt.Printf("  ⏭ [%s/%s] %s: release/%s 不存在，跳过\n", goos, goarch, ed.Name, mainSrcName)
+		return nil
+	}
+
+	dirName := ed.DirName
+	if dirName == "" {
+		dirName = cfg.Dist.DirName
+	}
+	distDir := filepath.Join(root, cfg.Dist.OutputDir, dirName)
+	os.RemoveAll(distDir)
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		return err
+	}
+
+	// 包内主程序名：windows 补 .exe，其它平台保持基名。
+	mainDstName := ed.MainDst
+	if mainDstName == "" {
+		mainDstName = ed.MainSrc
+	}
+	if goos == "windows" && !strings.HasSuffix(strings.ToLower(mainDstName), ".exe") {
+		mainDstName += ".exe"
+	}
+	if goos != "windows" {
+		mainDstName = strings.TrimSuffix(mainDstName, ".exe")
+	}
+	if err := copyFile(filepath.Join(distDir, mainDstName), mainSrcPath); err != nil {
+		return fmt.Errorf("复制主程序 %s: %w", mainSrcName, err)
+	}
+	fmt.Printf("  → [%s/%s] %s → %s\n", goos, goarch, mainSrcName, mainDstName)
+
+	entries := make([]DistEntry, 0, len(cfg.Dist.Include)+len(ed.Include))
+	entries = append(entries, cfg.Dist.Include...)
+	entries = append(entries, ed.Include...)
+	for _, entry := range entries {
+		if entry.OS != "" && entry.OS != goos {
+			continue // 非本平台条目跳过
 		}
+		srcPath := filepath.Join(root, entry.Src)
+		dstPath := filepath.Join(distDir, entry.Dst)
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			if entry.Optional {
+				continue
+			}
+			return fmt.Errorf("必需文件缺失: %s", entry.Src)
+		}
+		if err := copyDistEntry(srcPath, dstPath, entry); err != nil {
+			return fmt.Errorf("复制 %s: %w", entry.Src, err)
+		}
+		fmt.Printf("  → %s\n", entry.Dst)
+	}
+
+	if cfg.StripSecrets != nil {
+		stripSecrets(distDir, cfg.StripSecrets.Fields, cfg.StripSecrets.Files)
+	}
+
+	if cfg.Dist.Format != "dir" {
+		// 命名：<dirName>-<version>-<goos>.zip（web/gui 与平台一目了然）
+		zipName := fmt.Sprintf("%s-%s-%s.zip", dirName, cfg.Version, goos)
+		zipPath := filepath.Join(root, cfg.Dist.OutputDir, zipName)
+		if err := createZIP(zipPath, distDir); err != nil {
+			return fmt.Errorf("ZIP 打包 %s: %w", zipName, err)
+		}
+		zi, _ := os.Stat(zipPath)
+		fmt.Printf("  ✔ ZIP: %s (%.1f MB)\n", zipName, float64(zi.Size())/1024/1024)
 	}
 	return nil
 }

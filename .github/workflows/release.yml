@@ -261,11 +261,22 @@ jobs:
         working-directory: paircode
         run: ls -lh release/*.zip
 
-      - name: Upload release zip
+      # ★ 2026-10-19：web / gui 是两种独立发行版，各自出「平台包」。
+      # 旧实现把 GUI 单文件启动器与 pair-server 塞进同一个 zip（两个 exe 重复
+      # 约 40MB，且用户分不清该下哪个）；现在 packager 的 dist.editions 分别
+      # 产出 PairCode-web-<ver>-<os>.zip 与 PairCode-gui-<ver>-<os>.zip。
+      - name: Upload web release zip
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.name }}
-          path: paircode/release/*.zip
+          name: release-web-${{ matrix.name }}
+          path: paircode/release/PairCode-web-*.zip
+          if-no-files-found: error
+
+      - name: Upload gui release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gui-${{ matrix.name }}
+          path: paircode/release/PairCode-gui-*.zip
           if-no-files-found: error
 
       # 「单 exe」交付形态：Windows 的 PairCode.exe 自身已内嵌 Skia 运行库、

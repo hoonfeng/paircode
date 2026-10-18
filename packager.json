@@ -28,7 +28,7 @@
     },
     {
       "name": "build-ui-frontend",
-      "command": "cd plugins-src/ui-app \u0026\u0026 npm run build"
+      "command": "cd plugins-src/ui-app && npm run build"
     },
     {
       "name": "sync-embed-shell",
@@ -92,14 +92,14 @@
         "optional": true
       },
       {
-        "src": "config/skills",
-        "dst": "config/skills",
+        "src": "docs",
+        "dst": "docs",
         "optional": true,
         "recursive": true
       },
       {
-        "src": "docs",
-        "dst": "docs",
+        "src": "config/skills",
+        "dst": "config/skills",
         "optional": true,
         "recursive": true
       },
@@ -122,80 +122,84 @@
         "src": "assets/icon128.png",
         "dst": "assets/icon128.png",
         "optional": true
-      },
+      }
+    ],
+    "editions": [
       {
-        "src": "release/pair-server.exe",
-        "dst": "pair-server.exe",
-        "optional": true,
-        "os": "windows"
-      },
-      {
-        "src": "release/pair-server-linux-amd64",
-        "dst": "pair-server",
-        "optional": true,
-        "os": "linux"
-      },
-      {
-        "src": "release/pair-server-darwin-arm64",
-        "dst": "pair-server",
-        "optional": true,
-        "os": "darwin"
-      },
-      {
-        "src": "bin/config/models.json",
-        "dst": "bin/config/models.json",
-        "optional": true
-      },
-      {
-        "src": "bin/config/onnx/onnxruntime.dll",
-        "dst": "bin/config/onnx/onnxruntime.dll",
-        "optional": true,
-        "os": "windows"
-      },
-      {
-        "src": "bin/config/onnx/libonnxruntime.so",
-        "dst": "bin/config/onnx/libonnxruntime.so",
-        "optional": true,
-        "os": "linux"
-      },
-      {
-        "src": "bin/config/onnx/libonnxruntime.dylib",
-        "dst": "bin/config/onnx/libonnxruntime.dylib",
-        "optional": true,
-        "os": "darwin"
-      },
-      {
-        "src": ".pair/plugins",
-        "dst": ".pair/plugins",
-        "optional": true,
-        "recursive": true
-      },
-      {
-        "src": "plugins-src/ui-app",
-        "dst": "plugins-src/ui-app",
-        "recursive": true,
-        "exclude": [
-          "node_modules"
+        "name": "web",
+        "dirName": "PairCode-web",
+        "mainSrc": "pair-server.exe",
+        "mainDst": "pair-server",
+        "include": [
+          {
+            "src": ".pair/plugins",
+            "dst": ".pair/plugins",
+            "optional": true,
+            "recursive": true
+          },
+          {
+            "src": "plugins-src/ui-app",
+            "dst": "plugins-src/ui-app",
+            "optional": true,
+            "recursive": true,
+            "exclude": [
+              "node_modules"
+            ]
+          },
+          {
+            "src": ".pair/assets/runtime/web",
+            "dst": ".pair/assets/runtime/web",
+            "optional": true,
+            "recursive": true
+          },
+          {
+            "src": ".pair/assets/runtime/bridge_node.js",
+            "dst": ".pair/assets/runtime/bridge_node.js",
+            "optional": true
+          },
+          {
+            "src": ".pair/assets/runtime/cordis.bundle.js",
+            "dst": ".pair/assets/runtime/cordis.bundle.js",
+            "optional": true
+          },
+          {
+            "src": "bin/config/models.json",
+            "dst": "bin/config/models.json",
+            "optional": true
+          },
+          {
+            "src": "bin/config/onnx/onnxruntime.dll",
+            "dst": "bin/config/onnx/onnxruntime.dll",
+            "optional": true,
+            "os": "windows"
+          },
+          {
+            "src": "bin/config/onnx/libonnxruntime.so",
+            "dst": "bin/config/onnx/libonnxruntime.so",
+            "optional": true,
+            "os": "linux"
+          },
+          {
+            "src": "bin/config/onnx/libonnxruntime.dylib",
+            "dst": "bin/config/onnx/libonnxruntime.dylib",
+            "optional": true,
+            "os": "darwin"
+          },
+          {
+            "src": "config/models",
+            "dst": "models",
+            "optional": true,
+            "recursive": true
+          }
         ]
       },
       {
-        "src": "config/models",
-        "dst": "models",
-        "optional": true,
-        "recursive": true
-      },
-      {
-        "src": ".pair/assets/runtime/web",
-        "dst": ".pair/assets/runtime/web",
-        "recursive": true
-      },
-      {
-        "src": ".pair/assets/runtime/bridge_node.js",
-        "dst": ".pair/assets/runtime/bridge_node.js"
-      },
-      {
-        "src": ".pair/assets/runtime/cordis.bundle.js",
-        "dst": ".pair/assets/runtime/cordis.bundle.js"
+        "name": "gui",
+        "dirName": "PairCode-gui",
+        "mainSrc": "PairCode.exe",
+        "mainDst": "PairCode",
+        "nativeOnly": true,
+        "include": []
       }
     ]
   },
