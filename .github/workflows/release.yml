@@ -68,7 +68,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xorg-dev libgl1-mesa-dev libxkbcommon-dev
+            xorg-dev libgl1-mesa-dev libxkbcommon-dev libgl1-mesa-dri \
+            xvfb x11-utils imagemagick \
+            fonts-noto-cjk fonts-wqy-zenhei
+          # ★ 中文字体是 headless/窗口自检的前提：Ubuntu runner 默认没有 CJK
+          # 字体，wb-ui 的 fontmgr 白名单再正确也加载不到文件 → 满屏方块。
+          # fonts-noto-cjk 提供 NotoSansCJK-Regular.ttc（含 SC face），
+          # fonts-wqy-zenhei 提供文泉驿兜底。装不上不算致命（macOS 自带 PingFang）。
+          fc-list :lang=zh | head -5 || true
 
       - name: Prepare go:embed frontend
         shell: bash
@@ -175,7 +182,66 @@ jobs:
           fi
           cat _temp/headless.log
           test -s _temp/headless.png
+          # ★ 2026-10-19（多平台中文字体防回归）：headless 日志必须出现
+          #   [fontmgr] cjk=<族名>，且族名不能是 (none)。旧实现在 Linux/macOS
+          #   上白名单只认 Windows 文件名 → 一个 CJK 字体都加载不到 → cjkTF
+          #   退化成西文字体 → 截图里中文全是豆腐块，而 CI 依然"成功"。
+          #   这一步现在把「字体落点」变成硬断言。
+          grep -q "\[fontmgr\] cjk=" _temp/headless.log || {
+            echo "::error::headless.log 缺少 [fontmgr] cjk=<族名>（字体初始化/日志回归）"
+            exit 1
+          }
+          CJK_FAMILY=$(grep -o "\[fontmgr\] cjk=[^ ]*" _temp/headless.log | tail -1 | sed 's/.*cjk=//')
+          echo "headless CJK font = $CJK_FAMILY"
+          case "$CJK_FAMILY" in
+            ""|"(none)")
+              echo "::error::未命中 CJK 字体（cjk=$CJK_FAMILY），中文会渲染成方块"
+              exit 1
+              ;;
+          esac
           echo "headless self-check OK: $(ls -lh _temp/headless.png | awk '{print $5}')"
+
+      # ★ 2026-10-19：Linux 真窗口自检（Xvfb）。headless 只能证明「引擎能画」，
+      # 这一步启动一体化 GUI（release/pair-linux-amd64 —— 与用户双击的同一个
+      # 二进制），在虚拟 X11 屏幕上开真窗口并截屏，验证窗口创建 + 页面装配 +
+      # 中文渲染。Xvfb 无 GPU，走 Mesa llvmpipe 软渲染；该步失败不阻断发布，
+      # 但会打印明确原因（限制如实记录，不用 headless 截图冒充窗口证据）。
+      - name: X11 window self-check (xvfb, Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        shell: bash
+        working-directory: paircode
+        run: |
+          set -uo pipefail
+          mkdir -p _temp
+          GUI=release/pair-linux-amd64
+          chmod +x "$GUI"
+          cp -f release/libSkiaSharp.* _temp/ 2>/dev/null || true
+          export LIBGL_ALWAYS_SOFTWARE=1
+          xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
+            set -u
+            WEB_PORT=9198 "$1" > _temp/window.log 2>&1 &
+            APP_PID=$!
+            for i in $(seq 1 40); do
+              if curl -sf -o /dev/null http://127.0.0.1:9198/ 2>/dev/null; then break; fi
+              sleep 0.5
+            done
+            sleep 12
+            import -window root _temp/window.png 2> _temp/import.err || true
+            kill $APP_PID 2>/dev/null || true
+            wait $APP_PID 2>/dev/null || true
+          ' _ "$GUI" || echo "xvfb 窗口运行失败（见 _temp/window.log）"
+          tail -60 _temp/window.log 2>/dev/null || true
+          if [ -f _temp/window.png ] && [ -s _temp/window.png ]; then
+            echo "window screenshot OK: $(ls -lh _temp/window.png | awk '{print $5}')"
+            grep -q "\[fontmgr\] cjk=" _temp/window.log || {
+              echo "::error::窗口模式日志缺少 [fontmgr] cjk=<族名>"
+              exit 1
+            }
+          else
+            echo "::warning::未能取得 X11 窗口截图（Xvfb/llvmpipe 限制）；headless 截图仍是同一渲染引擎的有效证据"
+            cat _temp/import.err 2>/dev/null || true
+          fi
 
       - name: Upload headless self-check
         if: runner.os != 'Windows'
@@ -186,6 +252,8 @@ jobs:
             paircode/_temp/headless.png
             paircode/_temp/headless.log
             paircode/_temp/server.log
+            paircode/_temp/window.png
+            paircode/_temp/window.log
           if-no-files-found: error
 
       - name: Show artifacts

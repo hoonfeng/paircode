@@ -251,7 +251,15 @@ func TestToolOfficeJSNative(t *testing.T) {
 	}
 	const file = "_temp/jsnative_test.csv"
 	ctxPath := filepath.Join(jsNativeWorkspace, file)
-	os.WriteFile(ctxPath, []byte("name,age\n张三,30\n李四,25\n"), 0o644)
+	// ★ 2026-10-19：测试自建目录，不能隐式依赖工作区里恰好存在 _temp/。
+	// 旧实现直接 WriteFile 且不检查 error —— CI（干净 checkout 没有 _temp/）
+	// 上写入静默失败，随后 csv_read 报「文件不存在」，master CI 因此长期红。
+	if err := os.MkdirAll(filepath.Dir(ctxPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(ctxPath), err)
+	}
+	if err := os.WriteFile(ctxPath, []byte("name,age\n张三,30\n李四,25\n"), 0o644); err != nil {
+		t.Fatalf("写测试 CSV %s: %v", ctxPath, err)
+	}
 	defer os.Remove(ctxPath)
 
 	// csv_read：表格渲染 + 列过滤

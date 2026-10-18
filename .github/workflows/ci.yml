@@ -16,6 +16,14 @@ jobs:
         with:
           go-version: "1.26"
 
+      # ★ 2026-10-19：与 release.yml 对齐。cmd/companion 用 //go:embed
+      # web-ui/dist 嵌入前端，而 dist/ 被 .gitignore 忽略 —— 干净 checkout
+      # 里不存在该目录，go vet/build 会直接报
+      # `pattern web-ui/dist: no matching files found`（master CI 长期三段红
+      # 的根因之一）。这里从入库的 .pair/assets/runtime/web 复制生成。
+      - name: Prepare go:embed frontend
+        run: node scripts/prepare-embed.mjs
+
       - name: Go vet
         run: go vet ./...
 
@@ -33,6 +41,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
+
+      - name: Prepare go:embed frontend
+        run: node scripts/prepare-embed.mjs
 
       - name: Run unit tests
         run: go test -short -count=1 ./cmd/companion/ ./pkg/... ./internal/...
@@ -55,6 +66,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
+
+      - name: Prepare go:embed frontend
+        run: node scripts/prepare-embed.mjs
 
       - name: Go build (agent — Linux/macOS)
         run: go build ./cmd/companion
