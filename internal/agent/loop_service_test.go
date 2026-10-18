@@ -178,6 +178,11 @@ func TestLoopService_RequestStop(t *testing.T) {
 	for prov.n.Load() < 2 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
+	// ★ 2026-10-18 修复 flaky：断言「停止请求之后不再继续跑」而不是「总调用数 < 100」。
+	//   原断言依赖测试 goroutine 被及时调度——mock provider 纳秒级返回，Windows CI runner
+	//   上调度粒度较粗，等 n>=2 时 loop 往往已跑过 100 轮（实测 107），并非停止逻辑失效。
+	//   语义保证是「下一轮迭代开始处退出」→ 请求后新增调用数 ≤ 1。
+	base := prov.n.Load()
 	svc.RequestStop()
 	<-done
 
@@ -187,8 +192,9 @@ func TestLoopService_RequestStop(t *testing.T) {
 	if loop.CancelCause.Kind != CancelByPlugin {
 		t.Errorf("CancelCause.Kind 应为 %q，得 %q", CancelByPlugin, loop.CancelCause.Kind)
 	}
-	if prov.n.Load() >= 100 {
-		t.Errorf("应提前停止（未跑满 100 次），实际 %d", prov.n.Load())
+	if extra := prov.n.Load() - base; extra > 1 {
+		t.Errorf("停止请求后应最多再完成 1 次 LLM 调用，实际新增 %d 次（stop 时 %d，结束 %d）",
+			extra, base, prov.n.Load())
 	}
 }
 

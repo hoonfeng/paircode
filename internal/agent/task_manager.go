@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,6 +47,26 @@ type TaskManager struct {
 	tasksDir string
 }
 
+// taskIDSeq 任务 ID 单调序列（★ 2026-10-18 修复：Windows 上 time.Now().UnixNano()
+// 分辨率有限，连续两次调用常返回同一纳秒值——快速连续建任务（或 ReplaceAllForConv
+// 批量写入 + 另一会话写入）会生成相同 ID，后者覆盖前者文件，表现为「跨会话任务丢失」。
+// 保证 ID 严格单调递增（仍是纯数字，兼容既有前端/文件名约定）。
+var taskIDSeq atomic.Int64
+
+// newTaskID 生成进程内唯一且单调递增的任务 ID。
+func newTaskID() string {
+	for {
+		n := time.Now().UnixNano()
+		last := taskIDSeq.Load()
+		if n <= last {
+			n = last + 1
+		}
+		if taskIDSeq.CompareAndSwap(last, n) {
+			return fmt.Sprintf("%d", n)
+		}
+	}
+}
+
 // NewTaskManager 创建任务管理器。
 func NewTaskManager(root string) *TaskManager {
 	dir := filepath.Join(root, ".pair", "tasks")
@@ -63,7 +84,7 @@ func (tm *TaskManager) Create(subject, description string, dependencies []string
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	now := time.Now().UTC().Format(time.RFC3339)
-	id := fmt.Sprintf("%d", time.Now().UnixNano())
+	id := newTaskID()
 	if dependencies == nil {
 		dependencies = []string{}
 	}
@@ -291,7 +312,7 @@ func (tm *TaskManager) ReplaceAllForConv(tasks []Task, convID string) error {
 	for i := range tasks {
 		t := &tasks[i]
 		if t.ID == "" {
-			t.ID = fmt.Sprintf("%d", time.Now().UnixNano()+int64(i))
+			t.ID = newTaskID()
 		}
 		if t.CreatedAt == "" {
 			t.CreatedAt = time.Now().UTC().Format(time.RFC3339)
