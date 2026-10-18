@@ -63,12 +63,25 @@ if (!existsSync(cfgPath)) {
   process.exit(1)
 }
 const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
-const entry = (cfg?.dist?.include || []).find((e) => e.src === BASELINE_ENTRY_SRC)
-if (!entry) {
-  console.error(`[verify-dist-isolation] packager.json 的 dist.include 缺少 { src: "${BASELINE_ENTRY_SRC}" } —— 打包基线插件链路已变，请同步本护栏`)
+// ★ 2026-10-19：打包链拆分为 web/gui 双发行版（dist.editions[]）后，基线
+//   .pair/plugins 条目位于各 edition 的 include 中（dist.include 只保留通用项）。
+//   收集所有携带该条目的 scope：**每个 scope 的 exclude 都必须覆盖全部独立插件**，
+//   否则该发行版会把独立插件打进包（旧逻辑只看 dist.include，拆版后误报缺条目）。
+const scopes = [
+  { label: 'dist.include', include: cfg?.dist?.include || [] },
+  ...(cfg?.dist?.editions || []).map((ed) => ({
+    label: `dist.editions[${ed && ed.name}].include`,
+    include: (ed && ed.include) || [],
+  })),
+]
+  .map((s) => ({ ...s, entry: s.include.find((e) => e.src === BASELINE_ENTRY_SRC) }))
+  .filter((s) => s.entry)
+if (scopes.length === 0) {
+  console.error(`[verify-dist-isolation] packager.json 的 dist.include / dist.editions[].include 均缺少 { src: "${BASELINE_ENTRY_SRC}" } —— 打包基线插件链路已变，请同步本护栏`)
   process.exit(1)
 }
-const excluded = new Set(entry.exclude || [])
+const excludedScopes = scopes.map((s) => ({ label: s.label, set: new Set(s.entry.exclude || []) }))
+const excluded = new Set(excludedScopes.flatMap((s) => [...s.set]))
 
 const problems = []
 const notes = []
@@ -79,8 +92,10 @@ for (const name of distPlugins.keys()) {
   if (!pkg.name) {
     notes.push(`plugins-dist/${name}/package.json 缺 name 字段（发布脚本会规范化，仅提示）`)
   }
-  if (!excluded.has(name)) {
-    problems.push(`packager.json → dist.include[${BASELINE_ENTRY_SRC}].exclude 缺少 "${name}"：该独立插件会被打进 IDE 发布包`)
+  for (const s of excludedScopes) {
+    if (!s.set.has(name)) {
+      problems.push(`packager.json → ${s.label}[${BASELINE_ENTRY_SRC}].exclude 缺少 "${name}"：该独立插件会被打进对应发行版`)
+    }
   }
   if (baselinePlugins.has(name)) {
     let lst = null

@@ -129,6 +129,9 @@ const plugins = ref([
   { name: 'tool-rig', state: 'on', source: 'repo', srcLabel: 'repo', scope: 'project', hasClient: false, tools: 5, uiActive: false },
   { name: 'tool-voice', state: 'on', source: 'repo', srcLabel: 'repo', scope: 'global', hasClient: false, tools: 3, uiActive: false },
   { name: 'plugin-dev-helpers-and-templates', state: 'on', source: 'js', srcLabel: '动态', scope: 'project', hasClient: true, tools: 2, uiActive: false },
+  // ★ 超长无连字符名（80+ 字符）：真实侧栏 ~250px 下必须换 3 行以上，
+  //   用于判定 wb-ui 的 white-space:normal + word-break:break-all 换行/裁剪行为。
+  { name: 'tool-codegraph-extra-long-plugin-name-without-any-breaks-at-all-0123456789', state: 'on', source: 'repo', srcLabel: 'repo', scope: 'project', hasClient: false, tools: 11, uiActive: false },
 ])
 
 const cards = ref([
@@ -202,6 +205,32 @@ onMounted(() => {
     const el = chatInputEl.value
     if (el) { el.focus(); measure() }
   }, 300)
+  // ★ 统一探针（2026-10-18）：把插件列表名称的布局/测量数据写成 JSON，
+  // Chrome（--dump-dom）与 wb-ui（-eval2）读同一份，逐项对照。
+  // 重点字段：clientWidth/scrollWidth 是否如实反映文本宽度、实际高度 vs lineHeight、
+  // computed white-space/word-break/overflow——文字「消失/压缩/不换行」的判定依据。
+  setTimeout(() => {
+    const out = { ua: navigator.userAgent, names: [] }
+    document.querySelectorAll('.pp-name').forEach((el) => {
+      const cs = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      out.names.push({
+        t: el.textContent,
+        cw: el.clientWidth, sw: el.scrollWidth,
+        ch: el.clientHeight, sh: el.scrollHeight,
+        w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10,
+        ws: cs.whiteSpace, wb: cs.wordBreak, ov: cs.overflow,
+        fs: cs.fontSize, lh: cs.lineHeight, ff: cs.fontFamily,
+        flex: cs.flex, minW: cs.minWidth,
+      })
+    })
+    const probe = document.createElement('div')
+    probe.id = 'probe-output'
+    probe.textContent = JSON.stringify(out)
+    probe.style.display = 'none'
+    document.body.appendChild(probe)
+    window.__probe = out
+  }, 800)
   window.__fx = { plugins, cards, ciFocused, ciLh, ciH, ppScrollTop, marketScrollTop, scrollLog }
 })
 onBeforeUnmount(() => cancelAnimationFrame(rafId))
@@ -245,7 +274,10 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: s
 .fx-btn { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-secondary); cursor: pointer; }
 
 /* ═══ A. 插件列表（复刻 PluginPanel）═══ */
-.pp-panel { display: flex; flex-direction: column; height: 420px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+/* ★ 固定为真实侧栏面板宽度（约 260px）：v-for 三列平分 1600px 时每个 .pp-name
+   宽 429px，长名字恰好单行放得下 → 复现不出截断。真实 IDE 侧栏插件面板只有
+   约 250px，长名字必须换行，才能暴露 wb-ui 的换行/裁剪缺陷。 */
+.pp-panel { display: flex; flex-direction: column; width: 260px; height: 420px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .pp-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
 .pp-title { font-size: 13px; font-weight: 600; }
 .pp-sub { font-size: 11px; color: var(--text-muted); }
@@ -256,7 +288,10 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: s
 .pp-row-main { display: flex; align-items: center; gap: 6px; }
 .pp-state { width: 7px; height: 7px; border-radius: 50%; background: #666; flex-shrink: 0; }
 .pp-state.on { background: #4caf50; }
-.pp-name { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; min-width: 96px; }
+/* ★ 与真实 PluginPanel.vue（2026-10-18 改造后）完全一致：
+   flex:1 1 auto + min-width:0；white-space:normal + word-break:break-all + overflow:visible，
+   长名在词内换行而非 ellipsis 截断。用于对比 wb-ui 与 Chrome 的换行/宽度计算。 */
+.pp-name { font-size: 13px; color: var(--text-primary); flex: 1 1 auto; min-width: 0; font-weight: 500; white-space: normal; word-break: break-all; overflow: visible; }
 .pp-chevron { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
 .pp-row-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .pp-src { font-size: 10px; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 4px; padding: 0 4px; }

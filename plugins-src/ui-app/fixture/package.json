@@ -1,0 +1,17 @@
+{
+  "name": "wb-ui-fixture",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "wb-ui 引擎缺陷隔离验证 fixture（插件列表 / 输入框 / 市场卡片）",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-vue": "^5.0.0"
+  }
+}
