@@ -10,7 +10,7 @@
     "frontendDir": "cmd/companion/web-ui",
     "icon": "assets/icon.png",
     "mainPkg": "./cmd/companion",
-    "output": "pair.exe",
+    "output": "PairCode.exe",
     "targets": "windows/amd64,linux/amd64,darwin/arm64"
   },
   "pipeline": [
@@ -69,6 +69,10 @@
       "ignoreError": true
     },
     {
+      "name": "build-stub",
+      "type": "build-stub"
+    },
+    {
       "name": "package",
       "type": "package"
     },
@@ -120,11 +124,6 @@
         "optional": true
       },
       {
-        "src": "lib/libSkiaSharp.dll",
-        "dst": "lib/libSkiaSharp.dll",
-        "optional": true
-      },
-      {
         "src": "release/pair-server.exe",
         "dst": "pair-server.exe",
         "optional": true,
@@ -139,24 +138,6 @@
       {
         "src": "release/pair-server-darwin-arm64",
         "dst": "pair-server",
-        "optional": true,
-        "os": "darwin"
-      },
-      {
-        "src": "release/libSkiaSharp.dll",
-        "dst": "libSkiaSharp.dll",
-        "optional": true,
-        "os": "windows"
-      },
-      {
-        "src": "release/libSkiaSharp.so",
-        "dst": "libSkiaSharp.so",
-        "optional": true,
-        "os": "linux"
-      },
-      {
-        "src": "release/libSkiaSharp.dylib",
-        "dst": "libSkiaSharp.dylib",
         "optional": true,
         "os": "darwin"
       },

@@ -130,6 +130,7 @@ func main() {
 	setVersion := ""
 	filterStep := ""
 	targetsOverride := ""
+	versionOnly := false
 
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -153,6 +154,8 @@ func main() {
 				targetsOverride = os.Args[i+1]
 				i++
 			}
+		case "--version-only":
+			versionOnly = true
 		case "-h", "--help":
 			printHelp()
 			return
@@ -172,6 +175,11 @@ func main() {
 	if setVersion != "" || bump != "" {
 		saveConfig(cfgPath, cfg)
 		fmt.Println("  版本已更新: packager.json")
+	}
+	if versionOnly {
+		// 只改版本号，不执行任何 pipeline 步骤（CI 的 tag 版本对齐用）。
+		fmt.Printf("  仅版本处理完成: %s v%s\n", cfg.AppName, cfg.Version)
+		return
 	}
 
 	fmt.Printf("Packager: %s v%s\n", cfg.AppName, cfg.Version)
@@ -214,6 +222,8 @@ func main() {
 			err = execBuildGo(root, step, cfg, vars)
 		case "build-go-gui":
 			err = execBuildGoGUI(root, step, cfg, vars)
+		case "build-stub":
+			err = execBuildStub(root, step, cfg)
 		case "package":
 			err = execPackage(root, cfg, vars)
 		default:
@@ -399,6 +409,10 @@ func execBuildGoGUI(root string, step StepDef, cfg *PackagerConfig, vars *Vars) 
 	}
 
 	ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
+	if goos == "windows" {
+		// GUI 子系统：双击启动不弹控制台窗口（服务版 pair-server.exe 保留控制台）。
+		ldflags += " -H windowsgui"
+	}
 	if extra := vars.custom["extraLdflags"]; extra != "" {
 		ldflags += " " + extra
 	}
@@ -420,6 +434,81 @@ func execBuildGoGUI(root string, step StepDef, cfg *PackagerConfig, vars *Vars) 
 	fmt.Printf("  → go build -tags %s [%s/%s cgo=1] -o %s %s\n", tags, goos, goarch, outName, pkg)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("编译 GUI 主程序 %s/%s 失败: %w", goos, goarch, err)
+	}
+	return nil
+}
+
+// execBuildStub 构建单文件自解压启动器（-tags stub）。
+//
+// 把本机平台的 GUI 主程序与 Skia 原生库复制到 cmd/paircode-stub/payload/，
+// 再编译成 release/PairCode[.exe]。发布包因此只需一个可执行文件：首次运行
+// 由 stub 释放到用户级 runtime 目录，之后复用；Windows PE 在进程启动前解析
+// 导入表，所以解压只能在不通��� Skia 的外层进程里完成。
+func execBuildStub(root string, step StepDef, cfg *PackagerConfig) error {
+	goos, goarch := runtime.GOOS, runtime.GOARCH
+	payloadDir := filepath.Join(root, step.Dir)
+	if step.Dir == "" {
+		payloadDir = filepath.Join(root, "cmd", "paircode-stub", "payload")
+	}
+	mainInPayload := "pair"
+	if goos == "windows" {
+		mainInPayload = "pair.exe"
+	}
+	skiaLib := map[string]string{
+		"windows": "libSkiaSharp.dll",
+		"linux":   "libSkiaSharp.so",
+		"darwin":  "libSkiaSharp.dylib",
+	}[goos]
+	if skiaLib == "" {
+		return fmt.Errorf("build-stub: 不支持的平台 %s/%s", goos, goarch)
+	}
+	// 每次重建 payload：避免上一次构建的平台产物/已删除插件残留进 embed。
+	if err := os.RemoveAll(payloadDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(payloadDir, 0o755); err != nil {
+		return err
+	}
+	mainSrc := filepath.Join(root, "release", targetExeName("pair.exe", goos, goarch))
+	skiaSrc := filepath.Join(root, "release", skiaLib)
+	if err := copyFile(filepath.Join(payloadDir, mainInPayload), mainSrc); err != nil {
+		return fmt.Errorf("build-stub: 复制 GUI 主程序（需先执行 build-go-gui）: %w", err)
+	}
+	if err := copyFile(filepath.Join(payloadDir, skiaLib), skiaSrc); err != nil {
+		return fmt.Errorf("build-stub: 复制 Skia 原生库（需先执行 stage-gui-runtime）: %w", err)
+	}
+	// 插件与前端资源是 IDE 界面的组成部分：只释放主程序+Skia 库时，插件宿主为 0、
+	// 侧边栏与面板全部显示「未装配」。随 stub 一起内嵌，空目录首次启动即可完整。
+	for _, res := range []string{".pair/plugins", ".pair/assets", "plugins-src/ui-app"} {
+		src := filepath.Join(root, filepath.FromSlash(res))
+		if _, err := os.Stat(src); err != nil {
+			continue // 资源目录可缺省（精简仓库）
+		}
+		dst := filepath.Join(payloadDir, filepath.FromSlash(res))
+		entry := DistEntry{Src: res, Dst: res, Recursive: true}
+		if err := copyDistEntry(src, dst, entry); err != nil {
+			return fmt.Errorf("build-stub: 复制 %s: %w", res, err)
+		}
+	}
+
+	// 与 package 步骤的 targetExeName 保持一致：windows 为 PairCode.exe，
+	// 其它平台带平台后缀（PairCode-linux-amd64 / PairCode-darwin-arm64）。
+	outName := targetExeName("PairCode.exe", goos, goarch)
+	outPath := filepath.Join(root, "release", outName)
+	ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
+	if goos == "windows" {
+		// 单文件启动器同样走 GUI 子系统，双击不弹控制台。
+		ldflags += " -H windowsgui"
+	}
+	fmt.Printf("  → go build -tags stub [%s/%s] -o %s ./cmd/paircode-stub\n", goos, goarch, outName)
+	cmd := exec.Command("go", "build", "-tags", "stub", "-ldflags="+ldflags, "-o", outPath, "./cmd/paircode-stub")
+	cmd.Dir = root
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// stub 是纯 Go（无 cgo），不依赖 wb-ui，显式 GOWORK=off 避免误用默认 workspace。
+	cmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("编译单文件启动器失败: %w", err)
 	}
 	return nil
 }
@@ -786,6 +875,7 @@ Packager — 通用打包执行引擎
 选项:
   --bump <level>    自动递增版本号: patch|minor|major
   --version <x.y.z> 手动指定版本号
+  --version-only    只写版本号到 packager.json，不执行 pipeline（配 --version 用）
   --step <name>     只执行指定步骤
   --targets <spec>  覆盖目标平台（如 --targets windows/amd64,linux/amd64,darwin/arm64）
   -h, --help        显示此帮助

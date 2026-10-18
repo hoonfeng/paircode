@@ -15,7 +15,14 @@ Thumbs.db
 *.user
 *.suo
 go.work
-go.work.sum
+# go.work.sum 必须入库：CI 用 go.work.gui 建 GUI 版时会读取同目录的
+# go.work.sum（Go 只认这个固定名，不认 go.work.gui.sum），缺失会使
+# 依赖校验和校验失败。
+!go.work.sum
+
+# paircode-stub 的 payload：由 packager 的 build-stub 步骤在构建时写入
+# （GUI 主程序 + Skia 原生库），不入库。
+/cmd/paircode-stub/payload/
 
 # Pair CodeAgent 工作目录：仅入库插件（plugins/）与运行资产（assets/）；
 # 其余（memory/conversations/tasks/skills/toolsets/execution_logs/publish 日志/

@@ -90,7 +90,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         working-directory: paircode
-        run: ./"$PACKAGER" --version "${GITHUB_REF_NAME#v}" --step __version_only__
+        run: ./"$PACKAGER" --version "${GITHUB_REF_NAME#v}" --version-only
 
       - name: Build GUI binary (cgo, native)
         shell: bash
@@ -111,6 +111,44 @@ jobs:
         shell: bash
         working-directory: paircode
         run: ./"$PACKAGER" --targets "${{ matrix.target }}" --step package
+
+      # 非 Windows 平台的自检：真的把 GUI 引擎的 headless 渲染跑起来（加载前端、
+      # 推进事件循环、截图+导出渲染文本），证明不是「只编译通过」。
+      # 复用 wb-ui/cmd/gouide 的 -headless 能力，连接本平台刚构建出的 pair-server。
+      - name: Headless render self-check
+        if: runner.os != 'Windows'
+        shell: bash
+        working-directory: paircode
+        run: |
+          set -euo pipefail
+          mkdir -p _temp
+          PORT=9199
+          SERVER=release/pair-server-linux-amd64
+          if [ "$RUNNER_OS" = "macOS" ]; then SERVER=release/pair-server-darwin-arm64; fi
+          chmod +x "$SERVER"
+          WEB_PORT=$PORT "$SERVER" > _temp/server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null "http://127.0.0.1:$PORT/"; then break; fi
+            sleep 0.5
+          done
+          ( cd ../wb-ui && CGO_ENABLED=1 GOWORK=off go build -o ../paircode/_temp/gouide ./cmd/gouide )
+          ./_temp/gouide -headless -attach -port $PORT -out _temp/headless.png -frames 60 -dump-text > _temp/headless.log 2>&1
+          cat _temp/headless.log
+          test -s _temp/headless.png
+          echo "headless self-check OK: $(ls -lh _temp/headless.png | awk '{print $5}')"
+
+      - name: Upload headless self-check
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-${{ matrix.name }}
+          path: |
+            paircode/_temp/headless.png
+            paircode/_temp/headless.log
+            paircode/_temp/server.log
+          if-no-files-found: error
 
       - name: Show artifacts
         shell: bash

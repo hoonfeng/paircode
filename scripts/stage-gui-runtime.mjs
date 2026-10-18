@@ -62,6 +62,9 @@ for (const modDir of moduleDirs) {
     const src = path.join(srcDir, name)
     if (!fs.existsSync(src)) continue
     const dst = path.join(releaseDir, name)
+    // Windows 上目标文件若残留只读属性（或被索引/杀软短暂持有），
+    // copyFileSync 直接覆盖会抛 EPERM；先删除再复制。
+    try { fs.rmSync(dst, { force: true }) } catch {}
     fs.copyFileSync(src, dst)
     const mb = (fs.statSync(dst).size / 1024 / 1024).toFixed(1)
     console.log(`  → ${name} (${mb} MB) ← ${src}`)
