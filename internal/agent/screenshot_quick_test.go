@@ -1,4 +1,12 @@
+//go:build windows
+
 // screenshot_quick_test.go — 截图工具快速端到端验证
+//
+// ★ 2026-10-19：captureDesktop 只在 screenshot_tool.go（//go:build windows）
+// 里实现，非 Windows 用 captureDesktopNonWindows。本测试原先没有平台约束，
+// CI 的 cross-build（ubuntu/macos）跑 go vet 时报
+// `undefined: captureDesktop`。这里补上 windows 约束（跨平台截图由
+// screenshot_tool_other.go 的实现单独覆盖）。
 
 package agent
 
