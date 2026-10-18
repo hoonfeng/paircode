@@ -104,4 +104,19 @@ const selectStyle = computed(() => (props.width > 0 ? { maxWidth: props.width + 
   color: var(--accent);
   pointer-events: none;
 }
+/* ★ 子组件根元素不继承父组件 scopeId（2026-10-19，引擎实测）：SvgIcon
+   的根 <svg> 只带自己的 data-v-cdf5ecb9、没有 SheetPicker 的
+   data-v-58d34149，且透传的 class="sp-chevron" 在引擎里丢失 →
+   上面的 .sp-chevron[data-v-…] 永远不命中，箭头变成普通 flex 子项
+   落在 select 框外、颜色回退成正文色（用户报「下拉图标在外部且颜色
+   异常」）。:deep() 编译为 `.sp-wrap[data-v-…] svg`（后代选择器），
+   不依赖子组件根元素的 scopeId。 */
+.sp-wrap :deep(svg) {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  pointer-events: none;
+}
 </style>

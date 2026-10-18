@@ -196,9 +196,16 @@ const marketHost = ref(null)
 let marketUnmount = null
 let marketRetryTimer = null
 
-function mountMarketPanel() {
+function mountMarketPanel(attempt = 0) {
   const el = marketHost.value
-  if (!el) return
+  if (!el) {
+    // ★ 容器随 v-if 挂载有延迟：marketTabOpen 与 mainView 在同一 tick 变更
+    //   时，watcher 可能早于 DOM patch 执行 → 旧实现直接 return，市场 tab
+    //   打开后永久空白（用户表现：「市场面板一片空白」）。这里短暂重试，
+    //   等 v-if 容器就绪再挂载。
+    if (attempt < 20) setTimeout(() => mountMarketPanel(attempt + 1), 50)
+    return
+  }
   el.innerHTML = ''
   const mod = window.MarketplacePanel
   if (mod && typeof mod.mount === 'function') {
@@ -330,6 +337,14 @@ watch(mainView, (v) => {
     const target = openViews.value.find(x => x.key === v)
     if (target) nextTick(() => mountViewIfNeeded(target))
   }
+})
+
+// ★ marketTabOpen 由顶部「市场」tab 直接置 true（UiTitlebar）——容器随该
+//   状态经 v-if 创建，若与 mainView 同 tick 变更，mainView watcher 可能早于
+//   DOM patch 执行 → 市场页空白。显式监听该状态，容器就绪后再挂载。
+watch(() => state.marketTabOpen, (v) => {
+  if (v) nextTick(mountMarketPanel)
+  else unmountMarketPanel()
 })
 
 const gridStyle = computed(() => {
