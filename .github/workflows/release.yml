@@ -136,6 +136,12 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         working-directory: paircode
+        env:
+          # goskia 的 #cgo LDFLAGS 带 -Wl,-rpath,@loader_path（macOS 运行时库搜索
+          # 路径），Go 1.26 的 cgo flag 白名单默认拒绝，与 Build GUI binary 步骤
+          # 保持一致显式放行；否则 macOS 上这一 step 的 `go build ./cmd/gouide`
+          # 会直接报 invalid flag in #cgo LDFLAGS。
+          CGO_LDFLAGS_ALLOW: ".*"
         run: |
           set -euo pipefail
           mkdir -p _temp
@@ -151,7 +157,22 @@ jobs:
             sleep 0.5
           done
           ( cd ../wb-ui && CGO_ENABLED=1 GOWORK=off go build -o ../paircode/_temp/gouide ./cmd/gouide )
-          ./_temp/gouide -headless -attach -port $PORT -out _temp/headless.png -frames 60 -dump-text > _temp/headless.log 2>&1
+          # 运行期依赖 libSkiaSharp（goskia 的 cgo 绑定）：Linux 是 rpath=$ORIGIN、
+          # macOS 是 rpath=@loader_path，因此把库放到 gouide 同目录即可命中。
+          # stage-gui-runtime 已把本平台库放进 release/；缺库时 gouide 会以
+          # 127（找不到动态库）退出，所以失败分支打印 ldd/otool 便于定位。
+          cp -f release/libSkiaSharp.* _temp/ 2>/dev/null || true
+          ls -l _temp/gouide _temp/libSkiaSharp.* 2>/dev/null || true
+          if ! ./_temp/gouide -headless -attach -port $PORT -out _temp/headless.png -frames 60 -dump-text > _temp/headless.log 2>&1; then
+            echo "headless 运行失败，依赖诊断："
+            case "$RUNNER_OS" in
+              macOS) otool -L _temp/gouide || true ;;
+              *)     ldd _temp/gouide || true ;;
+            esac
+            ls -l _temp/ || true
+            cat _temp/headless.log || true
+            exit 1
+          fi
           cat _temp/headless.log
           test -s _temp/headless.png
           echo "headless self-check OK: $(ls -lh _temp/headless.png | awk '{print $5}')"
