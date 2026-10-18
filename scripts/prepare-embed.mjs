@@ -20,6 +20,24 @@ if (!fs.existsSync(path.join(src, 'index.html'))) {
   console.error(`[prepare-embed] 缺少前端产物：${src}/index.html`)
   process.exit(1)
 }
+// 完整性校验：index.html 引用的本地资源必须都在。只入库 index.html 而漏掉
+// assets/*.js（hash 产物）时，CI 打出的发布包 Web UI 会白屏——这里快速失败，
+// 比等到用户装上才发现好。
+{
+  const html = fs.readFileSync(path.join(src, 'index.html'), 'utf8')
+  const refs = [...html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)].map((m) => m[1])
+  const missing = refs
+    .map((r) => path.join(src, r))
+    .filter((p) => !fs.existsSync(p))
+  if (missing.length > 0) {
+    console.error(
+      '[prepare-embed] 前端产物不完整，缺少：\n' +
+        missing.map((p) => '  ' + p).join('\n') +
+        '\n请在 plugins-src/ui-app 执行 npm run build，并提交 .pair/assets/runtime/web/assets/ 下的产物。'
+    )
+    process.exit(1)
+  }
+}
 if (fs.existsSync(dst)) {
   console.log(`[prepare-embed] 已存在，跳过：${dst}`)
   process.exit(0)
