@@ -3495,10 +3495,20 @@ func (p *jsPluginAdapter) buildNPMService(pc *PluginContext) goja.Value {
 // ─── ctx.plugins：磁盘插件装配服务（通用能力）───────────────────
 //
 //	ctx.plugins.reloadDisk() → "已重新扫描磁盘插件包（n 个插件）"（新装插件立即生效）
+//
+// reloadDiskRunning 防止「插件在 apply 中调用 reloadDisk」造成递归重扫：
+// 重扫会重新 apply 同名插件（applyGlobalPlugin 先 Unload/Undefine 再装载），
+// 若 apply 内再次调用 reloadDisk，就会无限递归。守卫在重扫期间直接拒绝再次进入。
+var reloadDiskRunning atomic.Bool
+
 func (p *jsPluginAdapter) buildPluginsService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	pl := vm.NewObject()
 	pl.Set("reloadDisk", func(call goja.FunctionCall) goja.Value {
+		if !reloadDiskRunning.CompareAndSwap(false, true) {
+			return vm.ToValue("磁盘插件重扫已在进行中（跳过本次调用，防递归）")
+		}
+		defer reloadDiskRunning.Store(false)
 		ph := GetGlobalPluginHost()
 		if ph == nil {
 			return vm.ToValue("宿主未就绪，跳过磁盘插件重扫（重启自动装配）")
