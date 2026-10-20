@@ -250,8 +250,24 @@ func (ps *ptySession) startPTY() error {
 }
 
 // ptyReader 从 PTY 读取输出并发送到 WebSocket（二进制帧）。
+// ptyStats* 是 WB_PTY_STATS=1 的诊断计数（Read 次数/字节量，每 3s 一行）：
+// 用于区分「空转的零字节读」与「shell 真实高频输出」。
+var (
+	ptyStatsOn   = os.Getenv("WB_PTY_STATS") != ""
+	ptyStatReads atomic.Int64
+	ptyStatBytes atomic.Int64
+	ptyStatLast  atomic.Int64
+)
+
 func (ps *ptySession) ptyReader() {
 	buf := make([]byte, 65536)
+	// ★ 空读退避（性能关键）：ConPTY 管道在 shell 退出/半关闭等状态下可能
+	//   出现「立即返回 (0, nil)」——此前的循环直接重试，单核 100% 空转
+	//   （实测打开编辑器后终端面板挂起即整机 CPU 100%，pprof 显示
+	//   ptyReader→windowsPty.Read 占 43% 采样）。这里对「无数据无错误」
+	//   的读让出 2ms（连续空读超过 50 次后降频到 10ms），正常路径
+	//   （n>0 或 err!=nil）不受影响。
+	zeroReads := 0
 	for {
 		ps.mu.Lock()
 		sess := ps.sess
@@ -263,7 +279,24 @@ func (ps *ptySession) ptyReader() {
 		}
 
 		n, err := sess.Read(buf)
+		if ptyStatsOn {
+			if n > 0 {
+				ptyStatBytes.Add(int64(n))
+			}
+			reads := ptyStatReads.Add(1)
+			last := ptyStatLast.Load()
+			if last == 0 {
+				ptyStatLast.Store(time.Now().UnixNano())
+			} else if time.Since(time.Unix(0, last)) >= 3*time.Second &&
+				ptyStatLast.CompareAndSwap(last, time.Now().UnixNano()) {
+				log.Printf("[pty-stats] reads=%d bytes=%d closed=%v",
+					reads, ptyStatBytes.Load(), closed)
+				ptyStatReads.Store(0)
+				ptyStatBytes.Store(0)
+			}
+		}
 		if n > 0 {
+			zeroReads = 0
 			data := make([]byte, n)
 			copy(data, buf[:n])
 			if wErr := ps.writeBinary(data); wErr != nil {
@@ -271,6 +304,24 @@ func (ps *ptySession) ptyReader() {
 				ps.close()
 				return
 			}
+		}
+		if n == 0 && err == nil {
+			zeroReads++
+			if zeroReads == 5000 {
+				log.Printf("[terminal-ws] PTY 连续 %d 次空读（无数据无错误），已降频等待；多半是 shell 已退出但管道未关", zeroReads)
+			}
+			d := 2 * time.Millisecond
+			if zeroReads > 50 {
+				d = 10 * time.Millisecond
+			}
+			ps.mu.Lock()
+			closedNow := ps.closed
+			ps.mu.Unlock()
+			if closedNow {
+				return
+			}
+			time.Sleep(d)
+			continue
 		}
 		if err != nil {
 			// ★ 正常关闭竞态不打印：wsReader 返回 → ps.close() → sess.Close()
