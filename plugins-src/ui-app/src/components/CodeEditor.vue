@@ -8,7 +8,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { EditorView } from 'codemirror'
-import { EditorState, Transaction, Prec } from '@codemirror/state'
+import { EditorState, Transaction, Prec, Compartment } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle, foldGutter, indentOnInput, defaultHighlightStyle, bracketMatching, foldKeymap } from '@codemirror/language'
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
 import { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
@@ -53,6 +53,14 @@ let view = null
 //   （先到的 Promise 永久 pending）。注册前必须先移除旧引用。
 let contextMenuHandler = null
 
+// ★ 文件切换复用编辑器实例（2026-10-21）：此前 EditorArea 用 :key=activeFile
+//   强制整组件重挂载 → 每次打开/切换文件都 destroy + new EditorView（扩展
+//   构建 + 语言解析器初始化 + 整套 DOM 创建）。实测打开 59KB 文件时帧内
+//   events 段 769ms、整帧 1189ms。改为 Compartment 动态重配语言与 history，
+//   切文件只做一次文档替换 + 一次语法解析。
+const langCompartment = new Compartment()
+const historyCompartment = new Compartment()
+
 function getLang(path) {
   if (!path) return null
   const ext = path.split('.').pop().toLowerCase()
@@ -88,7 +96,7 @@ function createEditor() {
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
-    history(),
+    historyCompartment.of(history()),
     foldGutter({ openText: '∨', closedText: '›' }),
     drawSelection(),
     dropCursor(),
@@ -135,7 +143,10 @@ function createEditor() {
       },
     ])),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
+      // ★ 远程替换（切文件 / 外部内容同步）不当作「用户编辑」回写：
+      //   否则 onContentChange 会把整篇文本写回 state.fileContents 并重算
+      //   fileDirty，大文件每次替换都白跑一遍 toString()。
+      if (update.docChanged && !update.transactions.some((tr) => tr.annotation(Transaction.remote))) {
         emit('update:modelValue', update.state.doc.toString())
       }
       // 光标位置变化时通知
@@ -195,9 +206,9 @@ function createEditor() {
   if (themeExt) extensions.push(themeExt)
   if (syntaxExt) extensions.push(syntaxExt)
 
-  // 语言
+  // 语言（放进 Compartment：切换文件时只重配语言，不重建编辑器实例）
   const langImpl = lang ? lang() : null
-  if (langImpl) extensions.push(langImpl)
+  extensions.push(langCompartment.of(langImpl || []))
 
   // 只读
   if (props.readonly) extensions.push(EditorView.editable.of(false))
@@ -299,18 +310,41 @@ onMounted(() => {
   }, 100)
 })
 
-watch(() => props.path, () => {
-  if (view) {
-    view.destroy()
-    view = null
+// switchFile：复用当前 EditorView 切到新文件——替换文档 + 重配语言 +
+// 重置撤销历史（与原「重建实例」语义一致：撤销不会跨文件回退），
+// 并把滚动容器回到顶部。销毁重建只用于「还没有实例」的首次挂载。
+function switchFile(path, content) {
+  if (!view) { createEditor(); return }
+  const lang = getLang(path)
+  const effects = [
+    langCompartment.reconfigure(lang ? lang() : []),
+    // history compartment 重配 = 丢弃旧文件的撤销栈（等价于重建实例）
+    historyCompartment.reconfigure(history()),
+  ]
+  const next = content || ''
+  const cur = view.state.doc.toString()
+  if (cur !== next) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: next },
+      effects,
+      annotations: Transaction.remote,
+    })
+  } else {
+    view.dispatch({ effects })
   }
-  createEditor()
+  if (view.scrollDOM) view.scrollDOM.scrollTop = 0
+  searchPanelRef.value?.close()
+}
+
+watch(() => props.path, (p) => {
+  switchFile(p, props.modelValue)
 })
 
 watch(() => props.modelValue, (newVal) => {
   if (view && newVal !== view.state.doc.toString()) {
     view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: newVal || '' }
+      changes: { from: 0, to: view.state.doc.length, insert: newVal || '' },
+      annotations: Transaction.remote,
     })
   }
 })

@@ -52,7 +52,6 @@
           </div>
           <CodeEditor v-else
             ref="editorRef"
-            :key="'md_' + state.activeFile"
             :modelValue="currentContent"
             :path="state.activeFile"
             @update:modelValue="onContentChange"
@@ -63,7 +62,6 @@
         <!-- 文本文件（代码编辑器） -->
         <CodeEditor v-else
           ref="editorRef"
-          :key="state.activeFile"
           :modelValue="currentContent"
           :path="state.activeFile"
           @update:modelValue="onContentChange"
