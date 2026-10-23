@@ -233,8 +233,11 @@ func (c Config) buildManifest(rel ghRelease) (Manifest, error) {
 		PublishedAt: rel.PublishedAt,
 		Source:      "github:" + strings.TrimSpace(c.Repo),
 	}
-	picked := MatchAsset(names, ver, c.GOOS)
+	picked := MatchAsset(names, ver, c.GOOS, c.Edition)
 	if picked == "" {
+		if ed := strings.TrimSpace(c.Edition); ed != "" {
+			return m, fmt.Errorf("发布 %s 无本平台（%s）的 %s 版更新包", rel.TagName, c.GOOS, ed)
+		}
 		return m, fmt.Errorf("发布 %s 无本平台（%s）可用更新包", rel.TagName, c.GOOS)
 	}
 	a := byName[picked]

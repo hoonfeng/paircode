@@ -41,8 +41,12 @@ var conciseToolDescriptions = map[string]string{
 	"grep": "以 RE2 正则搜文件内容返「路径:行号: 行」；path/glob/case_insensitive 可限（path 相对主项目根，跨项目传 project 或绝对路径）；自动跳过依赖/VCS/构建/IDE 运行数据目录。",
 
 	// ── 网络 ──
-	"web_fetch":  "抓取 http(s) 网页返纯文本（去标签，超长截断）。",
-	"web_search": "搜网返题/链/摘（SearXNG 优先，否则 DuckDuckGo）。",
+	// ★ 2026-10-19：设置「网络工具 → 搜索/抓取 API 实例」选定实例后走该实例
+	//   （DeepSeek 协议 /v1/tools/search、/v1/tools/fetch），未配置才回退 DuckDuckGo。
+	//   旧文案只写「SearXNG 优先」——SearXNG 分支早已移除，且完全没提搜索/抓取 API，
+	//   模型不知道有这套能力（也导致用户误以为 agent 不会用 DeepSeek 搜索）。
+	"web_fetch":  "抓取 http(s) 网页返正文（选定 API 实例则走其抓取接口 /v1/tools/fetch 返 Markdown；否则原生抓取去标签，超长截断）。",
+	"web_search": "搜网返题/链/摘（选定 API 实例则走其搜索接口 /v1/tools/search，支持 site:/引号语法、count 1~50；否则回退 DuckDuckGo）。拿到链接可再用 web_fetch 读全文。",
 
 	// ── 记忆 ──
 	"memory": "跨会话记忆（.pair/memory/）单工具：op=write 写/更新（先查重同则融合，勿碎片化；需批准）/read/search/list/delete。",

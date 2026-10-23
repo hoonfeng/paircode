@@ -76,6 +76,9 @@ type Config struct {
 	MirrorPrefix string // 镜像前缀（非空时拼接在下载 URL 前）
 	Channel      string // stable | prerelease
 	Token        string // 可选 GitHub token（提升 API 限额 / 私有仓库）
+	// Edition 当前发行版（web | gui；空 = 不限制）。宿主按安装目录主程序识别
+	// （见 DetectEdition）——web/gui 包同名版本共存时只挑自己那一种，绝不跨版兜底。
+	Edition string
 
 	RequireSHA256 bool // 强制校验（默认 true）
 	KeepBackup    bool // 保留 pair.exe.old（默认 true）
@@ -206,7 +209,10 @@ func AssetNameForPlatform(ver, goos string) string {
 
 // MatchAsset 从资产名列表中挑出本平台该版本对应的 zip（宽容匹配）。
 // 顺序：精确（含/不含 v 前缀）→ 含版本号 + 平台词 → 返回空串表示无可用包。
-func MatchAsset(names []string, ver, goos string) string {
+//
+// edition 非空时只在该发行版的资产里挑（PairCode-<edition>-<ver>-<os>.zip）；
+// 没有就回退到「拆分前」的旧命名（不带 web/gui 段），绝不挑另一个发行版的包。
+func MatchAsset(names []string, ver, goos string, edition ...string) string {
 	zips := make([]string, 0, len(names))
 	for _, n := range names {
 		if strings.HasSuffix(strings.ToLower(n), ".zip") {
@@ -216,6 +222,28 @@ func MatchAsset(names []string, ver, goos string) string {
 	if len(zips) == 0 {
 		return ""
 	}
+	ed := ""
+	if len(edition) > 0 {
+		ed = strings.TrimSpace(edition[0])
+	}
+	if ed != "" {
+		if got := matchEditionAsset(zips, ver, goos, ed); got != "" {
+			return got
+		}
+		// 兼容拆分前的旧命名（无 web/gui 段）：带 edition 标记的资产一律不参与。
+		legacy := make([]string, 0, len(zips))
+		for _, n := range zips {
+			if !hasEditionTag(n) {
+				legacy = append(legacy, n)
+			}
+		}
+		return matchLegacyAsset(legacy, ver, goos)
+	}
+	return matchLegacyAsset(zips, ver, goos)
+}
+
+// matchLegacyAsset 旧命名 / 不限定发行版的宽容匹配。
+func matchLegacyAsset(zips []string, ver, goos string) string {
 	want := AssetNameForPlatform(ver, goos)
 	for _, n := range zips {
 		if strings.EqualFold(n, want) {

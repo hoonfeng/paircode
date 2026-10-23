@@ -93,6 +93,86 @@ func TestMatchMainProgram(t *testing.T) {
 	}
 }
 
+// TestMatchAssetEdition 发行版限定匹配（2026-10-19）：
+// web/gui 包共存时只挑自己那一种；只剩 web 包时 GUI 不得跨版误取。
+func TestMatchAssetEdition(t *testing.T) {
+	names := []string{
+		"PairCode-web-1.7.0-windows.zip",
+		"PairCode-gui-1.7.0-windows.zip",
+		"PairCode-web-1.7.0-linux.zip",
+		"PairCode-gui-1.7.0-linux.zip",
+		"PairCode-web-1.7.0-darwin.zip",
+		"PairCode-gui-1.7.0-darwin.zip",
+	}
+	cases := []struct{ goos, ed, want string }{
+		{"windows", "web", "PairCode-web-1.7.0-windows.zip"},
+		{"windows", "gui", "PairCode-gui-1.7.0-windows.zip"},
+		{"linux", "web", "PairCode-web-1.7.0-linux.zip"},
+		{"darwin", "gui", "PairCode-gui-1.7.0-darwin.zip"},
+	}
+	for _, c := range cases {
+		if got := MatchAsset(names, "1.7.0", c.goos, c.ed); got != c.want {
+			t.Errorf("MatchAsset(%s,%s)=%s want %s", c.goos, c.ed, got, c.want)
+		}
+	}
+	// 版本号带 v 前缀
+	if got := MatchAsset(names, "v1.7.0", "windows", "web"); got != "PairCode-web-1.7.0-windows.zip" {
+		t.Errorf("v 前缀 edition 匹配 = %s", got)
+	}
+	// 只剩 web 包 → GUI 明确无包（不得退回 web，否则主程序名不符、更新假成功）
+	onlyWeb := []string{"PairCode-web-1.7.0-windows.zip", "PairCode-web-1.7.0-linux.zip"}
+	if got := MatchAsset(onlyWeb, "1.7.0", "windows", "gui"); got != "" {
+		t.Errorf("无 gui 包时不应跨版匹配，得到 %s", got)
+	}
+	// 旧命名（拆分前无 edition 段）仍兼容
+	legacy := []string{"PairCode-1.7.0.zip", "PairCode-linux-1.7.0.zip"}
+	if got := MatchAsset(legacy, "1.7.0", "windows", "gui"); got != "PairCode-1.7.0.zip" {
+		t.Errorf("旧命名兼容匹配 = %s", got)
+	}
+
+	if got := AssetNameForEdition("v1.7.0", "windows", "web"); got != "PairCode-web-1.7.0-windows.zip" {
+		t.Errorf("AssetNameForEdition = %s", got)
+	}
+}
+
+// TestDetectEdition 按安装目录主程序识别发行版。
+func TestDetectEdition(t *testing.T) {
+	dir := t.TempDir()
+	if got := DetectEdition(dir); got != "" {
+		t.Errorf("空目录应识别为空，得到 %s", got)
+	}
+	webDir := t.TempDir()
+	webName := "pair-server"
+	guiName := "PairCode"
+	if runtime.GOOS == "windows" {
+		webName += ".exe"
+		guiName += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(webDir, webName), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := DetectEdition(webDir); got != EditionWeb {
+		t.Errorf("web 安装识别 = %s", got)
+	}
+	guiDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(guiDir, guiName), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := DetectEdition(guiDir); got != EditionGUI {
+		t.Errorf("gui 安装识别 = %s", got)
+	}
+	// 两者共存 → gui 优先（用户实际双击的是它）
+	both := t.TempDir()
+	for _, n := range []string{webName, guiName} {
+		if err := os.WriteFile(filepath.Join(both, n), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := DetectEdition(both); got != EditionGUI {
+		t.Errorf("共存时应识别为 gui，得到 %s", got)
+	}
+}
+
 func TestNormalizeDigest(t *testing.T) {
 	want := "173cefb94c8ca3b1a0e3c23a40e66c67cd296ff9cee04c8a3bac01cce130ff75"
 	for _, in := range []string{want, "SHA256:" + strings.ToUpper(want), " sha256=" + want + " "} {

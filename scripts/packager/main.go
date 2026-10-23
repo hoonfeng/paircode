@@ -150,6 +150,9 @@ func main() {
 	filterStep := ""
 	targetsOverride := ""
 	versionOnly := false
+	// editionFilter 只打指定发行版（web / gui …）。空 = packager.json 声明的全部。
+	// ★ 2026-10-19：发布不需要桌面版时传 --edition web，避免 base 流程仍产出 gui 包。
+	var editionFilter []string
 
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -171,6 +174,15 @@ func main() {
 		case "--targets":
 			if i+1 < len(os.Args) {
 				targetsOverride = os.Args[i+1]
+				i++
+			}
+		case "--edition":
+			if i+1 < len(os.Args) {
+				for _, e := range strings.Split(os.Args[i+1], ",") {
+					if e = strings.TrimSpace(e); e != "" {
+						editionFilter = append(editionFilter, e)
+					}
+				}
 				i++
 			}
 		case "--version-only":
@@ -244,11 +256,22 @@ func main() {
 		case "build-stub":
 			err = execBuildStub(root, step, cfg)
 		case "package":
-			err = execPackage(root, cfg, vars)
+			err = execPackage(root, cfg, vars, editionFilter)
 		default:
 			command := vars.resolve(step.Command)
 			if command != "" {
-				err = execShell(command, workDir, step.Env)
+				// 把 --edition 透传给下游守门员（verify-package-contents.mjs 据此只校验
+				// 本次实际产出的发行版；未传时脚本按 packager.json 全部 edition 校验）。
+				env := step.Env
+				if len(editionFilter) > 0 {
+					merged := make(map[string]string, len(env)+1)
+					for k, v := range env {
+						merged[k] = v
+					}
+					merged["PAIRCODE_EDITIONS"] = strings.Join(editionFilter, ",")
+					env = merged
+				}
+				err = execShell(command, workDir, env)
 			}
 		}
 
@@ -542,7 +565,7 @@ func execBuildStub(root string, step StepDef, cfg *PackagerConfig) error {
 	return nil
 }
 
-func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
+func execPackage(root string, cfg *PackagerConfig, vars *Vars, editionFilter []string) error {
 	if cfg.Dist == nil {
 		return nil
 	}
@@ -565,6 +588,31 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 			MainDst: outputName,
 			Include: cfg.Dist.Include,
 		}}
+	}
+
+	// --edition 过滤：只打显式指定的发行版（发布不需要桌面版时用）。
+	// 指定名必须存在于 packager.json，拼错直接报错而不是静默产出空集合。
+	if len(editionFilter) > 0 {
+		wanted := make(map[string]bool, len(editionFilter))
+		for _, name := range editionFilter {
+			wanted[strings.ToLower(strings.TrimSpace(name))] = true
+		}
+		var picked []DistEdition
+		for _, ed := range editions {
+			if wanted[strings.ToLower(ed.Name)] {
+				picked = append(picked, ed)
+				delete(wanted, strings.ToLower(ed.Name))
+			}
+		}
+		if len(wanted) > 0 {
+			missing := make([]string, 0, len(wanted))
+			for name := range wanted {
+				missing = append(missing, name)
+			}
+			return fmt.Errorf("--edition 指定的发行版未在 packager.json dist.editions 中定义: %s", strings.Join(missing, ", "))
+		}
+		editions = picked
+		fmt.Printf("  只打发行版: %s\n", strings.Join(editionFilter, ", "))
 	}
 
 	for _, ed := range editions {
@@ -967,6 +1015,7 @@ Packager — 通用打包执行引擎
   --version-only    只写版本号到 packager.json，不执行 pipeline（配 --version 用）
   --step <name>     只执行指定步骤
   --targets <spec>  覆盖目标平台（如 --targets windows/amd64,linux/amd64,darwin/arm64）
+  --edition <names> 只打指定发行版（逗号分隔，如 web / web,gui；默认 packager.json 全部）
   -h, --help        显示此帮助
 
 配置 (packager.json):

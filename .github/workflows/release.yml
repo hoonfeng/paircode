@@ -13,11 +13,21 @@ name: release
 #   - push tag v*（如 v1.6.21）→ 构建并发布；
 #   - workflow_dispatch → 手动构建并发布（版本号取 packager.json）。
 #
+# ★ 2026-10-19：发布默认**不含桌面版**（gui）——只出 web 版三平台包
+#   （PairCode-web-<ver>-<os>.zip）。桌面版构建依赖 wb-ui/Cocoa/X11，
+#   且发布件体积大、用户下载易混淆；需要时在 workflow_dispatch 勾选
+#   include_desktop=true 才构建并上传 gui 包与单文件 exe。
+#
 # 依赖仓库：paircode（后端 + 构建器）与 wb-ui（GUI 引擎），检出为兄弟目录，
 # 由 paircode/go.work.gui 的 `use ../wb-ui` 纳入同一 workspace。
 
 on:
   workflow_dispatch:
+    inputs:
+      include_desktop:
+        description: "是否构建并发布桌面版（gui 包 + 单文件 exe）"
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -29,6 +39,9 @@ jobs:
   build:
     name: build-${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    env:
+      # tag 触发没有 inputs → 空值兜底 'false'（只发 web 版）
+      INCLUDE_DESKTOP: ${{ github.event.inputs.include_desktop || 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +64,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout wb-ui (GUI engine)
+        if: env.INCLUDE_DESKTOP == 'true'
         uses: actions/checkout@v4
         with:
           repository: hoonfeng/wb-ui
@@ -63,7 +77,7 @@ jobs:
           cache-dependency-path: paircode/go.sum
 
       - name: Install Linux GUI build deps
-        if: runner.os == 'Linux'
+        if: env.INCLUDE_DESKTOP == 'true' && runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
@@ -103,6 +117,7 @@ jobs:
         run: ./"$PACKAGER" --version "${GITHUB_REF_NAME#v}" --version-only
 
       - name: Build GUI binary (cgo, native)
+        if: env.INCLUDE_DESKTOP == 'true'
         shell: bash
         working-directory: paircode
         env:
@@ -114,6 +129,7 @@ jobs:
         run: ./"$PACKAGER" --step build-go-gui
 
       - name: Stage Skia runtime library
+        if: env.INCLUDE_DESKTOP == 'true'
         shell: bash
         working-directory: paircode
         run: ./"$PACKAGER" --step stage-gui-runtime
@@ -122,6 +138,7 @@ jobs:
       # 发布包顶层只暴露 PairCode[.exe]。必须排在 build-go-gui 与 stage-gui-runtime 之后
       # （它从 release/ 目录读取这两步的产物），并排在 package 之前（package 找的就是它）。
       - name: Build single-file launcher (stub)
+        if: env.INCLUDE_DESKTOP == 'true'
         shell: bash
         working-directory: paircode
         run: ./"$PACKAGER" --step build-stub
@@ -134,13 +151,25 @@ jobs:
       - name: Package release zip
         shell: bash
         working-directory: paircode
-        run: ./"$PACKAGER" --targets "${{ matrix.target }}" --step package
+        run: |
+          EDITIONS="web"
+          if [ "$INCLUDE_DESKTOP" = "true" ]; then EDITIONS="web,gui"; fi
+          ./"$PACKAGER" --targets "${{ matrix.target }}" --edition "$EDITIONS" --step package
+
+      # 发布物内容守门：禁入内容 + 发行版隔离（web 包不得混入 PairCode/Skia）。
+      - name: Verify release package contents
+        shell: bash
+        working-directory: paircode
+        run: |
+          EDITIONS="web"
+          if [ "$INCLUDE_DESKTOP" = "true" ]; then EDITIONS="web,gui"; fi
+          node scripts/verify-package-contents.mjs --editions "$EDITIONS"
 
       # 非 Windows 平台的自检：真的把 GUI 引擎的 headless 渲染跑起来（加载前端、
       # 推进事件循环、截图+导出渲染文本），证明不是「只编译通过」。
       # 复用 wb-ui/cmd/gouide 的 -headless 能力，连接本平台刚构建出的 pair-server。
       - name: Headless render self-check
-        if: runner.os != 'Windows'
+        if: env.INCLUDE_DESKTOP == 'true' && runner.os != 'Windows'
         shell: bash
         working-directory: paircode
         env:
@@ -207,7 +236,7 @@ jobs:
       # 中文渲染。Xvfb 无 GPU，走 Mesa llvmpipe 软渲染；该步失败不阻断发布，
       # 但会打印明确原因（限制如实记录，不用 headless 截图冒充窗口证据）。
       - name: X11 window self-check (xvfb, Linux)
-        if: runner.os == 'Linux'
+        if: env.INCLUDE_DESKTOP == 'true' && runner.os == 'Linux'
         continue-on-error: true
         shell: bash
         working-directory: paircode
@@ -244,7 +273,7 @@ jobs:
           fi
 
       - name: Upload headless self-check
-        if: runner.os != 'Windows'
+        if: env.INCLUDE_DESKTOP == 'true' && runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: headless-${{ matrix.name }}
@@ -273,6 +302,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload gui release zip
+        if: env.INCLUDE_DESKTOP == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: release-gui-${{ matrix.name }}
@@ -283,7 +313,7 @@ jobs:
       # 前端与插件资源，可脱离 zip 直接双击运行。这里额外上传裸 exe，
       # 用户从 Release 一次下载即可用，无需解压。
       - name: Upload standalone Windows exe
-        if: runner.os == 'Windows'
+        if: env.INCLUDE_DESKTOP == 'true' && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: standalone-windows
@@ -295,28 +325,34 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # 汇总后做一次「全平台齐全 + 内容守门」校验：每个 build runner 只校验
+      # 自己平台的包，这里确保 Release 三平台资产真的齐了（不是只有一个平台成功）。
+      - name: Checkout (verify scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: hoonfeng/paircode
+          path: paircode
+
       - name: Download all platform zips
         uses: actions/download-artifact@v4
         with:
           path: dist
+          # 默认只发 web 版；含桌面版时 release-gui-* 也会被同一 pattern 覆盖
           pattern: release-*
           merge-multiple: true
 
-      - name: Download standalone Windows exe
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          name: standalone-windows
-
       - name: List assets
         run: ls -lh dist
+
+      - name: Verify aggregated assets
+        working-directory: paircode
+        run: node scripts/verify-package-contents.mjs ../dist/*.zip
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.zip
-            dist/PairCode.exe
           draft: false
           prerelease: false
           generate_release_notes: true

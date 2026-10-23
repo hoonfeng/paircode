@@ -31,10 +31,11 @@ const updateSettingKey = "app-update"
 
 // 环境变量覆盖（离线源 / 测试 / 内网镜像；优先级高于插件设置）。
 const (
-	envUpdateFeed   = "PAIRCODE_UPDATE_FEED"   // 自定义清单 URL 或本地路径（→ feedType=custom）
-	envUpdateRepo   = "PAIRCODE_UPDATE_REPO"   // owner/repo 覆盖
-	envUpdateMirror = "PAIRCODE_UPDATE_MIRROR" // 镜像前缀覆盖
-	envUpdateDir    = "PAIRCODE_UPDATE_DIR"    // 下载/暂存目录覆盖
+	envUpdateFeed    = "PAIRCODE_UPDATE_FEED"    // 自定义清单 URL 或本地路径（→ feedType=custom）
+	envUpdateRepo    = "PAIRCODE_UPDATE_REPO"    // owner/repo 覆盖
+	envUpdateMirror  = "PAIRCODE_UPDATE_MIRROR"  // 镜像前缀覆盖
+	envUpdateDir     = "PAIRCODE_UPDATE_DIR"     // 下载/暂存目录覆盖
+	envUpdateEdition = "PAIRCODE_UPDATE_EDITION" // 发行版覆盖（web|gui；默认按安装目录识别）
 )
 
 // updateEngine 进程内更新引擎单例。
@@ -49,6 +50,9 @@ func buildUpdateConfig() update.Config {
 	cfg.InstallDir = core.InstallDir()
 	cfg.DownloadDir = filepath.Join(core.ConfigDir(), "updates")
 	cfg.UserAgent = "PairCode-Updater/" + update.NormalizeVersion(version)
+	// 发行版：web / gui 包同名版本共存时只挑自己那一种（桌面版发布默认不再上传，
+	// 若不限定，GUI 安装会把 web 包装进安装目录 → 主程序没变，更新假成功）。
+	cfg.Edition = update.DetectEdition(cfg.InstallDir)
 
 	if st := core.Settings.PluginSettings[updateSettingKey]; st != nil {
 		if v := updStr(st, "feedType"); v != "" {
@@ -77,6 +81,9 @@ func buildUpdateConfig() update.Config {
 	}
 	if v := strings.TrimSpace(os.Getenv(envUpdateDir)); v != "" {
 		cfg.DownloadDir = v
+	}
+	if v := strings.TrimSpace(os.Getenv(envUpdateEdition)); v != "" {
+		cfg.Edition = strings.ToLower(v)
 	}
 	// 兜底：custom 但无地址 → 回落到 GitHub 源（避免配置错误导致功能不可用）
 	if strings.EqualFold(cfg.FeedType, "custom") && strings.TrimSpace(cfg.FeedURL) == "" {

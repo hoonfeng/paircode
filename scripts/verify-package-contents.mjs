@@ -21,9 +21,17 @@
 // Windows/Linux/macOS 一致；本仓库发布物 < 4GB，无 ZIP64）。
 //
 // 用法：
-//   node scripts/verify-package-contents.mjs              # 校验 packager.json 版本的六包
+//   node scripts/verify-package-contents.mjs              # 校验 packager.json 版本的全部发行版包
 //   node scripts/verify-package-contents.mjs --version 1.6.20
+//   node scripts/verify-package-contents.mjs --editions web   # 只校验 web 包（发布不含桌面版）
+//   node scripts/verify-package-contents.mjs --all-platforms   # 三平台都要在（发布汇总后校验）
 //   node scripts/verify-package-contents.mjs release/a.zip release/b.zip
+//
+// ★ 2026-10-19：packager 的 --edition 会把选择经 PAIRCODE_EDITIONS 环境变量透传，
+//   本脚本未显式传 --editions 时读该变量——发布只产 web 包时不能因为「gui 包不存在」
+//   而误判失败，同时仍保留「产出的包必须内容正确」的强校验。
+//   默认只期望**本机平台**的包（CI 每个 runner 只打本平台产物）；全平台发布汇总后
+//   用 --all-platforms（或显式传 zip 路径）校验齐全性。
 // ═══════════════════════════════════════════════════════════════
 import fs from 'node:fs'
 import path from 'node:path'
@@ -103,10 +111,36 @@ const argv = process.argv.slice(2)
 const errors = []
 let version = ''
 const explicit = []
+let editionsArg = ''
+let platformArg = ''
+let allPlatforms = false
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--version') version = argv[++i]
+  else if (argv[i] === '--editions') editionsArg = argv[++i] || ''
+  else if (argv[i] === '--platform') platformArg = argv[++i] || ''
+  else if (argv[i] === '--all-platforms') allPlatforms = true
   else explicit.push(argv[i])
 }
+
+// 发行版过滤：显式 --editions 优先，其次 packager 透传的 PAIRCODE_EDITIONS。
+const editionsWanted = String(editionsArg || process.env.PAIRCODE_EDITIONS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean)
+const knownEditions = EDITION_RULES.map((r) => r.name)
+const invalidEditions = editionsWanted.filter((n) => !knownEditions.includes(n))
+if (invalidEditions.length > 0) {
+  console.error(`[verify-package-contents] ✘ 未知发行版: ${invalidEditions.join(', ')}（支持: ${knownEditions.join(', ')}）`)
+  process.exit(1)
+}
+const editionsToCheck = editionsWanted.length > 0 ? editionsWanted : knownEditions
+const currentOs = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
+const platformsToCheck = allPlatforms
+  ? ['windows', 'linux', 'darwin']
+  : String(platformArg || currentOs)
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
 
 let zips = explicit
 if (zips.length === 0) {
@@ -118,17 +152,18 @@ if (zips.length === 0) {
       process.exit(1)
     }
   }
-  // web / gui × windows / linux / darwin = 六个独立包（2026-10-19 起）
-  const names = ['windows', 'linux', 'darwin'].flatMap((os) => [
-    `PairCode-web-${version}-${os}.zip`,
-    `PairCode-gui-${version}-${os}.zip`,
-  ])
+  // 发行版 × 平台（默认本机平台、web+gui 两种发行版）
+  const names = platformsToCheck.flatMap((os) =>
+    editionsToCheck.map((ed) => `PairCode-${ed}-${version}-${os}.zip`),
+  )
   zips = names.map((n) => path.join(repoRoot, 'release', n))
 } else {
   zips = zips.map((p) => (path.isAbsolute(p) ? p : path.join(repoRoot, p)))
 }
 
-console.log(`[verify-package-contents] 校验发布产物 zip（${zips.length} 个）…`)
+console.log(
+  `[verify-package-contents] 校验发布产物 zip（${zips.length} 个；发行版 ${editionsToCheck.join('+')}；平台 ${platformsToCheck.join('+')}）…`,
+)
 
 // nativeOnly 版（如 gui：cgo + Skia 只能原生构建）在非本机平台不会产出 zip，
 // 这属于预期跳过而非校验失败。
@@ -140,8 +175,6 @@ const nativeOnlyEditions = (() => {
     return new Set()
   }
 })()
-const currentOs = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
-
 for (const zip of zips) {
   const base = path.basename(zip)
   if (!fs.existsSync(zip)) {
@@ -197,4 +230,6 @@ if (errors.length > 0) {
   for (const e of errors) console.error('  - ' + e)
   process.exit(1)
 }
-console.log('\n[verify-package-contents] ✔ 全部通过（六包：无禁入内容，且 web/gui 主程序互不混装）')
+console.log(
+  `\n[verify-package-contents] ✔ 全部通过（${editionsToCheck.join('+')}：无禁入内容，主程序互不混装）`,
+)
